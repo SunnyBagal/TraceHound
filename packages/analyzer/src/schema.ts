@@ -163,6 +163,16 @@ export const ComponentEdge = z.object({
 });
 export type ComponentEdge = z.infer<typeof ComponentEdge>;
 
+export const Warning = z.object({
+  id: z.string(),
+  kind: z.enum(["orphan-file"]),
+  severity: z.enum(["info", "warning"]),
+  file: z.string(),
+  componentId: z.string().optional(),
+  message: z.string(),
+});
+export type Warning = z.infer<typeof Warning>;
+
 export const Snapshot = z
   .object({
     schemaVersion: z.literal(SCHEMA_VERSION),
@@ -173,6 +183,7 @@ export const Snapshot = z
     edges: z.array(ComponentEdge),
     files: z.array(FileFacts),
     evidence: z.array(Evidence),
+    warnings: z.array(Warning),
   })
   .superRefine((snap, ctx) => {
     const evidenceIds = new Set(snap.evidence.map((e) => e.id));
@@ -184,6 +195,9 @@ export const Snapshot = z
       for (const end of [edge.source, edge.target]) {
         if (!componentIds.has(end)) ctx.addIssue({ code: "custom", message: `edge ${edge.id} references missing component ${end}` });
       }
+    }
+    for (const w of snap.warnings) {
+      if (w.componentId && !componentIds.has(w.componentId)) ctx.addIssue({ code: "custom", message: `warning ${w.id} references missing component ${w.componentId}` });
     }
   });
 export type Snapshot = z.infer<typeof Snapshot>;

@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { aggregateEdges } from "./aggregate/edges.ts";
+import { orphanWarnings } from "./aggregate/warnings.ts";
 import { EvidenceStore, type ExtractContext } from "./extract/evidence.ts";
 import { extractEnv } from "./extract/env.ts";
 import { extractHttp } from "./extract/http-routes.ts";
@@ -95,6 +96,7 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
     edges,
     files,
     evidence: allEvidence,
+    warnings: orphanWarnings(files, grouping.fileToComponent),
   });
 }
 

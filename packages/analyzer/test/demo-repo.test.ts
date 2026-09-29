@@ -50,6 +50,12 @@ describe.skipIf(!existsSync(DEMO))("demo repo (cex-v2-boilercode @ da0e3d6)", ()
     }
   });
 
+  it("warns about the one orphan file: the engine's unused exchange store", () => {
+    expect(snap.warnings.map((w) => [w.kind, w.file, w.componentId])).toEqual([
+      ["orphan-file", "engine/src/store/exchange-store.ts", "engine:engine-worker"],
+    ]);
+  });
+
   it("never draws edges for unresolved imports", () => {
     const db = snap.files.find((f) => f.path === "backend/src/db.ts")!;
     const generated = db.imports.find((i) => i.specifier === "./generated/prisma/client")!;
