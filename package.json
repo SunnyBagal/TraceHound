@@ -1,0 +1,21 @@
+{
+  "name": "tracehound",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "fixture": "bash scripts/fetch-demo-repo.sh",
+    "analyze": "pnpm --filter @tracehound/analyzer run analyze",
+    "demo": "pnpm fixture && pnpm analyze",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.2"
+  }
+}

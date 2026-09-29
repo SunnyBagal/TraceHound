@@ -1,0 +1,12 @@
+node_modules/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+.DS_Store
+.env*
+!.env.example
+
+# demo input and derived output (regenerate with `pnpm demo`)
+fixtures/
+snapshots/
