@@ -108,7 +108,8 @@ export const FileFacts = z.object({
   imports: z.array(ImportFact),
   symbols: z.array(SymbolFact),
   routes: z.array(RouteFact),
-  mounts: z.array(z.object({ router: z.string(), prefix: z.string().optional(), evidenceId: z.string() })),
+  // `parent.use(prefix?, router)` — routers are keyed "file#variable"
+  mounts: z.array(z.object({ parent: z.string(), router: z.string(), prefix: z.string().optional(), evidenceId: z.string() })),
   listens: z.array(z.object({ evidenceId: z.string() })),
   clients: z.array(ClientConstruction),
   redisOps: z.array(RedisOpFact),
