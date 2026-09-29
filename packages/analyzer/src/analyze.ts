@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { aggregateEdges } from "./aggregate/edges.ts";
+import { loadConfig, normalizeOverrides } from "./config.ts";
 import { orphanWarnings } from "./aggregate/warnings.ts";
 import { EvidenceStore, type ExtractContext } from "./extract/evidence.ts";
 import { extractEnv } from "./extract/env.ts";
@@ -30,10 +31,13 @@ function repoNameFromUrl(url: string | undefined, fallback: string): string {
 
 export interface AnalyzeOptions {
   now?: () => Date;
+  /** tracehound.json path; defaults to <repo>/tracehound.json when present. */
+  configPath?: string;
 }
 
 export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Snapshot {
   const ws = loadWorkspace(repoPath);
+  const { config, source: configSource } = loadConfig(ws.repoRoot, options.configPath);
   const commitSha = git(ws.repoRoot, "rev-parse", "HEAD");
   if (!commitSha) throw new Error(`${ws.repoRoot} is not a git checkout; snapshots are keyed by commit SHA`);
   const url = git(ws.repoRoot, "remote", "get-url", "origin");
@@ -83,7 +87,7 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
   }
   files.sort((a, b) => a.path.localeCompare(b.path));
 
-  const grouping = groupComponents(files, ws.packages);
+  const grouping = groupComponents(files, ws.packages, { overrides: normalizeOverrides(config) });
   const allEvidence = evidence.all();
   const edges = aggregateEdges(files, grouping, new Map(allEvidence.map((e) => [e.id, e])));
 
@@ -96,7 +100,15 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
     edges,
     files,
     evidence: allEvidence,
-    warnings: orphanWarnings(files, grouping.fileToComponent),
+    warnings: [
+      ...orphanWarnings(files, grouping.fileToComponent),
+      ...grouping.unmatchedOverrides.map((id) => ({
+        id: `override-unmatched:${id}`,
+        kind: "override-unmatched" as const,
+        severity: "warning" as const,
+        message: `override "${id}" in ${path.basename(configSource ?? "tracehound.json")} matched no files`,
+      })),
+    ],
   });
 }
 

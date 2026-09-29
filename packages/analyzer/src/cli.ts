@@ -7,16 +7,17 @@ import { readManifest, upsertManifest, writeManifest } from "./manifest.ts";
 const { values } = parseArgs({
   options: {
     repo: { type: "string" },
+    config: { type: "string" },
     out: { type: "string", default: "snapshots" },
   },
 });
 if (!values.repo) {
-  console.error("usage: node src/cli.ts --repo <path> [--out <dir>]");
+  console.error("usage: node src/cli.ts --repo <path> [--config <tracehound.json>] [--out <dir>]");
   process.exit(1);
 }
 
 const started = performance.now();
-const snapshot = analyzeRepo(values.repo);
+const snapshot = analyzeRepo(values.repo, { configPath: values.config });
 const outDir = path.resolve(values.out!);
 const relFile = `${snapshot.repo.commitSha}/${snapshot.analyzerVersion}.json`;
 const file = path.join(outDir, relFile);

@@ -30,6 +30,6 @@ describe("orphanWarnings", () => {
   });
 
   it("ignores declaration files, tool configs and entry points", () => {
-    expect(warnings.some((w) => /express\.d\.ts|prisma\.config|index\.ts|schema\.prisma/.test(w.file))).toBe(false);
+    expect(warnings.some((w) => /express\.d\.ts|prisma\.config|index\.ts|schema\.prisma/.test(w.file ?? ""))).toBe(false);
   });
 });

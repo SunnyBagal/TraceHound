@@ -56,6 +56,33 @@ describe.skipIf(!existsSync(DEMO))("demo repo (cex-v2-boilercode @ da0e3d6)", ()
     ]);
   });
 
+  describe("with configs/cex-v2-boilercode.tracehound.json", () => {
+    const configPath = path.resolve(import.meta.dirname, "../../../configs/cex-v2-boilercode.tracehound.json");
+    const run = () => analyzeRepo(DEMO, { now: () => new Date(0), configPath });
+    const first = run();
+    const ids = (s: typeof snap) => s.components.map((c) => c.id).sort();
+
+    it("splits Engine Client into the Redis RPC Bridge and the Pending-Response Registry", () => {
+      const byId = Object.fromEntries(first.components.map((c) => [c.id, c]));
+      expect(byId["redis-rpc-bridge"]).toMatchObject({ name: "Redis RPC Bridge", files: ["backend/src/types/engine.ts", "backend/src/utils/engine-client.ts"] });
+      expect(byId["pending-response-registry"]).toMatchObject({ name: "Pending-Response Registry", files: ["backend/src/store/pending-responses.ts"] });
+      expect(first.components.some((c) => c.name === "Engine Client")).toBe(false);
+      expect(first.edges.find((e) => e.source === "redis-rpc-bridge" && e.target === "pending-response-registry")?.label).toBe("resolveEngineResponse, waitForEngineResponse");
+      expect(first.warnings.filter((w) => w.kind === "override-unmatched")).toEqual([]);
+    });
+
+    it("keeps component ids identical across re-runs", () => {
+      const again = run();
+      expect(ids(again)).toEqual(ids(first));
+      expect(again.edges.map((e) => e.id)).toEqual(first.edges.map((e) => e.id));
+    });
+
+    it("leaves ids of components the override doesn't touch unchanged", () => {
+      const untouched = ids(snap).filter((id) => id !== "backend:engine-client");
+      expect(ids(first)).toEqual([...untouched, "pending-response-registry", "redis-rpc-bridge"].sort());
+    });
+  });
+
   it("never draws edges for unresolved imports", () => {
     const db = snap.files.find((f) => f.path === "backend/src/db.ts")!;
     const generated = db.imports.find((i) => i.specifier === "./generated/prisma/client")!;

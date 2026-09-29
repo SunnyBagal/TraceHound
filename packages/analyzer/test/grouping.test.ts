@@ -122,3 +122,44 @@ describe("component bounds", () => {
     expect(components[1]!.membership[0]!.reason).toMatch(/split out of P App by directory p\/src\/a/);
   });
 });
+
+describe("tracehound.json overrides", () => {
+  const overrides = [
+    { id: "redis-rpc-bridge", name: "Redis RPC Bridge", kind: "service" as const, globs: ["be/src/utils/engine-client.ts"] },
+    { id: "pending-response-registry", name: "Pending-Response Registry", globs: ["be/src/store/*.ts"] },
+    { id: "typo", globs: ["be/src/does-not-exist/**"] },
+  ];
+  const all = [...backend, ...engine];
+  const withOverrides = groupComponents(all, packages, { overrides });
+  const byId = Object.fromEntries(withOverrides.components.map((c) => [c.id, c]));
+
+  it("uses override keys verbatim as component ids and pins their files", () => {
+    expect(byId["redis-rpc-bridge"]).toMatchObject({ name: "Redis RPC Bridge", kind: "service", files: ["be/src/utils/engine-client.ts"] });
+    expect(byId["pending-response-registry"]).toMatchObject({ name: "Pending-Response Registry", files: ["be/src/store/pending.ts"] });
+    expect(byId["redis-rpc-bridge"]!.membership[0]!.reason).toMatch(/pinned by tracehound.json "redis-rpc-bridge"/);
+  });
+
+  it("wins over the heuristic anchor for the same file", () => {
+    expect(withOverrides.components.some((c) => c.name === "Engine Client")).toBe(false);
+  });
+
+  it("infers kind when the override doesn't set one", () => {
+    expect(byId["pending-response-registry"]!.kind).toBe("library");
+  });
+
+  it("is exempt from merge/split and reports overrides that match nothing", () => {
+    const tight = groupComponents(all, packages, { overrides, max: 5 });
+    expect(tight.components.map((c) => c.id)).toEqual(expect.arrayContaining(["redis-rpc-bridge", "pending-response-registry"]));
+    expect(withOverrides.unmatchedOverrides).toEqual(["typo"]);
+  });
+
+  it("gives a file matched by two overrides to the first key", () => {
+    const both = groupComponents(all, packages, {
+      overrides: [{ id: "first", globs: ["be/src/store/**"] }, { id: "second", globs: ["be/src/store/pending.ts"] }],
+    });
+    const first = both.components.find((c) => c.id === "first")!;
+    expect(first.files).toEqual(["be/src/store/pending.ts"]);
+    expect(first.membership[0]!.reason).toMatch(/also matched "second", first key wins/);
+    expect(both.unmatchedOverrides).toEqual(["second"]);
+  });
+});

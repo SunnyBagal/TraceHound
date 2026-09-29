@@ -1,4 +1,6 @@
 // Responsibility-based grouping of files into components. Pure: FileFacts in, components out.
+import path from "node:path";
+import type { ComponentOverride } from "../config.ts";
 import type { Component, ComponentKind, FileFacts } from "../schema.ts";
 import { packageTitle, responsibilityTokens, slug, stem, titleCase, tokens } from "./naming.ts";
 
@@ -10,6 +12,8 @@ export interface GroupingPackage {
 export interface GroupingOptions {
   min: number;
   max: number;
+  /** From tracehound.json: pinned files, keyed by a stable component id. Wins over heuristics. */
+  overrides?: ComponentOverride[];
 }
 
 export interface GroupingResult {
@@ -17,6 +21,7 @@ export interface GroupingResult {
   fileToComponent: Map<string, string>;
   redisResourceByConnection: Map<string, string>;
   prismaResourceByPackage: Map<string, string>;
+  unmatchedOverrides: string[];
 }
 
 interface Cluster {
@@ -24,7 +29,9 @@ interface Cluster {
   name: string;
   kind: ComponentKind;
   package?: string;
-  anchor?: string;
+  anchor?: string; // the file that marks this responsibility (heuristic components)
+  seeds: string[]; // files reach starts from: [anchor], or an override's pinned files
+  pinned?: boolean; // from tracehound.json: never merged, split or renamed by heuristics
   matchTokens: string[];
   files: string[];
   reasons: Map<string, string>;
@@ -36,7 +43,8 @@ const DEFAULT_OPTIONS: GroupingOptions = { min: 5, max: 10 };
 const QUEUE_OPS = /^(l|r|bl|br)(push|pop|pushx|move|poplpush)$|^(s|p)?(publish|subscribe)$|^x(add|read|readgroup)$/i;
 const PRISMA_ENGINES: Record<string, string> = { postgresql: "Postgres", mysql: "MySQL", sqlite: "SQLite", sqlserver: "SQL Server", mongodb: "MongoDB", cockroachdb: "CockroachDB" };
 
-export function groupComponents(files: FileFacts[], packages: GroupingPackage[], options: GroupingOptions = DEFAULT_OPTIONS): GroupingResult {
+export function groupComponents(files: FileFacts[], packages: GroupingPackage[], options: Partial<GroupingOptions> = {}): GroupingResult {
+  const opts = { ...DEFAULT_OPTIONS, ...options };
   const sorted = [...files].sort((a, b) => a.path.localeCompare(b.path));
   const byPath = new Map(sorted.map((f) => [f.path, f]));
   const pkgName = (root: string) => packages.find((p) => p.root === root)?.name ?? root;
@@ -52,6 +60,32 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
     cluster.files.push(file);
     cluster.reasons.set(file, reason);
   };
+
+  // 0. Overrides first: their keys are the component ids, and their files are off-limits to heuristics.
+  const overrideClusters: Cluster[] = (opts.overrides ?? []).map((o) => {
+    usedIds.add(o.id);
+    return { id: o.id, name: o.name ?? titleCase(tokens(o.id)), kind: o.kind ?? "library", seeds: [], pinned: true, matchTokens: tokens(o.id), files: [], reasons: new Map() };
+  });
+  const pinned = new Set<string>();
+  for (const f of sorted) {
+    const hits = (opts.overrides ?? []).flatMap((o, i) => {
+      const glob = o.globs.find((g) => path.matchesGlob(f.path, g));
+      return glob ? [{ cluster: overrideClusters[i]!, glob }] : [];
+    });
+    const [first, ...others] = hits;
+    if (!first) continue;
+    const also = others.length ? `; also matched ${others.map((h) => `"${h.cluster.id}"`).join(", ")}, first key wins` : "";
+    assign(first.cluster, f.path, `pinned by tracehound.json "${first.cluster.id}" (${first.glob})${also}`);
+    first.cluster.seeds.push(f.path);
+    pinned.add(f.path);
+  }
+  for (const [i, c] of overrideClusters.entries()) {
+    const facts = c.files.map((f) => byPath.get(f)!);
+    const pkgs = [...new Set(facts.map((f) => f.package))];
+    c.package = pkgs.length === 1 ? pkgs[0] : undefined;
+    if (!opts.overrides![i]!.kind) c.kind = inferKind(facts);
+  }
+  clusters.push(...overrideClusters);
 
   // 1. Infrastructure resources: one Redis node per connection, one Prisma DB per package.
   const redisResourceByConnection = new Map<string, string>();
@@ -70,6 +104,7 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
       id: uniqueId(`redis:${slug(connection)}`),
       name: redisConnections.length > 1 ? `Redis (${connection})` : "Redis",
       kind: isQueue ? "queue" : "cache",
+      seeds: [],
       matchTokens: ["redis"],
       files: [],
       reasons: new Map(),
@@ -92,12 +127,13 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
       name: prismaPackages.length > 1 ? `${engineName} (${packageTitle(pkgName(pkg))})` : engineName,
       kind: "db",
       package: pkg,
+      seeds: [],
       matchTokens: ["prisma", "db", "database", "schema", ...(provider ? [provider] : [])],
       files: [],
       reasons: new Map(),
       resource: { tech: "prisma", engine: provider, connection, models: [...new Set(pkgFiles.flatMap((f) => f.prismaModels.map((m) => m.name)))].sort() },
     };
-    for (const f of pkgFiles.filter((f) => f.language === "prisma")) assign(cluster, f.path, "Prisma schema");
+    for (const f of pkgFiles.filter((f) => f.language === "prisma" && !pinned.has(f.path))) assign(cluster, f.path, "Prisma schema");
     clusters.push(cluster);
     prismaResourceByPackage.set(pkg, cluster.id);
   }
@@ -124,9 +160,10 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
     const pkgTitle = packageTitle(pkgName(pkg));
     const pkgSlug = slug(pkg === "." ? pkgName(pkg) : pkg);
     const anchors: Cluster[] = [];
-    const stoppers = new Set<string>();
+    const stoppers = new Set(pkgTs.filter((f) => pinned.has(f.path)).map((f) => f.path));
+    const pkgOverrides = overrideClusters.filter((c) => c.seeds.some((s) => byPath.get(s)?.package === pkg));
 
-    for (const f of pkgTs.filter(isClientOnlyModule)) {
+    for (const f of pkgTs.filter((f) => !pinned.has(f.path) && isClientOnlyModule(f))) {
       const resource = resourceForClient(f);
       if (!resource) continue;
       assign(resource, f.path, `only constructs and exports the ${resource.name} client (${f.clients.map((c) => c.variable).join(", ")})`);
@@ -134,7 +171,7 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
     }
 
     const addAnchor = (f: FileFacts, name: string, kind: ComponentKind, reason: string, matchTokens: string[]) => {
-      const cluster: Cluster = { id: uniqueId(`${pkgSlug}:${slug(name)}`), name, kind, package: pkg, anchor: f.path, matchTokens, files: [], reasons: new Map() };
+      const cluster: Cluster = { id: uniqueId(`${pkgSlug}:${slug(name)}`), name, kind, package: pkg, anchor: f.path, seeds: [f.path], matchTokens, files: [], reasons: new Map() };
       assign(cluster, f.path, reason);
       anchors.push(cluster);
       stoppers.add(f.path);
@@ -156,18 +193,20 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
       }
     }
 
+    const owningClusters = [...anchors, ...pkgOverrides];
+
     // A package with nothing that marks responsibility is one library component.
-    if (anchors.length === 0) {
-      const cluster: Cluster = { id: uniqueId(`${pkgSlug}:${slug(pkgTitle)}`), name: pkgTitle, kind: "library", package: pkg, matchTokens: [], files: [], reasons: new Map() };
+    if (owningClusters.length === 0) {
+      const cluster: Cluster = { id: uniqueId(`${pkgSlug}:${slug(pkgTitle)}`), name: pkgTitle, kind: "library", package: pkg, seeds: [], matchTokens: [], files: [], reasons: new Map() };
       for (const f of pkgTs.filter((f) => !stoppers.has(f.path))) assign(cluster, f.path, "package has no entry points, routes or clients");
       if (cluster.files.length) clusters.push(cluster);
       continue;
     }
 
-    // Reach: follow resolved same-package imports from each anchor, stopping at other anchors.
+    // Reach: follow resolved same-package imports from each anchor/override, stopping at other anchors.
     const owners = new Map<string, Cluster[]>();
-    for (const anchor of anchors) {
-      const queue = [anchor.anchor!];
+    for (const anchor of owningClusters) {
+      const queue = anchor.seeds.filter((s) => byPath.get(s)?.package === pkg);
       const seen = new Set(queue);
       while (queue.length) {
         const current = byPath.get(queue.shift()!);
@@ -176,14 +215,14 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
           if (!target || seen.has(target) || stoppers.has(target) || byPath.get(target)?.package !== pkg) continue;
           seen.add(target);
           queue.push(target);
-          owners.set(target, [...(owners.get(target) ?? []), anchor]);
+          if (!owners.get(target)?.includes(anchor)) owners.set(target, [...(owners.get(target) ?? []), anchor]);
         }
       }
     }
 
     let shared: Cluster | undefined;
     const toShared = (file: string, reason: string) => {
-      shared ??= { id: uniqueId(`${pkgSlug}:shared`), name: `${pkgTitle} Shared`, kind: "library", package: pkg, matchTokens: [], files: [], reasons: new Map() };
+      shared ??= { id: uniqueId(`${pkgSlug}:shared`), name: `${pkgTitle} Shared`, kind: "library", package: pkg, seeds: [], matchTokens: [], files: [], reasons: new Map() };
       assign(shared, file, reason);
     };
     const pkgResources = clusters.filter((c) => c.resource && (c.package === pkg || c.resource.tech === "redis"));
@@ -197,7 +236,7 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
       if (stoppers.has(f.path)) continue;
       const users = owners.get(f.path) ?? [];
       if (users.length === 1) {
-        assign(users[0]!, f.path, `only reachable from ${users[0]!.name} (${users[0]!.anchor})`);
+        assign(users[0]!, f.path, `only reachable from ${users[0]!.name} (${users[0]!.anchor ?? users[0]!.seeds.join(", ")})`);
         continue;
       }
       if (users.length > 1) {
@@ -207,9 +246,9 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
         else toShared(f.path, `used by ${names}`);
         continue;
       }
-      const match = affinity(f.path, [...anchors, ...pkgResources]);
+      const match = affinity(f.path, [...owningClusters, ...pkgResources]);
       if (match) assign(match, f.path, `not imported by any entry point; file name matches ${match.name}`);
-      else if (anchors.length === 1) assign(anchors[0]!, f.path, `not imported by any entry point; only component in package ${pkgTitle}`);
+      else if (owningClusters.length === 1) assign(owningClusters[0]!, f.path, `not imported by any entry point; only component in package ${pkgTitle}`);
       else toShared(f.path, "not imported by any entry point; no single owner");
     }
 
@@ -218,13 +257,22 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
   }
 
   // 3. Keep the canvas readable: 5–10 components.
-  enforceBounds(clusters, byPath, options, uniqueId);
+  enforceBounds(clusters, byPath, opts, uniqueId);
 
   const fileToComponent = new Map<string, string>();
   for (const c of clusters) for (const file of c.files) fileToComponent.set(file, c.id);
   const prefixes = routePrefixes(sorted);
   const components = clusters.filter((c) => c.files.length > 0 || c.resource).map((c) => toComponent(c, byPath, prefixes));
-  return { components, fileToComponent, redisResourceByConnection, prismaResourceByPackage };
+  const unmatchedOverrides = overrideClusters.filter((c) => c.files.length === 0).map((c) => c.id);
+  return { components, fileToComponent, redisResourceByConnection, prismaResourceByPackage, unmatchedOverrides };
+}
+
+function inferKind(facts: FileFacts[]): ComponentKind {
+  const entry = facts.find((f) => f.isEntry);
+  if (entry) return entry.routes.length || entry.listens.length ? "api" : entry.redisOps.some((o) => o.role === "consume") ? "worker" : "service";
+  if (facts.some((f) => f.routes.length)) return "api";
+  if (facts.some((f) => f.clients.length)) return "service";
+  return "library";
 }
 
 function coupling(a: Cluster, b: Cluster, byPath: Map<string, FileFacts>): number {
@@ -237,7 +285,7 @@ function coupling(a: Cluster, b: Cluster, byPath: Map<string, FileFacts>): numbe
 }
 
 function enforceBounds(clusters: Cluster[], byPath: Map<string, FileFacts>, { min, max }: GroupingOptions, uniqueId: (base: string) => string) {
-  const movable = () => clusters.filter((c) => !c.resource);
+  const movable = () => clusters.filter((c) => !c.resource && !c.pinned);
 
   while (clusters.length > max) {
     const [smallest] = movable().sort((a, b) => a.files.length - b.files.length || a.id.localeCompare(b.id));
@@ -265,7 +313,7 @@ function enforceBounds(clusters: Cluster[], byPath: Map<string, FileFacts>, { mi
       const moved = pick.c.files.filter((f) => dirOf(f) === dir);
       const words = tokens(dir.split("/").pop() ?? dir);
       const name = `${pick.c.name} ${titleCase(words)}`;
-      const split: Cluster = { id: uniqueId(`${pick.c.id}-${slug(dir.split("/").pop() ?? dir)}`), name, kind: "library", package: pick.c.package, matchTokens: words, files: [], reasons: new Map() };
+      const split: Cluster = { id: uniqueId(`${pick.c.id}-${slug(dir.split("/").pop() ?? dir)}`), name, kind: "library", package: pick.c.package, seeds: [], matchTokens: words, files: [], reasons: new Map() };
       for (const f of moved) split.reasons.set(f, `${pick.c.reasons.get(f)}; split out of ${pick.c.name} by directory ${dir} (component minimum ${min})`);
       split.files.push(...moved);
       pick.c.files = pick.c.files.filter((f) => dirOf(f) !== dir);
@@ -313,9 +361,11 @@ function toComponent(c: Cluster, byPath: Map<string, FileFacts>, prefixes: Map<s
     }
   }
   for (const r of routes) entryPoints.push({ file: r.file, symbol: `${r.method} ${r.path}`, reason: "HTTP route" });
-  if (c.kind === "service" && c.anchor) {
-    for (const s of byPath.get(c.anchor)?.symbols.filter((s) => s.exported && s.kind === "function") ?? []) {
-      entryPoints.push({ file: c.anchor, symbol: s.name, reason: "exported function" });
+  if (c.kind === "service") {
+    for (const seed of c.seeds) {
+      for (const s of byPath.get(seed)?.symbols.filter((s) => s.exported && s.kind === "function") ?? []) {
+        entryPoints.push({ file: seed, symbol: s.name, reason: "exported function" });
+      }
     }
   }
 
@@ -354,7 +404,9 @@ function subtitle(c: Cluster, facts: FileFacts[], routes: Component["routes"]): 
       const produced = redisOps.filter((o) => o.role === "produce");
       const consumed = redisOps.filter((o) => o.role === "consume");
       const parts = [produced.length ? `pushes ${keyList(produced)}` : "", consumed.length ? `awaits ${keyList(consumed)}` : ""].filter(Boolean);
-      return parts.length ? capitalize(parts.join(" · ")) : `${facts.length} modules`;
+      if (parts.length) return capitalize(parts.join(" · "));
+      const exported = facts.flatMap((f) => f.symbols.filter((s) => s.exported && s.kind === "function").map((s) => s.name));
+      return exported.length ? `Exports ${exported.slice(0, 2).join(", ")}${exported.length > 2 ? "…" : ""}` : `${facts.length} modules`;
     }
     case "library": {
       return `Shared modules · ${facts.map((f) => stem(f.path)).slice(0, 3).join(", ")}${facts.length > 3 ? "…" : ""}`;

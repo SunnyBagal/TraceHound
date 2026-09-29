@@ -165,9 +165,9 @@ export type ComponentEdge = z.infer<typeof ComponentEdge>;
 
 export const Warning = z.object({
   id: z.string(),
-  kind: z.enum(["orphan-file"]),
+  kind: z.enum(["orphan-file", "override-unmatched"]),
   severity: z.enum(["info", "warning"]),
-  file: z.string(),
+  file: z.string().optional(),
   componentId: z.string().optional(),
   message: z.string(),
 });

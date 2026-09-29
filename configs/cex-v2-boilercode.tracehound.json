@@ -1,0 +1,14 @@
+{
+  "components": {
+    "redis-rpc-bridge": {
+      "name": "Redis RPC Bridge",
+      "kind": "service",
+      "files": ["backend/src/utils/engine-client.ts", "backend/src/types/engine.ts"]
+    },
+    "pending-response-registry": {
+      "name": "Pending-Response Registry",
+      "kind": "service",
+      "files": ["backend/src/store/pending-responses.ts"]
+    }
+  }
+}

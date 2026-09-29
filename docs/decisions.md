@@ -68,3 +68,15 @@ files. Re-analyzing the same (repo, sha, version) replaces its manifest entry.
 **Rejected:** A Fastify `GET /snapshot/:sha` server. It adds a process to run, CORS or rewrite
 plumbing, and a deploy target, and gives nothing a static file doesn't while snapshots are
 immutable and produced offline. It comes back when analysis runs on demand (roadmap step 2).
+
+## 010 · tracehound.json overrides pin files and then act like anchors
+**Choice:** The config maps a component id to file globs (or `{ name, kind, files }`). Matched
+files are pinned before any heuristic runs. The key becomes the component id verbatim. Pinned
+components are never merged, split or renamed. When a file matches two overrides, the first key
+wins and the membership reason records it. The pinned files also seed the reachability pass, so
+an unmatched helper used only by an override component follows it. An override that matches
+nothing becomes an `override-unmatched` warning. Overrides live in the analyzed repo's root, or
+come from `--config` (the demo's is in `configs/`, since the fixture isn't ours).
+**Rejected:** (a) Overrides that only rename heuristic components. Renames can't split or merge,
+and the ids would still depend on heuristics. (b) Pin-only overrides with no reach. Pinning an
+anchor file would push its private helpers into "Shared".
