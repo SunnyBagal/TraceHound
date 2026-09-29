@@ -59,7 +59,8 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
   for (const connection of redisConnections) {
     const ops = sorted.flatMap((f) => f.redisOps.filter((o) => o.connection === connection));
     const isQueue = ops.some((o) => QUEUE_OPS.test(o.op));
-    const keys = [...new Set(ops.filter((o) => o.key).map((o) => o.key!.value ?? "<dynamic>"))].sort();
+    const resolvedKeys = [...new Set(ops.flatMap((o) => (o.key?.value ? [o.key.value] : [])))].sort();
+    const keys = ops.some((o) => o.key && !o.key.value) ? [...resolvedKeys, "<dynamic>"] : resolvedKeys;
     const styles = [
       ops.some((o) => /^(l|r|bl|br)/i.test(o.op) && /(push|pop|move)/i.test(o.op)) ? "lists" : "",
       ops.some((o) => /(publish|subscribe)$/i.test(o.op)) ? "pub/sub" : "",
