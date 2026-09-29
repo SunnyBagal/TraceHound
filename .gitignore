@@ -7,9 +7,8 @@ coverage/
 .env*
 !.env.example
 
-# demo input and derived output (regenerate with `pnpm demo`)
+# demo input (clone with `pnpm fixture`)
 fixtures/
-snapshots/
 
 # local LLM spend ledger + response cache
 .tracehound/
