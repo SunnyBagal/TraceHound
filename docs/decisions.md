@@ -112,3 +112,44 @@ pass is skipped, which is how tests and CI stay deterministic.
 the model propose groupings or edges. That breaks the product rule. (c) Naming inside
 `analyzeRepo`. It would make the core pipeline async and non-deterministic; it stays a
 post-pass the CLI opts into.
+
+## 013 · Hard budget caps enforced before each call, priced pessimistically
+**Choice:** Every model call goes through `TokenFactoryClient`, which does the following:
+- **Estimate before sending.** It prices a worst case: ~3 chars/token for the prompt plus the
+  full `max_tokens` of output, from `config/prices.json`.
+- **Reserve against both caps.** The estimate is reserved against `TRACEHOUND_BUDGET_RUN_USD`
+  (default $1) and `TRACEHOUND_BUDGET_TOTAL_USD` (default $45 of the $59 hackathon credit; the
+  total is summed from the ledger). In-flight reservations count, so parallel calls can't
+  jointly overshoot.
+- **Refuse loudly.** A refused call throws `BudgetExceededError`. The naming pass never swallows
+  it: the CLI exits non-zero and writes no snapshot.
+- **Never price at zero.** Placeholder or unknown prices use a deliberately high fallback
+  ($5 / $15 per 1M in/out, above the published Nemotron Ultra price).
+- **Ledger every real call** in `.tracehound/spend.jsonl`. Reported usage is charged as-is.
+  Without usage, a 4xx counts as 0 tokens (rejected before inference) and a 5xx, network error
+  or timeout counts as the upper bound. The ledger may over-count but never under-count.
+- **Check the model id for free first.** `GET /models` runs before any paid call, so a bad id
+  costs nothing.
+- **Nano by default.** Other models only through an explicit `--model`. The env override for
+  the model was removed.
+
+**Rejected:** (a) Checking spend only after calls. By then the money is gone, and with 4
+concurrent calls the overshoot is 4×. (b) Silently falling back to heuristic names when the
+budget is hit. The user would not notice the guard tripped, and a bug that burns credit would
+look like a quiet naming failure. (c) Pricing unknown models at 0 until the table is filled in,
+which is exactly how an uncapped spend happens.
+
+## 014 · Content-addressed response cache
+**Choice:** Successful completions are stored in `.tracehound/cache/<sha256(model + full
+request JSON)>.json`. The key covers the system prompt, the facts payload, temperature and
+max_tokens. Hits make no request, write no ledger entry and cost $0. Re-running analyze on an
+unchanged commit therefore costs nothing and yields identical names. When facts change (new
+commit, new override, new prompt), the key changes and only affected components are re-asked.
+`--no-cache` skips reads but still refreshes entries. Failures are never cached, so a transient
+error is retried on the next run. Writes are atomic (temp file + rename). The cache lives
+outside the repo and is gitignored.
+**Rejected:** (a) A cache keyed by commit SHA + component id. It serves stale names after a
+prompt or grouping change. (b) Storing names in the snapshot and reusing them. It couples the
+cache to one analyzer version and hides that an answer came from an old prompt. (c) No cache,
+relying on temperature 0. Every dev re-run would cost money, and determinism across calls isn't
+guaranteed anyway.

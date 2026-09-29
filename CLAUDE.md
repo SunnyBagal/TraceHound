@@ -9,7 +9,15 @@ confidence. Extraction, grouping and edges are deterministic — no model is inv
 an edge you can't point to in code. The one model call allowed is the optional naming pass
 (`src/naming/llm.ts`, Nemotron Nano via Nebius Token Factory): it sees extracted facts only (no
 source), may change only component `name`/`summary`, falls back to the heuristic name on any
-failure, and every call is logged in `snapshot.llmCalls` (model, latency, tokens). Unresolved facts (e.g. an import of a generated file that isn't in the
+failure, and every call is logged in `snapshot.llmCalls` (model, latency, tokens).
+
+## Spending (hackathon credits, not ours)
+All model calls go through `src/llm/client.ts`: response cache → budget reservation (run cap
+`TRACEHOUND_BUDGET_RUN_USD`=1, total cap `TRACEHOUND_BUDGET_TOTAL_USD`=45) → request → ledger
+(`.tracehound/spend.jsonl`, `pnpm spend`). Nano is the default; Super/Ultra only via explicit
+`--model`, reserved for the final evaluation. Tests must never hit the network or need
+`NEBIUS_API_KEY` (`test/setup.ts` enforces this). Keep `config/prices.json` placeholders until
+real catalog prices are filled in. Unresolved facts (e.g. an import of a generated file that isn't in the
 repo) are recorded as facts but never produce edges.
 
 ## Stack (fixed — ask before adding dependencies)
