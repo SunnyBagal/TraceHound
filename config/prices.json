@@ -2,7 +2,7 @@
   "_readme": "USD per 1M tokens for Nebius Token Factory models. Entries with \"placeholder\": true are NOT real prices: fill inputPer1M/outputPer1M from the Nebius model catalog and set placeholder to false. Until then the budget uses placeholderFallback, a deliberately high estimate, so guardrails err toward refusing.",
   "placeholderFallback": { "inputPer1M": 5.0, "outputPer1M": 15.0 },
   "models": {
-    "nvidia/nvidia-nemotron-3-nano-30b-a3b": { "inputPer1M": null, "outputPer1M": null, "placeholder": true },
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": { "inputPer1M": null, "outputPer1M": null, "placeholder": true },
     "nvidia/nemotron-3-super-120b-a12b": { "inputPer1M": null, "outputPer1M": null, "placeholder": true },
     "nvidia/Nemotron-3-Ultra-550b-a55b": { "inputPer1M": null, "outputPer1M": null, "placeholder": true }
   }

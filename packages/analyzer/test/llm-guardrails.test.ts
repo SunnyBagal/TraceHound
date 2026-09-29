@@ -6,7 +6,7 @@ import { SpendLedger, summarize } from "../src/llm/ledger.ts";
 import { costUSD, priceFor } from "../src/llm/prices.ts";
 import { fakeClient, TEST_PRICES } from "./helpers.ts";
 
-const request = (model = "nvidia/nvidia-nemotron-3-nano-30b-a3b", content = "name this"): ChatRequest => ({
+const request = (model = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", content = "name this"): ChatRequest => ({
   model, temperature: 0, max_tokens: 1500, messages: [{ role: "user", content }],
 });
 
@@ -25,7 +25,7 @@ const ok = (content = '{"name":"X","summary":"Y"}', usage = { prompt_tokens: 200
 
 describe("prices", () => {
   it("uses the conservative fallback for placeholders and unknown models, never zero", () => {
-    expect(priceFor(TEST_PRICES, "nvidia/nvidia-nemotron-3-nano-30b-a3b")).toEqual({ inputPer1M: 5, outputPer1M: 15, estimated: true });
+    expect(priceFor(TEST_PRICES, "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B")).toEqual({ inputPer1M: 5, outputPer1M: 15, estimated: true });
     expect(priceFor(TEST_PRICES, "someone/unlisted")).toMatchObject({ estimated: true, outputPer1M: 15 });
     expect(priceFor(TEST_PRICES, "priced/model")).toEqual({ inputPer1M: 1, outputPer1M: 2, estimated: false });
   });
@@ -64,7 +64,7 @@ describe("TokenFactoryClient", () => {
     const { client, ledger, budget } = fakeClient(f.impl);
     const result = await client.chat(request(), { purpose: "component-naming", componentId: "c1" });
     const [entry] = ledger.entries();
-    expect(entry).toMatchObject({ model: "nvidia/nvidia-nemotron-3-nano-30b-a3b", inputTokens: 200, outputTokens: 50, purpose: "component-naming", componentId: "c1", usageReported: true, priceEstimated: true });
+    expect(entry).toMatchObject({ model: "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", inputTokens: 200, outputTokens: 50, purpose: "component-naming", componentId: "c1", usageReported: true, priceEstimated: true });
     expect(entry!.estCostUSD).toBeCloseTo(costUSD({ inputPer1M: 5, outputPer1M: 15, estimated: true }, 200, 50));
     expect(result.costUSD).toBe(entry!.estCostUSD);
     expect(budget.runSpent).toBe(entry!.estCostUSD);
@@ -129,9 +129,9 @@ describe("TokenFactoryClient", () => {
   });
 
   it("lists models without touching the budget or ledger", async () => {
-    const f = scriptedFetch([{ body: { data: [{ id: "nvidia/nvidia-nemotron-3-nano-30b-a3b" }] } }]);
+    const f = scriptedFetch([{ body: { data: [{ id: "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B" }] } }]);
     const { client, ledger, budget } = fakeClient(f.impl);
-    expect(await client.listModels()).toEqual(["nvidia/nvidia-nemotron-3-nano-30b-a3b"]);
+    expect(await client.listModels()).toEqual(["nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"]);
     expect(ledger.entries()).toEqual([]);
     expect(budget.runSpent).toBe(0);
   });

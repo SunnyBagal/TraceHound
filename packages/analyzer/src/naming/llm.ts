@@ -7,7 +7,7 @@ import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import type { Component, LlmCall, Snapshot } from "../schema.ts";
 
 /** Development default. Larger Nemotrons only when explicitly passed (--model). */
-export const DEFAULT_MODEL = "nvidia/nvidia-nemotron-3-nano-30b-a3b";
+export const DEFAULT_MODEL = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B";
 const MAX_TOKENS = 1500; // headroom for reasoning tokens before the JSON answer
 
 export interface LlmNamingConfig {

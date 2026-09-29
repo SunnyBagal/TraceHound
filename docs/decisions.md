@@ -97,7 +97,7 @@ edge that other sites prove.
 
 ## 012 · LLM naming is a separate, facts-only, fail-safe pass
 **Choice:** After deterministic analysis, `nameComponentsWithLlm` sends each component's
-extracted facts to Nemotron Nano (`nvidia/nvidia-nemotron-3-nano-30b-a3b`, Nebius Token
+extracted facts to Nemotron Nano (`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`, Nebius Token
 Factory, OpenAI-compatible `/chat/completions`, temperature 0). The facts are the heuristic name,
 kind, files, routes, entry points, env vars, resource info, and neighbours with edge labels. The
 model returns `{name, summary}`, which is validated with Zod (short title, not a filename, no

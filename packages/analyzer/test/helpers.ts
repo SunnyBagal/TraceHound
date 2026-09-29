@@ -34,7 +34,7 @@ export function memoryProject(files: Record<string, string>) {
 export const TEST_PRICES = PriceTable.parse({
   placeholderFallback: { inputPer1M: 5, outputPer1M: 15 },
   models: {
-    "nvidia/nvidia-nemotron-3-nano-30b-a3b": { inputPer1M: null, outputPer1M: null, placeholder: true },
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": { inputPer1M: null, outputPer1M: null, placeholder: true },
     "priced/model": { inputPer1M: 1, outputPer1M: 2 },
   },
 });

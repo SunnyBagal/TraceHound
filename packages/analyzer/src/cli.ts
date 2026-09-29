@@ -6,6 +6,7 @@ import { Budget, BudgetExceededError, capsFromEnv } from "./llm/budget.ts";
 import { ResponseCache } from "./llm/cache.ts";
 import { TokenFactoryClient } from "./llm/client.ts";
 import { SpendLedger } from "./llm/ledger.ts";
+import { closestModel } from "./llm/models.ts";
 import { loadPriceTable, priceFor } from "./llm/prices.ts";
 import { readManifest, upsertManifest, writeManifest } from "./manifest.ts";
 import { DEFAULT_MODEL, formatCall, nameComponentsWithLlm } from "./naming/llm.ts";
@@ -69,8 +70,11 @@ if (values.naming === "llm" && apiKey) {
   // Free preflight: make sure the model id resolves before spending anything.
   const available = await client.listModels().catch((error: Error) => fail(`could not list models: ${error.message}`));
   if (!available.includes(model)) {
-    const near = available.filter((id) => /nemotron/i.test(id));
-    fail(`model id "${model}" is not in GET /models (${available.length} models).${near.length ? ` Nemotron ids available: ${near.join(", ")}` : ""}`);
+    const suggestion = closestModel(model, available);
+    fail(
+      `model id "${model}" is not in GET /models (${available.length} models).` +
+        (suggestion ? ` Did you mean "${suggestion.id}"? (${suggestion.reason})` : ` Available: ${available.join(", ")}`),
+    );
   }
   console.error(`[naming] model ${model} resolved via GET /models`);
 

@@ -65,13 +65,13 @@ describe("nameComponentsWithLlm", () => {
       ["pending-response-registry", "Pending-Response Registry", "override"],
     ]);
     expect(named.components[0]!.summary).toBe("Sends engine commands over Redis and awaits replies.");
-    expect(named.components[0]!.naming).toMatchObject({ heuristicName: "Engine Client", model: "nvidia/nvidia-nemotron-3-nano-30b-a3b" });
+    expect(named.components[0]!.naming).toMatchObject({ heuristicName: "Engine Client", model: "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B" });
     expect(named.edges).toEqual(base.edges); // the reply's "edges" key is ignored
     expect(named.evidence).toBe(base.evidence);
     expect(() => Snapshot.parse(named)).not.toThrow();
 
     expect(logs).toHaveLength(2);
-    expect(logs[0]).toMatchObject({ purpose: "component-naming", model: "nvidia/nvidia-nemotron-3-nano-30b-a3b", ok: true, cached: false, promptTokens: 100, completionTokens: 20, totalTokens: 120 });
+    expect(logs[0]).toMatchObject({ purpose: "component-naming", model: "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", ok: true, cached: false, promptTokens: 100, completionTokens: 20, totalTokens: 120 });
     expect(logs[0]!.estCostUSD).toBeCloseTo((100 * 5 + 20 * 15) / 1e6); // placeholder → conservative fallback price
     expect(logs[0]!.latencyMs).toBeGreaterThanOrEqual(0);
     expect(named.llmCalls.map((c) => c.componentId)).toEqual(["backend:engine-client", "redis:redis-url"]); // component order
