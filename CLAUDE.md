@@ -28,16 +28,17 @@ repo) are recorded as facts but never produce edges.
 - No API server for now (hackathon): snapshots are static files. The analyzer writes
   `snapshots/<sha>/<analyzerVersion>.json` plus `snapshots/index.json` (manifest with a
   `latest` pointer); the viewer loads the manifest, then the snapshot file directly.
-- `apps/web` — Next.js App Router, React Flow (`@xyflow/react`), ELK.js, Tailwind, shadcn/ui,
-  Framer Motion.
-- Vitest for extractors and grouping. No UI tests yet.
+- `viewer/` — static Next.js export (App Router, React Flow `@xyflow/react`, elkjs, Tailwind).
+  Loads `snapshots/index.json` then the latest snapshot; no server, API, auth or DB.
+- Vitest for extractors and grouping; one viewer component test (jsdom) on the demo snapshot.
 - Later: Postgres/Drizzle/BullMQ. For now the JSON snapshot file is the store.
 
 ## Commands
 - `pnpm demo` — clone the pinned demo repo into `fixtures/demo-repo` and analyze it (uses
   `configs/cex-v2-boilercode.tracehound.json`; set `NEBIUS_API_KEY` in `.env` for LLM names).
 - `pnpm test` / `pnpm typecheck` — all packages.
-- `pnpm --filter @tracehound/web dev`.
+- `pnpm --filter @tracehound/viewer dev` — viewer on :3000 (copies ../snapshots first).
+- `pnpm --filter @tracehound/viewer build` — static export in `viewer/out/`.
 
 ## Conventions
 - Snapshots are keyed by commit SHA + `ANALYZER_VERSION` (`packages/analyzer/src/version.ts`).

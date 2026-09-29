@@ -153,3 +153,38 @@ prompt or grouping change. (b) Storing names in the snapshot and reusing them. I
 cache to one analyzer version and hides that an answer came from an old prompt. (c) No cache,
 relying on temperature 0. Every dev re-run would cost money, and determinism across calls isn't
 guaranteed anyway.
+
+## 015 · Left-to-right layered layout (ELK `layered`, direction RIGHT)
+**Choice:** ELK's layered algorithm, flowing left to right with 140px between layers. Requests
+enter at the left (server entry → APIs), cross the middle (RPC bridge, Redis) and reach the
+worker and data stores on the right, which is how people read a request path. Laptop screens
+are wider than tall, and the demo has 4–5 layers, so LR fits without zooming out. On phones the
+canvas pans; the layout doesn't change.
+**Rejected:** (a) Top-to-bottom. It is taller than the viewport on laptops, and the edge labels
+("produces · resolved-default") are wide and collide more when stacked vertically. (b) A
+force-directed layout. It isn't deterministic between loads, so nodes would jump, and saved
+positions would fight the simulation.
+
+## 016 · Floating edges instead of fixed left/right handles
+**Choice:** Each edge leaves from whichever side of its source faces the target and enters the
+facing side of the target, as a cubic bezier. Edges between the same two nodes (in either
+direction) get their own lane, 30px apart along that side.
+**Rejected:** Fixed source-right / target-left handles, the React Flow default. The graph has
+real cycles (Redis RPC Bridge ↔ Redis ↔ Engine Worker, Bridge ↔ Pending-Response Registry), so
+every backward edge looped around the outside of the canvas. That was visible in the first
+screenshot.
+
+## 017 · Confidence is a dash pattern plus text, never style alone
+**Choice:** proven = solid, resolved-default = dashed (7 5), dynamic = dotted (round caps). Every
+edge label reads `kind · label` ("consumes · dynamic"). The inspector and the top-bar legend
+show the same line sample next to the word.
+**Rejected:** Colour-coding confidence. It fails for colour-blind users and in greyscale
+screenshots, and colour is already used for hover/selection.
+
+## 018 · Viewer serves copied snapshots; the repo's `snapshots/` stays the source of truth
+**Choice:** `snapshots/` is committed at the repo root, where the analyzer writes. The viewer's
+`predev`/`prebuild` step copies it into `viewer/public/snapshots` (gitignored), so the static
+export contains `index.json` plus the snapshot files and fetches them with relative URLs.
+**Rejected:** (a) Importing the snapshot JSON into the JS bundle. Adding a snapshot would need a
+rebuild of the code rather than just the data, and the manifest indirection would be pointless.
+(b) Writing snapshots straight into `viewer/public`. That couples the analyzer to one consumer.
