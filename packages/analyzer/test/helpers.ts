@@ -1,3 +1,11 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { Budget, type BudgetCaps } from "../src/llm/budget.ts";
+import { ResponseCache } from "../src/llm/cache.ts";
+import { TokenFactoryClient } from "../src/llm/client.ts";
+import { SpendLedger } from "../src/llm/ledger.ts";
+import { PriceTable } from "../src/llm/prices.ts";
 import { Project, ts, type SourceFile } from "ts-morph";
 import { EvidenceStore, type ExtractContext } from "../src/extract/evidence.ts";
 
@@ -21,4 +29,24 @@ export function memoryProject(files: Record<string, string>) {
   const ctx: ExtractContext = { rel: (abs) => abs.replace(/^\//, ""), evidence };
   const sf = (path: string): SourceFile => project.getSourceFileOrThrow(path);
   return { project, ctx, evidence, sf };
+}
+
+export const TEST_PRICES = PriceTable.parse({
+  placeholderFallback: { inputPer1M: 5, outputPer1M: 15 },
+  models: {
+    "nvidia/nvidia-nemotron-3-nano-30b-a3b": { inputPer1M: null, outputPer1M: null, placeholder: true },
+    "priced/model": { inputPer1M: 1, outputPer1M: 2 },
+  },
+});
+
+/** TokenFactoryClient wired to a fake fetch and a throwaway ledger/cache directory. */
+export function fakeClient(fetchImpl: typeof fetch, opts: { caps?: BudgetCaps; readCache?: boolean; dir?: string; spentBefore?: number } = {}) {
+  const dir = opts.dir ?? mkdtempSync(path.join(tmpdir(), "tracehound-test-"));
+  const ledger = new SpendLedger(path.join(dir, "spend.jsonl"));
+  const budget = new Budget(opts.caps ?? { totalUSD: 45, runUSD: 1 }, opts.spentBefore ?? ledger.totalUSD());
+  const client = new TokenFactoryClient({
+    apiKey: "test-key", prices: TEST_PRICES, budget, ledger, cache: new ResponseCache(path.join(dir, "cache")),
+    readCache: opts.readCache ?? true, fetch: fetchImpl,
+  });
+  return { client, ledger, budget, dir };
 }

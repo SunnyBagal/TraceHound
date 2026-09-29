@@ -10,3 +10,6 @@ coverage/
 # demo input and derived output (regenerate with `pnpm demo`)
 fixtures/
 snapshots/
+
+# local LLM spend ledger + response cache
+.tracehound/

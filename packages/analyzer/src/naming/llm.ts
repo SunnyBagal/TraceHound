@@ -2,18 +2,18 @@
 // It runs after deterministic analysis, reads facts only (never source code), and can only
 // change `name`, `summary` and `naming` on components. Edges, evidence and ids pass through as-is.
 import { z } from "zod";
+import { BudgetExceededError } from "../llm/budget.ts";
+import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import type { Component, LlmCall, Snapshot } from "../schema.ts";
 
-export const DEFAULT_BASE_URL = "https://api.tokenfactory.us-central1.nebius.com/v1";
+/** Development default. Larger Nemotrons only when explicitly passed (--model). */
 export const DEFAULT_MODEL = "nvidia/nvidia-nemotron-3-nano-30b-a3b";
+const MAX_TOKENS = 1500; // headroom for reasoning tokens before the JSON answer
 
 export interface LlmNamingConfig {
-  apiKey: string;
-  baseUrl?: string;
+  client: { chat(request: ChatRequest, meta: { purpose: string; componentId?: string }): Promise<ChatResult> };
   model?: string;
-  timeoutMs?: number;
   concurrency?: number;
-  fetch?: typeof fetch;
   log?: (call: LlmCall) => void;
 }
 
@@ -66,42 +66,39 @@ export function parseReply(content: string): z.infer<typeof Reply> | undefined {
   }
 }
 
-async function nameOne(snapshot: Snapshot, component: Component, cfg: Required<Omit<LlmNamingConfig, "log">>) {
+async function nameOne(snapshot: Snapshot, component: Component, client: LlmNamingConfig["client"], model: string) {
+  const call: LlmCall = { purpose: "component-naming", componentId: component.id, model, latencyMs: 0, ok: false, cached: false, estCostUSD: 0 };
   const started = performance.now();
-  const call: LlmCall = { purpose: "component-naming", componentId: component.id, model: cfg.model, latencyMs: 0, ok: false };
   try {
-    const res = await cfg.fetch(`${cfg.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${cfg.apiKey}` },
-      body: JSON.stringify({
-        model: cfg.model,
+    const result = await client.chat(
+      {
+        model,
         temperature: 0,
-        max_tokens: 1500, // headroom for reasoning tokens before the JSON answer
+        max_tokens: MAX_TOKENS,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: JSON.stringify(componentFacts(snapshot, component)) },
         ],
-      }),
-      signal: AbortSignal.timeout(cfg.timeoutMs),
+      },
+      { purpose: "component-naming", componentId: component.id },
+    );
+    Object.assign(call, {
+      latencyMs: result.latencyMs,
+      cached: result.cached,
+      estCostUSD: result.costUSD,
+      promptTokens: result.inputTokens,
+      completionTokens: result.outputTokens,
+      totalTokens: result.inputTokens !== undefined && result.outputTokens !== undefined ? result.inputTokens + result.outputTokens : undefined,
     });
-    const body = (await res.json().catch(() => ({}))) as {
-      choices?: { message?: { content?: string } }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-      error?: { message?: string };
-    };
-    call.promptTokens = body.usage?.prompt_tokens;
-    call.completionTokens = body.usage?.completion_tokens;
-    call.totalTokens = body.usage?.total_tokens;
-    if (!res.ok) throw new Error(`HTTP ${res.status}${body.error?.message ? `: ${body.error.message}` : ""}`);
-    const reply = parseReply(body.choices?.[0]?.message?.content ?? "");
-    if (!reply) throw new Error("reply was not a valid {name, summary} object");
+    const reply = parseReply(result.content);
+    if (!reply) throw new Error(`reply was not a valid {name, summary} object: ${JSON.stringify(result.content.slice(0, 160))}`);
     call.ok = true;
     return { call, reply };
   } catch (error) {
+    if (error instanceof BudgetExceededError) throw error; // never degrade silently past a cap
     call.error = error instanceof Error ? error.message : String(error);
+    if (!call.latencyMs) call.latencyMs = Math.round(performance.now() - started);
     return { call, reply: undefined };
-  } finally {
-    call.latencyMs = Math.round(performance.now() - started);
   }
 }
 
@@ -110,14 +107,7 @@ async function nameOne(snapshot: Snapshot, component: Component, cfg: Required<O
  * Returns a new snapshot; only component name/summary/naming differ from the input.
  */
 export async function nameComponentsWithLlm(snapshot: Snapshot, config: LlmNamingConfig): Promise<Snapshot> {
-  const cfg = {
-    apiKey: config.apiKey,
-    baseUrl: config.baseUrl ?? DEFAULT_BASE_URL,
-    model: config.model ?? DEFAULT_MODEL,
-    timeoutMs: config.timeoutMs ?? 30_000,
-    concurrency: config.concurrency ?? 4,
-    fetch: config.fetch ?? fetch,
-  };
+  const cfg = { model: config.model ?? DEFAULT_MODEL, concurrency: config.concurrency ?? 4 };
   const log = config.log ?? (() => {});
   const targets = snapshot.components.filter((c) => c.naming.source !== "override");
   const results = new Map<string, Awaited<ReturnType<typeof nameOne>>>();
@@ -126,7 +116,7 @@ export async function nameComponentsWithLlm(snapshot: Snapshot, config: LlmNamin
   const worker = async () => {
     while (next < targets.length) {
       const component = targets[next++]!;
-      const result = await nameOne(snapshot, component, cfg);
+      const result = await nameOne(snapshot, component, config.client, cfg.model);
       log(result.call);
       results.set(component.id, result);
     }
@@ -149,6 +139,7 @@ export async function nameComponentsWithLlm(snapshot: Snapshot, config: LlmNamin
 }
 
 export function formatCall(call: LlmCall): string {
-  const tokens = call.totalTokens !== undefined ? `${call.promptTokens}+${call.completionTokens}=${call.totalTokens} tokens` : "tokens n/a";
-  return `[naming] ${call.componentId.padEnd(28)} ${call.model} ${String(call.latencyMs).padStart(5)}ms ${tokens} ${call.ok ? "ok" : `FAILED (${call.error}) → heuristic name`}`;
+  const tokens = call.totalTokens !== undefined ? `${call.promptTokens}+${call.completionTokens}=${call.totalTokens} tok` : "tokens n/a";
+  const cost = call.cached ? "cached $0" : `~$${call.estCostUSD.toFixed(5)}`;
+  return `[naming] ${call.componentId.padEnd(28)} ${call.model} ${String(call.latencyMs).padStart(6)}ms ${tokens} ${cost} ${call.ok ? "ok" : `FAILED (${call.error}) → heuristic name`}`;
 }

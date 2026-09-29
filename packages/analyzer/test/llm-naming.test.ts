@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { componentFacts, nameComponentsWithLlm, parseReply } from "../src/naming/llm.ts";
+import { BudgetExceededError } from "../src/llm/budget.ts";
 import { Snapshot, type Component, type LlmCall } from "../src/schema.ts";
+import { fakeClient } from "./helpers.ts";
 
 const component = (id: string, name: string, extra: Partial<Component> = {}): Component => ({
   id, name, kind: "service", subtitle: "sub", naming: { source: "heuristic", heuristicName: name },
@@ -55,7 +57,7 @@ describe("nameComponentsWithLlm", () => {
       Redis: { content: '```json\n{"name": "Order Queue", "summary": "Redis lists carrying engine requests and responses."}\n```' },
     });
     const logs: LlmCall[] = [];
-    const named = await nameComponentsWithLlm(base, { apiKey: "k", fetch: impl, log: (c) => logs.push(c) });
+    const named = await nameComponentsWithLlm(base, { client: fakeClient(impl).client, log: (c) => logs.push(c) });
 
     expect(named.components.map((c) => [c.id, c.name, c.naming.source])).toEqual([
       ["backend:engine-client", "Redis RPC Bridge", "llm"],
@@ -69,7 +71,8 @@ describe("nameComponentsWithLlm", () => {
     expect(() => Snapshot.parse(named)).not.toThrow();
 
     expect(logs).toHaveLength(2);
-    expect(logs[0]).toMatchObject({ purpose: "component-naming", model: "nvidia/nvidia-nemotron-3-nano-30b-a3b", ok: true, promptTokens: 100, completionTokens: 20, totalTokens: 120 });
+    expect(logs[0]).toMatchObject({ purpose: "component-naming", model: "nvidia/nvidia-nemotron-3-nano-30b-a3b", ok: true, cached: false, promptTokens: 100, completionTokens: 20, totalTokens: 120 });
+    expect(logs[0]!.estCostUSD).toBeCloseTo((100 * 5 + 20 * 15) / 1e6); // placeholder → conservative fallback price
     expect(logs[0]!.latencyMs).toBeGreaterThanOrEqual(0);
     expect(named.llmCalls.map((c) => c.componentId)).toEqual(["backend:engine-client", "redis:redis-url"]); // component order
     expect(named.llmCalls).toEqual(expect.arrayContaining(logs));
@@ -77,19 +80,19 @@ describe("nameComponentsWithLlm", () => {
 
   it("falls back to the heuristic name on HTTP errors, network errors and junk replies", async () => {
     const { impl } = fakeFetch({ "Engine Client": { status: 500, content: "" }, Redis: { throws: true } });
-    const named = await nameComponentsWithLlm(base, { apiKey: "k", fetch: impl });
+    const named = await nameComponentsWithLlm(base, { client: fakeClient(impl).client });
     expect(named.components.map((c) => c.name)).toEqual(["Engine Client", "Redis", "Pending-Response Registry"]);
     expect(named.components.every((c) => c.naming.source !== "llm")).toBe(true);
-    expect(named.llmCalls.map((c) => [c.ok, c.error])).toEqual([[false, "HTTP 500"], [false, "network down"]]);
+    expect(named.llmCalls.map((c) => [c.ok, c.error])).toEqual([[false, "HTTP 500: no error message"], [false, "network down"]]);
 
-    const junk = await nameComponentsWithLlm(base, { apiKey: "k", fetch: fakeFetch({ "Engine Client": { content: "I think it's a client." } }).impl });
+    const junk = await nameComponentsWithLlm(base, { client: fakeClient(fakeFetch({ "Engine Client": { content: "I think it's a client." } }).impl).client });
     expect(junk.components[0]!.name).toBe("Engine Client");
     expect(junk.llmCalls[0]!.error).toMatch(/not a valid/);
   });
 
   it("never sends source code, and skips components named by an override", async () => {
     const { impl, bodies } = fakeFetch({});
-    await nameComponentsWithLlm(base, { apiKey: "k", fetch: impl, model: "custom/model" });
+    await nameComponentsWithLlm(base, { client: fakeClient(impl).client, model: "custom/model" });
     expect(bodies.map((b) => JSON.parse(b.messages[1]!.content).currentName).sort()).toEqual(["Engine Client", "Redis"]);
     expect(bodies.every((b) => b.model === "custom/model")).toBe(true);
     expect(JSON.stringify(bodies)).not.toContain(SECRET_SNIPPET);
@@ -97,7 +100,7 @@ describe("nameComponentsWithLlm", () => {
 
   it("rejects a duplicate name so two nodes never share a label", async () => {
     const same = '{"name": "Pending-Response Registry", "summary": "Tracks promises waiting for engine replies."}';
-    const named = await nameComponentsWithLlm(base, { apiKey: "k", fetch: fakeFetch({ "Engine Client": { content: same } }).impl });
+    const named = await nameComponentsWithLlm(base, { client: fakeClient(fakeFetch({ "Engine Client": { content: same } }).impl).client });
     expect(named.components[0]!.name).toBe("Engine Client");
   });
 });
@@ -115,3 +118,13 @@ describe("parseReply", () => {
     expect(parseReply('{"name": "This component is the one that bridges Redis", "summary": "Does things with the engine."}')).toBeUndefined();
   });
 });
+
+describe("nameComponentsWithLlm under a budget cap", () => {
+  it("fails loudly instead of falling back when the budget refuses a call", async () => {
+    const { impl, bodies } = fakeFetch({});
+    const { client } = fakeClient(impl, { caps: { totalUSD: 45, runUSD: 0.0001 } });
+    await expect(nameComponentsWithLlm(base, { client })).rejects.toBeInstanceOf(BudgetExceededError);
+    expect(bodies).toHaveLength(0);
+  });
+});
+

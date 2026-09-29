@@ -187,6 +187,8 @@ export const LlmCall = z.object({
   promptTokens: z.number().int().optional(),
   completionTokens: z.number().int().optional(),
   totalTokens: z.number().int().optional(),
+  cached: z.boolean(), // served from .tracehound/cache: no request, $0
+  estCostUSD: z.number().nonnegative(), // from config/prices.json (conservative if placeholder)
   ok: z.boolean(),
   error: z.string().optional(),
 });
