@@ -188,12 +188,19 @@ export const Snapshot = z
   });
 export type Snapshot = z.infer<typeof Snapshot>;
 
-export const SnapshotSummary = z.object({
+export const ManifestEntry = z.object({
   repo: z.string(),
-  commitSha: z.string(),
+  sha: z.string().regex(/^[0-9a-f]{40}$/),
   analyzerVersion: z.string(),
-  generatedAt: z.string(),
-  components: z.number().int(),
-  edges: z.number().int(),
+  path: z.string(), // relative to the manifest, e.g. "<sha>/<analyzerVersion>.json"
+  createdAt: z.string(),
 });
-export type SnapshotSummary = z.infer<typeof SnapshotSummary>;
+export type ManifestEntry = z.infer<typeof ManifestEntry>;
+
+/** snapshots/index.json — the static entry point the viewer loads first. */
+export const SnapshotManifest = z.object({
+  schemaVersion: z.literal(SCHEMA_VERSION),
+  latest: ManifestEntry.nullable(),
+  snapshots: z.array(ManifestEntry),
+});
+export type SnapshotManifest = z.infer<typeof SnapshotManifest>;

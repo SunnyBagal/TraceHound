@@ -13,17 +13,19 @@ repo) are recorded as facts but never produce edges.
 - pnpm workspaces, Node >= 24. TS runs via Node's native type stripping: use `.ts` import
   extensions and erasable-only syntax (no enums, no parameter properties, no namespaces).
 - `packages/analyzer` — ts-morph + Zod. `@tracehound/analyzer/schema` is the zod-only subpath
-  the API and web import; keep `src/schema.ts` free of relative imports.
-- `apps/api` — Fastify. Serves snapshots from `./snapshots/<sha>/<analyzerVersion>.json`.
+  the web imports; keep `src/schema.ts` free of relative imports.
+- No API server for now (hackathon): snapshots are static files. The analyzer writes
+  `snapshots/<sha>/<analyzerVersion>.json` plus `snapshots/index.json` (manifest with a
+  `latest` pointer); the viewer loads the manifest, then the snapshot file directly.
 - `apps/web` — Next.js App Router, React Flow (`@xyflow/react`), ELK.js, Tailwind, shadcn/ui,
-  Framer Motion. Talks to the API through a Next rewrite (`/api/*`).
+  Framer Motion.
 - Vitest for extractors and grouping. No UI tests yet.
 - Later: Postgres/Drizzle/BullMQ. For now the JSON snapshot file is the store.
 
 ## Commands
 - `pnpm demo` — clone the pinned demo repo into `fixtures/demo-repo` and analyze it.
 - `pnpm test` / `pnpm typecheck` — all packages.
-- `pnpm --filter @tracehound/api dev`, `pnpm --filter @tracehound/web dev`.
+- `pnpm --filter @tracehound/web dev`.
 
 ## Conventions
 - Snapshots are keyed by commit SHA + `ANALYZER_VERSION` (`packages/analyzer/src/version.ts`).
@@ -36,8 +38,8 @@ repo) are recorded as facts but never produce edges.
 - Small, meaningful commits pushed to `main`.
 
 ## Roadmap
-1. ✅ Slice: analyzer → snapshot JSON → `GET /snapshot/:sha` → Railway-style canvas.
-2. Persist snapshots in Postgres (Drizzle); analysis jobs on BullMQ; analyze arbitrary repos.
+1. Slice: analyzer → static snapshot JSON + manifest → Railway-style canvas.
+2. API (Fastify) + Postgres (Drizzle) persistence; analysis jobs on BullMQ; arbitrary repos.
 3. More extractors (BullMQ, Kafka, fetch/axios calls between services, tRPC, Next routes).
 4. Snapshot diffing across commits.
 5. Graph-guided repair agent: trace an issue to affected components, propose tested fixes in a

@@ -59,3 +59,12 @@ responses reach the backend, and hiding it would erase half the round trip.
 (`engine-client.ts`) are their own service component.
 **Rejected:** Always a separate component per client module. It creates a "db.ts" box that only
 duplicates the database node.
+
+## 009 · Static snapshot files + manifest instead of an API (hackathon scope)
+**Choice:** The analyzer writes `snapshots/<sha>/<analyzerVersion>.json` and upserts
+`snapshots/index.json`, which lists every snapshot (repo, sha, analyzerVersion, path, createdAt)
+and has a `latest` pointer. The viewer fetches the manifest, then the snapshot, as plain static
+files. Re-analyzing the same (repo, sha, version) replaces its manifest entry.
+**Rejected:** A Fastify `GET /snapshot/:sha` server. It adds a process to run, CORS or rewrite
+plumbing, and a deploy target, and gives nothing a static file doesn't while snapshots are
+immutable and produced offline. It comes back when analysis runs on demand (roadmap step 2).
