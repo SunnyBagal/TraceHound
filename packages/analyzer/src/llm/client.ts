@@ -50,13 +50,14 @@ export class TokenFactoryClient {
   readonly #opts: Required<Omit<TokenFactoryOptions, "cache">> & { cache?: ResponseCache };
 
   constructor(opts: TokenFactoryOptions) {
+    // `??` rather than spread defaults: an explicit `undefined` (e.g. unset NEBIUS_BASE_URL) must not win
     this.#opts = {
-      baseUrl: DEFAULT_BASE_URL,
-      readCache: true,
-      timeoutMs: 60_000,
-      fetch: globalThis.fetch,
-      now: () => new Date(),
       ...opts,
+      baseUrl: opts.baseUrl ?? DEFAULT_BASE_URL,
+      readCache: opts.readCache ?? true,
+      timeoutMs: opts.timeoutMs ?? 60_000,
+      fetch: opts.fetch ?? globalThis.fetch,
+      now: opts.now ?? (() => new Date()),
     };
   }
 

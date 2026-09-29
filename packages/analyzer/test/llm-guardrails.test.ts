@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { Budget, BudgetExceededError, capsFromEnv } from "../src/llm/budget.ts";
+import { Budget, BudgetExceededError, capsFromEnv, DEFAULT_CAPS } from "../src/llm/budget.ts";
 import { ResponseCache } from "../src/llm/cache.ts";
-import type { ChatRequest } from "../src/llm/client.ts";
-import { summarize } from "../src/llm/ledger.ts";
+import { TokenFactoryClient, type ChatRequest } from "../src/llm/client.ts";
+import { SpendLedger, summarize } from "../src/llm/ledger.ts";
 import { costUSD, priceFor } from "../src/llm/prices.ts";
 import { fakeClient, TEST_PRICES } from "./helpers.ts";
 
@@ -115,6 +115,17 @@ describe("TokenFactoryClient", () => {
     const { client } = fakeClient(f.impl);
     await expect(client.chat(request(), { purpose: "p" })).rejects.toThrow();
     expect((await client.chat(request(), { purpose: "p" })).cached).toBe(false);
+  });
+
+  it("falls back to the default base URL when baseUrl is explicitly undefined", async () => {
+    const urls: string[] = [];
+    const impl = (async (url: string) => {
+      urls.push(url);
+      return new Response(JSON.stringify({ data: [] }));
+    }) as unknown as typeof fetch;
+    const client = new TokenFactoryClient({ apiKey: "k", baseUrl: undefined, prices: TEST_PRICES, budget: new Budget(DEFAULT_CAPS, 0), ledger: new SpendLedger("/dev/null"), fetch: impl });
+    await client.listModels();
+    expect(urls).toEqual(["https://api.tokenfactory.us-central1.nebius.com/v1/models"]);
   });
 
   it("lists models without touching the budget or ledger", async () => {
