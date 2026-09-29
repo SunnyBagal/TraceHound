@@ -12,10 +12,23 @@ const MODEL_OPS = new Set([
 const RAW_OPS = new Set(["$queryRaw", "$queryRawUnsafe", "$executeRaw", "$executeRawUnsafe", "$transaction"]);
 const CONNECTION_PROPS = new Set(["url", "connectionString", "datasourceUrl"]);
 
-/** `model User {` declarations in a .prisma schema. */
+/** `model User {` declarations and the datasource provider in a .prisma schema. */
 export function extractPrismaSchema(file: string, text: string, ctx: ExtractContext) {
   const models: { name: string; evidenceId: string }[] = [];
+  let datasource: { provider: string; evidenceId: string } | undefined;
+  let block = "";
   text.split(/\r?\n/).forEach((line, i) => {
+    const open = /^\s*(\w+)\s+\w+\s*\{/.exec(line);
+    if (open) block = open[1]!;
+    const provider = /^\s*provider\s*=\s*"([^"]+)"/.exec(line);
+    if (block === "datasource" && provider && !datasource) {
+      datasource = {
+        provider: provider[1]!,
+        evidenceId: ctx.evidence.add({
+          file, startLine: i + 1, endLine: i + 1, extractor: "prisma", confidence: 1, detail: `prisma datasource provider ${provider[1]}`,
+        }),
+      };
+    }
     const match = /^\s*model\s+(\w+)\s*\{/.exec(line);
     if (!match) return;
     const evidenceId = ctx.evidence.add({
@@ -24,7 +37,7 @@ export function extractPrismaSchema(file: string, text: string, ctx: ExtractCont
     });
     models.push({ name: match[1]!, evidenceId });
   });
-  return models;
+  return { models, datasource };
 }
 
 function isPrismaModule(module: string): boolean {
@@ -98,7 +111,9 @@ export function extractPrisma(sf: SourceFile, ctx: ExtractContext, schemaModels:
       clientExpr = target;
     }
     const ident = clientExpr && rootIdentifier(clientExpr);
-    if (!ident || !isPrismaClientInit(resolveVariable(ident)?.getInitializer())) continue;
+    const clientVar = ident && resolveVariable(ident);
+    if (!ident || !clientVar || !isPrismaClientInit(clientVar.getInitializer())) continue;
+    const clientDecl = `${ctx.rel(clientVar.getSourceFile().getFilePath())}#${clientVar.getName()}`;
 
     const model = accessor ? (modelByAccessor.get(accessor) ?? accessor) : "$raw";
     const inSchema = accessor ? modelByAccessor.has(accessor) : false;
@@ -108,7 +123,7 @@ export function extractPrisma(sf: SourceFile, ctx: ExtractContext, schemaModels:
       detail: `${model}.${op}${accessor && !inSchema ? " (model not found in schema.prisma)" : ""}`,
       symbol: call.getFirstAncestorByKind(SyntaxKind.FunctionDeclaration)?.getName(),
     });
-    facts.ops.push({ client: ident.getText(), model, op, evidenceId });
+    facts.ops.push({ client: ident.getText(), clientDecl, model, op, evidenceId });
   }
   return facts;
 }

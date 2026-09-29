@@ -77,6 +77,7 @@ export type RedisOpFact = z.infer<typeof RedisOpFact>;
 
 export const PrismaOpFact = z.object({
   client: z.string(),
+  clientDecl: z.string(), // "file#variable" of the PrismaClient declaration
   model: z.string(),
   op: z.string(),
   evidenceId: z.string(),
@@ -115,6 +116,7 @@ export const FileFacts = z.object({
   redisOps: z.array(RedisOpFact),
   prismaOps: z.array(PrismaOpFact),
   prismaModels: z.array(z.object({ name: z.string(), evidenceId: z.string() })),
+  prismaDatasource: z.object({ provider: z.string(), evidenceId: z.string() }).optional(),
   envReads: z.array(EnvReadFact),
 });
 export type FileFacts = z.infer<typeof FileFacts>;
@@ -136,7 +138,8 @@ export const Component = z.object({
   counts: z.object({ files: z.number().int(), routes: z.number().int(), envVars: z.number().int() }),
   resource: z
     .object({
-      tech: z.enum(["redis", "postgres"]),
+      tech: z.enum(["redis", "prisma"]),
+      engine: z.string().optional(), // e.g. "postgresql" from the prisma datasource
       connection: z.string(),
       keys: z.array(z.string()).optional(),
       models: z.array(z.string()).optional(),

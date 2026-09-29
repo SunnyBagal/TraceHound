@@ -2,15 +2,17 @@ import { describe, expect, it } from "vitest";
 import { extractPrisma, extractPrismaSchema } from "../src/extract/prisma.ts";
 import { memoryProject } from "./helpers.ts";
 
-const schema = [`generator client {`, `  provider = "prisma-client"`, `}`, `model User {`, `  id String @id`, `}`, `model Order {`, `}`].join("\n");
+const schema = [`generator client {`, `  provider = "prisma-client"`, `}`, `datasource db {`, `  provider = "postgresql"`, `}`, `model User {`, `  id String @id`, `}`, `model Order {`, `}`].join("\n");
 
 describe("extractPrismaSchema", () => {
-  it("lists models with line evidence", () => {
+  it("lists models and the datasource provider (not the generator's) with line evidence", () => {
     const { ctx, evidence } = memoryProject({});
     evidence.setFileText("prisma/schema.prisma", schema);
-    const models = extractPrismaSchema("prisma/schema.prisma", schema, ctx);
+    const { models, datasource } = extractPrismaSchema("prisma/schema.prisma", schema, ctx);
     expect(models.map((m) => m.name)).toEqual(["User", "Order"]);
-    expect(evidence.get(models[0]!.evidenceId)!.range).toEqual({ startLine: 4, endLine: 4 });
+    expect(evidence.get(models[0]!.evidenceId)!.range).toEqual({ startLine: 7, endLine: 7 });
+    expect(datasource?.provider).toBe("postgresql");
+    expect(evidence.get(datasource!.evidenceId)!.range.startLine).toBe(5);
   });
 });
 
