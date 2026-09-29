@@ -1,0 +1,87 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+/* TraceHound: charcoal canvas, amber "scent trail" accent. Dark by default. */
+:root {
+  --bg: #0a0a0c;
+  --panel: #111114;
+  --card: #16161a;
+  --card-hover: #1b1b20;
+  --line: #26262d;
+  --line-strong: #34343d;
+  --text: #ececf1;
+  --muted: #9b9ba8;
+  --faint: #6b6b78;
+  --accent: #f5a524;
+  --accent-soft: rgba(245, 165, 36, 0.14);
+  --warn: #f2b84b;
+  --edge: #8a8a99;
+  --edge-active: #f5a524;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-card: var(--card);
+  --color-card-hover: var(--card-hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-warn: var(--warn);
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden; /* the canvas pans; the page itself never scrolls sideways */
+  background: var(--bg);
+  color: var(--text);
+}
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* React Flow chrome in our palette */
+.react-flow {
+  --xy-background-color: var(--bg);
+  --xy-minimap-background-color: var(--panel);
+  --xy-minimap-mask-background-color: rgba(10, 10, 12, 0.7);
+  --xy-controls-button-background-color: var(--card);
+  --xy-controls-button-background-color-hover: var(--card-hover);
+  --xy-controls-button-color: var(--muted);
+  --xy-controls-button-border-color: var(--line);
+}
+.react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+.react-flow__attribution {
+  background: transparent;
+}
+.react-flow__attribution a {
+  color: var(--faint);
+}
+
+@keyframes trail {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 1px var(--accent), 0 0 0 0 rgba(245, 165, 36, 0.35); }
+  50% { box-shadow: 0 0 0 1px var(--accent), 0 0 0 10px rgba(245, 165, 36, 0); }
+}
+.pulse-ring {
+  animation: pulse-ring 1.4s ease-in-out 3;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse-ring { animation: none; }
+}
