@@ -1,0 +1,19 @@
+{
+  "name": "@tracehound/analyzer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "analyze": "node src/cli.ts --repo ../../fixtures/demo-repo --out ../../snapshots",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ts-morph": "^28.0.0",
+    "zod": "^4.6.5"
+  }
+}
