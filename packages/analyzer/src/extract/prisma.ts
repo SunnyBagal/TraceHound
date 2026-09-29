@@ -120,6 +120,7 @@ export function extractPrisma(sf: SourceFile, ctx: ExtractContext, schemaModels:
     const evidenceId = ctx.evidence.addNode(call, file, {
       extractor: "prisma",
       confidence: inSchema ? 0.9 : 0.7,
+      resolution: "proven", // model and op are literal member names in the call
       detail: `${model}.${op}${accessor && !inSchema ? " (model not found in schema.prisma)" : ""}`,
       symbol: call.getFirstAncestorByKind(SyntaxKind.FunctionDeclaration)?.getName(),
     });

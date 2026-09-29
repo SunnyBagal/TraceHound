@@ -55,8 +55,23 @@ describe("extractRedis", () => {
     expect(evidence.get(push!.evidenceId)).toMatchObject({ confidence: 0.7, range: { startLine: 7 }, symbol: "send" });
   });
 
-  it("keeps template keys as patterns", () => {
+  it("keeps template keys as patterns, labelled dynamic", () => {
     expect(facts.ops[2]!.key?.value).toBe("response-queue-*");
+    expect(evidence.get(facts.ops[2]!.evidenceId)!.resolution).toBe("dynamic");
+  });
+
+  it("labels keys by how they were resolved", () => {
+    const [fallback, param] = facts.ops;
+    expect(evidence.get(fallback!.evidenceId)!.resolution).toBe("resolved-default"); // env ?? "backend-to-engine-broker"
+    expect(evidence.get(param!.evidenceId)!.resolution).toBe("dynamic"); // function parameter
+  });
+
+  it("labels literal keys proven", () => {
+    const { ctx: c2, evidence: ev2, sf: sf2 } = memoryProject({
+      "/a.ts": [`import { createClient } from "redis";`, `const r = createClient();`, `const Q = "jobs";`, `r.lPush("jobs", "x");`, `r.lPush(Q, "x");`].join("\n"),
+    });
+    const ops = extractRedis(sf2("/a.ts"), c2).ops;
+    expect(ops.map((o) => ev2.get(o.evidenceId)!.resolution)).toEqual(["proven", "proven"]);
   });
 
   it("records dynamic keys as unresolved with confidence 0.5", () => {

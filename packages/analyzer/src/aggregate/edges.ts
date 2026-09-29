@@ -1,5 +1,7 @@
-import type { ComponentEdge, EdgeKind, Evidence, FileFacts } from "../schema.ts";
+import type { ComponentEdge, EdgeKind, Evidence, FileFacts, Resolution } from "../schema.ts";
 import type { GroupingResult } from "../group/grouping.ts";
+
+const STRENGTH: Resolution[] = ["dynamic", "resolved-default", "proven"];
 
 interface Draft {
   source: string;
@@ -54,6 +56,11 @@ export function aggregateEdges(files: FileFacts[], grouping: GroupingResult, evi
     .map(([id, d]) => {
       const evidenceIds = [...d.evidenceIds].sort();
       const labels = [...d.labels].sort();
+      const resolutions = evidenceIds.map((e) => {
+        const r = evidence.get(e)?.resolution;
+        if (!r) throw new Error(`edge ${id} cites evidence ${e} without a resolution`);
+        return r;
+      });
       return {
         id,
         source: d.source,
@@ -62,6 +69,8 @@ export function aggregateEdges(files: FileFacts[], grouping: GroupingResult, evi
         evidenceIds,
         weight: evidenceIds.length,
         confidence: Math.max(...evidenceIds.map((e) => evidence.get(e)?.confidence ?? 0)),
+        // an edge is as established as its best evidence: one literal call site proves it
+        confidenceLabel: STRENGTH[Math.max(...resolutions.map((r) => STRENGTH.indexOf(r)))]!,
         label: labels.length > 3 ? `${labels.slice(0, 3).join(", ")} +${labels.length - 3}` : labels.join(", "),
       };
     });

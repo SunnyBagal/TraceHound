@@ -31,6 +31,16 @@ describe.skipIf(!existsSync(DEMO))("demo repo (cex-v2-boilercode @ da0e3d6)", ()
     expect(edge("Auth API", "Postgres", "queries")?.label).toBe("User.create");
   });
 
+  it("labels every edge proven / resolved-default / dynamic", () => {
+    expect(edge("Exchange API", "Engine Client", "imports")?.confidenceLabel).toBe("proven");
+    expect(edge("Auth API", "Postgres", "queries")?.confidenceLabel).toBe("proven");
+    expect(edge("Engine Client", "Redis", "produces")?.confidenceLabel).toBe("resolved-default");
+    expect(edge("Redis", "Engine Worker", "consumes")?.confidenceLabel).toBe("resolved-default");
+    expect(edge("Engine Worker", "Redis", "produces")?.confidenceLabel).toBe("dynamic");
+    expect(edge("Redis", "Engine Client", "consumes")?.confidenceLabel).toBe("dynamic");
+    expect(snap.edges.every((e) => ["proven", "resolved-default", "dynamic"].includes(e.confidenceLabel))).toBe(true);
+  });
+
   it("finds all 8 HTTP routes", () => {
     expect(snap.components.flatMap((c) => c.routes.map((r) => `${r.method} ${r.path}`)).sort()).toEqual([
       "DELETE /order/:orderId", "GET /balance", "GET /depth/:symbol", "GET /health", "GET /order/:orderId", "POST /order", "POST /signin", "POST /signup",

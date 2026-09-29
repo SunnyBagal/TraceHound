@@ -7,6 +7,14 @@ export const SCHEMA_VERSION = 1;
 export const ExtractorName = z.enum(["imports", "symbols", "http-routes", "redis", "prisma", "env"]);
 export type ExtractorName = z.infer<typeof ExtractorName>;
 
+/**
+ * How a fact's operand was established — shown in the UI instead of the numeric confidence.
+ * proven: literal / compiler-resolved · resolved-default: taken from a `?? "default"` fallback
+ * (e.g. an env var's default) · dynamic: only known at runtime.
+ */
+export const Resolution = z.enum(["proven", "resolved-default", "dynamic"]);
+export type Resolution = z.infer<typeof Resolution>;
+
 export const LineRange = z.object({
   startLine: z.number().int().positive(),
   endLine: z.number().int().positive(),
@@ -20,6 +28,7 @@ export const Evidence = z.object({
   range: LineRange,
   extractor: ExtractorName,
   confidence: z.number().min(0).max(1),
+  resolution: Resolution.optional(), // absent for facts that never back an edge (e.g. unresolved imports)
   detail: z.string(),
   snippet: z.object({ startLine: z.number().int().positive(), lines: z.array(z.string()) }),
 });
@@ -158,7 +167,8 @@ export const ComponentEdge = z.object({
   kind: EdgeKind,
   evidenceIds: z.array(z.string()).min(1), // product rule: no edge without evidence
   weight: z.number().int().positive(),
-  confidence: z.number().min(0).max(1),
+  confidence: z.number().min(0).max(1), // internal: max over evidence
+  confidenceLabel: Resolution, // strongest resolution over evidence; what the UI shows
   label: z.string(),
 });
 export type ComponentEdge = z.infer<typeof ComponentEdge>;

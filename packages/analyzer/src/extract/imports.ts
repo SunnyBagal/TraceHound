@@ -46,6 +46,7 @@ export function extractImports(sf: SourceFile, ctx: ExtractContext): ImportFact[
     const evidenceId = ctx.evidence.addNode(decl, file, {
       extractor: "imports",
       confidence: target || external ? 1 : 0.5,
+      resolution: target || external ? "proven" : undefined,
       detail,
       symbol: names.join(", ") || undefined,
     });

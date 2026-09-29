@@ -33,7 +33,9 @@ repo) are recorded as facts but never produce edges.
 - Extractors return facts + `Evidence`; they never create component edges. Grouping is a pure
   function over `FileFacts`; edges are aggregated from facts afterwards.
 - Confidence: 1.0 compiler-resolved · 0.9 pattern with import provenance · 0.7 value resolved
-  via fallback/const indirection · 0.5 real op, dynamic/unresolved operand.
+  via fallback/const indirection · 0.5 real op, dynamic/unresolved operand. Numbers are
+  internal; every edge also carries `confidenceLabel` (`proven` · `resolved-default` ·
+  `dynamic`), which is what the UI shows.
 - Record non-obvious choices in `docs/decisions.md` (choice + rejected alternative).
 - Small, meaningful commits pushed to `main`.
 

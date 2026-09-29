@@ -80,3 +80,17 @@ come from `--config` (the demo's is in `configs/`, since the fixture isn't ours)
 **Rejected:** (a) Overrides that only rename heuristic components. Renames can't split or merge,
 and the ids would still depend on heuristics. (b) Pin-only overrides with no reach. Pinning an
 anchor file would push its private helpers into "Shared".
+
+## 011 · Categorical confidence labels on edges; numbers stay internal
+**Choice:** Each evidence item records how its operand was established: `proven` (a literal or
+compiler-resolved target), `resolved-default` (taken from a `?? "default"` fallback, e.g.
+`process.env.INCOMING_QUEUE ?? "backend-to-engine-broker"`), or `dynamic` (only known at
+runtime: parameters, message fields, template keys with runtime holes, bare env vars). The label
+is set by the resolver from *what it did*, not by thresholding the number. An edge's
+`confidenceLabel` is the strongest label among its evidence, since one literal call site proves
+the edge. The UI shows the label; the numeric `confidence` stays for sorting and later tuning.
+**Rejected:** (a) Showing the number. "0.7" means nothing to a reader, and the numbers mix two
+axes (provenance strength vs. value resolution). (b) Deriving labels from numeric bands. A
+template key (`response-queue-${uuid}`) scores 0.7 but is runtime-only, so bands would mislabel
+it as `resolved-default`. (c) Weakest-evidence labels. One dynamic call site would downgrade an
+edge that other sites prove.

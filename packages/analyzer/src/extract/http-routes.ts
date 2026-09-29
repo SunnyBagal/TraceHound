@@ -112,6 +112,7 @@ export function extractHttp(sf: SourceFile, ctx: ExtractContext): HttpFacts {
     const evidenceId = ctx.evidence.addNode(call, file, {
       extractor: "http-routes",
       confidence: literal !== undefined ? receiver.confidence : Math.min(receiver.confidence, 0.7),
+      resolution: literal !== undefined ? "proven" : "dynamic",
       detail: `${httpMethod} ${path} → ${handlerNames.join(", ") || "handler"}`,
       symbol: handlerNames.at(-1),
     });

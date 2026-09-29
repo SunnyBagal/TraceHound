@@ -1,4 +1,5 @@
 import { Node, SyntaxKind, type FunctionDeclaration, type ArrowFunction, type FunctionExpression } from "ts-morph";
+import type { Resolution } from "../schema.ts";
 import { literalValue, rootIdentifier } from "./provenance.ts";
 
 export interface StaticValue {
@@ -6,6 +7,7 @@ export interface StaticValue {
   value?: string; // resolved string ("*" marks template holes)
   env?: string; // env var the value comes from, when known
   confidence: number; // 1 literal · 0.7 via fallback/indirection · 0.5 dynamic
+  basis: Resolution;
 }
 
 const MAX_DEPTH = 6;
@@ -69,27 +71,30 @@ export function envHelperCallName(node: Node): string | undefined {
  */
 export function resolveStatic(node: Node, depth = 0): StaticValue {
   const raw = node.getText();
-  const dynamic: StaticValue = { raw, confidence: 0.5 };
+  const dynamic: StaticValue = { raw, confidence: 0.5, basis: "dynamic" };
   if (depth > MAX_DEPTH) return dynamic;
 
   if (Node.isParenthesizedExpression(node) || Node.isAsExpression(node) || Node.isNonNullExpression(node)) {
     return { ...resolveStatic(node.getExpression(), depth + 1), raw };
   }
   if (Node.isStringLiteral(node) || Node.isNoSubstitutionTemplateLiteral(node)) {
-    return { raw, value: node.getLiteralValue(), confidence: 1 };
+    return { raw, value: node.getLiteralValue(), confidence: 1, basis: "proven" };
   }
   if (Node.isTemplateExpression(node)) {
-    return { raw, value: literalValue(node), confidence: 0.7 };
+    // the pattern is known ("response-queue-*"), the concrete value only at runtime
+    return { raw, value: literalValue(node), confidence: 0.7, basis: "dynamic" };
   }
   const envName = processEnvName(node) ?? envHelperCallName(node);
-  if (envName) return { raw, env: envName, confidence: 0.9 };
+  if (envName) return { raw, env: envName, confidence: 0.9, basis: "dynamic" };
 
   if (Node.isBinaryExpression(node)) {
     const op = node.getOperatorToken().getKind();
     if (op === SyntaxKind.QuestionQuestionToken || op === SyntaxKind.BarBarToken) {
       const left = resolveStatic(node.getLeft(), depth + 1);
       const right = resolveStatic(node.getRight(), depth + 1);
-      return { raw, value: left.value ?? right.value, env: left.env ?? right.env, confidence: Math.min(0.7, right.confidence) };
+      const basis: Resolution =
+        left.basis === "proven" ? "proven" : right.basis === "dynamic" ? "dynamic" : "resolved-default";
+      return { raw, value: left.value ?? right.value, env: left.env ?? right.env, confidence: Math.min(0.7, right.confidence), basis };
     }
   }
   if (Node.isIdentifier(node)) {

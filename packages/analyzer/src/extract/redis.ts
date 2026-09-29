@@ -111,6 +111,7 @@ export function extractRedis(sf: SourceFile, ctx: ExtractContext): RedisFacts {
     const evidenceId = ctx.evidence.addNode(call, file, {
       extractor: "redis",
       confidence,
+      resolution: key?.basis ?? "proven",
       detail: `${op}${keyLabel ? ` key=${keyLabel}` : ""} (${opRole}) via ${callee.getExpression().getText()}`,
       symbol: call.getFirstAncestorByKind(SyntaxKind.FunctionDeclaration)?.getName(),
     });

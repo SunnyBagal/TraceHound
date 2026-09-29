@@ -1,5 +1,5 @@
 import type { Node } from "ts-morph";
-import type { Evidence, ExtractorName } from "../schema.ts";
+import type { Evidence, ExtractorName, Resolution } from "../schema.ts";
 
 const CONTEXT_LINES = 2;
 const MAX_SNIPPET_LINES = 14;
@@ -10,6 +10,7 @@ export interface EvidenceInput {
   endLine: number;
   extractor: ExtractorName;
   confidence: number;
+  resolution?: Resolution;
   detail: string;
   symbol?: string;
 }
@@ -35,6 +36,7 @@ export class EvidenceStore {
       range: { startLine: input.startLine, endLine: input.endLine },
       extractor: input.extractor,
       confidence: input.confidence,
+      resolution: input.resolution,
       detail: input.detail,
       snippet: this.#snippet(input.file, input.startLine, input.endLine),
     });
