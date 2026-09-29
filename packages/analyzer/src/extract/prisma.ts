@@ -36,7 +36,12 @@ function connectionOf(expr: Node): { connection: string; confidence: number } {
   const scopes: Node[] = [expr];
   if (Node.isNewExpression(expr)) {
     for (const ident of expr.getDescendantsOfKind(SyntaxKind.Identifier)) {
-      const init = resolveVariable(ident)?.getInitializer();
+      const parent = ident.getParent();
+      // `{ adapter }` shorthand: the identifier's own symbol is the property, not the variable
+      const decl = Node.isShorthandPropertyAssignment(parent)
+        ? parent.getValueSymbol()?.getDeclarations().find(Node.isVariableDeclaration)
+        : resolveVariable(ident);
+      const init = decl?.getInitializer();
       if (init) scopes.push(init);
     }
   }
