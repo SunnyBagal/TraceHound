@@ -8,7 +8,7 @@
     "./schema": "./src/schema.ts"
   },
   "scripts": {
-    "analyze": "node src/cli.ts --repo ../../fixtures/demo-repo --config ../../configs/cex-v2-boilercode.tracehound.json --out ../../snapshots",
+    "analyze": "node --env-file-if-exists=../../.env src/cli.ts --repo ../../fixtures/demo-repo --config ../../configs/cex-v2-boilercode.tracehound.json --out ../../snapshots",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

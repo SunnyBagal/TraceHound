@@ -138,6 +138,12 @@ export const Component = z.object({
   name: z.string(),
   kind: ComponentKind,
   subtitle: z.string(),
+  summary: z.string().optional(), // one-sentence description (LLM naming pass only)
+  naming: z.object({
+    source: z.enum(["heuristic", "override", "llm"]),
+    heuristicName: z.string(), // always kept: the deterministic fallback
+    model: z.string().optional(),
+  }),
   package: z.string().optional(), // absent for infrastructure resources
   files: z.array(z.string()),
   entryPoints: z.array(z.object({ file: z.string(), symbol: z.string().optional(), reason: z.string() })),
@@ -173,6 +179,19 @@ export const ComponentEdge = z.object({
 });
 export type ComponentEdge = z.infer<typeof ComponentEdge>;
 
+export const LlmCall = z.object({
+  purpose: z.literal("component-naming"),
+  componentId: z.string(),
+  model: z.string(),
+  latencyMs: z.number().int().nonnegative(),
+  promptTokens: z.number().int().optional(),
+  completionTokens: z.number().int().optional(),
+  totalTokens: z.number().int().optional(),
+  ok: z.boolean(),
+  error: z.string().optional(),
+});
+export type LlmCall = z.infer<typeof LlmCall>;
+
 export const Warning = z.object({
   id: z.string(),
   kind: z.enum(["orphan-file", "override-unmatched"]),
@@ -194,6 +213,7 @@ export const Snapshot = z
     files: z.array(FileFacts),
     evidence: z.array(Evidence),
     warnings: z.array(Warning),
+    llmCalls: z.array(LlmCall), // every model call made while building this snapshot
   })
   .superRefine((snap, ctx) => {
     const evidenceIds = new Set(snap.evidence.map((e) => e.id));

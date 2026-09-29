@@ -32,6 +32,7 @@ interface Cluster {
   anchor?: string; // the file that marks this responsibility (heuristic components)
   seeds: string[]; // files reach starts from: [anchor], or an override's pinned files
   pinned?: boolean; // from tracehound.json: never merged, split or renamed by heuristics
+  namedByOverride?: boolean;
   matchTokens: string[];
   files: string[];
   reasons: Map<string, string>;
@@ -64,7 +65,10 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
   // 0. Overrides first: their keys are the component ids, and their files are off-limits to heuristics.
   const overrideClusters: Cluster[] = (opts.overrides ?? []).map((o) => {
     usedIds.add(o.id);
-    return { id: o.id, name: o.name ?? titleCase(tokens(o.id)), kind: o.kind ?? "library", seeds: [], pinned: true, matchTokens: tokens(o.id), files: [], reasons: new Map() };
+    return {
+      id: o.id, name: o.name ?? titleCase(tokens(o.id)), kind: o.kind ?? "library", seeds: [], pinned: true, namedByOverride: o.name !== undefined,
+      matchTokens: tokens(o.id), files: [], reasons: new Map(),
+    };
   });
   const pinned = new Set<string>();
   for (const f of sorted) {
@@ -374,6 +378,7 @@ function toComponent(c: Cluster, byPath: Map<string, FileFacts>, prefixes: Map<s
     name: c.name,
     kind: c.kind,
     subtitle: c.note ?? subtitle(c, facts, routes),
+    naming: { source: c.namedByOverride ? "override" : "heuristic", heuristicName: c.name },
     package: c.package,
     files,
     entryPoints,

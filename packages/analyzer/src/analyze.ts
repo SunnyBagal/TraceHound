@@ -109,6 +109,7 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
         message: `override "${id}" in ${path.basename(configSource ?? "tracehound.json")} matched no files`,
       })),
     ],
+    llmCalls: [],
   });
 }
 

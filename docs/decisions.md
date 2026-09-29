@@ -94,3 +94,21 @@ axes (provenance strength vs. value resolution). (b) Deriving labels from numeri
 template key (`response-queue-${uuid}`) scores 0.7 but is runtime-only, so bands would mislabel
 it as `resolved-default`. (c) Weakest-evidence labels. One dynamic call site would downgrade an
 edge that other sites prove.
+
+## 012 · LLM naming is a separate, facts-only, fail-safe pass
+**Choice:** After deterministic analysis, `nameComponentsWithLlm` sends each component's
+extracted facts to Nemotron Nano (`nvidia/nvidia-nemotron-3-nano-30b-a3b`, Nebius Token
+Factory, OpenAI-compatible `/chat/completions`, temperature 0). The facts are the heuristic name,
+kind, files, routes, entry points, env vars, resource info, and neighbours with edge labels. The
+model returns `{name, summary}`, which is validated with Zod (short title, not a filename, no
+duplicate). It is applied only to `name`/`summary`/`naming`. Edges, evidence and ids are passed
+through by reference, and a test proves an `"edges"` key in the reply is ignored. Any failure
+(HTTP, network, timeout, junk reply) keeps the heuristic name. Components named by a
+tracehound.json override are never sent. Each call's model, latency and token usage is printed
+and stored in `snapshot.llmCalls`. Without `NEBIUS_API_KEY` (or with `--naming heuristic`) the
+pass is skipped, which is how tests and CI stay deterministic.
+**Rejected:** (a) Sending source code or snippets. That costs more tokens, invites the model to
+"discover" relationships, and leaks code to a third party for little naming gain. (b) Letting
+the model propose groupings or edges. That breaks the product rule. (c) Naming inside
+`analyzeRepo`. It would make the core pipeline async and non-deterministic; it stays a
+post-pass the CLI opts into.

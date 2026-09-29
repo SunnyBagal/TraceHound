@@ -5,8 +5,11 @@ on a canvas. Later: a graph-guided repair agent.
 
 ## Product rule (non-negotiable)
 Every edge in the graph must be backed by evidence: file, symbol, line range, extractor name,
-confidence. Extraction is deterministic — no LLM calls in the analyzer. Never draw an edge you
-can't point to in code. Unresolved facts (e.g. an import of a generated file that isn't in the
+confidence. Extraction, grouping and edges are deterministic — no model is involved. Never draw
+an edge you can't point to in code. The one model call allowed is the optional naming pass
+(`src/naming/llm.ts`, Nemotron Nano via Nebius Token Factory): it sees extracted facts only (no
+source), may change only component `name`/`summary`, falls back to the heuristic name on any
+failure, and every call is logged in `snapshot.llmCalls` (model, latency, tokens). Unresolved facts (e.g. an import of a generated file that isn't in the
 repo) are recorded as facts but never produce edges.
 
 ## Stack (fixed — ask before adding dependencies)
@@ -23,7 +26,8 @@ repo) are recorded as facts but never produce edges.
 - Later: Postgres/Drizzle/BullMQ. For now the JSON snapshot file is the store.
 
 ## Commands
-- `pnpm demo` — clone the pinned demo repo into `fixtures/demo-repo` and analyze it.
+- `pnpm demo` — clone the pinned demo repo into `fixtures/demo-repo` and analyze it (uses
+  `configs/cex-v2-boilercode.tracehound.json`; set `NEBIUS_API_KEY` in `.env` for LLM names).
 - `pnpm test` / `pnpm typecheck` — all packages.
 - `pnpm --filter @tracehound/web dev`.
 
