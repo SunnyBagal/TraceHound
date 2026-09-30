@@ -376,3 +376,67 @@ can't explain its ranking. (b) Using model-written summaries as ranking text: th
 unverified claims ("validates credentials"). (c) A calibrated probability: there's no labelled
 data to calibrate on, so a number that looks like a probability would be misleading. (d) BM25 /
 TF-IDF: needs corpus statistics that a 9-component repo can't provide in any meaningful way.
+
+## 026 · Repair harness core: provider interface, harness-owned verification, Docker first
+**Choice:** Feature 6 starts with the harness, not the agent.
+- **Provider interface:** `SandboxProvider` is deliberately small: `create({ image, source,
+  network? })`, `exec(handle, cmd, { timeoutMs })`, `writeFile`, `readFile`, `destroy`.
+  - `source` is `{ gitUrl, sha }` or `{ localPath }` (localPath is for test fixtures only).
+  - The harness calls `destroy` in a `finally` on every exit path, including errors, timeouts
+    and cancellation. The CLI's SIGINT/SIGTERM handler also removes live containers.
+- **`LocalDockerProvider`:**
+  - The image is `tracehound-sandbox:bun1.4.2-ts5.9.3-1`, built from `harness/sandbox.Dockerfile`:
+    - `buildpack-deps:bookworm-scm@sha256:b42f74a5…cb92` (official; git 2.39.5)
+    - the bun 1.4.2 binary from `oven/bun:1.4.2@sha256:9114c058…6895`
+    - `typescript@5.9.3` installed at build time
+  - Both bases are pinned by multi-arch index digest, so the same file builds on arm64 and amd64.
+  - **Isolation:**
+    - Nothing is mounted. The repo goes in as a `git bundle --all` (committed history only, so
+      untracked `.env`/keys can't come along) via `docker cp`.
+    - No `-e`: the container's environment is exactly `BUN_INSTALL HOME HOSTNAME PATH PWD`.
+    - `--network none` unless the task sets `network: true`.
+    - `--cap-drop ALL`, `no-new-privileges`, 2 GB memory, 2 CPUs, 512 pids.
+  - **Timeouts:** each command runs under coreutils `timeout` inside the container, with a
+    host-side kill as a backstop.
+  - Docker tests run where `docker version` works (CI). Elsewhere they're skipped with a message.
+- **Contree:** there is no Contree provider yet. It comes after the Sandboxes spike, once beta
+  access is granted. The interface is shaped so it can be added without changing the harness.
+- **Task spec** (`eval/tasks/<id>/task.json`): source + `baseSha`, setup commands, issue text,
+  repro `{ testFile, dest, command }`, regression commands, optional typecheck packages, and
+  limits (`steps`, `wallClockMs`, `tokens`, `commandTimeoutMs`). The repro test lives in the task
+  dir, never in the target repo.
+- **States:** `PREPARING_SANDBOX → REPRODUCING → PATCHING → VERIFYING → RESOLVED | UNRESOLVED |
+  FAILED | CANCELLED`.
+  - **REPRODUCING:** copy the repro in and run it. It must fail, or the run ends FAILED "repro
+    does not reproduce". Then remove it, require a clean tree, and record the baseline:
+    regression exit codes, plus `tsc --noEmit` error counts per package.
+  - **PATCHING:** the agent gets only `AgentContext`: exec/readFile/writeFile scoped to its
+    sandbox, the issue, the limits, `reportUsage`, and optional graph tools. Each operation
+    counts as a step. An agent error or a hit limit is recorded, and verification runs anyway.
+  - **VERIFYING:** the harness itself extracts `git add -A && git diff --cached <baseSha>`, puts
+    the repro back and runs it, then runs regressions and typecheck. **RESOLVED** only if the
+    repro passes and nothing fails (or has more TS errors) that passed at baseline. Pre-existing
+    failures, like CEX's Prisma import error, are reported as baseline, not regressions. Nothing
+    the agent says is read.
+- **Terminal states:**
+  - **FAILED:** the task or infrastructure is at fault (repro doesn't reproduce, setup
+    fails or times out, harness/provider error).
+  - **CANCELLED:** stopped from outside (a signal) or the run's wall-clock limit is reached,
+    including a command cut short by that deadline.
+  - **UNRESOLVED:** the agent ran and verification says the bug isn't fixed, or something
+    regressed.
+- Every run writes `runs/<runId>.json`: task, provider, agent, image, state history with
+  timestamps, diff, every command (phase, actor, exit code, duration, timeout flag, output
+  tails), baseline vs final, tokens/cost (0 for scripted agents), final state + reason, and
+  create→destroy time.
+- Scripted agents for testing the harness: `oracle` (applies a given patch with `git apply`) and
+  `noop`. There's no LLM loop yet.
+
+**Rejected:** (a) Mounting the repo into the container: that's fast, but it exposes the host
+tree (and any `.env`) and lets the sandbox write back to it. (b) Letting the agent report
+success, or run its own tests as the verdict: the harness has to re-derive the outcome. (c)
+Shipping the repro test inside the repo or leaving it in place during PATCHING: the agent would
+see the answer key. (d) `oven/bun` alone: it has no git, which the harness needs for checkout
+and diffs. Installing git over apt at build time would leave the package version unpinned.
+(e) Building the Contree provider now: its API permissions are unverified (FEEDBACK
+2026-09-30), so an untested second provider would just be guesswork.

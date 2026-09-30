@@ -1,0 +1,13 @@
+diff --git a/src/cart.ts b/src/cart.ts
+index cd31080..94f0ef9 100644
+--- a/src/cart.ts
++++ b/src/cart.ts
+@@ -9,7 +9,7 @@ export function subtotal(items: Item[]): number {
+ 
+ /** Apply a percentage discount (0-100) to a total. */
+ export function applyDiscount(total: number, percent: number): number {
+-  return total - percent;
++  return Math.round(total * (1 - percent / 100));
+ }
+ 
+ /** Total to charge, rounded to cents. */

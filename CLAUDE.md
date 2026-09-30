@@ -17,6 +17,12 @@ on a canvas. Later: a graph-guided repair agent.
   writes a report the viewer serves at `?impact=<name>` (changed/affected styling, dynamic
   edges flagged, chain panel). The viewer build fails if an impact cites an id missing from its
   base snapshot. Precomputed: `seed-queue-consumer`, `seed-rpc-bridge`, `seed-pending-registry`.
+- **Repair harness core (feature 6, decision 026):** `pnpm tracehound repair --task
+  eval/tasks/<id>/task.json --agent oracle|noop [--patch f] --provider docker` → `runs/<id>.json`.
+  LocalDockerProvider only (Contree after the Sandboxes spike). Sandbox image
+  `tracehound-sandbox:bun1.4.2-ts5.9.3-1` from `harness/sandbox.Dockerfile`. Toy fixture:
+  `node eval/fixtures/build-toy-repo.ts`, tasks `eval/tasks/toy-*`. No LLM agent loop yet; the
+  user writes CEX tasks.
 - **Agent tools (feature 5):** `context` / `query` / `mcp` over a snapshot. Ranking v1 is lexical
   and deterministic, confidence is a labelled heuristic, and token counts are estimates (chars/4).
   See decision 025.

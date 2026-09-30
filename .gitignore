@@ -12,3 +12,7 @@ fixtures/
 
 # local LLM spend ledger + response cache
 .tracehound/
+
+# repair harness: generated fixture repos and run records
+eval/fixtures/.build/
+runs/

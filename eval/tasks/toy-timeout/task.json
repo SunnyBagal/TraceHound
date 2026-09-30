@@ -1,0 +1,10 @@
+{
+  "id": "toy-timeout",
+  "source": { "localPath": "../../fixtures/.build/toy-cart" },
+  "baseSha": "6f7c30dab99e469b1ddb6a1c6c3b83dccc28787a",
+  "setup": ["sleep 30"],
+  "issue": "Same bug as toy-discount; the setup step hangs, so the run must end in a defined state with the sandbox removed.",
+  "repro": { "testFile": "repro.test.ts", "dest": "repro/discount.repro.test.ts", "command": "bun test ./repro/discount.repro.test.ts" },
+  "regression": ["bun test ./tests"],
+  "limits": { "steps": 20, "wallClockMs": 300000, "tokens": 0, "commandTimeoutMs": 2000 }
+}
