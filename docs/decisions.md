@@ -237,3 +237,23 @@ heuristic name, and the reason goes into `llmCalls[].rejectReason`.
 and it can hallucinate too. Rules are cheaper and testable against the real bad outputs.
 **Known gap:** Plain-English claims aren't checked: "cryptocurrency" (run 1), "validates
 credentials" (run 3, where `signin` is a TODO stub). Only identifier-like tokens are verified.
+
+## 022 · Drive Nebius Sandboxes from TypeScript over REST, no Python bridge
+**Choice:** Sandboxes (Contree) have a documented REST API with a published OpenAPI 3 spec
+(`https://eu-north.nebius.computer/static/api.yaml`, base
+`https://api.tokenfactory.nebius.com/sandboxes/v1`):
+- `POST /instances` spawns a run, with `disposable`, `timeout`, `networking.enabled`, `env` and
+  `files`.
+- `GET /operations/{id}` polls; `?inflight=1` returns live stdout.
+- `DELETE /operations/{id}` cancels.
+- `POST /operations/{id}/subprocesses` execs into a running instance.
+- There are also image import, tag and inspect endpoints.
+
+Auth is `Authorization: Bearer <NEBIUS_API_KEY>` plus a `Project: <project id>` header. The
+repair harness will call this with `fetch` from TypeScript, the same way `TokenFactoryClient`
+does, and can generate types from the spec later if the surface grows.
+`scripts/sandbox-spike.ts` is the first client.
+**Rejected:** A thin Python bridge around `contree-sdk` / `contree-client`. The SDK adds only
+convenience (image objects, branching helpers) over the same REST calls. The docs say
+`contree_sdk` "performs no auth, transport, or configuration of its own". A bridge would add a
+second runtime, packaging and IPC to a Node-only stack for no capability we need.

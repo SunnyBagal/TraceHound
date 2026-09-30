@@ -137,3 +137,26 @@ Observations from building TraceHound. Facts only; newest entries at the bottom.
 - **Differing names** (Nano → Super): Redis Queue → Task Queue; User Data Store → Database
   Layer; Backend Server → API Gateway; Backend Shared → Shared Utilities. Auth
   ("Authentication Service"), Exchange ("Exchange API") and Engine Worker were the same.
+
+---
+
+## 2026-09-30 · Sandboxes (Contree): docs review and first API calls
+
+- **Docs used:** `https://docs.tokenfactory.nebius.com/llms.txt` (index), `/sandboxes/overview`,
+  `/sandboxes/cli/tutorial/installation`, `/sandboxes/sdk/python_sdk/getting-started`, and the
+  OpenAPI spec `https://eu-north.nebius.computer/static/api.yaml`.
+- **REST API:** base `https://api.tokenfactory.nebius.com/sandboxes/v1`. Security schemes:
+  `IAMBearerAuth` (`Authorization: Bearer …`) plus `IAMProjectHeader` (a header named `Project`).
+- **Token:** the CLI install page says it falls back to `NEBIUS_API_KEY` and reads the project
+  from `CONTREE_PROJECT`, then `NEBIUS_AI_PROJECT`.
+- **Missing project:** `GET /v1/whoami` and `GET /v1/images` with only
+  `Authorization: Bearer <NEBIUS_API_KEY>` both returned `400 {"error": "Missing \"Project\" header"}`.
+  The Token Factory inference API needs no project ID; Sandboxes does.
+- **Spawn options:** `InstanceSpawnRequest.networking.enabled` defaults to `true`; `disposable`
+  defaults to `false`; `timeout` is in seconds.
+- **Beta limits** (overview page): 50 simultaneously running operations; untagged checkpoint
+  images are retained for 180 days.
+- **Pricing:** no sandbox pricing appeared on the pages above or on
+  `/other-capabilities/billing-new`.
+- **Live run:** not performed yet (no project ID available).
+  `scripts/sandbox-spike.ts` is ready; it needs `NEBIUS_AI_PROJECT`.
