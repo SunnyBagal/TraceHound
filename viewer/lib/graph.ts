@@ -1,4 +1,5 @@
 import { Position, type Edge, type Node } from "@xyflow/react";
+import type { ImpactRole } from "./impact";
 import type { Component, ComponentEdge, Resolution, Snapshot, Warning } from "./types";
 
 export const NODE_WIDTH = 272;
@@ -16,6 +17,8 @@ export type ComponentNodeData = {
   warnings: Warning[];
   dimmed?: boolean; // not connected to the hovered/selected node
   highlighted?: boolean; // focused from the warnings panel
+  /** impact mode (?impact=): changed / affected; null = not part of the impact */
+  impact?: ImpactRole | null;
 };
 export type ComponentNode = Node<ComponentNodeData, "component">;
 
@@ -26,6 +29,9 @@ export type EvidenceEdgeData = {
   parallelCount: number;
   active?: boolean; // touches the hovered/selected node
   dimmed?: boolean;
+  /** impact mode: this edge is a hop on some affected component's chain */
+  onImpactChain?: boolean;
+  impactMode?: boolean;
 };
 export type EvidenceEdge = Edge<EvidenceEdgeData, "evidence">;
 

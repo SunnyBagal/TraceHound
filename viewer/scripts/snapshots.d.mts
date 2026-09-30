@@ -3,3 +3,8 @@ export declare const PUBLIC: string;
 export declare const EXPORT: string;
 export declare function verifySnapshots(dir: string, label?: string): { manifest: { latest: { path: string } }; referenced: string[] };
 export declare function copySnapshots(): string[];
+export declare const IMPACT_SOURCE: string;
+export declare const IMPACT_PUBLIC: string;
+export declare const IMPACT_EXPORT: string;
+export declare function verifyImpacts(dir: string, snapshotsDir: string, label?: string): string[];
+export declare function copyImpacts(): string[];

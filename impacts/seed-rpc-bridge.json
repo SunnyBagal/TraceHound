@@ -1,0 +1,181 @@
+{
+  "repo": "SunnyBagal/cex-v2-boilercode",
+  "base": "da0e3d640a9c02f815fcca48f8328c94558cc058",
+  "head": "a21a534dffeaff66a760a7e556ee58c163a26655",
+  "snapshot": {
+    "analyzerVersion": "0.4.0",
+    "file": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.4.0.json",
+    "path": "snapshots/da0e3d640a9c02f815fcca48f8328c94558cc058/0.4.0.json"
+  },
+  "depth": 2,
+  "directionRule": "imports, queries: reverse (dependents of the changed component) · produces, consumes, reads, writes: bidirectional (message/data contract) · crossing a queue/cache broker costs one hop of depth (decision 024)",
+  "files": [
+    {
+      "status": "modified",
+      "path": "backend/src/utils/engine-client.ts",
+      "basePath": "backend/src/utils/engine-client.ts",
+      "componentId": "redis-rpc-bridge"
+    }
+  ],
+  "changed": [
+    {
+      "id": "redis-rpc-bridge",
+      "name": "Redis RPC Bridge",
+      "modelWrittenName": false,
+      "files": [
+        "backend/src/utils/engine-client.ts"
+      ]
+    }
+  ],
+  "affected": [
+    {
+      "id": "backend:backend-server",
+      "name": "Backend Server",
+      "modelWrittenName": true,
+      "depth": 1,
+      "chain": [
+        {
+          "edgeId": "backend:backend-server->redis-rpc-bridge:imports",
+          "kind": "imports",
+          "source": "backend:backend-server",
+          "target": "redis-rpc-bridge",
+          "from": "redis-rpc-bridge",
+          "to": "backend:backend-server",
+          "walk": "reverse",
+          "confidenceLabel": "proven",
+          "label": "connectRedis, listenForEngineResponses, pingRedis",
+          "evidence": {
+            "id": "backend/src/index.ts#L5-9:imports",
+            "file": "backend/src/index.ts",
+            "line": 5
+          },
+          "depthCost": 1
+        }
+      ],
+      "dynamic": false
+    },
+    {
+      "id": "backend:exchange-api",
+      "name": "Exchange API",
+      "modelWrittenName": true,
+      "depth": 1,
+      "chain": [
+        {
+          "edgeId": "backend:exchange-api->redis-rpc-bridge:imports",
+          "kind": "imports",
+          "source": "backend:exchange-api",
+          "target": "redis-rpc-bridge",
+          "from": "redis-rpc-bridge",
+          "to": "backend:exchange-api",
+          "walk": "reverse",
+          "confidenceLabel": "proven",
+          "label": "sendToEngine",
+          "evidence": {
+            "id": "backend/src/controllers/exchange-controller.ts#L7-7:imports",
+            "file": "backend/src/controllers/exchange-controller.ts",
+            "line": 7
+          },
+          "depthCost": 1
+        }
+      ],
+      "dynamic": false
+    },
+    {
+      "id": "engine:engine-worker",
+      "name": "Engine Worker",
+      "modelWrittenName": true,
+      "depth": 1,
+      "chain": [
+        {
+          "edgeId": "redis-rpc-bridge->redis:redis-url:produces",
+          "kind": "produces",
+          "source": "redis-rpc-bridge",
+          "target": "redis:redis-url",
+          "from": "redis-rpc-bridge",
+          "to": "redis:redis-url",
+          "walk": "bidirectional",
+          "confidenceLabel": "resolved-default",
+          "label": "lPush backend-to-engine-broker",
+          "evidence": {
+            "id": "backend/src/utils/engine-client.ts#L43-43:redis",
+            "file": "backend/src/utils/engine-client.ts",
+            "line": 43
+          },
+          "depthCost": 1
+        },
+        {
+          "edgeId": "redis:redis-url->engine:engine-worker:consumes",
+          "kind": "consumes",
+          "source": "redis:redis-url",
+          "target": "engine:engine-worker",
+          "from": "redis:redis-url",
+          "to": "engine:engine-worker",
+          "walk": "bidirectional",
+          "confidenceLabel": "resolved-default",
+          "label": "brPop backend-to-engine-broker",
+          "evidence": {
+            "id": "engine/src/index.ts#L96-96:redis",
+            "file": "engine/src/index.ts",
+            "line": 96
+          },
+          "depthCost": 0
+        }
+      ],
+      "dynamic": false
+    },
+    {
+      "id": "pending-response-registry",
+      "name": "Pending-Response Registry",
+      "modelWrittenName": false,
+      "depth": 1,
+      "chain": [
+        {
+          "edgeId": "pending-response-registry->redis-rpc-bridge:imports",
+          "kind": "imports",
+          "source": "pending-response-registry",
+          "target": "redis-rpc-bridge",
+          "from": "redis-rpc-bridge",
+          "to": "pending-response-registry",
+          "walk": "reverse",
+          "confidenceLabel": "proven",
+          "label": "EngineResponse",
+          "evidence": {
+            "id": "backend/src/store/pending-responses.ts#L1-1:imports",
+            "file": "backend/src/store/pending-responses.ts",
+            "line": 1
+          },
+          "depthCost": 1
+        }
+      ],
+      "dynamic": false
+    },
+    {
+      "id": "redis:redis-url",
+      "name": "Redis Queue",
+      "modelWrittenName": true,
+      "depth": 1,
+      "chain": [
+        {
+          "edgeId": "redis-rpc-bridge->redis:redis-url:produces",
+          "kind": "produces",
+          "source": "redis-rpc-bridge",
+          "target": "redis:redis-url",
+          "from": "redis-rpc-bridge",
+          "to": "redis:redis-url",
+          "walk": "bidirectional",
+          "confidenceLabel": "resolved-default",
+          "label": "lPush backend-to-engine-broker",
+          "evidence": {
+            "id": "backend/src/utils/engine-client.ts#L43-43:redis",
+            "file": "backend/src/utils/engine-client.ts",
+            "line": 43
+          },
+          "depthCost": 1
+        }
+      ],
+      "dynamic": false
+    }
+  ],
+  "unmapped": [],
+  "linkedTests": []
+}

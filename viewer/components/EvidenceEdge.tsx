@@ -54,6 +54,7 @@ function EvidenceEdgeView({ id, source, target, data, selected }: EdgeProps<Evid
   const { edge, parallelIndex, parallelCount } = data;
   const style = EDGE_STYLES[edge.confidenceLabel];
   const active = selected || data.active;
+  const flagDynamic = data.impactMode && edge.confidenceLabel === "dynamic"; // impact mode: dynamic edges are called out
   const { path, labelX, labelY } = route(box(sourceNode), box(targetNode), parallelIndex, parallelCount);
   const stroke = active ? "var(--edge-active)" : "var(--edge)";
 
@@ -68,7 +69,7 @@ function EvidenceEdgeView({ id, source, target, data, selected }: EdgeProps<Evid
           strokeWidth: active ? 2.2 : 1.6,
           strokeDasharray: style.dash,
           strokeLinecap: edge.confidenceLabel === "dynamic" ? "round" : "butt",
-          opacity: data.dimmed ? 0.14 : 1,
+          opacity: data.dimmed ? (flagDynamic ? 0.5 : 0.14) : 1,
           transition: "opacity 200ms, stroke 200ms",
         }}
         markerEnd={`url(#th-arrow${active ? "-active" : ""})`}
@@ -82,9 +83,14 @@ function EvidenceEdgeView({ id, source, target, data, selected }: EdgeProps<Evid
             "nodrag nopan pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer whitespace-nowrap rounded-md border px-1.5 py-0.5 font-mono text-[10px] leading-tight transition-opacity duration-200",
             active ? "border-accent/60 bg-panel text-text" : "border-line bg-bg/90 text-muted",
           ].join(" ")}
-          style={{ left: labelX, top: labelY, opacity: data.dimmed ? 0.15 : 1 }}
+          style={{ left: labelX, top: labelY, opacity: data.dimmed ? (flagDynamic ? 0.6 : 0.15) : 1 }}
           title={`${edge.label} (${edge.weight} evidence)`}
         >
+          {flagDynamic && (
+            <span data-testid="dynamic-flag" className="mr-1 rounded bg-warn px-1 font-semibold text-bg">
+              ⚠ DYNAMIC
+            </span>
+          )}
           {edge.kind} · <span className={active ? "text-accent" : "text-text/80"}>{style.text}</span>
           {edge.weight > 1 && <span className="text-faint"> ×{edge.weight}</span>}
         </div>

@@ -1,6 +1,6 @@
 // tracehound impact --repo <path> --diff <base>..<head> [--depth 2] [--json] [--snapshots <dir>]
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { readManifest } from "../manifest.ts";
@@ -10,7 +10,7 @@ import { formatImpact } from "./format.ts";
 import { computeImpact, parseNameStatus } from "./impact.ts";
 
 const WORKSPACE_ROOT = path.resolve(import.meta.dirname, "../../../..");
-const USAGE = "usage: tracehound impact --repo <path> --diff <base>..<head> [--depth 2] [--json] [--snapshots <dir>]";
+const USAGE = "usage: tracehound impact --repo <path> --diff <base>..<head> [--depth 2] [--json] [--out <file.json>] [--snapshots <dir>]";
 
 export class ImpactError extends Error {
   override name = "ImpactError";
@@ -56,6 +56,7 @@ export function runImpact(argv: string[]): { text: string; exitCode: number } {
       diff: { type: "string" },
       depth: { type: "string", default: "2" },
       json: { type: "boolean", default: false },
+      out: { type: "string" }, // also write the JSON report here (e.g. impacts/<name>.json for the viewer)
       snapshots: { type: "string", default: path.join(WORKSPACE_ROOT, "snapshots") },
     },
   });
@@ -70,6 +71,12 @@ export function runImpact(argv: string[]): { text: string; exitCode: number } {
   const { snapshot, path: snapshotPath } = findBaseSnapshot(path.resolve(values.snapshots!), base);
   const changes = parseNameStatus(git(repo, "diff", "--name-status", "-M", base, head));
   const report = computeImpact({ snapshot, changes, base, head, depth, snapshotPath });
+  if (values.out) {
+    const out = path.resolve(values.out);
+    mkdirSync(path.dirname(out), { recursive: true });
+    writeFileSync(out, JSON.stringify(report, null, 2) + "\n");
+    console.error(`→ wrote ${path.relative(process.cwd(), out)}`);
+  }
   return { text: values.json ? JSON.stringify(report, null, 2) : formatImpact(report), exitCode: 0 };
 }
 

@@ -17,6 +17,8 @@
   --warn: #f2b84b;
   --edge: #8a8a99;
   --edge-active: #f5a524;
+  --impact-changed: #f5a524;
+  --impact-affected: #7cc4ff;
   color-scheme: dark;
 }
 
@@ -33,6 +35,8 @@
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
   --color-warn: var(--warn);
+  --color-impact-changed: var(--impact-changed);
+  --color-impact-affected: var(--impact-affected);
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }

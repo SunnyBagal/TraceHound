@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -9,7 +9,7 @@ import { formatImpact } from "../src/impact/format.ts";
 import { ImpactError, runImpact } from "../src/impact/cli.ts";
 import { computeImpact, parseNameStatus, type ImpactReport } from "../src/impact/impact.ts";
 import { upsertManifest, writeManifest } from "../src/manifest.ts";
-import type { Snapshot } from "../src/schema.ts";
+import { ImpactReport as ImpactReportSchema, impactReferenceErrors, type Snapshot } from "../src/schema.ts";
 
 // A tiny two-package repo, committed for real so `git diff --name-status` does the work:
 //   api:api-app -imports-> orders -imports-> queue-client -produces-> redis:redis-url -consumes-> worker
@@ -195,6 +195,20 @@ describe("tracehound impact on the fixture repo", () => {
     const run = () => runImpact(["--repo", repo, "--diff", `orphan-base..${base}`, "--snapshots", snapshotsDir]);
     expect(run).toThrow(ImpactError);
     expect(run).toThrow(/no analyzer \S+ snapshot for base [0-9a-f]{40}[\s\S]*create one by analyzing the base commit[\s\S]*--naming heuristic/);
+  });
+
+  it("--out writes a schema-valid report whose ids all exist in the base snapshot; tampering is caught", () => {
+    git("checkout", "-q", "-B", "out-file", base);
+    write("api/src/queue-client.ts", BASE_FILES["api/src/queue-client.ts"]! + "// v3\n");
+    git("add", "-A");
+    git("commit", "-qm", "out-file");
+    const out = path.join(snapshotsDir, "impacts", "seed-x.json");
+    runImpact(["--repo", repo, "--diff", `${base}..out-file`, "--out", out, "--snapshots", snapshotsDir]);
+    const report = ImpactReportSchema.parse(JSON.parse(readFileSync(out, "utf8")));
+    expect(report.snapshot.file).toBe(`${base}/${snapshot.analyzerVersion}.json`);
+    expect(impactReferenceErrors(report, snapshot)).toEqual([]);
+    const tampered = { ...report, affected: [{ ...report.affected[0]!, id: "ghost" }, ...report.affected.slice(1)] };
+    expect(impactReferenceErrors(tampered, snapshot)).toEqual(['affected references component "ghost", which is not in the base snapshot']);
   });
 
   it("text mode says 0 linked tests when no test imports a touched component", () => {

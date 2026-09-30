@@ -268,3 +268,82 @@ export const SnapshotManifest = z.object({
   snapshots: z.array(ManifestEntry),
 });
 export type SnapshotManifest = z.infer<typeof SnapshotManifest>;
+
+// ── Impact reports (`tracehound impact --json`) ─────────────────────────────────────────────
+export const ImpactEvidenceRef = z.object({ id: z.string(), file: z.string(), line: z.number().int().positive() });
+
+export const ImpactHop = z.object({
+  edgeId: z.string(),
+  kind: EdgeKind,
+  source: z.string(),
+  target: z.string(),
+  from: z.string(), // walk order: the component closer to the change
+  to: z.string(),
+  walk: z.enum(["reverse", "bidirectional"]),
+  confidenceLabel: Resolution,
+  label: z.string(),
+  evidence: ImpactEvidenceRef,
+  depthCost: z.union([z.literal(0), z.literal(1)]).optional(), // 0 = leaving a broker (decision 024)
+});
+export type ImpactHop = z.infer<typeof ImpactHop>;
+
+export const ImpactFile = z.object({
+  status: z.enum(["added", "modified", "deleted", "renamed", "copied", "type-changed"]),
+  path: z.string(), // path at head (for deleted files: the base path)
+  basePath: z.string().optional(), // path at base; absent for added/copied files
+  componentId: z.string().optional(), // from the base snapshot; undefined = unmapped
+  reason: z.string().optional(),
+});
+export type ImpactFile = z.infer<typeof ImpactFile>;
+
+export const ImpactReport = z.object({
+  repo: z.string(),
+  base: z.string().regex(/^[0-9a-f]{40}$/),
+  head: z.string().regex(/^[0-9a-f]{40}$/),
+  snapshot: z.object({
+    analyzerVersion: z.string(),
+    file: z.string(), // base snapshot, relative to the snapshots dir: "<sha>/<analyzerVersion>.json"
+    path: z.string().optional(), // where the CLI read it from (display only)
+  }),
+  depth: z.number().int().nonnegative(),
+  directionRule: z.string(),
+  files: z.array(ImpactFile),
+  changed: z.array(z.object({ id: z.string(), name: z.string(), modelWrittenName: z.boolean(), files: z.array(z.string()) })),
+  affected: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      modelWrittenName: z.boolean(),
+      depth: z.number().int().nonnegative(), // depth used (a broker crossing counts once), not chain length
+      chain: z.array(ImpactHop), // changed component -> ... -> this one
+      dynamic: z.boolean(), // some hop on the chain is only known at runtime
+    }),
+  ),
+  unmapped: z.array(ImpactFile),
+  linkedTests: z.array(z.object({ file: z.string(), componentId: z.string(), evidence: ImpactEvidenceRef })),
+});
+export type ImpactReport = z.infer<typeof ImpactReport>;
+
+/** Every component, edge and evidence id an impact report cites must exist in its base snapshot. */
+export function impactReferenceErrors(report: ImpactReport, snapshot: Snapshot): string[] {
+  const components = new Set(snapshot.components.map((c) => c.id));
+  const edges = new Set(snapshot.edges.map((e) => e.id));
+  const evidence = new Set(snapshot.evidence.map((e) => e.id));
+  const errors: string[] = [];
+  const component = (id: string | undefined, where: string) => {
+    if (id !== undefined && !components.has(id)) errors.push(`${where} references component "${id}", which is not in the base snapshot`);
+  };
+  if (snapshot.repo.commitSha !== report.base) errors.push(`base ${report.base} does not match the snapshot's commit ${snapshot.repo.commitSha}`);
+  report.files.forEach((f) => component(f.componentId, `files[${f.path}]`));
+  report.changed.forEach((c) => component(c.id, "changed"));
+  report.linkedTests.forEach((t) => component(t.componentId, `linkedTests[${t.file}]`));
+  for (const a of report.affected) {
+    component(a.id, "affected");
+    for (const h of a.chain) {
+      for (const id of [h.source, h.target, h.from, h.to]) component(id, `affected[${a.id}].chain`);
+      if (!edges.has(h.edgeId)) errors.push(`affected[${a.id}].chain references edge "${h.edgeId}", which is not in the base snapshot`);
+      if (!evidence.has(h.evidence.id)) errors.push(`affected[${a.id}].chain references evidence "${h.evidence.id}", which is not in the base snapshot`);
+    }
+  }
+  return [...new Set(errors)];
+}

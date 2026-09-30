@@ -1,6 +1,6 @@
 import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD } from "next/constants";
 import type { NextConfig } from "next";
-import { copySnapshots } from "./scripts/snapshots.mjs";
+import { copyImpacts, copySnapshots } from "./scripts/snapshots.mjs";
 
 // Fully static: `next build` writes out/ (HTML + JS + public/snapshots). No server, API or DB.
 const config: NextConfig = {
@@ -18,7 +18,8 @@ const config: NextConfig = {
 export default function nextConfig(phase: string): NextConfig {
   if (phase === PHASE_PRODUCTION_BUILD || phase === PHASE_DEVELOPMENT_SERVER) {
     const files = copySnapshots();
-    console.log(`[snapshots] next.config: index.json + ${files.length} snapshot file(s) in public/snapshots`);
+    const impacts = copyImpacts();
+    console.log(`[snapshots] next.config: index.json + ${files.length} snapshot file(s) in public/snapshots; ${impacts.length} impact report(s) in public/impacts`);
   }
   return config;
 }

@@ -1,6 +1,6 @@
 // Impact analysis: which components a diff touches, and which others depend on them.
 // Pure over a base snapshot + a parsed `git diff --name-status`; no model, no network.
-import type { ComponentEdge, ComponentKind, EdgeKind, Resolution, Snapshot } from "../schema.ts";
+import type { ComponentEdge, ComponentKind, EdgeKind, ImpactFile, ImpactHop, ImpactReport, Resolution, Snapshot } from "../schema.ts";
 
 // ── git diff --name-status ─────────────────────────────────────────────────────────────────
 export type ChangeStatus = "added" | "modified" | "deleted" | "renamed" | "copied" | "type-changed";
@@ -39,54 +39,12 @@ const BROKER_KINDS: ComponentKind[] = ["queue", "cache"];
 export const DIRECTION_RULE =
   "imports, queries: reverse (dependents of the changed component) · produces, consumes, reads, writes: bidirectional (message/data contract) · crossing a queue/cache broker costs one hop of depth (decision 024)";
 
-// ── Report ─────────────────────────────────────────────────────────────────────────────────
-export interface MappedFile extends FileChange {
-  componentId?: string; // from the base snapshot; undefined = unmapped
-  reason?: string; // why it's unmapped / how it mapped
-}
-
-export interface Hop {
-  edgeId: string;
-  kind: EdgeKind;
-  source: string;
-  target: string;
-  from: string; // walk order: the component closer to the change
-  to: string;
-  walk: "reverse" | "bidirectional";
-  confidenceLabel: Resolution;
-  label: string;
-  evidence: { id: string; file: string; line: number };
-  depthCost?: 0 | 1; // 0 = leaving a broker (the crossing was paid on the way in)
-}
-
-export interface AffectedComponent {
-  id: string;
-  name: string;
-  modelWrittenName: boolean;
-  depth: number; // hops of depth used (a broker crossing counts once), not chain.length
-  chain: Hop[]; // changed component → … → this one
-  dynamic: boolean; // some hop on the chain is only known at runtime
-}
-
-export interface LinkedTest {
-  file: string;
-  componentId: string;
-  evidence: { id: string; file: string; line: number };
-}
-
-export interface ImpactReport {
-  repo: string;
-  base: string;
-  head: string;
-  snapshot: { analyzerVersion: string; path?: string };
-  depth: number;
-  directionRule: string;
-  files: MappedFile[];
-  changed: { id: string; name: string; modelWrittenName: boolean; files: string[] }[];
-  affected: AffectedComponent[];
-  unmapped: MappedFile[];
-  linkedTests: LinkedTest[];
-}
+// ── Report (shapes live in schema.ts so the viewer can validate impact files) ───────────────
+export type MappedFile = ImpactFile;
+export type Hop = ImpactHop;
+export type AffectedComponent = ImpactReport["affected"][number];
+export type LinkedTest = ImpactReport["linkedTests"][number];
+export type { ImpactReport };
 
 const STRENGTH: Resolution[] = ["dynamic", "resolved-default", "proven"];
 const weakest = (chain: Hop[]) => Math.min(...chain.map((h) => STRENGTH.indexOf(h.confidenceLabel)));
@@ -189,7 +147,7 @@ export function computeImpact({ snapshot, changes, base, head, depth = 2, snapsh
     repo: snapshot.repo.name,
     base,
     head,
-    snapshot: { analyzerVersion: snapshot.analyzerVersion, path: snapshotPath },
+    snapshot: { analyzerVersion: snapshot.analyzerVersion, file: `${snapshot.repo.commitSha}/${snapshot.analyzerVersion}.json`, path: snapshotPath },
     depth,
     directionRule: DIRECTION_RULE,
     files,

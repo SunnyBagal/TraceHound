@@ -13,7 +13,10 @@ on a canvas. Later: a graph-guided repair agent.
   ELK, node/edge inspectors, GitHub permalinks, warnings panel, phone bottom sheet).
 - **Impact (feature 4, CLI only):** `pnpm tracehound impact --repo <path> --diff <base>..<head>
   [--depth 2] [--json]` → changed/affected components with evidence chains (decision 023).
-  Needs a current-version snapshot of `<base>` in `snapshots/`. No canvas highlight yet.
+  Needs a current-version snapshot of `<base>` in `snapshots/`. `--out impacts/<name>.json`
+  writes a report the viewer serves at `?impact=<name>` (changed/affected styling, dynamic
+  edges flagged, chain panel). The viewer build fails if an impact cites an id missing from its
+  base snapshot. Precomputed: `seed-queue-consumer`, `seed-rpc-bridge`, `seed-pending-registry`.
   Compared with dependency-cruiser `--reaches` on 3 seeded fork branches in
   `docs/impact-comparison.md` (it found nothing TraceHound missed; TraceHound over-reports at
   component granularity). A queue crossing costs one hop of depth (decision 024).

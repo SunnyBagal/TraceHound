@@ -14,6 +14,7 @@ import {
 import { RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { buildGraph, neighbours, NODE_HEIGHT, NODE_WIDTH, type ComponentNode as ComponentNodeType } from "@/lib/graph";
+import { impactEdges, impactRoles, type ImpactReport } from "@/lib/impact";
 import { elkLayout, type Positions } from "@/lib/layout";
 import { clearPositions, loadPositions, savePositions } from "@/lib/positions";
 import type { Snapshot } from "@/lib/types";
@@ -32,9 +33,13 @@ export interface GraphCanvasProps {
   /** component to pulse and pan to (e.g. from the warnings panel) */
   focusId?: string | null;
   focusNonce?: number;
+  /** ?impact=<name>: style changed/affected components and the edges on their chains */
+  impact?: ImpactReport;
 }
 
-export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce }: GraphCanvasProps) {
+export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce, impact }: GraphCanvasProps) {
+  const roles = useMemo(() => (impact ? impactRoles(impact) : null), [impact]);
+  const chainEdges = useMemo(() => (impact ? impactEdges(impact) : null), [impact]);
   const base = useMemo(() => buildGraph(snapshot), [snapshot]);
   const storageKey = `${snapshot.repo.commitSha}:${snapshot.analyzerVersion}`;
   const [nodes, setNodes, onNodesChange] = useNodesState<ComponentNodeType>([]);
@@ -86,18 +91,30 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
       nodes.map((n) => ({
         ...n,
         selected: selection?.type === "node" && selection.id === n.id,
-        data: { ...n.data, dimmed: focusSet ? !focusSet.has(n.id) : false, highlighted: focusId === n.id },
+        data: {
+          ...n.data,
+          // hover/selection focus wins; otherwise impact mode dims everything outside the impact
+          dimmed: focusSet ? !focusSet.has(n.id) : roles ? !roles.has(n.id) : false,
+          highlighted: focusId === n.id,
+          impact: roles ? (roles.get(n.id) ?? null) : undefined,
+        },
       })),
-    [nodes, selection, focusSet, focusId],
+    [nodes, selection, focusSet, focusId, roles],
   );
   const displayEdges = useMemo(
     () =>
       base.edges.map((e) => ({
         ...e,
         selected: selection?.type === "edge" && selection.id === e.id,
-        data: { ...e.data!, active: activeEdgeIds.has(e.id), dimmed: focusSet ? !activeEdgeIds.has(e.id) : false },
+        data: {
+          ...e.data!,
+          active: activeEdgeIds.has(e.id) || (!focusSet && Boolean(chainEdges?.has(e.id))),
+          dimmed: focusSet ? !activeEdgeIds.has(e.id) : chainEdges ? !chainEdges.has(e.id) : false,
+          onImpactChain: chainEdges?.has(e.id),
+          impactMode: Boolean(chainEdges),
+        },
       })),
-    [base.edges, selection, activeEdgeIds, focusSet],
+    [base.edges, selection, activeEdgeIds, focusSet, chainEdges],
   );
 
   const persist = useCallback(() => {
