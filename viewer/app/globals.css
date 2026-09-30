@@ -1,24 +1,43 @@
 @import "tailwindcss";
 @import "@xyflow/react/dist/style.css";
 
-/* TraceHound: charcoal canvas, amber "scent trail" accent. Dark by default. */
+/*
+ * TraceHound palette: every colour lives here. Deep navy canvas with a dot grid (colours and
+ * density inspired by Railway's project canvas), amber "scent trail" accent. Dark only.
+ * Measured contrast (WCAG 2.x): text ≥ 13:1, muted ≥ 7.2:1, faint ≥ 5.2:1 on every surface below.
+ */
 :root {
-  --bg: #0a0a0c;
-  --panel: #111114;
-  --card: #16161a;
-  --card-hover: #1b1b20;
-  --line: #26262d;
-  --line-strong: #34343d;
-  --text: #ececf1;
-  --muted: #9b9ba8;
-  --faint: #6b6b78;
+  /* surfaces */
+  --canvas-bg: #0b1120;
+  --canvas-dot: #223052;
+  --node-bg: #131c31;
+  --node-bg-hover: #18233c;
+  --node-border: #26334f;
+  --node-border-strong: #364668;
+  --panel-bg: #101829;
+  --panel-raised: #16203a;
+  /* text */
+  --text: #e6ebf5;
+  --muted: #a6b1c8;
+  --faint: #8a96b0;
+  /* accents */
   --accent: #f5a524;
   --accent-soft: rgba(245, 165, 36, 0.14);
+  --accent-glow: rgba(245, 165, 36, 0.4);
   --warn: #f2b84b;
-  --edge: #8a8a99;
-  --edge-active: #f5a524;
-  --impact-changed: #f5a524;
+  --edge: #7d8aa6;
+  --edge-active: var(--accent);
+  --impact-changed: var(--accent);
   --impact-affected: #7cc4ff;
+  --scrim: rgba(5, 8, 16, 0.72);
+
+  /* aliases used by the utility classes */
+  --bg: var(--canvas-bg);
+  --panel: var(--panel-bg);
+  --card: var(--node-bg);
+  --card-hover: var(--node-bg-hover);
+  --line: var(--node-border);
+  --line-strong: var(--node-border-strong);
   color-scheme: dark;
 }
 
@@ -34,6 +53,7 @@
   --color-faint: var(--faint);
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
+  --color-panel-raised: var(--panel-raised);
   --color-warn: var(--warn);
   --color-impact-changed: var(--impact-changed);
   --color-impact-affected: var(--impact-affected);
@@ -55,23 +75,15 @@ body {
 
 /* React Flow chrome in our palette */
 .react-flow {
-  --xy-background-color: var(--bg);
-  --xy-minimap-background-color: var(--panel);
-  --xy-minimap-mask-background-color: rgba(10, 10, 12, 0.7);
-  --xy-controls-button-background-color: var(--card);
-  --xy-controls-button-background-color-hover: var(--card-hover);
-  --xy-controls-button-color: var(--muted);
-  --xy-controls-button-border-color: var(--line);
+  --xy-background-color: var(--canvas-bg);
+  --xy-background-pattern-color: var(--canvas-dot);
+  --xy-minimap-background-color: var(--panel-bg);
+  --xy-minimap-mask-background-color: rgba(11, 17, 32, 0.7);
+  --xy-minimap-node-background-color: var(--node-border-strong);
 }
 .react-flow__handle {
   opacity: 0;
   pointer-events: none;
-}
-.react-flow__attribution {
-  background: transparent;
-}
-.react-flow__attribution a {
-  color: var(--faint);
 }
 
 @keyframes trail {
@@ -80,8 +92,8 @@ body {
   }
 }
 @keyframes pulse-ring {
-  0%, 100% { box-shadow: 0 0 0 1px var(--accent), 0 0 0 0 rgba(245, 165, 36, 0.35); }
-  50% { box-shadow: 0 0 0 1px var(--accent), 0 0 0 10px rgba(245, 165, 36, 0); }
+  0%, 100% { box-shadow: 0 0 0 1px var(--accent), 0 0 0 0 var(--accent-glow); }
+  50% { box-shadow: 0 0 0 1px var(--accent), 0 0 0 10px transparent; }
 }
 .pulse-ring {
   animation: pulse-ring 1.4s ease-in-out 3;
