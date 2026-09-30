@@ -16,3 +16,7 @@ coverage/
 # repair harness: generated fixture repos and run records
 eval/fixtures/.build/
 runs/
+
+# Next dev server writes these into viewer/
+viewer/AGENTS.md
+viewer/CLAUDE.md

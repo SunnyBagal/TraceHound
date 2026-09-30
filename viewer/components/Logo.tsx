@@ -9,3 +9,14 @@ export function Logo({ className = "size-6" }: { className?: string }) {
     </svg>
   );
 }
+
+const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+/** The mark as a link to the default canvas view (no selection, no impact report). */
+export function LogoLink({ className = "" }: { className?: string }) {
+  return (
+    <a href={`${base}/`} title="TraceHound: back to the full canvas" aria-label="TraceHound home" data-testid="home-link" className={`grid shrink-0 place-items-center rounded-lg ${className}`}>
+      <Logo className="size-7" />
+    </a>
+  );
+}

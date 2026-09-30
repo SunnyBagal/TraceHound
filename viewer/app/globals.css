@@ -27,6 +27,8 @@
   --warn: #f2b84b;
   --edge: #7d8aa6;
   --edge-active: var(--accent);
+  /* inspector-row hover/focus on the canvas: distinct from the amber selection */
+  --highlight: #c4b5fd;
   --impact-changed: var(--accent);
   --impact-affected: #7cc4ff;
   --scrim: rgba(5, 8, 16, 0.72);
@@ -55,6 +57,7 @@
   --color-accent-soft: var(--accent-soft);
   --color-panel-raised: var(--panel-raised);
   --color-warn: var(--warn);
+  --color-highlight: var(--highlight);
   --color-impact-changed: var(--impact-changed);
   --color-impact-affected: var(--impact-affected);
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -77,9 +80,6 @@ body {
 .react-flow {
   --xy-background-color: var(--canvas-bg);
   --xy-background-pattern-color: var(--canvas-dot);
-  --xy-minimap-background-color: var(--panel-bg);
-  --xy-minimap-mask-background-color: rgba(11, 17, 32, 0.7);
-  --xy-minimap-node-background-color: var(--node-border-strong);
 }
 .react-flow__handle {
   opacity: 0;

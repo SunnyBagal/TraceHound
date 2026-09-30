@@ -56,7 +56,8 @@ function EvidenceEdgeView({ id, source, target, data, selected }: EdgeProps<Evid
   const active = selected || data.active;
   const flagDynamic = data.impactMode && edge.confidenceLabel === "dynamic"; // impact mode: dynamic edges are called out
   const { path, labelX, labelY } = route(box(sourceNode), box(targetNode), parallelIndex, parallelCount);
-  const stroke = active ? "var(--edge-active)" : "var(--edge)";
+  const hover = Boolean(data.panelHover); // inspector-row hover, styled apart from the selection
+  const stroke = hover ? "var(--highlight)" : active ? "var(--edge-active)" : "var(--edge)";
 
   return (
     <>
@@ -66,22 +67,22 @@ function EvidenceEdgeView({ id, source, target, data, selected }: EdgeProps<Evid
         interactionWidth={18}
         style={{
           stroke,
-          strokeWidth: active ? 2.2 : 1.6,
+          strokeWidth: hover ? 2.8 : active ? 2.2 : 1.6,
           strokeDasharray: style.dash,
           strokeLinecap: edge.confidenceLabel === "dynamic" ? "round" : "butt",
           opacity: data.dimmed ? (flagDynamic ? 0.5 : 0.14) : 1,
           transition: "opacity 200ms, stroke 200ms",
         }}
-        markerEnd={`url(#th-arrow${active ? "-active" : ""})`}
+        markerEnd={`url(#th-arrow${hover ? "-highlight" : active ? "-active" : ""})`}
       />
       {/* test/inspection hook: the path's dash pattern is the confidence style */}
-      <path data-testid="edge-path" data-confidence={edge.confidenceLabel} d={path} fill="none" stroke="none" strokeDasharray={style.dash ?? "none"} />
+      <path data-testid="edge-path" data-edge-id={edge.id} data-panel-hover={hover || undefined} data-confidence={edge.confidenceLabel} d={path} fill="none" stroke="none" strokeDasharray={style.dash ?? "none"} />
       <EdgeLabelRenderer>
         <div
           data-testid="edge-label"
           className={[
             "nodrag nopan pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer whitespace-nowrap rounded-md border px-1.5 py-0.5 font-mono text-[10px] leading-tight transition-opacity duration-200",
-            active ? "border-accent/60 bg-panel text-text" : "border-line bg-bg/90 text-muted",
+            hover ? "border-highlight bg-panel text-text" : active ? "border-accent/60 bg-panel text-text" : "border-line bg-bg/90 text-muted",
           ].join(" ")}
           style={{ left: labelX, top: labelY, opacity: data.dimmed ? (flagDynamic ? 0.6 : 0.15) : 1 }}
           title={`${edge.label} (${edge.weight} evidence)`}
@@ -109,6 +110,7 @@ export function EdgeMarkers() {
         {[
           ["th-arrow", "var(--edge)"],
           ["th-arrow-active", "var(--edge-active)"],
+          ["th-arrow-highlight", "var(--highlight)"],
         ].map(([id, color]) => (
           <marker key={id} id={id} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill={color} />

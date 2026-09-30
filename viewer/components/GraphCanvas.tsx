@@ -3,7 +3,6 @@
 import {
   Background,
   BackgroundVariant,
-  MiniMap,
   Panel,
   ReactFlow,
   useNodesState,
@@ -14,9 +13,11 @@ import { Maximize, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildGraph, neighbours, NODE_HEIGHT, NODE_WIDTH, type ComponentNode as ComponentNodeType } from "@/lib/graph";
 import { impactEdges, impactRoles, type ImpactReport } from "@/lib/impact";
+import type { Highlight } from "@/lib/highlight";
 import { elkLayout, type Positions } from "@/lib/layout";
 import { clearPositions, loadPositions, savePositions } from "@/lib/positions";
 import type { Snapshot } from "@/lib/types";
+import { clampZoom, keepInView, MAX_ZOOM, MIN_ZOOM, minZoomFor } from "@/lib/zoom";
 import { ComponentNode } from "./ComponentNode";
 import { EdgeMarkers, EvidenceEdge } from "./EvidenceEdge";
 
@@ -36,12 +37,25 @@ export interface GraphCanvasProps {
   impact?: ImpactReport;
   /** px of the canvas's right edge covered by the inspector overlay (0 when closed or on phones) */
   occludeRight?: number;
+  /** transient hover/focus highlight from an inspector row (styled apart from the selection) */
+  highlight?: Highlight | null;
 }
 
-const FIT = { padding: 0.18, duration: 300 };
+const fitOptions = (minZoom: number) => ({ padding: 0.18, duration: 300, minZoom, maxZoom: MAX_ZOOM });
+
+/** 0.4 on desktop, 0.2 on viewports narrower than 640px (lib/zoom.ts); follows resizes. */
+function useMinZoom(): number {
+  const [minZoom, setMinZoom] = useState(() => (typeof window === "undefined" ? MIN_ZOOM : minZoomFor(window.innerWidth)));
+  useEffect(() => {
+    const measure = () => setMinZoom(minZoomFor(window.innerWidth));
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  return minZoom;
+}
 const MARGIN = 32; // px kept clear around a selection brought into view
 
-export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce, impact, occludeRight = 0 }: GraphCanvasProps) {
+export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce, impact, occludeRight = 0, highlight = null }: GraphCanvasProps) {
   const roles = useMemo(() => (impact ? impactRoles(impact) : null), [impact]);
   const chainEdges = useMemo(() => (impact ? impactEdges(impact) : null), [impact]);
   const base = useMemo(() => buildGraph(snapshot), [snapshot]);
@@ -52,6 +66,10 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
   const [fitted, setFitted] = useState(0); // bumps when a layout's fitView lands
   const { fitView, setCenter, getViewport, setViewport } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
+  const minZoom = useMinZoom();
+  const fit = fitOptions(minZoom);
+  const fitRef = useRef(fit); // the layout effect reads the current limits without re-running ELK on resize
+  fitRef.current = fit;
 
   // ELK layout, then any positions this viewer saved for this snapshot.
   useEffect(() => {
@@ -65,7 +83,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
         if (cancelled) return;
         const saved = loadPositions(storageKey);
         setNodes(base.nodes.map((n) => ({ ...n, position: saved[n.id] ?? layout[n.id] ?? n.position })));
-        requestAnimationFrame(() => void fitView(FIT).then(() => !cancelled && setFitted((n) => n + 1)));
+        requestAnimationFrame(() => void fitView(fitRef.current).then(() => !cancelled && setFitted((n) => n + 1)));
       });
     return () => {
       cancelled = true;
@@ -82,13 +100,14 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
     if (!node) return;
     lastFocus.current = focusNonce;
     justFocused.current = `node:${focusId}`;
-    const zoom = 1.05;
+    const zoom = clampZoom(1.05, minZoom);
     setCenter(node.position.x + NODE_WIDTH / 2 + occludeRight / 2 / zoom, node.position.y + NODE_HEIGHT / 2, { zoom, duration: 500 });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run per focus request, not per drag
   }, [focusId, focusNonce, nodes.length > 0]);
 
   // Keep the selected node (or both ends of the selected edge) visible while the inspector is
-  // open: if the overlay would cover it, pan (same zoom) so it sits in the uncovered area.
+  // open: if the overlay would cover it, pan (same zoom, within the limits) so it sits in the
+  // uncovered area.
   const selectionKey = selection ? `${selection.type}:${selection.id}` : null;
   useEffect(() => {
     const el = containerRef.current;
@@ -103,18 +122,14 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
     })();
     const boxes = nodes.filter((n) => ids.includes(n.id));
     if (!boxes.length) return;
-    const minX = Math.min(...boxes.map((n) => n.position.x));
-    const minY = Math.min(...boxes.map((n) => n.position.y));
-    const maxX = Math.max(...boxes.map((n) => n.position.x + NODE_WIDTH));
-    const maxY = Math.max(...boxes.map((n) => n.position.y + NODE_HEIGHT));
-    const { x, y, zoom } = getViewport();
-    const visible = { left: MARGIN, top: MARGIN, right: el.clientWidth - occludeRight - MARGIN, bottom: el.clientHeight - MARGIN };
-    const screen = { left: minX * zoom + x, top: minY * zoom + y, right: maxX * zoom + x, bottom: maxY * zoom + y };
-    const inside = screen.left >= visible.left && screen.right <= visible.right && screen.top >= visible.top && screen.bottom <= visible.bottom;
-    if (inside || visible.right <= visible.left) return;
-    const dx = (visible.left + visible.right) / 2 - (screen.left + screen.right) / 2;
-    const dy = screen.top < visible.top || screen.bottom > visible.bottom ? (visible.top + visible.bottom) / 2 - (screen.top + screen.bottom) / 2 : 0;
-    setViewport({ x: x + dx, y: y + dy, zoom }, { duration: 350 });
+    const bounds = {
+      minX: Math.min(...boxes.map((n) => n.position.x)),
+      minY: Math.min(...boxes.map((n) => n.position.y)),
+      maxX: Math.max(...boxes.map((n) => n.position.x + NODE_WIDTH)),
+      maxY: Math.max(...boxes.map((n) => n.position.y + NODE_HEIGHT)),
+    };
+    const next = keepInView(bounds, getViewport(), { width: el.clientWidth, height: el.clientHeight }, occludeRight, MARGIN, minZoom);
+    if (next) setViewport(next, { duration: 350 });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- per selection / panel change, not per drag
   }, [selectionKey, occludeRight, fitted]);
 
@@ -129,33 +144,42 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
 
   const displayNodes = useMemo(
     () =>
-      nodes.map((n) => ({
-        ...n,
-        selected: selection?.type === "node" && selection.id === n.id,
-        data: {
-          ...n.data,
-          // hover/selection focus wins; otherwise impact mode dims everything outside the impact
-          dimmed: focusSet ? !focusSet.has(n.id) : roles ? !roles.has(n.id) : false,
-          highlighted: focusId === n.id,
-          impact: roles ? (roles.get(n.id) ?? null) : undefined,
-        },
-      })),
-    [nodes, selection, focusSet, focusId, roles],
+      nodes.map((n) => {
+        const panelHover = Boolean(highlight?.nodeIds.includes(n.id));
+        return {
+          ...n,
+          selected: selection?.type === "node" && selection.id === n.id,
+          data: {
+            ...n.data,
+            // a panel-hovered node is never dimmed; then hover/selection focus; then impact mode
+            // dims everything outside the impact
+            dimmed: panelHover ? false : focusSet ? !focusSet.has(n.id) : roles ? !roles.has(n.id) : false,
+            highlighted: focusId === n.id,
+            panelHover,
+            impact: roles ? (roles.get(n.id) ?? null) : undefined,
+          },
+        };
+      }),
+    [nodes, selection, focusSet, focusId, roles, highlight],
   );
   const displayEdges = useMemo(
     () =>
-      base.edges.map((e) => ({
-        ...e,
-        selected: selection?.type === "edge" && selection.id === e.id,
-        data: {
-          ...e.data!,
-          active: activeEdgeIds.has(e.id) || (!focusSet && Boolean(chainEdges?.has(e.id))),
-          dimmed: focusSet ? !activeEdgeIds.has(e.id) : chainEdges ? !chainEdges.has(e.id) : false,
-          onImpactChain: chainEdges?.has(e.id),
-          impactMode: Boolean(chainEdges),
-        },
-      })),
-    [base.edges, selection, activeEdgeIds, focusSet, chainEdges],
+      base.edges.map((e) => {
+        const panelHover = Boolean(highlight?.edgeIds.includes(e.id));
+        return {
+          ...e,
+          selected: selection?.type === "edge" && selection.id === e.id,
+          data: {
+            ...e.data!,
+            active: activeEdgeIds.has(e.id) || (!focusSet && Boolean(chainEdges?.has(e.id))),
+            dimmed: panelHover ? false : focusSet ? !activeEdgeIds.has(e.id) : chainEdges ? !chainEdges.has(e.id) : false,
+            panelHover,
+            onImpactChain: chainEdges?.has(e.id),
+            impactMode: Boolean(chainEdges),
+          },
+        };
+      }),
+    [base.edges, selection, activeEdgeIds, focusSet, chainEdges, highlight],
   );
 
   const persist = useCallback(() => {
@@ -181,17 +205,16 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
         onNodeMouseLeave={() => setHoverId(null)}
         nodesConnectable={false}
         elementsSelectable
-        minZoom={0.2}
-        maxZoom={2}
+        minZoom={minZoom}
+        maxZoom={MAX_ZOOM}
         proOptions={{ hideAttribution: true }}
         colorMode="dark"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.4} color="var(--canvas-dot)" />
-        <MiniMap pannable zoomable nodeStrokeWidth={0} className="!hidden transition-[right] duration-300 md:!block" style={{ right: occludeRight }} />
         <Panel position="top-right" className="flex flex-col gap-2 transition-[right] duration-300 sm:flex-row" style={{ right: occludeRight }}>
           <button
             type="button"
-            onClick={() => fitView(occludeRight ? { ...FIT, padding: { top: 0.12, bottom: 0.12, left: 0.06, right: `${occludeRight + MARGIN}px` } } : FIT)}
+            onClick={() => fitView(occludeRight ? { ...fit, padding: { top: 0.12, bottom: 0.12, left: 0.06, right: `${occludeRight + MARGIN}px` } } : fit)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel/90 px-2.5 py-1.5 text-xs text-muted backdrop-blur hover:border-line-strong hover:text-text"
             title="Fit every component in view (beside the inspector when it is open)"
           >

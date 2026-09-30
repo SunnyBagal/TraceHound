@@ -15,12 +15,25 @@ export const TECH_META: Record<Tech, { label: string; icon: string }> = {
   bun: { label: "Bun", icon: "bun.svg" },
 };
 
+/**
+ * How the component relates to the technology. Only the first three may put a logo in a header
+ * (decision 031): a component that merely uses a Redis client keeps its framework/runtime or kind
+ * icon, and Redis stays in its stack list.
+ */
+export type TechRole = "is" | "framework" | "runtime" | "uses";
+
 export interface TechFact {
   tech: Tech;
+  role: TechRole;
   file: string;
   line?: number; // absent when the fact has no line (package.json scripts)
   /** what the fact is, in words */
   detail: string;
+}
+
+/** The fact behind the node/panel header icon: the first one that isn't a mere "uses". */
+export function headerFact(facts: TechFact[]): TechFact | undefined {
+  return facts.find((f) => f.role !== "uses");
 }
 
 /** "PostgreSQL · backend/prisma/schema.prisma:12" */
@@ -30,7 +43,7 @@ export function techTitle(fact: TechFact): string {
 
 const BUN_SCRIPT = /^package\.json script "([^"]+)": (bun\b.*)$/;
 
-/** Every tech fact for a component, primary first: data store, then framework, clients, runtime. */
+/** Every tech fact for a component: what it is (data store, broker), framework, clients it uses, runtime. */
 export function techFacts(snapshot: Snapshot, component: Component): TechFact[] {
   const evidence = new Map(snapshot.evidence.map((e) => [e.id, e]));
   const at = (evidenceId: string) => {
@@ -46,11 +59,11 @@ export function techFacts(snapshot: Snapshot, component: Component): TechFact[] 
     const pkgFiles = snapshot.files.filter((f) => own.has(f.path) || (component.package !== undefined && f.package === component.package));
     const ds = pkgFiles.find((f) => f.prismaDatasource)?.prismaDatasource;
     const dsAt = ds && at(ds.evidenceId);
-    if (ds?.provider === "postgresql" && dsAt) facts.push({ tech: "postgresql", ...dsAt, detail: `prisma datasource provider "postgresql"` });
+    if (ds?.provider === "postgresql" && dsAt) facts.push({ tech: "postgresql", role: "is", ...dsAt, detail: `prisma datasource provider "postgresql"` });
     const client = files.flatMap((f) => f.clients).find((c) => c.tech === "prisma");
     const clientAt = client && at(client.evidenceId);
-    if (clientAt) facts.push({ tech: "prisma", ...clientAt, detail: `Prisma client ${client.variable}` });
-    else if (dsAt) facts.push({ tech: "prisma", ...dsAt, detail: "Prisma schema datasource" });
+    if (clientAt) facts.push({ tech: "prisma", role: "is", ...clientAt, detail: `Prisma client ${client.variable}` });
+    else if (dsAt) facts.push({ tech: "prisma", role: "is", ...dsAt, detail: "Prisma schema datasource" });
   }
 
   // The Redis broker node: its connection is opened by some client in the repo.
@@ -58,7 +71,7 @@ export function techFacts(snapshot: Snapshot, component: Component): TechFact[] 
     const conn = component.resource.connection;
     const client = snapshot.files.flatMap((f) => f.clients).find((c) => c.tech === "redis" && c.connection === conn);
     const clientAt = client && at(client.evidenceId);
-    if (clientAt) facts.push({ tech: "redis", ...clientAt, detail: `Redis client ${client.variable} on ${conn}` });
+    if (clientAt) facts.push({ tech: "redis", role: "is", ...clientAt, detail: `Redis client ${client.variable} on ${conn}` });
   }
 
   // Express: a route of this component, registered in a file that imports a value from "express".
@@ -67,7 +80,7 @@ export function techFacts(snapshot: Snapshot, component: Component): TechFact[] 
     const imp = file?.imports.find((i) => i.specifier === "express" && !i.typeOnly);
     const impAt = imp && at(imp.evidenceId);
     if (impAt) {
-      facts.push({ tech: "express", ...impAt, detail: `import { ${imp.names.join(", ")} } from "express"; routes registered in ${route.file}` });
+      facts.push({ tech: "express", role: "framework", ...impAt, detail: `import { ${imp.names.join(", ")} } from "express"; routes registered in ${route.file}` });
       break;
     }
   }
@@ -78,15 +91,15 @@ export function techFacts(snapshot: Snapshot, component: Component): TechFact[] 
     const op = files.flatMap((f) => f.redisOps).find((o) => o.key);
     const clientAt = client && at(client.evidenceId);
     const opAt = op && at(op.evidenceId);
-    if (clientAt) facts.push({ tech: "redis", ...clientAt, detail: `Redis client ${client.variable}` });
-    else if (opAt) facts.push({ tech: "redis", ...opAt, detail: `Redis ${op.op} ${op.key?.value ?? op.key?.raw ?? ""}`.trim() });
+    if (clientAt) facts.push({ tech: "redis", role: "uses", ...clientAt, detail: `Redis client ${client.variable}` });
+    else if (opAt) facts.push({ tech: "redis", role: "uses", ...opAt, detail: `Redis ${op.op} ${op.key?.value ?? op.key?.raw ?? ""}`.trim() });
   }
 
   // Runtime: only when a package.json script runs the entry file with bun.
   for (const f of files) {
     const script = f.entryReason && BUN_SCRIPT.exec(f.entryReason);
     if (script) {
-      facts.push({ tech: "bun", file: f.package === "." ? "package.json" : `${f.package}/package.json`, detail: `script "${script[1]}": ${script[2]}` });
+      facts.push({ tech: "bun", role: "runtime", file: f.package === "." ? "package.json" : `${f.package}/package.json`, detail: `script "${script[1]}": ${script[2]}` });
       break;
     }
   }

@@ -4,6 +4,7 @@ import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, ChevronRight, Exter
 import { useMemo, type ReactNode } from "react";
 import { EDGE_STYLES, redisKeys } from "@/lib/graph";
 import { permalink } from "@/lib/github";
+import { edgesWithEvidenceIn, noHighlight, type BindHighlight } from "@/lib/highlight";
 import { KIND_META } from "@/lib/kinds";
 import { current, type Entry, type PanelNavigation, type Tab } from "@/lib/navigation";
 import { TECH_META, techFacts, type TechFact } from "@/lib/tech";
@@ -191,13 +192,14 @@ function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot;
   );
 }
 
-function ComponentFiles({ snapshot, component }: { snapshot: Snapshot; component: Component }) {
+function ComponentFiles({ snapshot, component, bind }: { snapshot: Snapshot; component: Component; bind: BindHighlight }) {
   return (
     <Section title="Files · why each is here" count={component.files.length}>
       {component.membership.length ? (
-        <ul className="space-y-3">
+        <ul className="-mx-2 space-y-1">
           {component.membership.map((m) => (
-            <li key={m.file}>
+            // hover or focus (the permalink inside) lights up every edge with evidence in this file
+            <li key={m.file} data-testid="file-row" className="rounded-lg px-2 py-1.5 data-[highlighted=true]:bg-card data-[highlighted=true]:ring-1 data-[highlighted=true]:ring-highlight/70" {...bind({ key: `file:${m.file}`, nodeIds: [], edgeIds: edgesWithEvidenceIn(snapshot, m.file) })}>
               <FileLink snapshot={snapshot} file={m.file} />
               <div className="mt-0.5 text-[14px] leading-normal text-muted">{m.reason}</div>
             </li>
@@ -210,7 +212,7 @@ function ComponentFiles({ snapshot, component }: { snapshot: Snapshot; component
   );
 }
 
-function ConnectionList({ snapshot, edges, direction, onOpen }: { snapshot: Snapshot; edges: ComponentEdge[]; direction: "out" | "in"; onOpen: (e: ComponentEdge) => void }) {
+function ConnectionList({ snapshot, edges, direction, onOpen, bind }: { snapshot: Snapshot; edges: ComponentEdge[]; direction: "out" | "in"; onOpen: (e: ComponentEdge) => void; bind: BindHighlight }) {
   const name = (id: string) => snapshot.components.find((c) => c.id === id)?.name ?? id;
   const Dir = direction === "out" ? ArrowUpRight : ArrowDownLeft;
   if (!edges.length) return <p className="text-[14px] text-faint">None</p>;
@@ -222,7 +224,8 @@ function ConnectionList({ snapshot, edges, direction, onOpen }: { snapshot: Snap
             type="button"
             data-testid="connection"
             onClick={() => onOpen(e)}
-            className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-card"
+            {...bind({ key: `connection:${e.id}`, nodeIds: [direction === "out" ? e.target : e.source], edgeIds: [e.id] })}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-card data-[highlighted=true]:bg-card data-[highlighted=true]:ring-1 data-[highlighted=true]:ring-highlight/70"
             title={`Open the ${e.kind} edge and its evidence`}
           >
             <Dir className="size-4 shrink-0 text-faint" aria-label={direction === "out" ? "outgoing" : "incoming"} />
@@ -242,16 +245,16 @@ function ConnectionList({ snapshot, edges, direction, onOpen }: { snapshot: Snap
   );
 }
 
-function ComponentConnections({ snapshot, component, onOpen }: { snapshot: Snapshot; component: Component; onOpen: (e: ComponentEdge) => void }) {
+function ComponentConnections({ snapshot, component, onOpen, bind }: { snapshot: Snapshot; component: Component; onOpen: (e: ComponentEdge) => void; bind: BindHighlight }) {
   const outgoing = snapshot.edges.filter((e) => e.source === component.id);
   const incoming = snapshot.edges.filter((e) => e.target === component.id);
   return (
     <>
       <Section title="Outgoing" count={outgoing.length}>
-        <ConnectionList snapshot={snapshot} edges={outgoing} direction="out" onOpen={onOpen} />
+        <ConnectionList snapshot={snapshot} edges={outgoing} direction="out" onOpen={onOpen} bind={bind} />
       </Section>
       <Section title="Incoming" count={incoming.length}>
-        <ConnectionList snapshot={snapshot} edges={incoming} direction="in" onOpen={onOpen} />
+        <ConnectionList snapshot={snapshot} edges={incoming} direction="in" onOpen={onOpen} bind={bind} />
       </Section>
     </>
   );
@@ -259,11 +262,17 @@ function ComponentConnections({ snapshot, component, onOpen }: { snapshot: Snaps
 
 /* ───────────── edge ───────────── */
 
-function Endpoint({ snapshot, id, role, onOpen }: { snapshot: Snapshot; id: string; role: string; onOpen: () => void }) {
+function Endpoint({ snapshot, id, role, onOpen, bind }: { snapshot: Snapshot; id: string; role: string; onOpen: () => void; bind: BindHighlight }) {
   const component = snapshot.components.find((c) => c.id === id);
   const facts = useMemo(() => (component ? techFacts(snapshot, component) : []), [snapshot, component]);
   return (
-    <button type="button" onClick={onOpen} data-testid={`endpoint-${role}`} className="flex w-full items-center gap-3 rounded-lg border border-line bg-card px-3 py-2.5 text-left hover:border-line-strong hover:bg-card-hover">
+    <button
+      type="button"
+      onClick={onOpen}
+      data-testid={`endpoint-${role}`}
+      {...bind({ key: `endpoint:${role}:${id}`, nodeIds: [id], edgeIds: [] })}
+      className="flex w-full items-center gap-3 rounded-lg border border-line bg-card px-3 py-2.5 text-left hover:border-line-strong hover:bg-card-hover data-[highlighted=true]:border-highlight data-[highlighted=true]:bg-card-hover"
+    >
       {component && <ComponentIcon kind={component.kind} tech={facts} />}
       <span className="min-w-0 flex-1">
         <span className="block text-[12px] uppercase tracking-wider text-faint">{role}</span>
@@ -274,15 +283,15 @@ function Endpoint({ snapshot, id, role, onOpen }: { snapshot: Snapshot; id: stri
   );
 }
 
-function EdgeOverview({ snapshot, edge, onOpenNode, onEvidence }: { snapshot: Snapshot; edge: ComponentEdge; onOpenNode: (id: string) => void; onEvidence: () => void }) {
+function EdgeOverview({ snapshot, edge, onOpenNode, onEvidence, bind }: { snapshot: Snapshot; edge: ComponentEdge; onOpenNode: (id: string) => void; onEvidence: () => void; bind: BindHighlight }) {
   const evidence = edge.evidenceIds.map((id) => snapshot.evidence.find((e) => e.id === id)).filter((e) => e !== undefined);
   const detectors = [...new Set(evidence.map((e) => e.extractor))];
   return (
     <>
       <Section title="Endpoints">
         <div className="space-y-2">
-          <Endpoint snapshot={snapshot} id={edge.source} role="from" onOpen={() => onOpenNode(edge.source)} />
-          <Endpoint snapshot={snapshot} id={edge.target} role="to" onOpen={() => onOpenNode(edge.target)} />
+          <Endpoint snapshot={snapshot} id={edge.source} role="from" onOpen={() => onOpenNode(edge.source)} bind={bind} />
+          <Endpoint snapshot={snapshot} id={edge.target} role="to" onOpen={() => onOpenNode(edge.target)} bind={bind} />
         </div>
       </Section>
       <Section title="Details">
@@ -371,8 +380,11 @@ function Breadcrumbs({ snapshot, nav }: { snapshot: Snapshot; nav: PanelNavigati
   );
 }
 
-/** Right overlay on desktop (Railway-style), full-screen sheet on phones. */
-export function Inspector({ snapshot, nav }: { snapshot: Snapshot; nav: PanelNavigation }) {
+/**
+ * Right overlay on desktop (Railway-style), full-screen sheet on phones. `bind` wires rows that
+ * point at the canvas (connections, files, endpoints) to the transient hover highlight.
+ */
+export function Inspector({ snapshot, nav, bind = noHighlight }: { snapshot: Snapshot; nav: PanelNavigation; bind?: BindHighlight }) {
   const entry = current(nav.stack);
   const component = entry?.type === "node" ? snapshot.components.find((c) => c.id === entry.id) : undefined;
   const edge = entry?.type === "edge" ? snapshot.edges.find((e) => e.id === entry.id) : undefined;
@@ -404,9 +416,9 @@ export function Inspector({ snapshot, nav }: { snapshot: Snapshot; nav: PanelNav
     );
     body =
       tab === "files" ? (
-        <ComponentFiles snapshot={snapshot} component={component} />
+        <ComponentFiles snapshot={snapshot} component={component} bind={bind} />
       ) : tab === "connections" ? (
-        <ComponentConnections snapshot={snapshot} component={component} onOpen={(e) => nav.push({ type: "edge", id: e.id })} />
+        <ComponentConnections snapshot={snapshot} component={component} onOpen={(e) => nav.push({ type: "edge", id: e.id })} bind={bind} />
       ) : (
         <ComponentOverview snapshot={snapshot} component={component} facts={facts} />
       );
@@ -438,7 +450,7 @@ export function Inspector({ snapshot, nav }: { snapshot: Snapshot; nav: PanelNav
       tab === "evidence" ? (
         <EdgeEvidence snapshot={snapshot} edge={edge} />
       ) : (
-        <EdgeOverview snapshot={snapshot} edge={edge} onOpenNode={openNode} onEvidence={() => nav.setTab("evidence")} />
+        <EdgeOverview snapshot={snapshot} edge={edge} onOpenNode={openNode} onEvidence={() => nav.setTab("evidence")} bind={bind} />
       );
   }
 

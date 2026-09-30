@@ -12,7 +12,8 @@ export const metadata: Metadata = {
 };
 
 // themeColor is a meta tag and can't read CSS: keep it equal to --canvas-bg in globals.css.
-export const viewport: Viewport = { themeColor: "#0b1120", width: "device-width", initialScale: 1 };
+// viewportFit "cover" makes env(safe-area-inset-*) real, for the phone warnings button.
+export const viewport: Viewport = { themeColor: "#0b1120", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

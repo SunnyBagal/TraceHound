@@ -16,10 +16,11 @@ export const EDGE_STYLES: Record<Resolution, { dash?: string; text: string; mean
 export type ComponentNodeData = {
   component: Component;
   warnings: Warning[];
-  /** technology facts behind the header icon, primary first (lib/tech.ts) */
+  /** technology facts (lib/tech.ts); headerFact() picks the one behind the header icon */
   tech: TechFact[];
   dimmed?: boolean; // not connected to the hovered/selected node
   highlighted?: boolean; // focused from the warnings panel
+  panelHover?: boolean; // an inspector row pointing at this node is hovered/focused
   /** impact mode (?impact=): changed / affected; null = not part of the impact */
   impact?: ImpactRole | null;
 };
@@ -32,6 +33,7 @@ export type EvidenceEdgeData = {
   parallelCount: number;
   active?: boolean; // touches the hovered/selected node
   dimmed?: boolean;
+  panelHover?: boolean; // an inspector row pointing at this edge is hovered/focused
   /** impact mode: this edge is a hop on some affected component's chain */
   onImpactChain?: boolean;
   impactMode?: boolean;

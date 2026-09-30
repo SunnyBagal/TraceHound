@@ -1,5 +1,5 @@
 import { KIND_META } from "@/lib/kinds";
-import { TECH_META, techTitle, type TechFact } from "@/lib/tech";
+import { headerFact, TECH_META, techTitle, type TechFact } from "@/lib/tech";
 import type { ComponentKind } from "@/lib/types";
 
 const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -11,14 +11,15 @@ export function TechLogo({ fact, className }: { fact: TechFact; className?: stri
 }
 
 /**
- * The header icon: the component's primary technology when a fact proves one (hover shows that
- * fact), otherwise its generic kind icon.
+ * The header icon: a technology logo only when a fact proves the component IS that technology
+ * or runs on it as its framework/runtime (hover shows that fact); otherwise its generic kind
+ * icon. Technologies it merely uses stay in the inspector's stack list (decision 031).
  */
 export function ComponentIcon({ kind, tech, size = "md" }: { kind: ComponentKind; tech: TechFact[]; size?: "md" | "lg" }) {
-  const primary = tech[0];
+  const primary = headerFact(tech);
   const { icon: Icon, label } = KIND_META[kind];
   const box = size === "lg" ? "size-10 rounded-xl" : "size-8 rounded-lg";
-  const title = primary ? techTitle(primary) : `${label} (no technology fact)`;
+  const title = primary ? techTitle(primary) : `${label} (no data-store, framework or runtime fact)`;
   return (
     <span
       className={`grid shrink-0 place-items-center border border-line bg-panel ${box}`}
