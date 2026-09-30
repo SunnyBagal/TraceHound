@@ -160,3 +160,38 @@ Observations from building TraceHound. Facts only; newest entries at the bottom.
   `/other-capabilities/billing-new`.
 - **Live run:** not performed yet (no project ID available).
   `scripts/sandbox-spike.ts` is ready; it needs `NEBIUS_AI_PROJECT`.
+
+---
+
+## 2026-09-30 · Sandboxes (Contree): live spike blocked by permissions
+
+- **Setup:** `NEBIUS_API_KEY` (the same key that serves inference) plus `NEBIUS_AI_PROJECT`,
+  sent as `Authorization: Bearer …` and `Project: …` to
+  `https://api.tokenfactory.nebius.com/sandboxes/v1`. Script: `node --env-file=.env
+  scripts/sandbox-spike.ts`. Two runs, about 08:17 UTC.
+- **`GET /whoami`:** HTTP 200 in about 0.5 s. With the project header present, auth succeeds,
+  but every permission flag is `false`:
+  `{"import":false,"spawn":false,"spawn_disposable":false,"list":false,"cancel":false,"set_image_tag":false}`.
+  Also returned: `operations_stat` (0 running instances, 0 running imports) and `limits`
+  (`instance_max_timeout` 3600 s, `instance_max_concurrency` 50, `instance_max_layer_bytes`
+  12884901888 (12 GiB), `images_import_max_concurrency` 8, `images_import_max_timeout` 3600 s).
+- **`token_expiration`** in `/whoami` was 5 minutes after each call, and it moved forward
+  between calls (08:21:55, then 08:22:19). It looks like a short-lived token derived per request,
+  not the API key's own expiry.
+- **`GET /images?limit=200`, `GET /images`, `GET /operations?limit=5`:** HTTP 403
+  `{"status": 403, "error": "Insufficient permissions: list"}`.
+- **`POST /instances`** (`image: tag:ubuntu:latest`, `disposable: true`, `timeout: 300`,
+  `networking.enabled: true`): HTTP 403
+  `{"status": 403, "error": "Insufficient permissions: spawn or spawn_disposable"}`.
+  No operation was created, so nothing needed cancelling.
+- **Script exit code:** 1 on both runs (the first stopped at the images 403; the second, after
+  a fallback, stopped at the spawn 403). Total wall time under 1 s each.
+- **Not answered (no sandbox ran):** command output and exit code inside a sandbox, spawn
+  latency, cost, whether the npm registry and bun.sh are reachable, whether `redis-server` runs.
+- **Cost:** none shown and none incurred, since no operation was created.
+- **Docs:** the CLI install page says to "Get an API token and project ID from your ConTree
+  project". The Team Access "Groups & Access management" page lists project-level permissions
+  for Files, Fine-tuning, Batch, Dedicated/Public Endpoints and Prompt Presets, but not
+  Sandboxes. We found no page saying how to get Sandboxes permissions on a key or project.
+- **Error quality:** the 403 bodies name the missing permission, and `/whoami` shows the full
+  permission set, so the cause was clear after one call.

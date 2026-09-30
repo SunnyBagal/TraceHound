@@ -20,10 +20,11 @@ on a canvas. Later: a graph-guided repair agent.
   verified in the Nebius console.
 
 ### Open blockers
-1. **Sandbox spike pending.** `NEBIUS_AI_PROJECT` is now in `.env`. Run
-   `node --env-file=.env scripts/sandbox-spike.ts` (one disposable run: echo, bun, npm
-   reachability, redis-server), then log the results in FEEDBACK.md. Decision 022 already
-   chose TypeScript over REST.
+1. **Sandbox spike blocked on permissions.** Auth works with `NEBIUS_API_KEY` +
+   `NEBIUS_AI_PROJECT`, but `/whoami` reports every Sandboxes permission `false`; list and
+   spawn return 403 (FEEDBACK.md, 2026-09-30). Sandboxes access must be granted on the Nebius
+   side (key/project, or beta via contree@nebius.com), then rerun
+   `node --env-file=.env scripts/sandbox-spike.ts`. Decision 022 (TypeScript over REST) stands.
 2. **CEX has no license.** There's no LICENSE file or license field anywhere, so it stays
    all-rights-reserved. Don't create a modified fork for the repair harness until that's
    resolved (ask the author, or use another demo repo).
