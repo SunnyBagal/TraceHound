@@ -528,6 +528,36 @@ more tokens, and the summaries contain unverified prose. (c) Tolerant parsing (s
 fixing trailing commas): the output contract is strict JSON, and silent repair would hide how
 often the model breaks it.
 
+## 028 · Viewer: fact-backed tech icons, overlay inspector with history-backed navigation
+**Choice:**
+- **Icons come from facts, in the viewer.** `viewer/lib/tech.ts` picks a technology icon only
+  from deterministic snapshot facts, never from `name`/`summary`: PostgreSQL when the Prisma
+  datasource provider (already a file fact with evidence, `prismaDatasource`) is
+  `"postgresql"`; Prisma for Prisma data stores; Redis for the broker node and for components
+  whose files construct Redis clients or touch Redis keys; Express for components with routes
+  in a file that imports a value from `"express"`; Bun when a `package.json` script runs the
+  entry file with `bun`. Everything else keeps the generic kind icon. Hovering an icon shows
+  its fact (`PostgreSQL · backend/prisma/schema.prisma:12`). No analyzer change was needed, so
+  the analyzer version, snapshot and naming-cache keys are unchanged. SVGs are vendored from
+  svgl.app into `viewer/public/icons/` (sources in `CREDITS.md`); nothing is hotlinked.
+- **The inspector overlays the canvas** on desktop (`clamp(420px, 34vw, 600px)`), and the canvas
+  pans (same zoom) when the overlay would cover the selected node or edge. On phones it is a
+  full-screen sheet.
+- **Navigation is a stack stored in `history.state`.** Every in-panel step pushes a history
+  entry and rewrites `?component=` / `?edge=` (other params such as `?impact=` are kept). The
+  back arrow and crumb clicks call `history.back()` / `history.go(-n)`, so the panel and the
+  browser back button can't disagree. `popstate` restores the stack stored on the entry it
+  lands on. Opening something from outside the panel (canvas, warnings, impact list) starts a
+  new one-item breadcrumb. Closing (Esc, empty canvas, ✕) pushes an empty entry, so back
+  reopens the panel.
+
+**Rejected:** (a) A `tech` field in the analyzer for all icons: the facts already exist with
+evidence, and a schema change would have meant a version bump and regenerating snapshots
+and impacts for no new information. (b) Choosing icons from names/summaries or package
+dependency lists: names can be model-written, and a dependency doesn't show which component
+uses it. (c) Crumb clicks that push a truncated stack: the browser back button would then
+return to the deeper view, so the panel's history and the browser's would drift apart.
+
 ## 029 · Repair agent loop: host-side TypeScript, native tool calls
 **Protocol choice: native OpenAI-style `tool_calls`.** The spike (FEEDBACK 2026-09-30, 3 calls)
 showed Nemotron Nano on Token Factory returning `message.tool_calls` with parseable JSON

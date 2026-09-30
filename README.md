@@ -58,5 +58,12 @@ To serve it under a sub-path, build with `NEXT_PUBLIC_BASE_PATH=/tracehound`.
 - `docs/decisions.md` — every non-obvious choice and the alternative we rejected
 - `FEEDBACK.md` — dated observations on Nebius Token Factory + Nemotron
 
+## Credits
+- Canvas: [React Flow](https://reactflow.dev) (`@xyflow/react`, MIT). The in-canvas attribution is
+  hidden (`proOptions.hideAttribution`), so it is credited here.
+- Layout: [ELK](https://eclipse.dev/elk/) via [elkjs](https://github.com/kieler/elkjs) (EPL-2.0).
+- Technology icons: [svgl.app](https://svgl.app), vendored in `viewer/public/icons/` (sources in
+  `viewer/public/icons/CREDITS.md`).
+
 ## License
 MIT

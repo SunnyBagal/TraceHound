@@ -1,8 +1,9 @@
 "use client";
 
 import { ReactFlowProvider } from "@xyflow/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { impactParam, type ImpactReport } from "@/lib/impact";
+import { current, usePanelNavigation } from "@/lib/navigation";
 import type { Snapshot } from "@/lib/types";
 import { GraphCanvas, type Selection } from "./GraphCanvas";
 import { ImpactPanel } from "./ImpactPanel";
@@ -10,45 +11,64 @@ import { Inspector } from "./Inspector";
 import { TopBar } from "./TopBar";
 import { WarningsPanel } from "./WarningsPanel";
 
-/** Deep links: ?component=<id> or ?edge=<id> opens the inspector on load. */
-function initialSelection(snapshot: Snapshot): Selection {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const component = params.get("component");
-    const edge = params.get("edge");
-    if (component && snapshot.components.some((c) => c.id === component)) return { type: "node", id: component };
-    if (edge && snapshot.edges.some((e) => e.id === edge)) return { type: "edge", id: edge };
-  } catch {
-    // no window/URL: start unselected
-  }
-  return null;
+/** Inspector overlay width on desktop; mirrors md:w-[clamp(420px,34vw,600px)] in Inspector. 0 on phones. */
+function useOverlayWidth(): number {
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const measure = () => setWidth(window.innerWidth >= 768 ? Math.min(600, Math.max(420, window.innerWidth * 0.34)) : 0);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  return width;
 }
 
 export function Viewer({ snapshot, impact }: { snapshot: Snapshot; impact?: ImpactReport }) {
-  const [selection, setSelection] = useState<Selection>(() => initialSelection(snapshot));
+  // ?component= / ?edge= deep links, and the inspector's back/breadcrumb history
+  const nav = usePanelNavigation(snapshot);
+  const entry = current(nav.stack);
+  const selection: Selection = entry ? { type: entry.type, id: entry.id } : null;
   const [impactName] = useState(() => (typeof window === "undefined" ? null : impactParam(window.location.search)));
   const [focus, setFocus] = useState<{ id: string | null; nonce: number }>({ id: null, nonce: 0 });
+  const overlay = useOverlayWidth();
+  const { close } = nav;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !e.defaultPrevented) close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [close]);
 
   return (
     <ReactFlowProvider>
       <div className="flex h-dvh flex-col overflow-hidden">
         <TopBar snapshot={snapshot} />
         <main className="relative flex min-h-0 flex-1">
-          {impact && <ImpactPanel name={impactName ?? "impact"} impact={impact} snapshot={snapshot} onSelect={setSelection} />}
-          <div className="relative min-w-0 flex-1">
-            <GraphCanvas snapshot={snapshot} selection={selection} onSelect={setSelection} focusId={focus.id} focusNonce={focus.nonce} impact={impact} />
+          {impact && <ImpactPanel name={impactName ?? "impact"} impact={impact} snapshot={snapshot} onSelect={nav.open} />}
+          <div className="relative min-w-0 flex-1 overflow-hidden">
+            <GraphCanvas
+              snapshot={snapshot}
+              selection={selection}
+              onSelect={nav.open}
+              focusId={focus.id}
+              focusNonce={focus.nonce}
+              impact={impact}
+              occludeRight={selection ? overlay : 0}
+            />
             {/* on phones the impact panel takes the warnings panel's corner */}
             <div className={impact ? "hidden md:block" : undefined}>
               <WarningsPanel
-              snapshot={snapshot}
-              onFocus={(id) => {
-                setSelection({ type: "node", id });
-                setFocus((f) => ({ id, nonce: f.nonce + 1 }));
-              }}
-            />
+                snapshot={snapshot}
+                onFocus={(id) => {
+                  nav.open({ type: "node", id });
+                  setFocus((f) => ({ id, nonce: f.nonce + 1 }));
+                }}
+              />
             </div>
+            <Inspector snapshot={snapshot} nav={nav} />
           </div>
-          <Inspector snapshot={snapshot} selection={selection} onSelect={setSelection} />
         </main>
       </div>
     </ReactFlowProvider>

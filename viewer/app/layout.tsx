@@ -11,7 +11,8 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = { themeColor: "#0a0a0c", width: "device-width", initialScale: 1 };
+// themeColor is a meta tag and can't read CSS: keep it equal to --canvas-bg in globals.css.
+export const viewport: Viewport = { themeColor: "#0b1120", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

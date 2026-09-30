@@ -1,5 +1,6 @@
 import { Position, type Edge, type Node } from "@xyflow/react";
 import type { ImpactRole } from "./impact";
+import { techFacts, type TechFact } from "./tech";
 import type { Component, ComponentEdge, Resolution, Snapshot, Warning } from "./types";
 
 export const NODE_WIDTH = 272;
@@ -15,6 +16,8 @@ export const EDGE_STYLES: Record<Resolution, { dash?: string; text: string; mean
 export type ComponentNodeData = {
   component: Component;
   warnings: Warning[];
+  /** technology facts behind the header icon, primary first (lib/tech.ts) */
+  tech: TechFact[];
   dimmed?: boolean; // not connected to the hovered/selected node
   highlighted?: boolean; // focused from the warnings panel
   /** impact mode (?impact=): changed / affected; null = not part of the impact */
@@ -51,7 +54,7 @@ export function buildGraph(snapshot: Snapshot): { nodes: ComponentNode[]; edges:
     width: NODE_WIDTH,
     height: NODE_HEIGHT,
     handles,
-    data: { component, warnings: snapshot.warnings.filter((w) => w.componentId === component.id) },
+    data: { component, warnings: snapshot.warnings.filter((w) => w.componentId === component.id), tech: techFacts(snapshot, component) },
   }));
 
   const pairKey = (e: ComponentEdge) => [e.source, e.target].sort().join("|");
