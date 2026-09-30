@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Snapshot, SnapshotManifest } from "@tracehound/analyzer/schema";
 import { describe, expect, it } from "vitest";
-import { techFacts, techTitle } from "@/lib/tech";
+import { headerFact, techFacts, techTitle } from "@/lib/tech";
 
 const root = path.resolve(import.meta.dirname, "../../snapshots");
 const manifest = SnapshotManifest.parse(JSON.parse(readFileSync(path.join(root, "index.json"), "utf8")));
@@ -38,5 +38,34 @@ describe("technology icons come from facts", () => {
       files: snapshot.files.map((f) => (f.prismaDatasource ? { ...f, prismaDatasource: { ...f.prismaDatasource, provider: "mysql" } } : f)),
     };
     expect(titles("db:backend", mysql)).toEqual(["Prisma · backend/src/db.ts:9"]);
+  });
+});
+
+describe("header icon rule", () => {
+  const header = (id: string) => headerFact(techFacts(snapshot, snapshot.components.find((c) => c.id === id)!));
+
+  it("a logo only for what the component IS, or its framework/runtime; kind icon otherwise", () => {
+    const expected: Record<string, string> = {
+      "redis:redis-url": "Redis · backend/src/utils/engine-client.ts:13", // the broker IS Redis
+      "db:backend": "PostgreSQL · backend/prisma/schema.prisma:12", // the database IS PostgreSQL
+      "engine:engine-worker": "Bun · engine/package.json", // uses a Redis client; runtime Bun
+      "backend:backend-server": "Express · backend/src/index.ts:2",
+      "backend:auth-api": "Express · backend/src/routes/auth-routes.ts:1",
+      "backend:exchange-api": "Express · backend/src/routes/exchange-routes.ts:1",
+    };
+    for (const c of snapshot.components) {
+      const fact = header(c.id);
+      expect(fact ? techTitle(fact) : "kind icon", c.id).toBe(expected[c.id] ?? "kind icon");
+    }
+    // Redis RPC Bridge only uses a Redis client: generic service icon
+    expect(header("redis-rpc-bridge")).toBeUndefined();
+  });
+
+  it("using a Redis client never puts Redis in a header, but keeps it in the stack list", () => {
+    for (const c of snapshot.components) {
+      if (header(c.id)?.tech === "redis") expect(c.resource?.tech).toBe("redis");
+    }
+    expect(titles("engine:engine-worker")).toContain("Redis · engine/src/index.ts:26");
+    expect(titles("redis-rpc-bridge")).toContain("Redis · backend/src/utils/engine-client.ts:13");
   });
 });
