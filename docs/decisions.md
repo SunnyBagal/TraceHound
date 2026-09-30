@@ -835,6 +835,14 @@ and without the graph; none reads, mentions or special-cases a graph tool.** `ag
   is inside a typechecked or tested path.
 - **(e) Nothing else:** no new tools, no near-duplicate detection, no aliases for invented tool
   names.
+- **Reasoning on is now explicit (2026-10-01, before the diagnostic runs).** `--reasoning on`
+  sends `chat_template_kwargs: { enable_thinking: true }` instead of relying on the model
+  default (029 said "model default"). This makes the run configuration exactly what
+  `scripts/reasoning-tool-smoke.ts` validated: one Nano call with thinking on and the agent's
+  tool definitions returned `finish_reason: "tool_calls"`, a valid `list_dir` call, `content:
+  null`, and the thinking in `message.reasoning`. Token Factory does not report
+  `completion_tokens_details.reasoning_tokens`, so traces keep `reasoningChars` per turn, and
+  `reasoningTokens` only if it's ever reported.
 **Rejected:** (a) Stopping on the first refusal: the model sometimes recovers after one
 refusal. (b) Repeating the nudge: a nudge every N steps becomes noise, and v3 is meant to
 measure one intervention. (c) Hiding `bun run`'s usage text: that special-cases one command.

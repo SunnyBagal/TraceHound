@@ -181,7 +181,7 @@ describe("loop protocol and limits (fake provider, fake model)", () => {
     const r = await runRepair({ task: fakeTask({ tokens: 250 }), agent: new RepairLoopAgent({ reasoning: "on" }), provider: new FakeProvider(), image: "img", llm: client });
     expect(r.reason).toBe("budget exhausted: tokens 250");
     expect(trace(r)).toMatchObject({ reasoning: "on", model: "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B" });
-    expect(requests[0]).not.toHaveProperty("chat_template_kwargs"); // reasoning on = model default
+    expect(requests[0]).toMatchObject({ chat_template_kwargs: { enable_thinking: true } }); // reasoning on = thinking explicitly enabled
     expect(requests[0]).toMatchObject({ temperature: 0, tool_choice: "auto" });
   });
 });

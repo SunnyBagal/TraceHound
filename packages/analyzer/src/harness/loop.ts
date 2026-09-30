@@ -23,6 +23,8 @@ export const AGENT_PROMPT_V2_FILE = path.join(PROMPTS, "agent-v2.md");
 export const LOOP_VERSION = "agent-v3";
 /** agent-v3: this many refused calls in a row end the run UNRESOLVED "stuck". */
 export const STUCK_AFTER_REFUSALS = 3;
+/** reasoning "on": thinking explicitly enabled (reasoning "off" sends enable_thinking: false). */
+export const THINKING_ON = { chat_template_kwargs: { enable_thinking: true } } as const;
 /** agent-v3: once per run, if the diff is still empty after this many steps. */
 export const NUDGE_AFTER_STEPS = 15;
 export const noEditNudge = (limit: number) => `Step ${NUDGE_AFTER_STEPS} of ${limit} and no file has been changed. If you have found the bug, fix it now with edit_file.`;
@@ -74,6 +76,8 @@ export interface LoopTurn {
   finishReason?: string;
   content?: string;
   reasoningChars?: number;
+  /** usage.completion_tokens_details.reasoning_tokens, only when the API reports it */
+  reasoningTokens?: number;
   toolCalls: { id: string; name: string; arguments: string }[];
   toolResults: { id: string; name: string; ok: boolean; result: string }[];
 }
@@ -187,7 +191,8 @@ export class RepairLoopAgent implements Agent {
         tools: this.#tools,
         tool_choice: "auto",
         messages,
-        ...(this.#opts.reasoning === "off" ? NO_REASONING : {}),
+        // explicit both ways (the same kwargs the reasoning-on smoke test validated with tool calls)
+        ...(this.#opts.reasoning === "off" ? NO_REASONING : THINKING_ON),
       };
       const res = await ctx.llm.chat(request, { purpose: `repair-agent:${this.name}` }); // BudgetExhausted propagates to the harness
       const calls = res.toolCalls ?? [];
@@ -202,6 +207,7 @@ export class RepairLoopAgent implements Agent {
         finishReason: res.finishReason,
         ...(res.content && { content: truncate(res.content, 2000) }),
         ...(res.reasoningChars !== undefined && { reasoningChars: res.reasoningChars }),
+        ...(res.reasoningTokens !== undefined && { reasoningTokens: res.reasoningTokens }),
         toolCalls: calls.map((c) => ({ id: c.id, name: c.function.name, arguments: truncate(c.function.arguments, 2000) })),
         toolResults: [],
       };
