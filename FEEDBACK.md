@@ -116,3 +116,24 @@ Observations from building TraceHound. Facts only; newest entries at the bottom.
 - **Full naming run with `enable_thinking: false`** (7 components): 915–1467 ms per call, 229
   completion tokens total (2,021 with reasoning on the same facts), 2,513 total tokens. All 7
   replies were valid JSON.
+
+---
+
+## 2026-09-30 · Nano vs Super on the same naming task
+
+- **Setup:** 7 components, identical facts payloads, `chat_template_kwargs.enable_thinking=false`,
+  temperature 0, cache off for Super. The Nano numbers are from its fresh (uncached) run
+  earlier the same day.
+- **Models:** `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` and `nvidia/nemotron-3-super-120b-a12b`.
+  Both resolved via `GET /models`.
+- **Latency per call:** Nano 915–1467 ms (sum 8193 ms); Super 582–1390 ms (sum 6966 ms).
+- **Tokens:** Nano 2,284 prompt + 229 completion; Super 2,284 prompt + 234 completion.
+- **Est. cost** (config/prices.json, third-party rates): Nano $0.00019; Super $0.00090.
+- **All 14 replies** were valid JSON and passed TraceHound's naming checks.
+- **Content not supported by the facts sent:**
+  - Super, Engine Worker: "using Prisma models". No Prisma fact exists for that component.
+  - Super, Redis: "BRPOP/LPUSH". The facts spell the ops `brPop`/`lPush`.
+  - Nano, Auth API: "validates credentials". The facts list the `/signin` route only.
+- **Differing names** (Nano → Super): Redis Queue → Task Queue; User Data Store → Database
+  Layer; Backend Server → API Gateway; Backend Shared → Shared Utilities. Auth
+  ("Authentication Service"), Exchange ("Exchange API") and Engine Worker were the same.
