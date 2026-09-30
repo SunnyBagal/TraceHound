@@ -15,7 +15,12 @@ export interface AgentContext {
    * harness counts tokens and cost from the API responses' usage fields; agents can't report their
    * own. Absent when the run has no client (scripted agents).
    */
-  llm?: { chat(request: ChatRequest): Promise<ChatResult> };
+  llm?: { chat(request: ChatRequest, meta?: { purpose: string }): Promise<ChatResult> };
+  /**
+   * Count one step for an agent action that makes no provider call (finish, a graph tool, a
+   * rejected or malformed tool call). Provider operations count themselves.
+   */
+  step(label: string): void;
   /** Read-only graph tools over the target's snapshot, when the harness has one. */
   graph?: {
     searchComponents(query: string): unknown;
@@ -28,6 +33,8 @@ export interface AgentContext {
 export interface Agent {
   readonly name: string;
   run(ctx: AgentContext): Promise<void>;
+  /** Observational record of what the agent did (transcript etc.). Never used for verification. */
+  readonly trace?: unknown;
 }
 
 /** Scripted: applies a known patch with `git apply`. Proves the harness can reach RESOLVED. */

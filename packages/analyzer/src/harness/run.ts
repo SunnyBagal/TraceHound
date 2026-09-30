@@ -2,6 +2,7 @@
 // (decision 026). The harness decides the outcome from what it runs itself; it never reads or
 // trusts anything the agent says, including how many tokens it used.
 import { randomUUID } from "node:crypto";
+import { BudgetExceededError } from "../llm/budget.ts";
 import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import type { Agent, AgentContext } from "./agents.ts";
 import type { ExecResult, SandboxHandle, SandboxProvider, SandboxSource } from "./provider.ts";
@@ -45,9 +46,16 @@ export interface RunRecord {
   final?: CheckResults;
   comparison?: { newFailures: string[]; preExistingFailures: string[] };
   diff?: string;
-  agentRun?: { steps: number; budgetExhausted?: string; error?: string };
+  agentRun?: { steps: number; budgetExhausted?: string; error?: string; trace?: unknown };
   /** Counted by the harness from API usage fields (via the shared client), never from the agent. */
-  usage: { llmCalls: number; inputTokens: number; outputTokens: number; tokens: number; costUSD: number };
+  usage: {
+    llmCalls: number;
+    inputTokens: number;
+    outputTokens: number;
+    tokens: number;
+    costUSD: number;
+    calls?: { purpose: string; inputTokens: number; outputTokens: number; costUSD: number; latencyMs: number; cached: boolean }[];
+  };
 }
 
 /** External stop only: Ctrl-C, SIGTERM, an explicit abort. */
@@ -262,19 +270,37 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
       },
       writeFile: async (p, content) => (step(), provider.writeFile(handle!, p, content)),
       readFile: async (p) => (step(), provider.readFile(handle!, p)),
+      step: () => step(),
       ...(opts.llm && {
         llm: {
-          chat: async (request: ChatRequest) => {
+          chat: async (request: ChatRequest, meta?: { purpose: string }) => {
             budget();
             if (record.usage.tokens >= spec.limits.tokens) throw new BudgetExhausted(`tokens ${spec.limits.tokens}`);
-            const result = await opts.llm!.chat(request, { purpose: `repair-agent:${agent.name}` });
+            if (record.usage.costUSD >= spec.limits.costUSD) throw new BudgetExhausted(`cost $${spec.limits.costUSD}`);
+            let result: ChatResult;
+            try {
+              result = await opts.llm!.chat(request, { purpose: meta?.purpose ?? `repair-agent:${agent.name}` });
+            } catch (error) {
+              // the shared client's own caps (per-process run cap, total cap) also end the agent's budget
+              if (error instanceof BudgetExceededError) throw new BudgetExhausted(`cost cap (${error.message})`);
+              throw error;
+            }
             // the harness's own count, from the API response's usage fields as returned by the shared client
             record.usage.llmCalls++;
             record.usage.inputTokens += result.inputTokens ?? 0;
             record.usage.outputTokens += result.outputTokens ?? 0;
             record.usage.tokens = record.usage.inputTokens + record.usage.outputTokens;
             record.usage.costUSD += result.costUSD;
+            (record.usage.calls ??= []).push({
+              purpose: meta?.purpose ?? `repair-agent:${agent.name}`,
+              inputTokens: result.inputTokens ?? 0,
+              outputTokens: result.outputTokens ?? 0,
+              costUSD: result.costUSD,
+              latencyMs: result.latencyMs,
+              cached: result.cached,
+            });
             if (record.usage.tokens > spec.limits.tokens) throw new BudgetExhausted(`tokens ${spec.limits.tokens}`);
+            if (record.usage.costUSD > spec.limits.costUSD) throw new BudgetExhausted(`cost $${spec.limits.costUSD}`);
             return result;
           },
         },
@@ -290,6 +316,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
       else record.agentRun.error = (error as Error).message;
     }
     record.agentRun.steps = Math.min(steps, spec.limits.steps);
+    if (agent.trace !== undefined) record.agentRun.trace = agent.trace;
 
     // ── VERIFYING: the harness's own checks only (not bounded by the agent's wall-clock) ────
     enter("VERIFYING");

@@ -1,11 +1,30 @@
 {
   "id": "toy-discount",
-  "source": { "localPath": "../../fixtures/.build/toy-cart" },
+  "source": {
+    "localPath": "../../fixtures/.build/toy-cart"
+  },
   "baseSha": "6f7c30dab99e469b1ddb6a1c6c3b83dccc28787a",
   "setup": [],
   "issue": "Discounts are wrong: a 10% discount on a 200 cart charges 190 instead of 180.",
-  "repro": { "testFile": "repro.test.ts", "dest": "repro/discount.repro.test.ts", "command": "bun test ./repro/discount.repro.test.ts" },
-  "regression": ["bun test ./tests"],
-  "typecheck": { "packages": ["."], "command": "tsc --noEmit" },
-  "limits": { "steps": 20, "wallClockMs": 300000, "tokens": 0, "commandTimeoutMs": 60000 }
+  "repro": {
+    "testFile": "repro.test.ts",
+    "dest": "repro/discount.repro.test.ts",
+    "command": "bun test ./repro/discount.repro.test.ts"
+  },
+  "regression": [
+    "bun test ./tests"
+  ],
+  "typecheck": {
+    "packages": [
+      "."
+    ],
+    "command": "tsc --noEmit"
+  },
+  "limits": {
+    "steps": 40,
+    "wallClockMs": 600000,
+    "tokens": 300000,
+    "commandTimeoutMs": 60000,
+    "costUSD": 0.1
+  }
 }

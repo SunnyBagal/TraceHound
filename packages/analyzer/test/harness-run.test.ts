@@ -64,7 +64,7 @@ function task(overrides: Partial<TaskSpec> = {}): LoadedTask {
     repro: { testFile: "repro.test.ts", dest: "repro/x.test.ts", command: "run-repro" },
     regression: ["run-regression"],
     typecheck: { packages: ["."], command: "tsc --noEmit" },
-    limits: { steps: 10, wallClockMs: 60_000, tokens: 0, commandTimeoutMs: 5_000 },
+    limits: { steps: 10, wallClockMs: 60_000, tokens: 0, commandTimeoutMs: 5_000, costUSD: 0.1 },
     ...overrides,
   };
   return { spec, dir: "/tasks/fake", reproContent: "test()", localPath: "/nowhere" };
@@ -171,7 +171,7 @@ describe("runRepair state machine (fake provider)", () => {
   it('an agent past its wall-clock limit is UNRESOLVED "budget exhausted", not CANCELLED', async () => {
     const provider = new FakeProvider();
     const sleeper: Agent = { name: "sleeper", run: async (ctx) => { await new Promise((r) => setTimeout(r, 80)); await ctx.exec("echo late"); } };
-    const r = await runRepair({ task: task({ limits: { steps: 10, wallClockMs: 60, tokens: 0, commandTimeoutMs: 5_000 } }), agent: sleeper, provider, image: "img" });
+    const r = await runRepair({ task: task({ limits: { steps: 10, wallClockMs: 60, tokens: 0, commandTimeoutMs: 5_000, costUSD: 0.1 } }), agent: sleeper, provider, image: "img" });
     expect(r).toMatchObject({ finalState: "UNRESOLVED", reason: "budget exhausted: wall-clock 60ms" });
     expect(r.states.map((x) => x.state)).toContain("VERIFYING"); // the harness still records what the repo looks like
     expect(provider.destroyed).toHaveLength(1);
@@ -179,14 +179,14 @@ describe("runRepair state machine (fake provider)", () => {
 
   it('the step limit ends the run UNRESOLVED "budget exhausted: steps N"', async () => {
     const looper: Agent = { name: "looper", run: async (ctx) => { for (;;) await ctx.exec("echo busy"); } };
-    const r = await runRepair({ task: task({ limits: { steps: 3, wallClockMs: 60_000, tokens: 0, commandTimeoutMs: 5_000 } }), agent: looper, provider: new FakeProvider(), image: "img" });
+    const r = await runRepair({ task: task({ limits: { steps: 3, wallClockMs: 60_000, tokens: 0, commandTimeoutMs: 5_000, costUSD: 0.1 } }), agent: looper, provider: new FakeProvider(), image: "img" });
     expect(r.agentRun).toEqual({ steps: 3, budgetExhausted: "steps 3" });
     expect(r).toMatchObject({ finalState: "UNRESOLVED", reason: "budget exhausted: steps 3" });
   });
 
   it("even a fixed repo is UNRESOLVED when the agent ran out of budget", async () => {
     const fixThenLoop: Agent = { name: "fix-then-loop", run: async (ctx) => { await ctx.writeFile("state", "fixed"); for (;;) await ctx.exec("echo"); } };
-    const r = await runRepair({ task: task({ limits: { steps: 2, wallClockMs: 60_000, tokens: 0, commandTimeoutMs: 5_000 } }), agent: fixThenLoop, provider: new FakeProvider(), image: "img" });
+    const r = await runRepair({ task: task({ limits: { steps: 2, wallClockMs: 60_000, tokens: 0, commandTimeoutMs: 5_000, costUSD: 0.1 } }), agent: fixThenLoop, provider: new FakeProvider(), image: "img" });
     expect(r.repro.afterPatch!.exitCode).toBe(0);
     expect(r).toMatchObject({ finalState: "UNRESOLVED", reason: "budget exhausted: steps 2" });
   });
@@ -217,7 +217,7 @@ describe("token accounting (0g): the harness counts, from API usage, through the
         (ctx as unknown as { usage: unknown }).usage = { tokens: 1, costUSD: 0 };
       },
     };
-    const r = await runRepair({ task: task({ limits: { steps: 10, wallClockMs: 60_000, tokens: 10_000, commandTimeoutMs: 5_000 } }), agent: claimer, provider: new FakeProvider(), image: "img", llm: client });
+    const r = await runRepair({ task: task({ limits: { steps: 10, wallClockMs: 60_000, tokens: 10_000, commandTimeoutMs: 5_000, costUSD: 0.1 } }), agent: claimer, provider: new FakeProvider(), image: "img", llm: client });
     expect(r.usage).toMatchObject({ llmCalls: 2, inputTokens: 320, outputTokens: 80, tokens: 400 });
     expect(r.usage.costUSD).toBeCloseTo(ledger.entries().reduce((n, e) => n + e.estCostUSD, 0), 10);
     expect(ledger.entries().map((e) => [e.inputTokens, e.outputTokens, e.purpose])).toEqual([[120, 30, "repair-agent:claimer"], [200, 50, "repair-agent:claimer"]]);
@@ -226,7 +226,7 @@ describe("token accounting (0g): the harness counts, from API usage, through the
   it('crossing the token limit ends UNRESOLVED "budget exhausted: tokens N"', async () => {
     const { client } = fakeClient((async () => completion(900, 200)) as unknown as typeof fetch);
     const chatty: Agent = { name: "chatty", run: async (ctx) => { for (let i = 0; ; i++) await ctx.llm!.chat(request(`msg ${i}`)); } };
-    const r = await runRepair({ task: task({ limits: { steps: 10, wallClockMs: 60_000, tokens: 2_000, commandTimeoutMs: 5_000 } }), agent: chatty, provider: new FakeProvider(), image: "img", llm: client });
+    const r = await runRepair({ task: task({ limits: { steps: 10, wallClockMs: 60_000, tokens: 2_000, commandTimeoutMs: 5_000, costUSD: 0.1 } }), agent: chatty, provider: new FakeProvider(), image: "img", llm: client });
     expect(r).toMatchObject({ finalState: "UNRESOLVED", reason: "budget exhausted: tokens 2000" });
     expect(r.usage).toMatchObject({ llmCalls: 2, tokens: 2200 });
   });

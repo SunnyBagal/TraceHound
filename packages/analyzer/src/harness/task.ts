@@ -20,12 +20,15 @@ export const TaskSpec = z.object({
     command: z.string(), // must fail at baseSha, pass after the fix
   }),
   regression: z.array(z.string()).default([]),
+  /** Snapshot of the repo at baseSha, for --graph on (relative to the task dir). */
+  snapshot: z.string().optional(),
   typecheck: z.object({ packages: z.array(z.string()).min(1), command: z.string().default("tsc --noEmit") }).optional(),
   limits: z.object({
     steps: z.number().int().positive(), // provider operations the agent may make
     wallClockMs: z.number().int().positive(), // from create; exceeded in PATCHING = budget exhausted, before it = FAILED
     tokens: z.number().int().nonnegative(), // model tokens the agent may use, counted by the harness from API usage
     commandTimeoutMs: z.number().int().positive().default(120_000), // per harness/agent command
+    costUSD: z.number().positive().default(0.1), // model spend per run, counted by the harness
   }),
 });
 export type TaskSpec = z.infer<typeof TaskSpec>;

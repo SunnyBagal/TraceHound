@@ -2,15 +2,40 @@
 // fixed author, committer and dates, files added in sorted order. Tasks record that SHA as baseSha.
 // Usage: node eval/fixtures/build-toy-repo.ts [dest]   (default eval/fixtures/.build/toy-cart)
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, rmSync } from "node:fs";
+import { cpSync, existsSync, renameSync, rmSync } from "node:fs";
 import path from "node:path";
 
 export const TOY_SOURCE = path.resolve(import.meta.dirname, "toy-cart");
 export const TOY_REPO = path.resolve(import.meta.dirname, ".build/toy-cart");
 export const TOY_BASE_SHA = "6f7c30dab99e469b1ddb6a1c6c3b83dccc28787a";
 
+const headOf = (dir: string) => {
+  try {
+    return execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Idempotent and safe to call from parallel test files: reuse a build already at TOY_BASE_SHA,
+ * otherwise build in a private temp dir and rename it into place (first writer wins).
+ */
 export function buildToyRepo(dest = TOY_REPO): string {
-  if (existsSync(dest)) rmSync(dest, { recursive: true, force: true });
+  if (existsSync(dest) && headOf(dest) === TOY_BASE_SHA) return TOY_BASE_SHA;
+  const tmp = `${dest}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  const sha = build(tmp);
+  try {
+    if (existsSync(dest)) rmSync(dest, { recursive: true, force: true });
+    renameSync(tmp, dest);
+  } catch {
+    rmSync(tmp, { recursive: true, force: true }); // another process got there first
+    if (headOf(dest) !== TOY_BASE_SHA) throw new Error(`could not place the toy repo at ${dest}`);
+  }
+  return sha;
+}
+
+function build(dest: string): string {
   cpSync(TOY_SOURCE, dest, { recursive: true });
   const env = {
     ...process.env,

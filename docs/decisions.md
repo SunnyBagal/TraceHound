@@ -541,6 +541,41 @@ Malformed output is still handled, and each case counts as a step:
 
 The loop answers each with a tool-error message (or a user nudge for a missing call) and
 continues. The next model turn decides what happens.
+**The loop** (`src/harness/loop.ts`, `RepairLoopAgent`) runs on the host. The model is reached
+only via `ctx.llm` (the shared client; the harness counts tokens and $). The sandbox is offline
+after setup and reached only via `ctx.exec`.
+- **Repo tools:** `list_dir`, `read_file(path, startLine?, endLine?)`, `search(pattern, path?)`
+  (grep -E; there's no ripgrep in the image), `edit_file(path, oldText, newText)` (exact, and it
+  must match exactly once), `write_file` (new files only), `run(cmd)`, and `finish(summary)`.
+  - Each repo tool is exactly **one** provider operation, so one step. The file tools run a
+    small bun helper in the sandbox, with arguments base64-encoded in an env var (payload limit
+    about 64 KB).
+  - Paths are confined twice: normalized on the host, and checked with `realpath` of the nearest
+    existing ancestor in the sandbox, which catches symlinks out of `/work`.
+  - Results are truncated to 8,000 characters with an explicit note. The run record keeps 1,500
+    characters per result.
+- **Other steps:** tool calls with no provider op count via `ctx.step()`. That covers `finish`,
+  graph tools, malformed/unknown/invalid/path-rejected calls, and a turn with no tool call
+  (which also gets a user nudge).
+- **Graph tools** (`--graph on`): `context_packet` (lexical or nemotron decider),
+  `search_components`, `get_neighbors`, `get_edge_evidence`, `get_related_tests`. They read the
+  task's snapshot on the host. A nemotron decider's call also goes through `ctx.llm` and is
+  counted.
+- **Prompt:** one frozen file, `harness/prompts/agent-v1.md`. The single `GRAPH:` line is
+  included only with `--graph on`, so the conditions differ only by that sentence and the tool
+  list. The file's sha256 and the rendered prompt's sha256 go in every run record.
+- **Model settings:** Nano, temperature 0, reasoning off (`enable_thinking: false`) or on
+  (model default), `tool_choice: "auto"`, `max_tokens` 2048 (4096 with reasoning on). Response
+  cache reads are **off** for repair runs, so each run makes real calls. Cache writes still
+  happen.
+- **Limits:** steps, tokens, wall-clock, and the per-run $ cap (`limits.costUSD`, plus the
+  shared client's `TRACEHOUND_BUDGET_RUN_USD`/`TOTAL_USD`). Hitting any of them ends UNRESOLVED
+  `budget exhausted: <limit>`.
+- **Run record** (`agentRun.trace`):
+  - model, reasoning, temperature, prompt file + hashes, graph on/off, decider, tool list
+  - every turn: tokens, $, latency, finish reason, content, tool calls, truncated results
+  - distinct files read, graph calls, finish summary (recorded, never used)
+  - `usage.calls` is the harness's per-call count
 **Rejected:** (a) A JSON-action protocol in `content`: that means more parsing code and more
 failure modes, for no benefit once native calls work. (b) An agent framework (LangChain, the
 OpenAI Agents SDK, OpenCode): the loop is small, and the harness has to own step counting,

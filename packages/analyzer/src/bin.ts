@@ -25,6 +25,10 @@ if (command === "impact") {
   const { runMcp } = await import("./agent/mcp.ts");
   await runMcp(rest);
 } else if (command === "repair") {
+  // --agent nemotron needs NEBIUS_API_KEY: load the workspace .env for this command only
+  const { existsSync } = await import("node:fs");
+  const envFile = new URL("../../../.env", import.meta.url).pathname;
+  if (existsSync(envFile) && !process.env.NEBIUS_API_KEY) process.loadEnvFile(envFile);
   const { main } = await import("./harness/cli.ts");
   process.exitCode = await main(rest);
 } else if (command === "analyze") {

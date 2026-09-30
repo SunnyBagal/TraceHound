@@ -1,15 +1,20 @@
-// tracehound repair --task <task.json> --agent oracle|noop [--patch <file>] --provider docker [--runs-dir runs]
+// tracehound repair --task <task.json> --agent oracle|noop|nemotron [--patch <file>] [--graph on|off]
+//                   [--reasoning on|off] [--decider lexical|nemotron] --provider docker [--runs-dir runs]
 // Exit code: 0 RESOLVED · 1 UNRESOLVED · 2 FAILED/CANCELLED · 3 bad arguments / Docker unavailable.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { createTokenFactoryClient } from "../llm/setup.ts";
+import { loadSnapshot } from "../agent/query.ts";
 import { NoopAgent, OracleAgent, type Agent } from "./agents.ts";
+import { RepairLoopAgent, type LoopOptions } from "./loop.ts";
 import { DockerUnavailableError, LocalDockerProvider, SANDBOX_IMAGE } from "./docker.ts";
 import { runRepair, type RunRecord } from "./run.ts";
 import { loadTask } from "./task.ts";
 
 const WORKSPACE_ROOT = path.resolve(import.meta.dirname, "../../../..");
-const USAGE = "usage: tracehound repair --task <task.json> --agent oracle|noop [--patch <file>] --provider docker [--runs-dir runs]";
+const USAGE =
+  "usage: tracehound repair --task <task.json> --agent oracle|noop|nemotron [--patch <file>] [--graph on|off] [--reasoning on|off] [--decider lexical|nemotron] --provider docker [--runs-dir runs]";
 
 export function writeRun(record: RunRecord, runsDir: string): string {
   mkdirSync(runsDir, { recursive: true });
@@ -27,19 +32,38 @@ export async function main(argv: string[]): Promise<number> {
       patch: { type: "string" },
       provider: { type: "string", default: "docker" },
       "runs-dir": { type: "string", default: path.join(WORKSPACE_ROOT, "runs") },
+      graph: { type: "string", default: "off" },
+      reasoning: { type: "string", default: "off" },
+      decider: { type: "string", default: "lexical" },
     },
   });
   const fail = (msg: string) => (console.error(`✖ ${msg}`), 3);
   if (!values.task || !values.agent) return fail(USAGE);
   if (values.provider !== "docker") return fail(`unknown provider "${values.provider}" (only docker; Contree comes after the Sandboxes spike)\n${USAGE}`);
-  let agent: Agent;
+  let agent: Agent | undefined;
   if (values.agent === "oracle") {
     if (!values.patch) return fail(`--agent oracle needs --patch <file>\n${USAGE}`);
     agent = new OracleAgent(readFileSync(values.patch, "utf8"));
   } else if (values.agent === "noop") agent = new NoopAgent();
-  else return fail(`unknown agent "${values.agent}" (oracle | noop)\n${USAGE}`);
+  else if (values.agent !== "nemotron") return fail(`unknown agent "${values.agent}" (oracle | noop | nemotron)\n${USAGE}`);
+  for (const [flag, allowed] of [["graph", ["on", "off"]], ["reasoning", ["on", "off"]], ["decider", ["lexical", "nemotron"]]] as const) {
+    if (!(allowed as readonly string[]).includes(values[flag]!)) return fail(`--${flag} must be ${allowed.join(" or ")}\n${USAGE}`);
+  }
 
   const task = loadTask(values.task);
+  let llm: ReturnType<typeof createTokenFactoryClient>["client"] | undefined;
+  if (values.agent === "nemotron") {
+    let graph: LoopOptions["graph"];
+    if (values.graph === "on") {
+      if (!task.spec.snapshot) return fail(`--graph on needs a "snapshot" in ${values.task}`);
+      const { snapshot } = loadSnapshot(path.resolve(task.dir, task.spec.snapshot));
+      if (snapshot.repo.commitSha !== task.spec.baseSha) return fail(`snapshot is for ${snapshot.repo.commitSha}, task baseSha is ${task.spec.baseSha}`);
+      graph = { snapshot, decider: values.decider as "lexical" | "nemotron" };
+    }
+    agent = new RepairLoopAgent({ reasoning: values.reasoning as "on" | "off", graph });
+    // every model call: budget caps (TRACEHOUND_BUDGET_*) → request → ledger; cache reads off so each run is a real run
+    llm = createTokenFactoryClient({ readCache: false }).client;
+  }
   try {
     console.error(`[repair] docker ${LocalDockerProvider.assertAvailable()}`);
   } catch (error) {
@@ -60,9 +84,11 @@ export async function main(argv: string[]): Promise<number> {
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
 
-  const record = await runRepair({ task, agent, provider, image, signal: abort.signal, onState: (s, note) => console.error(`[repair] ${s}${note ? `: ${note}` : ""}`) });
+  const record = await runRepair({ task, agent: agent!, provider, image, llm, signal: abort.signal, onState: (s, note) => console.error(`[repair] ${s}${note ? `: ${note}` : ""}`) });
   const file = writeRun(record, path.resolve(values["runs-dir"]!));
-  console.log(`${record.finalState} · ${record.taskId} · agent ${record.agent} · ${record.sandbox.createToDestroyMs ?? "?"}ms create→destroy · ${record.reason}`);
+  console.log(
+    `${record.finalState} · ${record.taskId} · agent ${record.agent} · ${record.agentRun?.steps ?? 0} steps · ${record.usage.tokens} tokens · $${record.usage.costUSD.toFixed(5)} · ${record.sandbox.createToDestroyMs ?? "?"}ms create→destroy · ${record.reason}`,
+  );
   console.log(`→ ${path.relative(process.cwd(), file)}`);
   return record.finalState === "RESOLVED" ? 0 : record.finalState === "UNRESOLVED" ? 1 : 2;
 }
