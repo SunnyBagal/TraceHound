@@ -237,6 +237,13 @@ heuristic name, and the reason goes into `llmCalls[].rejectReason`.
 and it can hallucinate too. Rules are cheaper and testable against the real bad outputs.
 **Known gap:** Plain-English claims aren't checked: "cryptocurrency" (run 1), "validates
 credentials" (run 3, where `signin` is a TODO stub). Only identifier-like tokens are verified.
+**Update (2026-09-30):** Joined tokens are split on `/ , | +`. Each piece that is identifier-like,
+ALL-CAPS, or a case variant of a fact identifier must match a fact exactly (case-sensitive), so
+Super's "BRPOP/LPUSH" now fails against `brPop`/`lPush`. A token that is itself a fact (a route
+like `/depth/:symbol`) isn't split. Re-checking the 21 cached replies for the current facts
+offline changed one verdict (that Super reply); all 7 published Nano names still pass. Prose stays
+unchecked, so the viewer labels every model-written name/summary "Model-written (Nemotron
+Nano), prose not verified". Naming is closed: no more prompt tweaks or model comparisons.
 
 ## 022 · Drive Nebius Sandboxes from TypeScript over REST, no Python bridge
 **Choice:** Sandboxes (Contree) have a documented REST API with a published OpenAPI 3 spec

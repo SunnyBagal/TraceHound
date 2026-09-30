@@ -2,7 +2,7 @@ import { Position, type Edge, type Node } from "@xyflow/react";
 import type { Component, ComponentEdge, Resolution, Snapshot, Warning } from "./types";
 
 export const NODE_WIDTH = 272;
-export const NODE_HEIGHT = 124;
+export const NODE_HEIGHT = 140;
 
 /** Stroke style per confidence label. The label is always also rendered as text. */
 export const EDGE_STYLES: Record<Resolution, { dash?: string; text: string; meaning: string }> = {

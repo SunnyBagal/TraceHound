@@ -55,11 +55,19 @@ describe("GraphCanvas with the demo snapshot", () => {
     }
   });
 
-  it("labels names by source: Nemotron, heuristic or override", async () => {
+  it('labels every model-written name/summary "Model-written (Nemotron Nano), prose not verified", and nothing else', async () => {
     renderCanvas();
     const nodes = await screen.findAllByTestId("component-node", {}, { timeout: 5000 });
-    const badge = (id: string) => within(nodes.find((n) => n.dataset.componentId === id)!).getByTitle(/Named by|Name source/).textContent;
-    expect(badge("redis-rpc-bridge")).toBe("override");
-    expect(badge("backend:auth-api")).toBe(snapshot.components.find((c) => c.id === "backend:auth-api")!.naming.source === "llm" ? "Nemotron" : "heuristic");
+    const node = (id: string) => nodes.find((n) => n.dataset.componentId === id)!;
+    const llm = snapshot.components.filter((c) => c.naming.source === "llm");
+    expect(llm.length).toBeGreaterThan(0);
+    for (const c of llm) {
+      expect(within(node(c.id)).getByTestId("model-written").textContent).toBe("Model-written (Nemotron Nano), prose not verified");
+    }
+    for (const c of snapshot.components.filter((c) => c.naming.source !== "llm")) {
+      expect(within(node(c.id)).queryByTestId("model-written")).toBeNull();
+      expect(within(node(c.id)).getByTitle(/Name source/).textContent).toBe(c.naming.source);
+    }
+    expect(screen.getAllByTestId("model-written")).toHaveLength(llm.length); // edges/labels carry none
   });
 });

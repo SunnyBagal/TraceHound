@@ -31,10 +31,9 @@ on a canvas. Later: a graph-guided repair agent.
    list/spawn return 403 (FEEDBACK.md, 2026-09-30). Don't call the Sandboxes API or edit the
    spike script until access is confirmed, then rerun
    `node --env-file=.env scripts/sandbox-spike.ts`. Decision 022 (TypeScript over REST) stands.
-3. **Naming check bug (slash identifiers).** `isIdentifierLike` in `src/naming/checks.ts` only
-   flags `a/b` tokens that also contain `.`, `_` or `-`, so Super's "BRPOP/LPUSH" passed even
-   though the facts spell them `brPop`/`lPush`. Prose claims ("uses Prisma models",
-   "validates credentials") are also unchecked.
+3. ~~**Naming check bug (slash identifiers).**~~ Closed 2026-09-30: joined tokens are split
+   and checked case-sensitively (decision 021 update). Prose is still unchecked, so the viewer
+   labels model-written names/summaries "prose not verified". Naming work is closed.
 
 ## Product rule (non-negotiable)
 Every edge in the graph must be backed by evidence: file, symbol, line range, extractor name,

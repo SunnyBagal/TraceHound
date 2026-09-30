@@ -1,16 +1,19 @@
 import { Sparkles } from "lucide-react";
+import { modelWrittenLabel } from "@/lib/naming";
 import type { Component } from "@/lib/types";
 
-/** Where a component's display name came from. */
-export function NameSourceBadge({ naming, compact = false }: { naming: Component["naming"]; compact?: boolean }) {
-  if (naming.source === "llm") {
+/** Where a component's display name and summary came from. Model output is always labelled. */
+export function NameSourceBadge({ naming }: { naming: Component["naming"] }) {
+  const modelLabel = modelWrittenLabel(naming);
+  if (modelLabel) {
     return (
       <span
-        className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-accent"
-        title={`Named by ${naming.model ?? "Nemotron"} from extracted facts; heuristic name: ${naming.heuristicName}`}
+        data-testid="model-written"
+        className="inline-flex max-w-full items-start gap-1 rounded-lg border border-accent/40 bg-accent-soft px-2 py-0.5 text-[10px] font-medium leading-tight text-accent"
+        title={`${modelLabel}. Name and summary were written by ${naming.model} from extracted facts only; identifiers are checked against the facts, prose claims are not. Heuristic name: ${naming.heuristicName}`}
       >
-        <Sparkles className="size-3" aria-hidden />
-        {compact ? "Nemotron" : "named by Nemotron"}
+        <Sparkles className="mt-px size-3 shrink-0" aria-hidden />
+        <span>{modelLabel}</span>
       </span>
     );
   }

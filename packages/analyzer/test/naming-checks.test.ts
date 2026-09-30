@@ -52,6 +52,27 @@ describe("checkReply: identifiers must match extracted facts", () => {
     expect(checkReply(derived, facts("engine:engine-worker"))).toEqual({ ok: false, reason: "identifier(s) not in extracted facts: backend-to-engine-queue" });
   });
 
+  it("rejects the real Super reply's BRPOP/LPUSH: the facts spell the ops brPop/lPush", () => {
+    // verbatim nvidia/nemotron-3-super-120b-a12b reply for the Redis component (2026-09-30, cached)
+    const superRedis = {
+      name: "Task Queue",
+      summary: "Manages asynchronous task distribution between Engine Workers and Redis RPC Bridge using BRPOP/LPUSH operations.",
+    };
+    const f = facts("redis:redis-url");
+    expect(JSON.stringify(f)).toMatch(/brPop/); // the fact really is spelled brPop
+    expect(checkReply(superRedis, f)).toEqual({ ok: false, reason: "identifier(s) not in extracted facts: BRPOP, LPUSH" });
+    expect(checkReply({ ...superRedis, summary: superRedis.summary.replace("BRPOP/LPUSH", "brPop/lPush") }, f)).toMatchObject({ ok: true });
+  });
+
+  it("splits joined tokens on / , | + and checks every identifier-like piece, case-sensitively", () => {
+    const f = facts("redis:redis-url");
+    expect(identifierTokens("uses brPop,LPUSH and a|b+SET_X")).toEqual(["brPop", "LPUSH", "SET_X"]);
+    expect(checkReply({ name: "Redis Queue", summary: "Uses brpop|lPush." }, f)).toEqual({ ok: false, reason: "identifier(s) not in extracted facts: brpop" });
+    expect(checkReply({ name: "Redis Queue", summary: "Reads and writes via read/write calls." }, f)).toMatchObject({ ok: true }); // plain words stay prose
+    // a whole fact is never split: /depth/:symbol is a route in the facts
+    expect(checkReply({ name: "Exchange API", summary: "Serves /depth/:symbol." }, facts("backend:exchange-api"))).toMatchObject({ ok: true });
+  });
+
   it("rejects invented file paths, routes and symbols; accepts real ones", () => {
     const f = facts("backend:exchange-api");
     expect(checkReply({ name: "Exchange API", summary: "Serves /orders via exchange-service.ts." }, f)).toMatchObject({ ok: false, reason: expect.stringContaining("/orders, exchange-service.ts") });

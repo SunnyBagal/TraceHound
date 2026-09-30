@@ -42,8 +42,28 @@ export function isIdentifierLike(token: string): boolean {
   );
 }
 
-export function identifierTokens(text: string): string[] {
-  return text.split(/\s+/).map(cleanToken).filter((t) => t && isIdentifierLike(t));
+const JOINERS = /[/,|+]/;
+const ALL_CAPS = /^[A-Z][A-Z0-9]+$/;
+
+/**
+ * Identifier-like tokens in `text`. A joined token ("BRPOP/LPUSH", "brPop,lPush", "a|b", "a+b")
+ * is also split, and each piece counts when it is identifier-like, ALL-CAPS (an op or constant
+ * spelled differently from the code), or a case variant of an identifier in `vocab`. A whole
+ * token that is itself a fact (a route like /depth/:symbol) is never split.
+ */
+export function identifierTokens(text: string, vocab?: Set<string>): string[] {
+  const variants = new Set([...(vocab ?? [])].filter(isIdentifierLike).map((v) => v.toLowerCase()));
+  const looksLike = (t: string) => isIdentifierLike(t) || variants.has(t.toLowerCase());
+  const out: string[] = [];
+  for (const token of text.split(/\s+/).map(cleanToken)) {
+    if (!token) continue;
+    if (!/[,|+]/.test(token) && looksLike(token)) out.push(token); // a list is checked piece by piece only
+    if (vocab?.has(token) || !JOINERS.test(token)) continue;
+    for (const piece of token.split(JOINERS).map(cleanToken)) {
+      if (piece && piece !== token && (looksLike(piece) || ALL_CAPS.test(piece))) out.push(piece);
+    }
+  }
+  return out;
 }
 
 /** Every string a summary may legitimately cite: facts, their tokens, file basenames and stems. */
@@ -110,7 +130,7 @@ export function checkReply(reply: { name: string; summary: string }, facts: Nami
   const name = normalizeText(reply.name);
   const summary = normalizeText(reply.summary);
   const vocab = factVocabulary(facts, extraVocabulary);
-  const unknown = [...identifierTokens(name), ...identifierTokens(summary)].filter((t) => !vocab.has(t));
+  const unknown = [...identifierTokens(name, vocab), ...identifierTokens(summary, vocab)].filter((t) => !vocab.has(t));
   if (unknown.length) return { ok: false, reason: `identifier(s) not in extracted facts: ${[...new Set(unknown)].join(", ")}` };
   const single = singlePartReason(name, facts);
   if (single) return { ok: false, reason: single };

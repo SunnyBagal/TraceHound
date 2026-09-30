@@ -31,7 +31,10 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
           <div className="truncate text-[13.5px] font-semibold leading-tight text-text" title={component.name}>
             {component.name}
           </div>
-          <div className="text-[10.5px] uppercase tracking-wider text-faint">{label}</div>
+          <div className="truncate text-[10.5px] text-faint">
+            <span className="uppercase tracking-wider">{label}</span> · {component.counts.files} files
+            {component.counts.routes > 0 && <> · {component.counts.routes} routes</>}
+          </div>
         </div>
         {warnings.length > 0 && (
           <span className="text-warn" title={warnings.map((w) => w.message).join("\n")} aria-label={`${warnings.length} warning(s)`}>
@@ -42,12 +45,8 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
       <p className="mt-2 line-clamp-2 text-[11.5px] leading-snug text-muted" title={component.summary ?? component.subtitle}>
         {component.summary ?? component.subtitle}
       </p>
-      <div className="mt-auto flex items-center gap-1.5 pt-1.5 text-[10.5px] text-faint">
-        <span>{component.counts.files} files</span>
-        {component.counts.routes > 0 && <span>· {component.counts.routes} routes</span>}
-        <span className="ml-auto">
-          <NameSourceBadge naming={component.naming} compact />
-        </span>
+      <div className="mt-auto flex min-w-0 justify-end pt-1.5">
+        <NameSourceBadge naming={component.naming} />
       </div>
       <Handle type="source" position={Position.Right} />
     </div>
