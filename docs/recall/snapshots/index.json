@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "latest": {
+    "repo": "SunnyBagal/Recall",
+    "sha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b",
+    "analyzerVersion": "0.7.0",
+    "path": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b/0.7.0.json",
+    "createdAt": "2026-09-30T21:47:35.677Z"
+  },
+  "snapshots": [
+    {
+      "repo": "SunnyBagal/Recall",
+      "sha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b",
+      "analyzerVersion": "0.7.0",
+      "path": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b/0.7.0.json",
+      "createdAt": "2026-09-30T21:47:35.677Z"
+    }
+  ]
+}

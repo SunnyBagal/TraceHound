@@ -20,9 +20,14 @@ export interface GroupingResult {
   components: Component[];
   fileToComponent: Map<string, string>;
   redisResourceByConnection: Map<string, string>;
+  /** 0.7.0+: BullMQ queue name (or `*` pattern) → its broker node */
+  queueResourceByName: Map<string, string>;
   prismaResourceByPackage: Map<string, string>;
   unmatchedOverrides: string[];
 }
+
+/** A file consumes a queue: a Redis consume op or a BullMQ Worker. */
+const consumesQueue = (f: FileFacts) => f.redisOps.some((o) => o.role === "consume") || (f.queueOps ?? []).some((o) => o.role === "consume");
 
 interface Cluster {
   id: string;
@@ -119,6 +124,29 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
     redisResourceByConnection.set(connection, cluster.id);
   }
 
+  // BullMQ: one broker node per statically known queue name (decision 035). Names that aren't
+  // static get no node; they become warnings instead.
+  const queueResourceByName = new Map<string, string>();
+  const queueOps = sorted.flatMap((f) => f.queueOps ?? []).filter((o) => o.role !== "unsupported" && o.queue?.value !== undefined);
+  for (const name of [...new Set(queueOps.map((o) => o.queue!.value!))].sort()) {
+    const ops = queueOps.filter((o) => o.queue!.value === name);
+    const jobs = [...new Set(ops.filter((o) => o.role === "produce").map((o) => o.jobName?.value ?? o.jobName?.raw ?? "?"))].sort();
+    const connection = ops.find((o) => o.connection)?.connection ?? "default";
+    const cluster: Cluster = {
+      id: uniqueId(`bullmq:${slug(name.replace(/\*/g, " dynamic "))}`), // "emails-*" → bullmq:emails-dynamic
+      name: `${name} queue`,
+      kind: "queue",
+      seeds: [],
+      matchTokens: [], // never pulls code files in by name
+      files: [],
+      reasons: new Map(),
+      resource: { tech: "bullmq", connection, keys: [name] },
+      note: `BullMQ queue · ${name}${jobs.length ? ` · jobs: ${jobs.join(", ")}` : ""}`,
+    };
+    clusters.push(cluster);
+    queueResourceByName.set(name, cluster.id);
+  }
+
   const prismaResourceByPackage = new Map<string, string>();
   const prismaPackages = [...new Set(sorted.filter((f) => f.language === "prisma" || f.clients.some((c) => c.tech === "prisma")).map((f) => f.package))].sort();
   for (const pkg of prismaPackages) {
@@ -184,7 +212,7 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
       if (stoppers.has(f.path)) continue;
       if (f.isEntry) {
         const serves = f.routes.length > 0 || f.listens.length > 0;
-        const consumes = f.redisOps.some((o) => o.role === "consume");
+        const consumes = consumesQueue(f);
         const kind: ComponentKind = serves ? "api" : consumes ? "worker" : "service";
         const suffix = serves ? "Server" : consumes ? "Worker" : "App";
         addAnchor(f, `${pkgTitle} ${suffix}`, kind, `entry point (${f.entryReason ?? "listens for connections"})`, responsibilityTokens(f.path));
@@ -268,12 +296,12 @@ export function groupComponents(files: FileFacts[], packages: GroupingPackage[],
   const prefixes = routePrefixes(sorted);
   const components = clusters.filter((c) => c.files.length > 0 || c.resource).map((c) => toComponent(c, byPath, prefixes));
   const unmatchedOverrides = overrideClusters.filter((c) => c.files.length === 0).map((c) => c.id);
-  return { components, fileToComponent, redisResourceByConnection, prismaResourceByPackage, unmatchedOverrides };
+  return { components, fileToComponent, redisResourceByConnection, queueResourceByName, prismaResourceByPackage, unmatchedOverrides };
 }
 
 function inferKind(facts: FileFacts[]): ComponentKind {
   const entry = facts.find((f) => f.isEntry);
-  if (entry) return entry.routes.length || entry.listens.length ? "api" : entry.redisOps.some((o) => o.role === "consume") ? "worker" : "service";
+  if (entry) return entry.routes.length || entry.listens.length ? "api" : consumesQueue(entry) ? "worker" : "service";
   if (facts.some((f) => f.routes.length)) return "api";
   if (facts.some((f) => f.clients.length)) return "service";
   return "library";
@@ -363,6 +391,9 @@ function toComponent(c: Cluster, byPath: Map<string, FileFacts>, prefixes: Map<s
     for (const op of f.redisOps.filter((o) => o.role === "consume")) {
       entryPoints.push({ file: f.path, symbol: `${op.op} ${op.key?.value ?? op.key?.raw ?? ""}`.trim(), reason: "queue consumer" });
     }
+    for (const op of (f.queueOps ?? []).filter((o) => o.role === "consume")) {
+      entryPoints.push({ file: f.path, symbol: `Worker ${op.queue?.value ?? op.queue?.raw ?? ""}`.trim(), reason: "queue consumer" });
+    }
   }
   for (const r of routes) entryPoints.push({ file: r.file, symbol: `${r.method} ${r.path}`, reason: "HTTP route" });
   if (c.kind === "service") {
@@ -391,8 +422,12 @@ function toComponent(c: Cluster, byPath: Map<string, FileFacts>, prefixes: Map<s
 }
 
 function subtitle(c: Cluster, facts: FileFacts[], routes: Component["routes"]): string {
-  const redisOps = facts.flatMap((f) => f.redisOps);
-  const keyList = (ops: typeof redisOps) => [...new Set(ops.map((o) => o.key?.value ?? "dynamic key"))].join(", ");
+  // Redis ops and BullMQ queue ops, as (role, name) pairs for the subtitles
+  const redisOps = [
+    ...facts.flatMap((f) => f.redisOps.map((o) => ({ role: o.role, name: o.key?.value ?? "dynamic key" }))),
+    ...facts.flatMap((f) => (f.queueOps ?? []).filter((o) => o.role === "produce" || o.role === "consume").map((o) => ({ role: o.role, name: o.queue?.value ?? "dynamic queue" }))),
+  ];
+  const keyList = (ops: typeof redisOps) => [...new Set(ops.map((o) => o.name))].join(", ");
   switch (c.kind) {
     case "api": {
       const sample = routes.slice(0, 2).map((r) => `${r.method} ${r.path}`).join(", ");

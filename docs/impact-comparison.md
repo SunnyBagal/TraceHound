@@ -182,3 +182,40 @@ npx -y -p dependency-cruiser@18.4.0 -p typescript@5.9.3 depcruise backend engine
 `>=2.0.0 <7.0.0` (`depcruise --info`). With the current `typescript@7.0.2` it parses no `.ts`
 files and prints an empty result. The reported set is `modules[].source`, excluding
 `node_modules`, core modules, unresolvable modules and the changed file itself.
+
+---
+
+## Recall (second repo): a change to the BullMQ worker's processor
+
+> One hand-made change in one repo. Direction only, like the three CEX seeds above.
+
+- **Repo:** [`SunnyBagal/Recall`](https://github.com/SunnyBagal/Recall) @ `5d2165a`, with
+  `configs/recall.tracehound.json`. The change is a local commit on a scratch branch
+  (`scoping/process-content-change`, not pushed): one added line at the top of
+  `processContent` in `recall-backend/worker.ts`.
+- **TraceHound:** `tracehound impact`, analyzer 0.7.0, `--depth 2`, base snapshot
+  `docs/recall/snapshots/5d2165aa9654f17a148f6663bc478a3fd9f7fc6b/0.7.0.json`.
+- **dependency-cruiser:** 18.4.0 with `typescript@5.9.3` through `npx`,
+  `--reaches "^recall-backend/worker\.ts$"` over `recall-backend recall-frontend`, both with the
+  default and with `--ts-pre-compilation-deps`.
+
+| Changed file | TraceHound affected (depth) | dependency-cruiser reaches (files → components) | Only TraceHound | Only dependency-cruiser |
+|---|---|---|---|---|
+| `recall-backend/worker.ts` | `bullmq:content-processing`@1, `recall-backend:brainly-server`@1 | `worker.ts` itself only → `recall-backend:worker` (the changed component) | both | none |
+
+- **TraceHound:** changed `recall-backend:worker`; affected at depth 1, crossing the queue once:
+  - `bullmq:content-processing` via `bullmq:content-processing -consumes-> recall-backend:worker`
+    `[proven]` "Worker processContent", `recall-backend/worker.ts:111`
+  - `recall-backend:brainly-server` via `recall-backend:brainly-server -produces->
+    bullmq:content-processing` `[proven]` "add process-content", `recall-backend/index.ts:153`.
+    That call is inside the `POST /api/v1/content` handler (`index.ts:116-171`), the route
+    that enqueues.
+- **dependency-cruiser:** nothing imports `worker.ts` (it's started as its own process), so its
+  reach set is the file itself in both variants (JSON output: 1 module, the target). As a
+  control, `--reaches config/queue.ts` lists `index.ts` and `worker.ts`: the only module-graph
+  link between the two processes is that shared config module, and a change to `worker.ts`
+  doesn't cross it.
+- **Reading:** the API is affected here only through the message contract (the job payload
+  `{ contentId }` and the queue name), which no import expresses. Whether this particular change
+  (a log line) can break the API is not something either tool decides; TraceHound reports the
+  coupling and its evidence.

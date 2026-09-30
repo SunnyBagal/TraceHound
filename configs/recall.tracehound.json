@@ -1,0 +1,5 @@
+{
+  "ignore": ["recall-backend/bench/**", "recall-backend/scripts/**"],
+  "entryPoints": ["recall-frontend/src/main.tsx"],
+  "components": { "recall-backend:worker": ["recall-backend/worker.ts"] }
+}

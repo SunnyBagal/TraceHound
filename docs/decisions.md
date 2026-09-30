@@ -894,3 +894,69 @@ explicit. (b) Keeping agent tests and counting them: a test the agent wrote isn'
 the fix, and a wrong one would decide the verdict. (c) Making /scratch a subdirectory of /work
 with a .gitignore entry: it would still be visible to the repo's own tools (tsc includes, test
 discovery with some configs).
+
+## 035 · BullMQ queues (detector bullmq-queues@0.1), Worker files as entry points, ignore/entryPoints config; analyzer 0.7.0
+**Context:** TraceHound's second repo, `SunnyBagal/Recall` @ `5d2165a`, is an Express API plus a
+separate BullMQ worker process. The one cross-process link, API → `"content-processing"` queue →
+worker, was invisible to 0.6.0: BullMQ hides the Redis calls, and `worker.ts` was an orphan
+lumped into a "shared" library with benchmarks and scripts. **Recall is not an unseen repo for
+this detector:** it was read (Prompt R) before the detector was written, and its shape (a literal
+queue name, a queue variable imported by the producer) shaped the fixtures. A held-out repo is
+still needed to say anything about how the detector generalizes.
+**Choice:**
+- **Facts** (`src/extract/bullmq.ts`, `FileFacts.queueOps`, present only when non-empty so
+  snapshots of repos without BullMQ are unchanged):
+  - `new Queue(name, …)` → a `define` fact (the variable, and the Redis connection when the
+    `connection` option resolves to a known redis client).
+  - `<receiver>.add(jobName, …)` / `.addBulk(…)` → a `produce` fact **only** when the receiver
+    resolves through ts-morph symbols (imports and re-exports included) to a variable initialized
+    with `new Queue(…)` from `"bullmq"`. The queue name is taken from that definition, and the
+    fact records `definedAt` (file:line) and the job name. A receiver that is merely *typed* as a
+    bullmq `Queue` (e.g. a parameter) is a `produce` fact with no queue → a warning. `.add` on
+    anything else (a `Set`, …) is not a fact at all.
+  - `new Worker(name, handler, …)` → a `consume` fact with the handler.
+  - Constructs the detector doesn't model are `unsupported` facts: any other `new X(…)` from
+    `"bullmq"` (QueueEvents, FlowProducer, QueueScheduler, …), and a processor that reads
+    `<job>.name` (job-name filtering).
+- **Names and labels** (the existing scheme): a string literal → `proven` (0.9, a pattern with
+  import provenance); a const, or `process.env.X ?? "default"`, resolved statically →
+  `resolved-default` (0.7); built at runtime → `dynamic` (0.5). A template keeps its pattern
+  (`emails-*`) and pairs with the same pattern. A name with no static value at all (e.g.
+  `process.env.Q!`) gets no node and no edge, only a `queue-unresolved` warning.
+- **Edges: no new kinds.** The Redis queue model already expresses this: producer
+  `-produces->` broker `-consumes->` consumer. BullMQ gets **one broker node per queue name**
+  (`bullmq:<name>`, kind `queue`, `resource.tech: "bullmq"`, `keys: [name]`), which is how
+  producers and consumers pair by name. Impact's rules therefore apply unchanged: produces and
+  consumes are bidirectional, and leaving a broker costs no extra depth (decisions 023, 024). The
+  producer edge cites the `.add` call (its evidence names the job and where the queue is
+  defined); the consumer edge cites `new Worker(…)`. The `new Queue` definition draws no edge.
+  The broker node is not linked to the Redis connection node: there is no op-level evidence for
+  that.
+- **Warnings (nothing silently dropped):** `queue-unpaired` (a producer whose queue no Worker
+  consumes, a Worker nothing adds to, a defined queue with neither), `queue-unresolved`, and
+  `queue-unsupported`. An unpaired producer still gets its edge to the queue: that call is real.
+- **Worker files are process entry points.** A file that constructs a BullMQ Worker gets
+  `isEntry` with the reason "constructs a BullMQ Worker (process entry point)", so it is never an
+  orphan and anchors its own component. Components whose entry consumes a queue (Redis or
+  BullMQ) are kind `worker`.
+- **tracehound.json** had only `components`. It gains `ignore` (globs left out of facts and
+  components, listed in the snapshot's `ignored` with the matching glob; ts-morph still loads the
+  files, so symbols through them resolve) and `entryPoints` (globs for entries no package.json
+  names, e.g. a Vite `main.tsx`). A glob that matches nothing is an `override-unmatched` warning.
+- **Recall config** (`configs/recall.tracehound.json`, 5 lines): ignore `recall-backend/bench/**`
+  and `recall-backend/scripts/**`, entry point `recall-frontend/src/main.tsx`, and pin
+  `recall-backend/worker.ts` as `recall-backend:worker`. The heuristics already give the worker
+  its own component; the pin makes the id stable. The Recall snapshot lives in
+  `docs/recall/snapshots/` (its own manifest), not in `snapshots/`, so the viewer doesn't serve
+  it.
+- **CEX regression** (`da0e3d6`, `--cache-only` names): components, edges, warnings, files,
+  evidence and tests are byte-identical to the 0.6.0 snapshot. Only `analyzerVersion`,
+  `generatedAt` and one cached naming call's `latencyMs` (1 → 0) differ.
+**Rejected:** (a) A new edge kind (`enqueues`/`processes`): produces/consumes through a broker
+already says it, and impact would need new direction rules for no new information. (b) A direct
+producer → consumer edge: it hides the queue, and the "one hop to cross a broker" rule
+(decision 024) would no longer apply the same way to Redis and BullMQ. (c) Routing BullMQ through
+the Redis connection node: every queue on one connection would pair with every other queue.
+(d) Treating every `.add(…)` as a producer: `Set.add` and friends would become queue edges. The
+receiver must resolve to a `new Queue` from bullmq. (e) Pairing names that aren't static by
+guesswork (env var names, the handler's job names): that would be an edge nobody can point to.

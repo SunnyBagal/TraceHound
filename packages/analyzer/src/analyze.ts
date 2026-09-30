@@ -3,9 +3,10 @@ import path from "node:path";
 import { aggregateEdges } from "./aggregate/edges.ts";
 import { loadConfig, normalizeOverrides } from "./config.ts";
 import { isTestFile, testLinks } from "./aggregate/tests.ts";
-import { orphanWarnings } from "./aggregate/warnings.ts";
+import { orphanWarnings, queueWarnings } from "./aggregate/warnings.ts";
 import { EvidenceStore, type ExtractContext } from "./extract/evidence.ts";
 import { extractEnv } from "./extract/env.ts";
+import { extractBullmq } from "./extract/bullmq.ts";
 import { extractErrorMessages } from "./extract/errors.ts";
 import { extractHttp } from "./extract/http-routes.ts";
 import { extractImports } from "./extract/imports.ts";
@@ -48,21 +49,38 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
 
   const evidence = new EvidenceStore();
   const ctx: ExtractContext = { rel: (abs) => relPath(ws.repoRoot, abs), evidence };
-  for (const sf of ws.sourceFiles) evidence.setFileText(ctx.rel(sf.getFilePath()), sf.getFullText());
-  for (const schema of ws.prismaSchemas) evidence.setFileText(schema.path, schema.text);
+  // tracehound.json `ignore`: left out of facts and components, but listed in the snapshot (and still
+  // loaded by ts-morph, so symbols through them resolve)
+  const ignoredBy = (file: string) => config.ignore.find((g) => path.matchesGlob(file, g));
+  const ignored = [...ws.sourceFiles.map((sf) => ctx.rel(sf.getFilePath())), ...ws.prismaSchemas.map((s) => s.path)]
+    .flatMap((file) => {
+      const glob = ignoredBy(file);
+      return glob ? [{ file, glob }] : [];
+    })
+    .sort((a, b) => a.file.localeCompare(b.file));
+  const sourceFilesToAnalyze = ws.sourceFiles.filter((sf) => !ignoredBy(ctx.rel(sf.getFilePath())));
+  const prismaSchemas = ws.prismaSchemas.filter((s) => !ignoredBy(s.path));
+  for (const sf of sourceFilesToAnalyze) evidence.setFileText(ctx.rel(sf.getFilePath()), sf.getFullText());
+  for (const schema of prismaSchemas) evidence.setFileText(schema.path, schema.text);
 
   const files: FileFacts[] = [];
-  const schemaFacts = ws.prismaSchemas.map((schema) => ({ schema, ...extractPrismaSchema(schema.path, schema.text, ctx) }));
+  const schemaFacts = prismaSchemas.map((schema) => ({ schema, ...extractPrismaSchema(schema.path, schema.text, ctx) }));
   const modelNames = [...new Set(schemaFacts.flatMap((s) => s.models.map((m) => m.name)))];
   const entries = new Map(ws.packages.flatMap((p) => p.entryFiles.map((e) => [e.path, e.reason] as const)));
 
-  for (const sf of ws.sourceFiles) {
+  for (const sf of sourceFilesToAnalyze) {
     const file = ctx.rel(sf.getFilePath());
     const pkg = ws.packages.find((p) => p.root === packageRootOf(ws.packages.map((x) => x.root), file))!;
     const http = extractHttp(sf, ctx);
     const redis = extractRedis(sf, ctx);
     const prisma = extractPrisma(sf, ctx, modelNames);
-    const entryReason = entries.get(file);
+    const queueOps = extractBullmq(sf, ctx);
+    const configEntry = config.entryPoints.find((g) => path.matchesGlob(file, g));
+    // a file that constructs a BullMQ Worker runs as its own process (decision 035)
+    const entryReason =
+      entries.get(file) ??
+      (configEntry ? `tracehound.json entryPoints (${configEntry})` : undefined) ??
+      (queueOps.some((o) => o.role === "consume") ? "constructs a BullMQ Worker (process entry point)" : undefined);
     files.push({
       path: file,
       package: pkg.root,
@@ -83,6 +101,7 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
       prismaModels: [],
       envReads: extractEnv(sf, ctx),
       errorMessages: extractErrorMessages(sf, ctx),
+      ...(queueOps.length && { queueOps }),
     });
   }
   for (const { schema, models, datasource } of schemaFacts) {
@@ -111,6 +130,15 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
     evidence: allEvidence,
     warnings: [
       ...orphanWarnings(sourceFiles, grouping.fileToComponent),
+      ...queueWarnings(sourceFiles, grouping.fileToComponent, new Map(allEvidence.map((e) => [e.id, e]))),
+      ...[...config.ignore, ...config.entryPoints]
+        .filter((g) => ![...ignored.map((i) => i.file), ...files.map((f) => f.path)].some((f) => path.matchesGlob(f, g)))
+        .map((g) => ({
+          id: `override-unmatched:${g}`,
+          kind: "override-unmatched" as const,
+          severity: "warning" as const,
+          message: `glob "${g}" in ${path.basename(configSource ?? "tracehound.json")} matched no files`,
+        })),
       ...grouping.unmatchedOverrides.map((id) => ({
         id: `override-unmatched:${id}`,
         kind: "override-unmatched" as const,
@@ -120,6 +148,7 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
     ],
     tests: testLinks(files, grouping.fileToComponent),
     llmCalls: [],
+    ...(ignored.length && { ignored }),
   });
 }
 

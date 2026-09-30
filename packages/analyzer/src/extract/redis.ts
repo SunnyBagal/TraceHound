@@ -60,6 +60,16 @@ function connectionOf(arg: Node | undefined): { connection: string; confidence: 
   return { connection: value.env ?? value.value ?? value.raw, confidence: Math.min(0.9, value.confidence) };
 }
 
+/**
+ * Redis connection behind an expression that names a redis client (`connection: redisConnection`),
+ * for other detectors (BullMQ). undefined when it isn't a known redis client.
+ */
+export function redisConnectionOf(expr: Node): string | undefined {
+  const ident = rootIdentifier(expr);
+  const decl = ident && resolveVariable(ident);
+  return decl ? clientFromInit(decl.getInitializer())?.connection : undefined;
+}
+
 function clientOfReceiver(expr: Node, cache: Map<Node, ClientInfo | null>): ClientInfo | undefined {
   const ident = rootIdentifier(expr);
   if (!ident) return undefined;

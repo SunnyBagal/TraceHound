@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export const SCHEMA_VERSION = 1;
 
-export const ExtractorName = z.enum(["imports", "symbols", "http-routes", "redis", "prisma", "env", "startup", "errors"]);
+export const ExtractorName = z.enum(["imports", "symbols", "http-routes", "redis", "prisma", "env", "startup", "errors", "bullmq-queues"]);
 export type ExtractorName = z.infer<typeof ExtractorName>;
 
 /**
@@ -107,6 +107,29 @@ export const ErrorMessageFact = z.object({
 });
 export type ErrorMessageFact = z.infer<typeof ErrorMessageFact>;
 
+/**
+ * A BullMQ construct (0.7.0+, detector bullmq-queues@0.1, decision 035): a queue definition
+ * `new Queue(name)`, a producer `<queue>.add(jobName, …)` whose queue was resolved through
+ * symbols to its definition, a consumer `new Worker(name, handler)`, or a construct the detector
+ * doesn't model (QueueEvents, FlowProducer, job-name filtering in a handler, …).
+ */
+export const QueueOpFact = z.object({
+  lib: z.literal("bullmq"),
+  role: z.enum(["define", "produce", "consume", "unsupported"]),
+  /** Queue name: `value` when statically known (may contain `*` for template holes). */
+  queue: ResolvedValue.optional(),
+  /** How the queue name was established: literal (proven), const indirection (resolved-default), runtime (dynamic). */
+  resolution: Resolution,
+  jobName: ResolvedValue.optional(), // produce
+  variable: z.string().optional(), // define: the Queue variable; produce: the receiver
+  handler: z.string().optional(), // consume: the processor function (or its source text)
+  definedAt: z.string().optional(), // produce: "file:line" of the resolved `new Queue(...)`
+  connection: z.string().optional(), // the redis connection when it resolves to a known client
+  construct: z.string().optional(), // unsupported: what was found
+  evidenceId: z.string(),
+});
+export type QueueOpFact = z.infer<typeof QueueOpFact>;
+
 export const ClientConstruction = z.object({
   tech: z.enum(["redis", "prisma"]),
   variable: z.string(),
@@ -138,6 +161,7 @@ export const FileFacts = z.object({
   prismaDatasource: z.object({ provider: z.string(), evidenceId: z.string() }).optional(),
   envReads: z.array(EnvReadFact),
   errorMessages: z.array(ErrorMessageFact).default([]), // 0.6.0+
+  queueOps: z.array(QueueOpFact).optional(), // 0.7.0+: BullMQ facts; omitted when a file has none
 });
 export type FileFacts = z.infer<typeof FileFacts>;
 
@@ -164,7 +188,7 @@ export const Component = z.object({
   counts: z.object({ files: z.number().int(), routes: z.number().int(), envVars: z.number().int() }),
   resource: z
     .object({
-      tech: z.enum(["redis", "prisma"]),
+      tech: z.enum(["redis", "prisma", "bullmq"]),
       engine: z.string().optional(), // e.g. "postgresql" from the prisma datasource
       connection: z.string(),
       keys: z.array(z.string()).optional(),
@@ -217,7 +241,9 @@ export type LlmCall = z.infer<typeof LlmCall>;
 
 export const Warning = z.object({
   id: z.string(),
-  kind: z.enum(["orphan-file", "override-unmatched"]),
+  // 0.7.0+: queue-unpaired (a producer without consumer or vice versa), queue-unresolved (a queue
+  // name that isn't static: no node, no edge), queue-unsupported (BullMQ constructs not modeled)
+  kind: z.enum(["orphan-file", "override-unmatched", "queue-unpaired", "queue-unresolved", "queue-unsupported"]),
   severity: z.enum(["info", "warning"]),
   file: z.string().optional(),
   componentId: z.string().optional(),
@@ -238,6 +264,8 @@ export const Snapshot = z
     warnings: z.array(Warning),
     tests: z.array(TestLink).default([]), // 0.4.0+; older snapshots didn't detect test files
     llmCalls: z.array(LlmCall), // every model call made while building this snapshot
+    /** 0.7.0+: files left out by tracehound.json `ignore` globs (listed, never silently dropped) */
+    ignored: z.array(z.object({ file: z.string(), glob: z.string() })).optional(),
   })
   .superRefine((snap, ctx) => {
     const evidenceIds = new Set(snap.evidence.map((e) => e.id));

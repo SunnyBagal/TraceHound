@@ -44,6 +44,12 @@ export function aggregateEdges(files: FileFacts[], grouping: GroupingResult, evi
       else if (op.role === "write") add(from, redis, "writes", op.evidenceId, label);
       // admin ops (connect/ping) stay file facts: they don't move data
     }
+    for (const op of f.queueOps ?? []) {
+      // BullMQ: through the queue's broker node, paired by name; no static name → no node, no edge (a warning instead)
+      const queue = op.queue?.value !== undefined ? grouping.queueResourceByName.get(op.queue.value) : undefined;
+      if (op.role === "produce") add(from, queue, "produces", op.evidenceId, `add ${op.jobName?.value ?? op.jobName?.raw ?? ""}`.trim());
+      else if (op.role === "consume") add(queue, from, "consumes", op.evidenceId, `Worker ${op.handler ?? ""}`.trim());
+    }
     for (const op of f.prismaOps) {
       const clientFile = op.clientDecl.split("#")[0]!;
       const db = componentOf(clientFile) ?? grouping.prismaResourceByPackage.get(f.package);

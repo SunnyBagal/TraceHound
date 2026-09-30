@@ -18,6 +18,10 @@ export const TraceHoundConfig = z
     $schema: z.string().optional(),
     /** component id → repo-relative file globs (or { name, kind, files }). Overrides win over heuristics. */
     components: z.record(ComponentId, OverrideSpec).default({}),
+    /** 0.7.0+: repo-relative globs left out of the analysis; listed in the snapshot's `ignored`. */
+    ignore: z.array(z.string().min(1)).default([]),
+    /** 0.7.0+: repo-relative globs of process entry points that no package.json names (e.g. a Vite main.tsx). */
+    entryPoints: z.array(z.string().min(1)).default([]),
   })
   .strict();
 export type TraceHoundConfig = z.infer<typeof TraceHoundConfig>;
