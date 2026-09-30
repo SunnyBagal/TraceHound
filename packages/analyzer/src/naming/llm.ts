@@ -5,6 +5,9 @@ import { z } from "zod";
 import { BudgetExceededError } from "../llm/budget.ts";
 import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import type { Component, LlmCall, Snapshot } from "../schema.ts";
+import { componentFacts } from "./facts.ts";
+
+export { componentFacts } from "./facts.ts";
 
 /** Development default. Larger Nemotrons only when explicitly passed (--model). */
 export const DEFAULT_MODEL = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B";
@@ -29,28 +32,6 @@ const Reply = z.object({
   name: z.string().trim().min(2).max(48).refine((n) => !/[\n{}]|\.(ts|js)\b/.test(n) && n.split(/\s+/).length <= 5, "not a short title"),
   summary: z.string().trim().min(8).max(280),
 });
-
-/** The facts sent to the model: structure and names only, never source text or snippets. */
-export function componentFacts(snapshot: Snapshot, component: Component) {
-  const nameOf = (id: string) => snapshot.components.find((c) => c.id === id)?.naming.heuristicName ?? id;
-  const edgeFacts = (dir: "out" | "in") =>
-    snapshot.edges
-      .filter((e) => (dir === "out" ? e.source : e.target) === component.id)
-      .map((e) => ({ component: nameOf(dir === "out" ? e.target : e.source), relation: e.kind, via: e.label }));
-  return {
-    currentName: component.naming.heuristicName,
-    kind: component.kind,
-    subtitle: component.subtitle,
-    files: component.files,
-    routes: component.routes.map((r) => `${r.method} ${r.path}`),
-    entryPoints: component.entryPoints.map((e) => [e.symbol, e.reason].filter(Boolean).join(" — ")),
-    envVars: component.envVars,
-    resource: component.resource,
-    dependsOn: edgeFacts("out"),
-    usedBy: edgeFacts("in"),
-    warnings: snapshot.warnings.filter((w) => w.componentId === component.id).map((w) => w.message),
-  };
-}
 
 /** Pull the JSON object out of a reply that may include <think> blocks or code fences. */
 export function parseReply(content: string): z.infer<typeof Reply> | undefined {

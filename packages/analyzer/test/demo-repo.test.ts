@@ -83,6 +83,19 @@ else describe("demo repo (cex-v2-boilercode @ da0e3d6)", () => {
       expect(first.warnings.filter((w) => w.kind === "override-unmatched")).toEqual([]);
     });
 
+    it("gives the naming model entry-point, route, redis-key and edge facts", async () => {
+      const { componentFacts } = await import("../src/naming/facts.ts");
+      const facts = (id: string) => componentFacts(first, first.components.find((c) => c.id === id)!);
+      expect(facts("backend:backend-server").entryPoint?.summary).toBe(
+        "mounts routers authRouter (Auth API), exchangeRouter (Exchange API); " +
+          "on startup calls connectRedis() from Redis RPC Bridge, listenForEngineResponses() from Redis RPC Bridge; listens for HTTP",
+      );
+      expect(facts("backend:exchange-api")).toMatchObject({ routeCount: 5, fileCount: 3 });
+      expect(facts("redis-rpc-bridge").redis).toEqual({ produces: ["backend-to-engine-broker"], consumes: ["response-queue-*"] });
+      expect(facts("engine:engine-worker").redis).toEqual({ produces: ["<dynamic: responseQueue>"], consumes: ["backend-to-engine-broker"] });
+      expect(facts("engine:engine-worker").outgoing).toEqual([{ to: "Redis", relationship: "produces", via: "lPush dynamic key", confidence: "dynamic" }]);
+    });
+
     it("keeps component ids identical across re-runs", () => {
       const again = run();
       expect(ids(again)).toEqual(ids(first));

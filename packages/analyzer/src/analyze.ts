@@ -9,6 +9,7 @@ import { extractHttp } from "./extract/http-routes.ts";
 import { extractImports } from "./extract/imports.ts";
 import { extractPrisma, extractPrismaSchema } from "./extract/prisma.ts";
 import { extractRedis } from "./extract/redis.ts";
+import { extractStartupCalls } from "./extract/startup.ts";
 import { extractSymbols } from "./extract/symbols.ts";
 import { groupComponents } from "./group/grouping.ts";
 import { loadWorkspace, relPath } from "./load/workspace.ts";
@@ -71,6 +72,7 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
       routes: http.routes,
       mounts: http.mounts,
       listens: http.listens,
+      startupCalls: extractStartupCalls(sf, ctx),
       clients: [...redis.clients, ...prisma.clients],
       redisOps: redis.ops,
       prismaOps: prisma.ops,
@@ -81,7 +83,7 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
   for (const { schema, models, datasource } of schemaFacts) {
     files.push({
       path: schema.path, package: schema.package, language: "prisma", loc: schema.text.split("\n").length, isEntry: false,
-      imports: [], symbols: [], routes: [], mounts: [], listens: [], clients: [], redisOps: [], prismaOps: [], envReads: [],
+      imports: [], symbols: [], routes: [], mounts: [], listens: [], startupCalls: [], clients: [], redisOps: [], prismaOps: [], envReads: [],
       prismaModels: models, prismaDatasource: datasource,
     });
   }

@@ -106,9 +106,9 @@ describe("nameComponentsWithLlm", () => {
 });
 
 describe("componentFacts", () => {
-  it("describes neighbours by name and relation", () => {
-    expect(componentFacts(base, base.components[0]!).dependsOn).toEqual([{ component: "Redis", relation: "produces", via: "lPush jobs" }]);
-    expect(componentFacts(base, base.components[1]!).usedBy).toEqual([{ component: "Engine Client", relation: "produces", via: "lPush jobs" }]);
+  it("describes neighbours by name, relationship and confidence label", () => {
+    expect(componentFacts(base, base.components[0]!).outgoing).toEqual([{ to: "Redis", relationship: "produces", via: "lPush jobs", confidence: "resolved-default" }]);
+    expect(componentFacts(base, base.components[1]!).incoming).toEqual([{ from: "Engine Client", relationship: "produces", via: "lPush jobs", confidence: "resolved-default" }]);
   });
 });
 

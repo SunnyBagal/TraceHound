@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export const SCHEMA_VERSION = 1;
 
-export const ExtractorName = z.enum(["imports", "symbols", "http-routes", "redis", "prisma", "env"]);
+export const ExtractorName = z.enum(["imports", "symbols", "http-routes", "redis", "prisma", "env", "startup"]);
 export type ExtractorName = z.infer<typeof ExtractorName>;
 
 /**
@@ -121,6 +121,7 @@ export const FileFacts = z.object({
   // `parent.use(prefix?, router)` — routers are keyed "file#variable"
   mounts: z.array(z.object({ parent: z.string(), router: z.string(), prefix: z.string().optional(), evidenceId: z.string() })),
   listens: z.array(z.object({ evidenceId: z.string() })),
+  startupCalls: z.array(z.object({ callee: z.string(), evidenceId: z.string() })), // top-level calls
   clients: z.array(ClientConstruction),
   redisOps: z.array(RedisOpFact),
   prismaOps: z.array(PrismaOpFact),
