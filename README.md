@@ -36,8 +36,12 @@ vars are needed at runtime.
 1. On vercel.com: **Add New… → Project**, then import `SunnyBagal/TraceHound`.
 2. Set **Root Directory** to `viewer`. Vercel detects Next.js and the pnpm workspace from the
    root `pnpm-lock.yaml`.
-3. Leave **Build Command** as `pnpm build` (the `prebuild` step copies `../snapshots` into
-   `public/`) and **Output Directory** as the Next.js default (the static export goes to `out/`).
+3. Build settings come from `viewer/vercel.json`: framework Next.js, build command
+   `pnpm run build`, which copies `../snapshots` into `public/`, builds, and verifies the export.
+   **Leave Output Directory unset.** Vercel's Next.js builder reads `.next/` and serves the
+   static export itself. Pointing it at `out/` fails with "routes-manifest.json couldn't be
+   found". Files outside the Root Directory must be included in the build (the Vercel default),
+   because the build reads `../snapshots` and `../packages/analyzer`.
 4. **Deploy.** Every push to `main` redeploys. To publish a new snapshot, commit it under
    `snapshots/` and push.
 

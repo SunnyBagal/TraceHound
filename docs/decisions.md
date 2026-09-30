@@ -202,7 +202,11 @@ rebuild of the code rather than just the data, and the manifest indirection woul
 directory in the Build Step" (Project Settings → Build and Deployment → Root Directory). The
 first deploy shows it is on: the viewer imports `@tracehound/analyzer/schema` from `../packages`,
 and that build succeeded. If it's ever turned off, the snapshot copy fails with a message naming
-the setting, instead of deploying a viewer that 404s.
+the setting, instead of deploying a viewer that 404s. Confirmed by the build log for
+`dpl_EgyJ66vZbvmK4aYHP4HH855wvkrg`: the copy and export check succeeded on Vercel. That deploy
+failed only because `viewer/vercel.json` set `outputDirectory: "out"`. Vercel's Next.js builder
+needs its default (`.next`, where `routes-manifest.json` lives) even for `output: "export"`, so
+the output directory is left unset.
 **Rejected:** (a) Committing a second copy of the snapshots inside `viewer/public/`. That
 duplicates data in git, and the two copies drift. (b) Fetching snapshots from
 raw.githubusercontent.com at runtime. It adds a runtime dependency on GitHub, and the viewer
