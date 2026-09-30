@@ -168,6 +168,8 @@ if (!docker.ok) {
       expect(r).toMatchObject({ finalState: "RESOLVED" });
       const t = trace(r);
       expect(t.filesRead).toEqual(["src/cart.ts"]);
+      // no trace of the repro test (file or its directory) is visible to the agent
+      expect(t.turns[0]!.toolResults[0]!.result.split("\n").filter(Boolean)).toEqual([".git/", "package.json", "src/", "tests/", "tsconfig.json"]);
       expect(t.turns[0]!.toolResults[1]!.result).toContain("src/cart.ts:11:export function applyDiscount");
       expect(t.turns[1]!.toolResults[0]!.result).toContain("12|   return total - percent;");
       expect(t.turns[2]!.toolResults[0]!.result).toBe("edited src/cart.ts: replaced 1 occurrence starting at line 12\n");

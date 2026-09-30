@@ -214,7 +214,10 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
   const runRepro = async (phase: Phase) => {
     await provider.writeFile(handle!, spec.repro.dest, task.reproContent);
     const r = await sh(phase, spec.repro.command);
-    await mustPass(sh, phase, `rm -f ${JSON.stringify(spec.repro.dest)}`, "removing the repro test");
+    // remove the file AND any directories created for it: an empty repro/ dir would show up in
+    // the agent's list_dir (git status can't see empty directories)
+    const dir = spec.repro.dest.includes("/") ? spec.repro.dest.slice(0, spec.repro.dest.lastIndexOf("/")) : "";
+    await mustPass(sh, phase, `rm -f ${JSON.stringify(spec.repro.dest)}${dir ? ` && (rmdir -p ${JSON.stringify(dir)} 2>/dev/null || true)` : ""}`, "removing the repro test");
     return { exitCode: r.exitCode, timedOut: r.timedOut };
   };
 

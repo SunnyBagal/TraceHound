@@ -120,8 +120,9 @@ describe("runRepair state machine (fake provider)", () => {
     provider.onExec = (cmd) => void seen.push(cmd) as undefined;
     await runRepair({ task: task(), agent: new NoopAgent(), provider, image: "img" });
     const patchingAt = seen.findIndex((c) => c.startsWith("git add -A"));
-    expect(seen.slice(0, patchingAt)).toEqual(expect.arrayContaining(['rm -f "repro/x.test.ts"', 'test -z "$(git status --porcelain)"']));
-    expect(seen.indexOf('rm -f "repro/x.test.ts"')).toBeLessThan(seen.indexOf('test -z "$(git status --porcelain)"'));
+    const rm = 'rm -f "repro/x.test.ts" && (rmdir -p "repro" 2>/dev/null || true)';
+    expect(seen.slice(0, patchingAt)).toEqual(expect.arrayContaining([rm, 'test -z "$(git status --porcelain)"']));
+    expect(seen.indexOf(rm)).toBeLessThan(seen.indexOf('test -z "$(git status --porcelain)"'));
   });
 
   it("a harness command that times out ends FAILED and still destroys the sandbox", async () => {
