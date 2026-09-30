@@ -38,6 +38,7 @@ export function costUSD(price: ModelPrice, inputTokens: number, outputTokens: nu
 }
 
 /** Upper-bound token count for a prompt: ~3 chars/token (English/JSON is ~4) plus per-message overhead. */
-export function estimateInputTokens(messages: { content: string }[]): number {
-  return messages.reduce((n, m) => n + Math.ceil(m.content.length / 3) + 8, 0);
+export function estimateInputTokens(messages: { content: string | null; tool_calls?: unknown }[], tools?: unknown): number {
+  const chars = (m: { content: string | null; tool_calls?: unknown }) => (m.content ?? "").length + (m.tool_calls ? JSON.stringify(m.tool_calls).length : 0);
+  return messages.reduce((n, m) => n + Math.ceil(chars(m) / 3) + 8, 0) + (tools ? Math.ceil(JSON.stringify(tools).length / 3) : 0);
 }

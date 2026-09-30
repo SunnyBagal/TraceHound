@@ -213,3 +213,27 @@ Observations from building TraceHound. Facts only; newest entries at the bottom.
     other APIs but don't mention Sandboxes or a beta request.
 - **Suggestion:** mention the beta-access request in the 403 body or the `/whoami` response,
   and on the Sandboxes overview and CLI install pages.
+
+---
+
+## 2026-09-30 · Tool calling on Nemotron 3 Nano (OpenAI-style `tools`)
+
+- **Setup:** `POST /v1/chat/completions`, model `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`,
+  temperature 0, `tool_choice: "auto"`, two function tools (`add(a, b)`, `get_weather(city)`),
+  one user message asking for both. Script: `scripts/tool-calling-spike.ts`. 3 calls, $0.00019
+  at the tracker rates in `config/prices.json`.
+- **(a) Reasoning off** (`chat_template_kwargs.enable_thinking=false`): HTTP 200,
+  `finish_reason: "tool_calls"`, `message.content: null`, and two parallel entries in
+  `message.tool_calls`. Each is `{id: "chatcmpl-tool-<hex>", type: "function", function: {name,
+  arguments}}`, with `arguments` a JSON **string** that parsed: `{"b": 25, "a": 17}` and
+  `{"city": "Paris"}`. 377 prompt + 57 completion tokens, 2057 ms.
+- **(b) Reasoning on** (model default): the same two tool calls in `message.tool_calls`, with
+  valid JSON arguments. The thinking text went to `message.reasoning` (≈1.3k chars), not to
+  `content` (null) or into the tool calls. 377 + 396 tokens, 4327 ms.
+- **(c) Second turn:** the (a) conversation plus the assistant message with its `tool_calls`,
+  then two `role: "tool"` messages (matching `tool_call_id`s). Result: `finish_reason: "stop"`,
+  `tool_calls: []`, and `content` with a correct answer ("The sum of 17 and 25 is **42**. … 18°C
+  … cloudy"). 476 + 36 tokens, 1168 ms.
+- **Message keys** in every response: `content, refusal, role, annotations, audio,
+  function_call, tool_calls, reasoning` (`reasoning` null when off).
+  `usage.completion_tokens_details` was absent/null, so reasoning tokens aren't broken out.

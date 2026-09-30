@@ -6,11 +6,30 @@ import { costUSD, estimateInputTokens, priceFor, type PriceTable } from "./price
 
 export const DEFAULT_BASE_URL = "https://api.tokenfactory.us-central1.nebius.com/v1";
 
+/** OpenAI-style tool call as returned in `message.tool_calls`. */
+export interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
+export type ChatMessage =
+  | { role: "system" | "user"; content: string }
+  | { role: "assistant"; content: string | null; tool_calls?: ToolCall[] }
+  | { role: "tool"; tool_call_id: string; content: string };
+
+export interface ToolDefinition {
+  type: "function";
+  function: { name: string; description: string; parameters: Record<string, unknown> };
+}
+
 export interface ChatRequest {
   model: string;
   temperature: number;
   max_tokens: number;
-  messages: { role: "system" | "user" | "assistant"; content: string }[];
+  messages: ChatMessage[];
+  tools?: ToolDefinition[];
+  tool_choice?: "auto" | "none" | "required";
   /** Documented in the Token Factory OpenAPI spec: none|minimal|low|medium|high|xhigh|max. */
   reasoning_effort?: string;
   /** Not in the official spec; passed through for chat templates that read it (e.g. enable_thinking). */
@@ -26,10 +45,14 @@ export interface ChatResult {
   costUSD: number; // 0 for cache hits
   reasoningChars?: number; // length of message.reasoning / reasoning_content, when returned
   reasoningTokens?: number; // usage.completion_tokens_details.reasoning_tokens, when reported
+  toolCalls?: ToolCall[]; // message.tool_calls, when present
+  finishReason?: string;
+  /** choices[0].message as returned (for inspection and transcripts) */
+  message?: Record<string, unknown>;
 }
 
 interface CompletionBody {
-  choices?: { message?: { content?: string | null; reasoning?: string | null; reasoning_content?: string | null } }[];
+  choices?: { finish_reason?: string; message?: { content?: string | null; reasoning?: string | null; reasoning_content?: string | null; tool_calls?: ToolCall[] | null } }[];
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } | null };
   error?: { message?: string } | string;
   detail?: string;
@@ -119,7 +142,7 @@ export class TokenFactoryClient {
     // Worst case: estimated prompt tokens + every allowed completion token, at the (possibly
     // conservative placeholder) price. Throws before any request if a cap would be crossed.
     const price = priceFor(prices, request.model);
-    const estIn = estimateInputTokens(request.messages);
+    const estIn = estimateInputTokens(request.messages, request.tools);
     const estimate = costUSD(price, estIn, request.max_tokens);
     const reservation = budget.reserve(estimate, `${meta.purpose}${meta.componentId ? ` (${meta.componentId})` : ""} on ${request.model}`);
 
@@ -142,7 +165,7 @@ export class TokenFactoryClient {
       record(body, res.status);
       if (!res.ok) throw new LlmHttpError(`HTTP ${res.status}: ${errorText(body)}`);
       const content = body.choices?.[0]?.message?.content ?? "";
-      if (content) cache?.put(key, body);
+      if (content || body.choices?.[0]?.message?.tool_calls?.length) cache?.put(key, body);
       return {
         content,
         cached: false,
@@ -185,12 +208,15 @@ export class TokenFactoryClient {
   }
 }
 
-function reasoningStats(body: CompletionBody): Pick<ChatResult, "reasoningChars" | "reasoningTokens"> {
+function reasoningStats(body: CompletionBody): Pick<ChatResult, "reasoningChars" | "reasoningTokens" | "toolCalls" | "finishReason" | "message"> {
   const message = body.choices?.[0]?.message;
   const reasoning = message?.reasoning ?? message?.reasoning_content;
   return {
     reasoningChars: typeof reasoning === "string" ? reasoning.length : undefined,
     reasoningTokens: body.usage?.completion_tokens_details?.reasoning_tokens ?? undefined,
+    ...(message?.tool_calls?.length && { toolCalls: message.tool_calls }),
+    ...(body.choices?.[0]?.finish_reason && { finishReason: body.choices[0].finish_reason }),
+    ...(message && { message: message as Record<string, unknown> }),
   };
 }
 

@@ -527,3 +527,21 @@ produced a given component. (b) Giving the model source code or the naming summa
 more tokens, and the summaries contain unverified prose. (c) Tolerant parsing (stripping fences,
 fixing trailing commas): the output contract is strict JSON, and silent repair would hide how
 often the model breaks it.
+
+## 029 · Repair agent loop: host-side TypeScript, native tool calls
+**Protocol choice: native OpenAI-style `tool_calls`.** The spike (FEEDBACK 2026-09-30, 3 calls)
+showed Nemotron Nano on Token Factory returning `message.tool_calls` with parseable JSON
+`arguments`, reasoning on or off, and continuing correctly after `role: "tool"` results. With
+reasoning on, the thinking goes to `message.reasoning` and never into the calls. So the loop
+sends `tools` and reads `tool_calls`; there's no JSON-in-content protocol.
+Malformed output is still handled, and each case counts as a step:
+- arguments that don't parse or don't match the tool's schema
+- an unknown tool name
+- a turn with no tool call at all
+
+The loop answers each with a tool-error message (or a user nudge for a missing call) and
+continues. The next model turn decides what happens.
+**Rejected:** (a) A JSON-action protocol in `content`: that means more parsing code and more
+failure modes, for no benefit once native calls work. (b) An agent framework (LangChain, the
+OpenAI Agents SDK, OpenCode): the loop is small, and the harness has to own step counting,
+token counting and verification without a framework in between.
