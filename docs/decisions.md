@@ -758,3 +758,38 @@ same Redis logo, which says "these are Redis" about two components that only tal
 (c) Keeping the highlight in the navigation stack or the URL: hover is not a place you can go
 back to, and every mouse movement would create a history entry. (d) Reusing the selection
 style for hover: then you can't tell what is selected from what the pointer is over.
+
+## 032 · Git env hygiene: every git spawn drops the repo-selecting GIT_* variables
+**Incident (2026-09-30):** the UI session ran the test gate inside `git rebase --exec` in its
+worktree. Git exports `GIT_DIR` there, and `GIT_DIR` overrides `git -C <dir>` in every child
+process. So `eval/fixtures/build-toy-repo.ts` and the test helpers' `git init/add/commit` (in
+`test/fixture-repo.ts` and `test/impact.test.ts`) wrote into that worktree's git dir instead of
+their temp repos. That produced two commits whose trees replaced the whole repository with
+fixture files (4 and 10 files), plus `core.bare = true` in the shared `.git/config`. Nothing
+was pushed.
+**Choice:**
+- `packages/analyzer/src/git-env.ts` (no imports; also exported as
+  `@tracehound/analyzer/git-env`): `cleanGitEnv(env)` returns a copy without `GIT_DIR`,
+  `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY`,
+  `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_COMMON_DIR`, `GIT_NAMESPACE`, `GIT_PREFIX`,
+  `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, and every `GIT_CONFIG_KEY_<n>` /
+  `GIT_CONFIG_VALUE_<n>`. `scrubGitEnv(env)` deletes the same variables in place.
+- Every git spawn in `packages/`, `eval/` and `viewer/` passes `env: cleanGitEnv()`,
+  production code included: `analyze.ts` (commit SHA and remote of the analyzed repo),
+  `impact/cli.ts` (`impact --diff` from a hook would otherwise diff the wrong repo),
+  `harness/docker.ts` (the host-side `git clone` / `cat-file` / `bundle`), `build-toy-repo.ts`,
+  `test/fixture-repo.ts` and `test/impact.test.ts`. The viewer spawns no git.
+- Both vitest setup files (`packages/analyzer/test/setup.ts`, `viewer/test/setup.ts`) call
+  `scrubGitEnv()` at startup.
+- `test/git-env.test.ts`: GIT_DIR (alone, and with GIT_WORK_TREE) points at a sentinel repo
+  while build-toy-repo and the fixture-repo helper run. The sentinel's local config, refs, index
+  and HEAD must be unchanged, and the toy repo must be valid. With the helper bypassed, the
+  GIT_DIR-only case reproduces the incident: the sentinel's `main` moves to a fixture commit and
+  its index becomes the fixture's files.
+- CLAUDE.md: gates run in a plain shell, never via `rebase --exec` or hooks, and the env check
+  above must print nothing first.
+**Rejected:** (a) Fixing only the test helpers: `impact --diff` and `analyze` from a hook would
+still read the wrong repo. (b) Passing `--git-dir`/`--work-tree` explicitly everywhere: it's
+easy to forget on one call, and `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY` and
+`GIT_CONFIG_PARAMETERS` would still leak. (c) Dropping every `GIT_*` variable: `GIT_ASKPASS`,
+`GIT_SSH_COMMAND` and similar are legitimate for clones.

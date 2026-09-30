@@ -4,6 +4,7 @@
 import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, renameSync, rmSync } from "node:fs";
 import path from "node:path";
+import { cleanGitEnv } from "../../packages/analyzer/src/git-env.ts";
 
 export const TOY_SOURCE = path.resolve(import.meta.dirname, "toy-cart");
 export const TOY_REPO = path.resolve(import.meta.dirname, ".build/toy-cart");
@@ -11,7 +12,7 @@ export const TOY_BASE_SHA = "3582f355e884dc4512ee157ee59848796893ec27";
 
 const headOf = (dir: string) => {
   try {
-    return execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env: cleanGitEnv() }).trim();
   } catch {
     return undefined;
   }
@@ -38,7 +39,7 @@ export function buildToyRepo(dest = TOY_REPO): string {
 function build(dest: string): string {
   cpSync(TOY_SOURCE, dest, { recursive: true });
   const env = {
-    ...process.env,
+    ...cleanGitEnv(), // decision 032: never GIT_DIR & co. from a hook or rebase --exec
     GIT_AUTHOR_NAME: "toy",
     GIT_AUTHOR_EMAIL: "toy@tracehound.invalid",
     GIT_COMMITTER_NAME: "toy",

@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { cleanGitEnv } from "../git-env.ts";
 import { readManifest } from "../manifest.ts";
 import { Snapshot } from "../schema.ts";
 import { ANALYZER_VERSION } from "../version.ts";
@@ -18,7 +19,7 @@ export class ImpactError extends Error {
 
 function git(repo: string, ...args: string[]): string {
   try {
-    return execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: cleanGitEnv() });
   } catch (error) {
     const stderr = (error as { stderr?: string }).stderr?.trim();
     throw new ImpactError(`git ${args.join(" ")} failed in ${repo}${stderr ? `: ${stderr}` : ""}`);

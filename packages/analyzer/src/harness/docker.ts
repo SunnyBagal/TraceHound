@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { cleanGitEnv } from "../git-env.ts";
 import type { ExecResult, SandboxHandle, SandboxProvider, SandboxSource } from "./provider.ts";
 
 export const SANDBOX_IMAGE = "tracehound-sandbox:bun1.4.2-ts5.9.3-1";
@@ -31,7 +32,7 @@ export function dockerAvailable(): { ok: boolean; detail: string } {
 function run(cmd: string, args: string[], opts: { input?: string; timeoutMs?: number } = {}): Promise<ExecResult> {
   return new Promise((resolve) => {
     const started = performance.now();
-    const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"], env: cleanGitEnv() }); // git clone/bundle on the host (decision 032)
     let stdout = "";
     let stderr = "";
     let timedOut = false;

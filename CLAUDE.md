@@ -108,6 +108,11 @@ repo) are recorded as facts but never produce edges.
   `dynamic`), which is what the UI shows.
 - Record non-obvious choices in `docs/decisions.md` (choice + rejected alternative).
 - Small, meaningful commits pushed to `main`.
+- **Gates (tests, typecheck, build) run in a plain shell, never via `git rebase --exec` or a git
+  hook.** Those export `GIT_DIR` & co., which override `git -C` in child processes (this once put
+  fixture commits into a real worktree; decision 032). Before a gate, this must print nothing:
+  `env | grep -E '^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE|PREFIX|CONFIG)'`.
+  Every git spawn in code passes `env: cleanGitEnv()` (`packages/analyzer/src/git-env.ts`).
 
 ## Roadmap
 1. Slice: analyzer → static snapshot JSON + manifest → Railway-style canvas.

@@ -13,6 +13,7 @@ import { extractPrisma, extractPrismaSchema } from "./extract/prisma.ts";
 import { extractRedis } from "./extract/redis.ts";
 import { extractStartupCalls } from "./extract/startup.ts";
 import { extractSymbols } from "./extract/symbols.ts";
+import { cleanGitEnv } from "./git-env.ts";
 import { groupComponents } from "./group/grouping.ts";
 import { loadWorkspace, relPath } from "./load/workspace.ts";
 import { SCHEMA_VERSION, Snapshot, type FileFacts } from "./schema.ts";
@@ -20,7 +21,7 @@ import { ANALYZER_VERSION } from "./version.ts";
 
 function git(repoRoot: string, ...args: string[]): string | undefined {
   try {
-    return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env: cleanGitEnv() }).trim();
   } catch {
     return undefined;
   }

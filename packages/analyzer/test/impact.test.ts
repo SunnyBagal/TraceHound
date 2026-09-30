@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { cleanGitEnv } from "../src/git-env.ts";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -19,7 +20,7 @@ let snapshot: Snapshot;
 let base: string;
 
 const git = (...args: string[]) =>
-  execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { encoding: "utf8" }).trim();
+  execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { encoding: "utf8", env: cleanGitEnv() }).trim();
 const write = (file: string, text: string) => {
   mkdirSync(path.dirname(path.join(repo, file)), { recursive: true });
   writeFileSync(path.join(repo, file), text);

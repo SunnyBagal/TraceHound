@@ -1,5 +1,6 @@
 // Shared fixture: a tiny two-package repo with a Redis queue between an API and a worker.
 import { execFileSync } from "node:child_process";
+import { cleanGitEnv } from "../src/git-env.ts";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -51,7 +52,7 @@ export function makeFixtureRepo(files: Record<string, string> = BASE_FILES): { r
     mkdirSync(path.dirname(path.join(repo, file)), { recursive: true });
     writeFileSync(path.join(repo, file), text);
   }
-  const git = (...args: string[]) => execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { encoding: "utf8" }).trim();
+  const git = (...args: string[]) => execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { encoding: "utf8", env: cleanGitEnv() }).trim();
   git("init", "-q", "-b", "main");
   git("add", "-A");
   git("commit", "-qm", "base");

@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema.ts"
+    "./schema": "./src/schema.ts",
+    "./git-env": "./src/git-env.ts"
   },
   "bin": {
     "tracehound": "./src/bin.ts"

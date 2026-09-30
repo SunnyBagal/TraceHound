@@ -1,3 +1,8 @@
+import { scrubGitEnv } from "@tracehound/analyzer/git-env";
+
+// A hook or `git rebase --exec` exports GIT_DIR & co.; tests must never inherit them (decision 032).
+scrubGitEnv();
+
 // jsdom lacks the layout APIs React Flow uses; minimal shims per the React Flow testing guide.
 class ResizeObserverShim {
   observe() {}
