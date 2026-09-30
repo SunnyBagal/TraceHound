@@ -14,19 +14,47 @@ import type { Snapshot } from "../schema.ts";
 import type { Agent, AgentContext } from "./agents.ts";
 import { confinePath, GRAPH_TOOLS, REPO_TOOLS, sandboxCommand, ToolInputError, truncate, WORKDIR } from "./tools.ts";
 
-export const AGENT_PROMPT_FILE = path.resolve(import.meta.dirname, "../../../../harness/prompts/agent-v1.md");
+const PROMPTS = path.resolve(import.meta.dirname, "../../../../harness/prompts");
+export const AGENT_PROMPT_FILE = path.join(PROMPTS, "agent-v2.md");
+/** Kept for reference and for reproducing earlier runs; agent-v2 is the default (decision 030). */
+export const AGENT_PROMPT_V1_FILE = path.join(PROMPTS, "agent-v1.md");
+/** The loop's own behaviour (guards, edit fallback, finish check), recorded next to the prompt hashes. */
+export const LOOP_VERSION = "agent-v2";
 const RECORD_RESULT_CHARS = 1500; // tool results kept in the run record (the model saw up to MAX_TOOL_RESULT)
+/** Tools that can change the repository; the repo state is re-read after each of them. */
+const MUTATING_TOOLS = new Set(["edit_file", "write_file", "run"]);
+/** The 3rd identical call on an unchanged repository (and every later one) is refused. */
+const MAX_IDENTICAL_CALLS = 2;
+export const EMPTY_FINISH_MESSAGE =
+  "not finished: no changes were made, so the repository is identical to its starting state. If you are sure no code change is needed, call finish again to confirm; otherwise continue working.";
 
-/** The frozen prompt file; `GRAPH: ` lines are included (without the prefix) only when graph tools are on. */
-export function renderSystemPrompt(file: string, graph: boolean): { text: string; fileSha256: string; renderedSha256: string } {
+/**
+ * The frozen prompt file. `GRAPH: ` lines are included (without the prefix) only when graph tools
+ * are on; `{{NAME}}` placeholders are filled from `vars` (a placeholder without a value throws).
+ */
+export function renderSystemPrompt(file: string, graph: boolean, vars: Record<string, string> = {}): { text: string; fileSha256: string; renderedSha256: string } {
   const raw = readFileSync(file, "utf8");
   const text = raw
     .split("\n")
     .flatMap((line) => (line.startsWith("GRAPH: ") ? (graph ? [line.slice("GRAPH: ".length)] : []) : [line]))
     .join("\n")
+    .replace(/\{\{([A-Z_]+)\}\}/g, (_, name: string) => {
+      if (vars[name] === undefined) throw new Error(`prompt ${path.basename(file)}: no value for {{${name}}}`);
+      return vars[name];
+    })
     .trim();
   const sha = (s: string) => createHash("sha256").update(s).digest("hex");
   return { text, fileSha256: sha(raw), renderedSha256: sha(text) };
+}
+
+/** The TEST_COMMANDS block of the prompt: identical in both graph conditions. */
+export const formatTestCommands = (cmds: string[]) => (cmds.length ? cmds.map((c) => `  - \`${c}\``).join("\n") : "  - (none configured)");
+
+/** Stable JSON (sorted keys) so that argument order doesn't make two identical calls look different. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonical((value as Record<string, unknown>)[k])}`).join(",")}}`;
+  return JSON.stringify(value);
 }
 
 export interface LoopTurn {
@@ -49,9 +77,12 @@ export interface LoopTrace {
   model: string;
   reasoning: "on" | "off";
   temperature: number;
+  loopVersion: string;
   promptFile: string;
   promptSha256: string;
-  renderedPromptSha256: string;
+  /** set when the run starts: the rendered prompt includes the task's test commands */
+  renderedPromptSha256?: string;
+  testCommands?: string[];
   graph: boolean;
   decider?: string;
   /** DECIDER_VERSION of the code that ran (frozen for the evaluation) */
@@ -61,6 +92,7 @@ export interface LoopTrace {
   filesRead: string[];
   graphCalls: { turn: number; tool: string; args: unknown }[];
   toolCallCount: number;
+  guards: { repeatsBlocked: number; emptyFinishRejected: number; editWhitespaceFallbacks: number };
   finishSummary?: string;
   stoppedBy?: string;
 }
@@ -80,8 +112,11 @@ export class RepairLoopAgent implements Agent {
   readonly name = "nemotron";
   readonly trace: LoopTrace;
   readonly #opts: Required<Omit<LoopOptions, "graph">> & { graph?: LoopOptions["graph"] };
-  readonly #system: string;
   readonly #tools: ToolDefinition[];
+  /** repo state (vs the base commit) now; re-read after every call that can change the repo */
+  #state: { hash: string; empty: boolean } = { hash: "", empty: true };
+  readonly #calls: { key: string; state: string }[] = [];
+  #emptyFinishRejected = false;
 
   constructor(opts: LoopOptions = {}) {
     this.#opts = {
@@ -91,17 +126,16 @@ export class RepairLoopAgent implements Agent {
       promptFile: opts.promptFile ?? AGENT_PROMPT_FILE,
       graph: opts.graph,
     };
-    const prompt = renderSystemPrompt(this.#opts.promptFile, Boolean(opts.graph));
-    this.#system = prompt.text;
+    const fileSha256 = createHash("sha256").update(readFileSync(this.#opts.promptFile, "utf8")).digest("hex");
     this.#tools = [...REPO_TOOLS, ...(opts.graph ? GRAPH_TOOLS : [])];
     this.trace = {
       agent: "nemotron-loop",
+      loopVersion: LOOP_VERSION,
       model: this.#opts.model,
       reasoning: this.#opts.reasoning,
       temperature: this.#opts.temperature,
       promptFile: path.basename(this.#opts.promptFile),
-      promptSha256: prompt.fileSha256,
-      renderedPromptSha256: prompt.renderedSha256,
+      promptSha256: fileSha256,
       graph: Boolean(opts.graph),
       ...(opts.graph && { decider: opts.graph.decider }),
       deciderVersion: DECIDER_VERSION,
@@ -110,14 +144,19 @@ export class RepairLoopAgent implements Agent {
       filesRead: [],
       graphCalls: [],
       toolCallCount: 0,
+      guards: { repeatsBlocked: 0, emptyFinishRejected: 0, editWhitespaceFallbacks: 0 },
     };
   }
 
   async run(ctx: AgentContext): Promise<void> {
     if (!ctx.llm) throw new Error("the nemotron agent needs a model client (ctx.llm)");
     const limits = ctx.limits;
+    const prompt = renderSystemPrompt(this.#opts.promptFile, Boolean(this.#opts.graph), { TEST_COMMANDS: formatTestCommands(ctx.testCommands) });
+    this.trace.renderedPromptSha256 = prompt.renderedSha256;
+    this.trace.testCommands = ctx.testCommands;
+    this.#state = await ctx.repoState();
     const messages: ChatMessage[] = [
-      { role: "system", content: this.#system },
+      { role: "system", content: prompt.text },
       {
         role: "user",
         content: `Issue:\n${ctx.issue}\n\nLimits for this task: at most ${limits.steps} tool calls, ${limits.tokens} model tokens, ${Math.round(limits.wallClockMs / 1000)} s. Start by exploring the repository.`,
@@ -195,8 +234,26 @@ export class RepairLoopAgent implements Agent {
 
     if (name === "finish") {
       ctx.step("finish");
+      // the first finish on an unchanged repo asks for confirmation; a second finish is accepted
+      if (this.#state.empty && !this.#emptyFinishRejected) {
+        this.#emptyFinishRejected = true;
+        this.trace.guards.emptyFinishRejected++;
+        return { ok: false, content: EMPTY_FINISH_MESSAGE };
+      }
       this.trace.finishSummary = String(args.summary);
       return { ok: true, content: "finished", finished: true };
+    }
+    // repeat guard: same tool + same arguments on the same repo state gives the same result
+    const key = `${name} ${canonical(args)}`;
+    const earlier = this.#calls.filter((c) => c.key === key && c.state === this.#state.hash).length;
+    this.#calls.push({ key, state: this.#state.hash });
+    if (earlier >= MAX_IDENTICAL_CALLS) {
+      ctx.step(`repeat ${name}`);
+      this.trace.guards.repeatsBlocked++;
+      return {
+        ok: false,
+        content: `error: not run - this exact call (${name} with the same arguments) was already made ${earlier} times and the repository has not changed since, so the result won't change. Do something different.`,
+      };
     }
     if (GRAPH_TOOLS.some((t) => t.function.name === name)) {
       ctx.step(`graph:${name}`);
@@ -217,6 +274,8 @@ export class RepairLoopAgent implements Agent {
       return { ok: false, content: `error: ${error.message}` };
     }
     const r = await ctx.exec(cmd, { timeoutMs: ctx.limits.commandTimeoutMs }); // one provider op = one step
+    if (MUTATING_TOOLS.has(name)) this.#state = await ctx.repoState(); // a harness probe, not a step
+    if (name === "edit_file" && r.exitCode === 0 && r.stdout.includes("whitespace-normalized match")) this.trace.guards.editWhitespaceFallbacks++;
     const output = `${r.stdout}${r.stderr ? (r.stdout ? "\n" : "") + r.stderr : ""}`;
     if (name === "run") return { ok: r.exitCode === 0, content: truncate(`exit code ${r.exitCode}${r.timedOut ? " (timed out)" : ""}\n${output || "(no output)"}`) };
     if (r.exitCode === 0) {
@@ -257,7 +316,7 @@ export function checkArgs(tool: ToolDefinition, args: Record<string, unknown>): 
   for (const key of schema.required ?? []) if (!(key in args)) return `${tool.function.name}: missing required argument "${key}"`;
   for (const [key, value] of Object.entries(args)) {
     const prop = schema.properties[key];
-    if (!prop) return `${tool.function.name}: unknown argument "${key}"`;
+    if (!prop) return `${tool.function.name}: unknown argument "${key}" (valid arguments: ${Object.keys(schema.properties).join(", ")})`;
     const ok =
       prop.type === "string" ? typeof value === "string" : prop.type === "integer" ? Number.isInteger(value) : prop.type === "array" ? Array.isArray(value) : true;
     if (!ok) return `${tool.function.name}: "${key}" must be ${prop.type === "integer" ? "an integer" : `a ${prop.type}`}`;

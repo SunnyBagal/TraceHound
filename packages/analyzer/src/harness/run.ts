@@ -131,6 +131,19 @@ export const SQUASH_HISTORY = [
   "git rev-parse HEAD",
 ].join("\n");
 
+/** The task's check commands as the agent should run them from /work (regression + typecheck). */
+export function taskTestCommands(spec: Pick<TaskSpec, "regression" | "typecheck">): string[] {
+  const tsc = (spec.typecheck?.packages ?? []).map((pkg) => (pkg === "." ? spec.typecheck!.command : `cd ${JSON.stringify(pkg)} && ${spec.typecheck!.command}`));
+  return [...spec.regression, ...tsc];
+}
+
+/**
+ * Prints a hash of everything that differs from `base` (tracked diff + untracked, non-ignored
+ * files with their content hashes), then the byte length of that diff (0 = no changes).
+ */
+export const repoStateCommand = (base: string) =>
+  `d=$(git diff --binary ${base} --; git ls-files -z -o --exclude-standard | xargs -0 -r sha256sum --); printf '%s' "$d" | sha256sum | cut -c1-64; printf '%s' "$d" | wc -c`;
+
 /**
  * PREPARING_SANDBOX: create (network on), check out baseSha, run setup (network on), squash the
  * history into one base commit, then cut the network and prove it's off. Shared by repair runs
@@ -310,6 +323,14 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     const ctx: AgentContext = {
       issue: spec.issue,
       limits: spec.limits,
+      testCommands: taskTestCommands(spec),
+      repoState: async () => {
+        budget();
+        const r = await mustPass(sh, "PATCHING", repoStateCommand(prepared.baseCommit), "computing the repo state");
+        const [hash = "", size = ""] = r.stdout.trim().split("\n").map((x) => x.trim());
+        if (!/^[0-9a-f]{64}$/.test(hash) || !/^\d+$/.test(size)) throw new RunFailed(`repo state probe printed ${JSON.stringify(r.stdout.slice(0, 120))}`);
+        return { hash, empty: size === "0" };
+      },
       exec: async (cmd, o) => {
         step();
         const r = await sh("PATCHING", cmd, { actor: "agent", timeoutMs: Math.max(1000, Math.min(o?.timeoutMs ?? spec.limits.commandTimeoutMs, deadline - Date.now())) });
@@ -359,12 +380,13 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     try {
       await agent.run(ctx);
     } catch (error) {
-      if (error instanceof RunCancelled) throw error;
+      if (error instanceof RunCancelled || error instanceof RunFailed) throw error; // an infrastructure fault (e.g. a harness probe), not the agent's
       if (error instanceof BudgetExhausted) record.agentRun.budgetExhausted = error.message;
       else record.agentRun.error = (error as Error).message;
+    } finally {
+      record.agentRun.steps = Math.min(steps, spec.limits.steps);
+      if (agent.trace !== undefined) record.agentRun.trace = agent.trace;
     }
-    record.agentRun.steps = Math.min(steps, spec.limits.steps);
-    if (agent.trace !== undefined) record.agentRun.trace = agent.trace;
 
     // ── VERIFYING: the harness's own checks only (not bounded by the agent's wall-clock) ────
     enter("VERIFYING");

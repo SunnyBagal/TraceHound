@@ -7,6 +7,13 @@ import type { TaskSpec } from "./task.ts";
 export interface AgentContext {
   issue: string;
   limits: TaskSpec["limits"];
+  /** The task's own check commands (regression + typecheck), run from /work. Never the repro. */
+  testCommands: string[];
+  /**
+   * The repo's state relative to the sandbox's base commit: a hash over the diff (untracked files
+   * included) and whether that diff is empty. A harness probe: not a step, not the agent's exec.
+   */
+  repoState(): Promise<{ hash: string; empty: boolean }>;
   exec(cmd: string, opts?: { timeoutMs?: number }): Promise<ExecResult>;
   writeFile(path: string, content: string): Promise<void>;
   readFile(path: string): Promise<string>;

@@ -75,9 +75,70 @@ export function truncate(text: string, max = MAX_TOOL_RESULT): string {
 const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64");
 const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
+// edit_file fallbacks (agent-v2, decision 030), plain JS so the sandbox helper can embed it and
+// tests can evaluate it on the host. Lines are compared with leading/trailing whitespace ignored.
+export const EDIT_FALLBACK_JS = String.raw`
+function wsNormalizedEdit(text, oldText, newText) {
+  const file = text.split("\n");
+  const pat = oldText.split("\n");
+  while (pat.length && !pat[0].trim()) pat.shift();
+  while (pat.length && !pat[pat.length - 1].trim()) pat.pop();
+  if (!pat.length) return { ok: false, lines: [] };
+  const p = pat.map((l) => l.trim());
+  const hits = [];
+  for (let i = 0; i + p.length <= file.length; i++) {
+    let j = 0;
+    while (j < p.length && file[i + j].trim() === p[j]) j++;
+    if (j === p.length) hits.push(i);
+  }
+  if (hits.length !== 1) return { ok: false, lines: hits.map((i) => i + 1) };
+  const at = hits[0];
+  // re-indent newText only if every non-blank line is off by the same indentation shift
+  const indent = (l) => /^[ \t]*/.exec(l)[0];
+  let shift;
+  for (let j = 0; j < pat.length && shift !== null; j++) {
+    if (!p[j]) continue;
+    const m = indent(pat[j]), f = indent(file[at + j]);
+    const s = f === m ? "=" : f.endsWith(m) ? "+" + f.slice(0, f.length - m.length) : m.endsWith(f) ? "-" + m.slice(0, m.length - f.length) : null;
+    shift = shift === undefined || shift === s ? s : null;
+  }
+  let lines = newText === "" ? [] : newText.split("\n");
+  if (newText.endsWith("\n")) lines.pop();
+  let reindent = "as given";
+  if (shift === "=" || shift === undefined) reindent = "unchanged";
+  else if (shift) {
+    const by = shift.slice(1);
+    lines = lines.map((l) => (!l.trim() ? l : shift[0] === "+" ? by + l : l.startsWith(by) ? l.slice(by.length) : l));
+    reindent = "shifted";
+  }
+  return { ok: true, text: [...file.slice(0, at), ...lines, ...file.slice(at + pat.length)].join("\n"), startLine: at + 1, endLine: at + pat.length, reindent };
+}
+function closestRegion(text, oldText) {
+  const file = text.split("\n");
+  const n = Math.max(1, Math.min(oldText.trim().split("\n").length, file.length));
+  const squash = (s) => s.replace(/\s+/g, " ").trim();
+  const grams = (s) => { const m = new Map(); for (let i = 0; i < s.length - 1; i++) { const g = s.slice(i, i + 2); m.set(g, (m.get(g) || 0) + 1); } return m; };
+  const target = grams(squash(oldText));
+  const tn = [...target.values()].reduce((a, b) => a + b, 0);
+  let best = { score: -1, start: 0 };
+  for (let i = 0; i + n <= file.length; i++) {
+    const g = grams(squash(file.slice(i, i + n).join("\n")));
+    let common = 0, gn = 0;
+    for (const [k, v] of g) { gn += v; common += Math.min(v, target.get(k) || 0); }
+    const score = tn + gn ? (2 * common) / (tn + gn) : 0;
+    if (score > best.score) best = { score, start: i };
+  }
+  if (best.score <= 0) return undefined;
+  const shown = file.slice(best.start, best.start + Math.min(n, 40));
+  return { startLine: best.start + 1, endLine: best.start + n, score: Math.round(best.score * 100) / 100, snippet: shown.map((l, k) => best.start + 1 + k + "| " + l).join("\n") };
+}
+`;
+
 // Runs inside the sandbox with bun. op = argv[1]; arguments = base64(JSON) in TH_ARGS.
 // Exit 0 = result on stdout; exit 2 = tool error on stderr (the model sees it as "error: …").
-const SANDBOX_HELPER = String.raw`
+const SANDBOX_HELPER =
+  EDIT_FALLBACK_JS +
+  String.raw`
 const fs = require("fs"), path = require("path");
 const ROOT = "/work";
 const fail = (m) => { process.stderr.write(m); process.exit(2); };
@@ -111,7 +172,18 @@ if (op === "list_dir") {
   if (!args.oldText) fail("oldText must not be empty");
   const text = fs.readFileSync(f, "utf8");
   const n = text.split(args.oldText).length - 1;
-  if (n === 0) fail("oldText not found in " + args.path + ". Copy it exactly from read_file output, without the '<n>| ' prefixes.");
+  if (n === 0) {
+    const ws = wsNormalizedEdit(text, args.oldText, args.newText);
+    if (ws.ok) {
+      fs.writeFileSync(f, ws.text);
+      const how = ws.reindent === "shifted" ? "newText was re-indented by the same shift" : ws.reindent === "as given" ? "newText was inserted as given (its indentation was not adjusted)" : "indentation already matched";
+      process.stdout.write("edited " + args.path + ": oldText did not match exactly, so a whitespace-normalized match (indentation and trailing spaces ignored) was applied to lines " + ws.startLine + "-" + ws.endLine + "; " + how + ". Read those lines back to check.\n");
+      process.exit(0);
+    }
+    if (ws.lines.length > 1) fail("oldText not found exactly in " + args.path + "; ignoring indentation and trailing spaces it matches " + ws.lines.length + " places (starting at lines " + ws.lines.join(", ") + "), so nothing was changed. Include more surrounding lines so it matches once.");
+    const near = closestRegion(text, args.oldText);
+    fail("oldText not found in " + args.path + ", even ignoring indentation and trailing spaces. Copy it exactly from read_file output, without the '<n>| ' prefixes." + (near ? "\nClosest region (lines " + near.startLine + "-" + near.endLine + ", similarity " + near.score + "):\n" + near.snippet : ""));
+  }
   if (n > 1) fail("oldText occurs " + n + " times in " + args.path + "; include more surrounding lines so it matches exactly once.");
   const at = text.indexOf(args.oldText);
   const line = text.slice(0, at).split("\n").length;

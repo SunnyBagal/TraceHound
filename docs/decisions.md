@@ -657,3 +657,60 @@ after setup and reached only via `ctx.exec`.
 failure modes, for no benefit once native calls work. (b) An agent framework (LangChain, the
 OpenAI Agents SDK, OpenCode): the loop is small, and the harness has to own step counting,
 token counting and verification without a framework in between.
+
+## 030 · Base agent competence: agent-v2 (same in both graph conditions)
+**Context:** the first toy-cart transcripts (agent-v1, 10 runs in `runs/session*`, 5 of them
+UNRESOLVED at the 40-step limit) failed for generic reasons, not for lack of architecture
+knowledge: the model repeated near-identical calls (about 30 invented `bun test --trace-*`
+flags; about 30 `find`/`ls` searches for node, some byte-identical), looked for node/npx/npm,
+sent edit_file oldText with the wrong indentation six times in its last 11 steps, called tools that don't exist
+(`str_replace_editor`, `explore`) or passed invented arguments (`command`), and could finish
+without an edit. A baseline that can't fix a one-line bug makes any with/without-graph
+comparison meaningless, so v2 fixes these in the base agent. **Every change applies
+identically with and without the graph; none of them reads, mentions or special-cases a graph
+tool.** The graph condition still differs only by its one `GRAPH:` sentence and its tool list.
+**Choice** (`harness/prompts/agent-v2.md` is the default; `agent-v1.md` is kept unchanged;
+trace field `loopVersion: "agent-v2"`, prompt file + rendered-prompt sha256 as before):
+- **(a) Environment facts in the system prompt.** What is installed (bun 1.4.2 with how to use
+  it for tests/scripts/one-liners, tsc 5.9.3, git, grep, sed, find), what is not (node, npm,
+  npx, yarn, ts-node, ripgrep), that there is no network, and the task's test commands:
+  `regression` plus `typecheck` from task.json (`{{TEST_COMMANDS}}`, filled by the harness via
+  `AgentContext.testCommands`; the repro command is never included). The install list is
+  static text that matches the pinned image `tracehound-sandbox:bun1.4.2-ts5.9.3-1`; a new
+  image needs a new prompt version. The rule "don't repeat a failing call" became "an identical
+  call on an unchanged repository returns the same result, so change the call", and step 5
+  says the bug is only fixed if the code changed. *Why:* of the 5 v1 step-limit failures, 2 went
+  to probing for node/npm, 1 to invented bun flags and 2 to repeated greps.
+- **(b) Repeat guard.** Key = tool name + arguments as canonical JSON (sorted keys). Repo state =
+  sha256 over `git diff --binary <baseCommit>` plus the untracked, non-ignored files' content
+  hashes, read by a harness probe (`AgentContext.repoState()`, logged as a harness command, not
+  a step) at the start and after every call that can change the repo (`edit_file`,
+  `write_file`, `run`). A call whose key was already made twice at the current state is not
+  executed: it returns "not run - … the result won't change. Do something different." and still
+  costs a step. Re-running tests after an edit is a new state, so it's not a repeat. *Why:* the
+  v1 step-limit failures were loops of identical calls.
+- **(c) edit_file whitespace fallback.** If the exact match fails, lines are compared with
+  leading/trailing whitespace ignored. The edit is applied only if that match is unique, and
+  the result says it was a whitespace-normalized match and which lines. newText is re-indented
+  only if every matched line is off by the same indentation shift; otherwise it is inserted as
+  given, and the result says that too. If there is no unique match, the error returns either
+  the start lines of all matches or the closest region (bigram similarity over a same-size
+  window) with line numbers. *Why:* one v1 run spent its last steps re-sending an oldText whose
+  only error was two spaces of indentation.
+- **(d) Unknown tool / unknown argument.** The unknown-tool error already listed the valid tool
+  names in v1 (kept, now tested in both conditions). v2 also lists the valid arguments when an
+  argument is unknown (`edit_file: unknown argument "command" (valid arguments: path, oldText,
+  newText)`). *Why:* same class of failure, one level down.
+- **(e) finish on an unchanged repo.** The first `finish` while the diff is empty is answered
+  "not finished: no changes were made … call finish again to confirm" (a step); any second
+  `finish` is accepted. *Why:* a no-edit finish is almost always premature, but a correct "no
+  change needed" must stay possible.
+- **Harness:** a repo-state probe that fails is an infrastructure fault (run FAILED), not an
+  agent error. The trace records `guards: { repeatsBlocked, emptyFinishRejected,
+  editWhitespaceFallbacks }` and `testCommands`.
+**Rejected:** (a) Detecting the environment at run time (`which …`): that is more commands per
+run for a fixed, pinned image. (b) Blocking the 2nd identical call: re-reading a file once is
+normal. (c) Fuzzy matching beyond whitespace (edit distance): it could silently edit code the
+model didn't mean. (d) Hard-rejecting every empty finish: legitimate no-op answers would become
+impossible. (e) Graph-specific hints ("start with context_packet"): the graph condition must
+differ only by the tools and their one sentence.
