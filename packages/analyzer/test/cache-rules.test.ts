@@ -46,7 +46,7 @@ describe("impact: reads/writes are bidirectional and a cache broker costs one ho
 describe("context: a cache broker brings in the other side (025 queue partners)", () => {
   it("matching the writer includes the cache and the reader", () => {
     const p = buildContext(snapshot, "saveProfile stores stale data");
-    expect(p.confidence.level).not.toMatch(/low|none/);
+    expect(p.confidence!.level).not.toMatch(/low|none/);
     const roles = Object.fromEntries(p.components.map((c) => [c.id, c.role]));
     expect(roles).toMatchObject({ "profile-writer": "match", "redis:redis-url": "neighbor", "profile-reader": "neighbor" });
     expect(p.components.find((c) => c.id === "profile-reader")!.reason).toBe('queue partner of profile-writer across redis:redis-url: reads "get profile-cache" [proven]');

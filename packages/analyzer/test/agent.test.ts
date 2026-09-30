@@ -121,7 +121,7 @@ describe("context packet", () => {
   // symbol exactly (handleOrder); vaguer wording is not covered by this test.
   it("an order timing out surfaces components on both sides of the queue (issue names a symbol)", () => {
     const p = buildContext(snapshot, "handleOrder times out after placing an order");
-    expect(p.confidence.level).toBe("high");
+    expect(p.confidence!.level).toBe("high");
     const roles = Object.fromEntries(p.components.map((c) => [c.id, c.role]));
     expect(roles.orders).toBe("match");
     expect(roles["queue-client"]).toBe("neighbor"); // producer side
@@ -138,7 +138,7 @@ describe("context packet", () => {
 
   it("says plainly when confidence is low and tells the agent to fall back to code search", () => {
     const p = buildContext(snapshot, "the page feels slow"); // ("app" would match the fixture's api:api-app id)
-    expect(["low", "none"]).toContain(p.confidence.level);
+    expect(["low", "none"]).toContain(p.confidence!.level);
     expect(p.advice).toMatch(/fall back to normal code search/);
     expect(p.components).toEqual([]);
     expect(formatContext(p)).toContain("(heuristic, not a probability)");

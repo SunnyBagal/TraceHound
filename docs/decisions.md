@@ -502,6 +502,26 @@ and diffs. Installing git over apt at build time would leave the package version
 - `tracehound context --decider lexical|nemotron`. The default stays lexical until the held-out
   evaluation decides.
 
+**Revision (2026-09-30, made after seeing dev results):** the first version's rules caused
+two structural problems on the dev issues:
+- "Return exactly k" forced padding: dev issue 2's #3 was an unrelated component.
+- Free-prose reasons couldn't be checked: one said a component *imports* a symbol it actually
+  *exports*.
+
+This is a structural fix, not a prompt tweak aimed at particular issues:
+- Every fact in the prompt now has a stable id `<componentId>#f<n>` (fixed order: files,
+  routes, exported symbols, Redis keys, error messages, edges).
+- The reply is `{"ranking":[{componentId, issuePhrase, factIds, note?}]}` with **at most** k
+  entries. `{"ranking":[]}` is a valid abstention when no fact relates to the issue.
+- Validation is deterministic: strict JSON and shape; known, unique component ids; `issuePhrase`
+  a non-empty **verbatim** substring of the issue; `factIds` non-empty, existing, and belonging
+  to that component; any `note` one line of at most 200 characters. It retries once with the
+  exact error, then falls back to lexical with the logged reason.
+- **Display:** the reason is built from the snapshot's fact text (`"<issuePhrase>" ↔ <fact
+  texts>`). The model's note, if any, is appended with the label `model-written note:`.
+- **Confidence:** with the nemotron decider, the lexical confidence isn't shown at all. The only
+  low-confidence signal is the ranking itself: empty (the packet tells the agent to fall back
+  to code search) or shorter than k (reported as `short ranking: n of k`).
 **Rejected:** (a) Merging the model's picks with lexical ones: nobody could tell which ranking
 produced a given component. (b) Giving the model source code or the naming summaries: that's
 more tokens, and the summaries contain unverified prose. (c) Tolerant parsing (stripping fences,

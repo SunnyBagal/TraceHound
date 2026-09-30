@@ -13,8 +13,9 @@ export type ConfidenceLevel = "high" | "medium" | "low" | "none";
 export interface ContextPacket {
   issue: string;
   snapshot: { repo: string; commitSha: string; analyzerVersion: string };
-  ranking: { method: string; decider: string; terms: string[]; fallback?: string; model?: string; usage?: DeciderResult["usage"] };
-  confidence: {
+  ranking: { method: string; decider: string; terms: string[]; fallback?: string; model?: string; usage?: DeciderResult["usage"]; signal?: string };
+  /** Lexical ranking only. Absent with the nemotron decider: there, an empty or short ranking is the signal. */
+  confidence?: {
     level: ConfidenceLevel;
     topScore: number;
     secondScore: number;
@@ -55,7 +56,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  * (weight 2) to 0.67; a lone name/route match (3) to 1.0. "high" also needs the top to at
  * least double #2.
  */
-export function confidenceOf(ranked: Ranked[], idf: Record<string, number> = {}): ContextPacket["confidence"] {
+export function confidenceOf(ranked: Ranked[], idf: Record<string, number> = {}): NonNullable<ContextPacket["confidence"]> {
   const topScore = ranked[0]?.score ?? 0;
   const secondScore = ranked[1]?.score ?? 0;
   const maxAchievable = round2(Object.values(idf).reduce((n, v) => n + MAX_FIELD_WEIGHT * v, 0));
@@ -71,6 +72,8 @@ export function confidenceOf(ranked: Ranked[], idf: Record<string, number> = {})
   return { level, topScore, secondScore, maxAchievable, normalizedTop, lead, rule: CONFIDENCE_RULE, note };
 }
 
+const NO_MODEL_MATCH =
+  "The nemotron decider cited no fact related to this issue. Do not rely on this packet: fall back to normal code search (grep/ripgrep for the issue's key terms, read entry points).";
 const FALLBACK =
   "Confidence is LOW. Do not rely on this packet: fall back to normal code search (grep/ripgrep for the issue's key terms, read entry points) and use the graph only to check what you find.";
 
@@ -173,16 +176,24 @@ export function buildContext(snapshot: Snapshot, issue: string, opts: { budget?:
       snapshot: { repo: snapshot.repo.name, commitSha: snapshot.repo.commitSha, analyzerVersion: snapshot.analyzerVersion },
       ranking: {
         method: byModel
-          ? "nemotron: Nemotron Nano ranked components from deterministic facts (no model-written text); confidence below is the lexical heuristic's, for reference"
+          ? "nemotron: Nemotron Nano picked components by citing fact ids and a verbatim issue phrase (validated); fact text below comes from the snapshot"
           : "v1 lexical: issue terms vs ids/names, routes, exported symbols, files, Redis keys, error messages, env vars (docs/decisions.md 025)",
         decider: opts.decided?.decider ?? "lexical",
         terms,
         ...(opts.decided?.fallback && { fallback: opts.decided.fallback }),
         ...(opts.decided?.model && { model: opts.decided.model }),
         ...(opts.decided && opts.decided.usage.calls > 0 && { usage: opts.decided.usage }),
+        ...(byModel && {
+          signal:
+            opts.decided!.ranking.length === 0
+              ? "empty ranking: the model cited no fact related to the issue"
+              : opts.decided!.ranking.length < opts.decided!.k
+                ? `short ranking: ${opts.decided!.ranking.length} of k=${opts.decided!.k}`
+                : `full ranking: ${opts.decided!.k} of k=${opts.decided!.k}`,
+        }),
       },
-      confidence,
-      ...(confidence.level === "low" || confidence.level === "none" ? { advice: FALLBACK } : {}),
+      ...(!byModel && { confidence }),
+      ...(byModel ? (opts.decided!.ranking.length === 0 ? { advice: NO_MODEL_MATCH } : {}) : confidence.level === "low" || confidence.level === "none" ? { advice: FALLBACK } : {}),
       components,
       edges,
       tests,
@@ -226,7 +237,8 @@ export function formatContext(p: ContextPacket): string {
   }
   out.push(`terms: ${p.ranking.terms.join(", ") || "(none)"}`);
   const c = p.confidence;
-  out.push(`${p.ranking.decider === "nemotron" ? "lexical " : ""}confidence: ${c.level.toUpperCase()} (heuristic, not a probability) · top ${c.topScore} of max ${c.maxAchievable} (normalized ${c.normalizedTop}), #2 ${c.secondScore}, lead ${c.lead} · ${c.note}`);
+  if (c) out.push(`confidence: ${c.level.toUpperCase()} (heuristic, not a probability) · top ${c.topScore} of max ${c.maxAchievable} (normalized ${c.normalizedTop}), #2 ${c.secondScore}, lead ${c.lead} · ${c.note}`);
+  if (p.ranking.signal) out.push(`signal: ${p.ranking.signal}`);
   if (p.advice) out.push(`⚠ ${p.advice}`);
   out.push("");
   out.push(`Components (${p.components.length})`);
