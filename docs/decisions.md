@@ -715,6 +715,18 @@ model didn't mean. (d) Hard-rejecting every empty finish: legitimate no-op answe
 impossible. (e) Graph-specific hints ("start with context_packet"): the graph condition must
 differ only by the tools and their one sentence.
 
+**Addendum (2026-10-01): the gate failed.** agent-v2 on toy-discount (Nano, reasoning off, 5
+runs graph off then 5 graph on): graph off resolved **2 of 5**, and the gate needed 4 of 5.
+Per its rule, the session stopped without further fixes. Table, failure modes and the
+decider-v1 dev results are in `eval/dev-log/2026-09-30-toy-gate.md`.
+- What the guards did: the repeat guard fired (31 refusals in one run) but the model ignored
+  the refusals. The whitespace fallback applied in 3 runs, and the empty-finish check in 2.
+- What remained: `bun run -e` misuse, whose usage-text output (about 1,900 tokens, exit 0)
+  exhausted the token budget; near-duplicate grep loops; no edit in any failed run.
+What followed: agent-v3 (decision 033): a tool-output cap, a stuck stop after consecutive
+refusals, one no-edit nudge, and a single way to run scratch code. Then diagnostic runs with
+graph off only, reasoning off vs on.
+
 ## 031 · Viewer: capped zoom, a header icon rule, transient panel↔canvas highlight, left rail
 **Choice:**
 - **Zoom is capped at 0.4–1.5 on an unbounded canvas** (Railway-style): panning is free, zoom is

@@ -3,7 +3,7 @@
 Analyzes a TypeScript repo and renders it as an interactive, evidence-backed component graph
 on a canvas. Later: a graph-guided repair agent.
 
-## Current state (2026-09-30)
+## Current state (2026-10-01)
 - **Live:** https://tracehound-tau.vercel.app (Vercel, Root Directory `viewer`, auto-deploys
   from `main`; leave Output Directory unset). CI (`.github/workflows/ci.yml`) runs tests,
   typecheck, and the viewer build, and checks that `out/snapshots/index.json` exists.
@@ -17,15 +17,22 @@ on a canvas. Later: a graph-guided repair agent.
   writes a report the viewer serves at `?impact=<name>` (changed/affected styling, dynamic
   edges flagged, chain panel). The viewer build fails if an impact cites an id missing from its
   base snapshot. Precomputed: `seed-queue-consumer`, `seed-rpc-bridge`, `seed-pending-registry`.
-- **Repair harness core (feature 6, decision 026):** `pnpm tracehound repair --task
-  eval/tasks/<id>/task.json --agent oracle|noop [--patch f] --provider docker` → `runs/<id>.json`.
-  LocalDockerProvider only (Contree after the Sandboxes spike). Sandbox image
-  `tracehound-sandbox:bun1.4.2-ts5.9.3-1` from `harness/sandbox.Dockerfile`. Toy fixture:
-  `node eval/fixtures/build-toy-repo.ts`, tasks `eval/tasks/toy-*`. No LLM agent loop yet; the
-  user writes CEX tasks.
+- **Repair harness (feature 6, decision 026):** `pnpm tracehound repair --task
+  eval/tasks/<id>/task.json --agent oracle|noop|nemotron [--patch f] [--graph on|off]
+  [--reasoning on|off] --provider docker` → `runs/<id>.json`. LocalDockerProvider only (Contree
+  after the Sandboxes spike). Sandbox image `tracehound-sandbox:bun1.4.2-ts5.9.3-1` from
+  `harness/sandbox.Dockerfile`. The sandbox's history is squashed to one fixed `base` commit
+  after setup (no `git log -p` leak). Toy fixture: `node eval/fixtures/build-toy-repo.ts`, tasks
+  `eval/tasks/toy-*`. The user writes the CEX tasks (`eval/tasks/dev-*`, none on main yet).
+- **Repair agent (decisions 029, 030):** host-side loop with native tool calls, Nano by default.
+  agent-v2 (environment facts, repeat guard, whitespace-tolerant edit_file, confirm-on-empty
+  finish) **failed the toy gate: graph off resolved 2/5, needed 4/5**
+  (`eval/dev-log/2026-09-30-toy-gate.md`). The toy is a single-file bug, so on/off there says
+  nothing about the graph.
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
-  validates ids, retries once, then falls back to lexical visibly.
+  validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**
+  (issuePhrase ≤ 6 words) until the evaluation is over; dev results in the dev log above.
 - **Agent tools (feature 5):** `context` / `query` / `mcp` over a snapshot. Ranking v1 is lexical
   and deterministic, confidence is a labelled heuristic, and token counts are estimates (chars/4).
   See decision 025.
@@ -40,7 +47,8 @@ on a canvas. Later: a graph-guided repair agent.
   `node src/cli.ts … --cache-only` (any cache miss aborts, no network).
 - **Naming:** Nano with reasoning off (`chat_template_kwargs.enable_thinking=false`, decision
   020) plus deterministic checks (021). Nano beat Super on cost and tied on checks, so Nano
-  stays the default. Spend so far is about $0.043 (`pnpm spend`).
+  stays the default. Naming spend was about $0.043; all-time spend is in `pnpm spend`
+  ($0.246 on 2026-10-01, mostly repair-agent runs).
 - **Prices:** `config/prices.json` has Nano/Super rates from third-party trackers, not yet
   verified in the Nebius console.
 
