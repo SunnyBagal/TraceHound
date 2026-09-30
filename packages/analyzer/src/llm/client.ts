@@ -43,6 +43,8 @@ export interface TokenFactoryOptions {
   ledger: SpendLedger;
   cache?: ResponseCache;
   readCache?: boolean; // false = --no-cache: always call, still refresh the cache
+  /** --cache-only: serve cache hits, throw CacheMissError on a miss; never reserve budget or fetch. */
+  offline?: boolean;
   timeoutMs?: number;
   fetch?: typeof fetch;
   now?: () => Date;
@@ -50,6 +52,11 @@ export interface TokenFactoryOptions {
 
 export class LlmHttpError extends Error {
   override name = "LlmHttpError";
+}
+
+/** Offline mode found no cached response: the request would have been a real (paid) call. */
+export class CacheMissError extends Error {
+  override name = "CacheMissError";
 }
 
 export class TokenFactoryClient {
@@ -61,6 +68,7 @@ export class TokenFactoryClient {
       ...opts,
       baseUrl: opts.baseUrl ?? DEFAULT_BASE_URL,
       readCache: opts.readCache ?? true,
+      offline: opts.offline ?? false,
       timeoutMs: opts.timeoutMs ?? 60_000,
       fetch: opts.fetch ?? globalThis.fetch,
       now: opts.now ?? (() => new Date()),
@@ -77,6 +85,7 @@ export class TokenFactoryClient {
 
   /** GET /models — free; used to confirm a model id resolves before any paid call. */
   async listModels(): Promise<string[]> {
+    if (this.#opts.offline) throw new CacheMissError("GET /models is a network call; not allowed in offline (cache-only) mode");
     const res = await this.#opts.fetch(this.#url("/models"), { headers: this.#headers(), signal: AbortSignal.timeout(this.#opts.timeoutMs) });
     const body = (await res.json().catch(() => ({}))) as { data?: { id: string }[] } & CompletionBody;
     if (!res.ok) throw new LlmHttpError(`GET /models → HTTP ${res.status}: ${errorText(body)}`);
@@ -101,6 +110,10 @@ export class TokenFactoryClient {
           ...reasoningStats(hit),
         };
       }
+    }
+
+    if (this.#opts.offline) {
+      throw new CacheMissError(`no cached response for ${meta.purpose}${meta.componentId ? ` (${meta.componentId})` : ""} on ${request.model}`);
     }
 
     // Worst case: estimated prompt tokens + every allowed completion token, at the (possibly

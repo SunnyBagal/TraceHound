@@ -11,8 +11,12 @@ on a canvas. Later: a graph-guided repair agent.
   anchor-reach grouping; `tracehound.json` overrides; orphan warnings; `proven` /
   `resolved-default` / `dynamic` labels) → static snapshots + manifest → viewer (React Flow +
   ELK, node/edge inspectors, GitHub permalinks, warnings panel, phone bottom sheet).
-- **Demo:** `rahul-MyGit/cex-v2-boilercode` @ `da0e3d6` → 9 components, 17 edges, 1 orphan
-  warning (`engine/src/store/exchange-store.ts`).
+- **Demo:** `SunnyBagal/cex-v2-boilercode` (fork of `rahul-MyGit/cex-v2-boilercode`, used with
+  the original author's agreement) @ `da0e3d6` → 9 components, 17 edges, 1 orphan warning
+  (`engine/src/store/exchange-store.ts`). The fork's `main` must stay at `da0e3d6`; seeded
+  changes live on `seed/<name>` branches based on `da0e3d6` and are never merged. Don't add a
+  LICENSE file to the fork. Regenerate names without spending:
+  `node src/cli.ts … --cache-only` (any cache miss aborts, no network).
 - **Naming:** Nano with reasoning off (`chat_template_kwargs.enable_thinking=false`, decision
   020) plus deterministic checks (021). Nano beat Super on cost and tied on checks, so Nano
   stays the default. Spend so far is about $0.043 (`pnpm spend`).
@@ -20,14 +24,13 @@ on a canvas. Later: a graph-guided repair agent.
   verified in the Nebius console.
 
 ### Open blockers
-1. **Sandbox spike blocked on permissions.** Auth works with `NEBIUS_API_KEY` +
-   `NEBIUS_AI_PROJECT`, but `/whoami` reports every Sandboxes permission `false`; list and
-   spawn return 403 (FEEDBACK.md, 2026-09-30). Sandboxes access must be granted on the Nebius
-   side (key/project, or beta via contree@nebius.com), then rerun
+1. ~~**CEX has no license.**~~ Closed 2026-09-30: the demo repo is the fork
+   `SunnyBagal/cex-v2-boilercode`, with the original author's agreement.
+2. **Sandbox: waiting on Sandboxes beta access** (requested in the console; free during beta,
+   runs don't consume credits). Until then `/whoami` reports every permission `false` and
+   list/spawn return 403 (FEEDBACK.md, 2026-09-30). Don't call the Sandboxes API or edit the
+   spike script until access is confirmed, then rerun
    `node --env-file=.env scripts/sandbox-spike.ts`. Decision 022 (TypeScript over REST) stands.
-2. **CEX has no license.** There's no LICENSE file or license field anywhere, so it stays
-   all-rights-reserved. Don't create a modified fork for the repair harness until that's
-   resolved (ask the author, or use another demo repo).
 3. **Naming check bug (slash identifiers).** `isIdentifierLike` in `src/naming/checks.ts` only
    flags `a/b` tokens that also contain `.`, `_` or `-`, so Super's "BRPOP/LPUSH" passed even
    though the facts spell them `brPop`/`lPush`. Prose claims ("uses Prisma models",

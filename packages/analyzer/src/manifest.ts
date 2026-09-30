@@ -6,7 +6,8 @@ export const MANIFEST_FILE = "index.json";
 
 /** Insert or replace the entry for (repo, sha, analyzerVersion) and point `latest` at it. */
 export function upsertManifest(manifest: SnapshotManifest | undefined, entry: ManifestEntry): SnapshotManifest {
-  const same = (e: ManifestEntry) => e.repo === entry.repo && e.sha === entry.sha && e.analyzerVersion === entry.analyzerVersion;
+  // Same path = same file on disk, which this entry just overwrote (e.g. a repo rename), so it's stale too.
+  const same = (e: ManifestEntry) => e.path === entry.path || (e.repo === entry.repo && e.sha === entry.sha && e.analyzerVersion === entry.analyzerVersion);
   const snapshots = [...(manifest?.snapshots ?? []).filter((e) => !same(e)), entry].sort(
     (a, b) => b.createdAt.localeCompare(a.createdAt) || a.path.localeCompare(b.path),
   );

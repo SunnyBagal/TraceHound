@@ -14,7 +14,7 @@ else describe("demo repo (cex-v2-boilercode @ da0e3d6)", () => {
   const edge = (from: string, to: string, kind: string) => snap.edges.find((e) => e.source === id(from) && e.target === id(to) && e.kind === kind);
 
   it("is keyed by the pinned commit", () => {
-    expect(snap.repo).toMatchObject({ name: "rahul-MyGit/cex-v2-boilercode", commitSha: "da0e3d640a9c02f815fcca48f8328c94558cc058" });
+    expect(snap.repo).toMatchObject({ name: "SunnyBagal/cex-v2-boilercode", commitSha: "da0e3d640a9c02f815fcca48f8328c94558cc058" });
   });
 
   it("groups 22 files into 8 responsibility components", () => {

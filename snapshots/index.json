@@ -1,19 +1,19 @@
 {
   "schemaVersion": 1,
   "latest": {
-    "repo": "rahul-MyGit/cex-v2-boilercode",
+    "repo": "SunnyBagal/cex-v2-boilercode",
     "sha": "da0e3d640a9c02f815fcca48f8328c94558cc058",
     "analyzerVersion": "0.3.0",
     "path": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.3.0.json",
-    "createdAt": "2026-09-30T06:25:53.405Z"
+    "createdAt": "2026-09-30T09:07:51.101Z"
   },
   "snapshots": [
     {
-      "repo": "rahul-MyGit/cex-v2-boilercode",
+      "repo": "SunnyBagal/cex-v2-boilercode",
       "sha": "da0e3d640a9c02f815fcca48f8328c94558cc058",
       "analyzerVersion": "0.3.0",
       "path": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.3.0.json",
-      "createdAt": "2026-09-30T06:25:53.405Z"
+      "createdAt": "2026-09-30T09:07:51.101Z"
     },
     {
       "repo": "rahul-MyGit/cex-v2-boilercode",

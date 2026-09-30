@@ -3,7 +3,7 @@
 // change `name`, `summary` and `naming` on components. Edges, evidence and ids pass through as-is.
 import { z } from "zod";
 import { BudgetExceededError } from "../llm/budget.ts";
-import type { ChatRequest, ChatResult } from "../llm/client.ts";
+import { CacheMissError, type ChatRequest, type ChatResult } from "../llm/client.ts";
 import type { Component, LlmCall, Snapshot } from "../schema.ts";
 import { checkReply } from "./checks.ts";
 import { componentFacts, type NamingFacts } from "./facts.ts";
@@ -100,6 +100,7 @@ async function nameOne(snapshot: Snapshot, component: Component, client: LlmNami
     return { call, reply: { name: checked.name, summary: checked.summary } };
   } catch (error) {
     if (error instanceof BudgetExceededError) throw error; // never degrade silently past a cap
+    if (error instanceof CacheMissError) throw error; // cache-only runs must not quietly fall back either
     call.error = error instanceof Error ? error.message : String(error);
     if (!call.latencyMs) call.latencyMs = Math.round(performance.now() - started);
     return { call, reply: undefined };

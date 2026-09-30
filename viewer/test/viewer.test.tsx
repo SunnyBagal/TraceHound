@@ -5,6 +5,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { GraphCanvas } from "@/components/GraphCanvas";
+import { permalink } from "@/lib/github";
 import { EDGE_STYLES } from "@/lib/graph";
 
 // The committed demo snapshot, loaded exactly as the viewer does: manifest → latest.
@@ -21,6 +22,14 @@ function renderCanvas() {
     </div>,
   );
 }
+
+describe("demo snapshot permalinks", () => {
+  it("point at the fork, pinned to the full commit SHA", () => {
+    expect(permalink(snapshot.repo, "engine/src/index.ts", 3, 7)).toBe(
+      "https://github.com/SunnyBagal/cex-v2-boilercode/blob/da0e3d640a9c02f815fcca48f8328c94558cc058/engine/src/index.ts#L3-L7",
+    );
+  });
+});
 
 describe("GraphCanvas with the demo snapshot", () => {
   it("renders one node per component (9)", async () => {

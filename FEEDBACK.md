@@ -195,3 +195,21 @@ Observations from building TraceHound. Facts only; newest entries at the bottom.
   Sandboxes. We found no page saying how to get Sandboxes permissions on a key or project.
 - **Error quality:** the 403 bodies name the missing permission, and `/whoami` shows the full
   permission set, so the cause was clear after one call.
+
+---
+
+## 2026-09-30 · Sandboxes need a separate beta-access request
+
+- **What unblocked it:** Sandboxes access has to be requested separately from the Token Factory
+  console. After that request, the console said Sandboxes are free during beta and runs don't
+  consume credits. (Access is still pending as of this entry.)
+- **None of the signals we hit said this:**
+  - `GET /whoami` returned HTTP 200 with every permission `false` and no hint about why or how
+    to change it.
+  - The 403 bodies (`Insufficient permissions: list`,
+    `Insufficient permissions: spawn or spawn_disposable`) name the missing permission but not
+    that beta access is required.
+  - The Team Access docs ("Groups & Access management") list project-level permissions for
+    other APIs but don't mention Sandboxes or a beta request.
+- **Suggestion:** mention the beta-access request in the 403 body or the `/whoami` response,
+  and on the Sandboxes overview and CLI install pages.

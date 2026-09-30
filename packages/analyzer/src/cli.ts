@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 import { analyzeRepo } from "./analyze.ts";
 import { Budget, BudgetExceededError, capsFromEnv } from "./llm/budget.ts";
 import { ResponseCache } from "./llm/cache.ts";
-import { TokenFactoryClient } from "./llm/client.ts";
+import { CacheMissError, TokenFactoryClient } from "./llm/client.ts";
 import { SpendLedger } from "./llm/ledger.ts";
 import { closestModel } from "./llm/models.ts";
 import { loadPriceTable, priceFor } from "./llm/prices.ts";
@@ -25,11 +25,12 @@ const { values } = parseArgs({
     naming: { type: "string", default: "llm" }, // "llm" (falls back per component) | "heuristic"
     model: { type: "string" }, // default Nano; Super/Ultra only when passed explicitly
     "no-cache": { type: "boolean", default: false },
+    "cache-only": { type: "boolean", default: false }, // naming from cached responses only; any miss aborts, zero network
     reasoning: { type: "string", default: "off" }, // naming: "off" (enable_thinking=false) | "on" (model default)
   },
 });
-if (!values.repo || !["llm", "heuristic"].includes(values.naming!)) {
-  console.error("usage: node src/cli.ts --repo <path> [--config <tracehound.json>] [--naming llm|heuristic] [--model <id>] [--no-cache] [--out <dir>]");
+if (!values.repo || !["llm", "heuristic"].includes(values.naming!) || (values["cache-only"] && values["no-cache"])) {
+  console.error("usage: node src/cli.ts --repo <path> [--config <tracehound.json>] [--naming llm|heuristic] [--model <id>] [--no-cache | --cache-only] [--out <dir>]");
   process.exit(1);
 }
 
@@ -42,7 +43,8 @@ const started = performance.now();
 let snapshot = analyzeRepo(values.repo, { configPath: values.config });
 
 const apiKey = process.env.NEBIUS_API_KEY;
-if (values.naming === "llm" && apiKey) {
+const cacheOnly = values["cache-only"]!;
+if (values.naming === "llm" && (apiKey || cacheOnly)) {
   const model = values.model ?? DEFAULT_MODEL;
   if (values.model && values.model !== DEFAULT_MODEL) console.error(`[naming] ⚠ non-default model ${model} requested explicitly`);
 
@@ -59,7 +61,10 @@ if (values.naming === "llm" && apiKey) {
   );
 
   const client = new TokenFactoryClient({
-    apiKey,
+    apiKey: cacheOnly ? "" : apiKey!,
+    offline: cacheOnly,
+    // belt and braces: in cache-only mode no code path may reach the network
+    ...(cacheOnly && { fetch: (async () => fail("network call attempted in --cache-only mode")) as unknown as typeof fetch }),
     baseUrl: process.env.NEBIUS_BASE_URL,
     prices,
     budget,
@@ -68,16 +73,20 @@ if (values.naming === "llm" && apiKey) {
     readCache: !values["no-cache"],
   });
 
-  // Free preflight: make sure the model id resolves before spending anything.
-  const available = await client.listModels().catch((error: Error) => fail(`could not list models: ${error.message}`));
-  if (!available.includes(model)) {
-    const suggestion = closestModel(model, available);
-    fail(
-      `model id "${model}" is not in GET /models (${available.length} models).` +
-        (suggestion ? ` Did you mean "${suggestion.id}"? (${suggestion.reason})` : ` Available: ${available.join(", ")}`),
-    );
+  if (cacheOnly) {
+    console.error(`[naming] --cache-only: cached responses only, no network; any cache miss aborts the run`);
+  } else {
+    // Free preflight: make sure the model id resolves before spending anything.
+    const available = await client.listModels().catch((error: Error) => fail(`could not list models: ${error.message}`));
+    if (!available.includes(model)) {
+      const suggestion = closestModel(model, available);
+      fail(
+        `model id "${model}" is not in GET /models (${available.length} models).` +
+          (suggestion ? ` Did you mean "${suggestion.id}"? (${suggestion.reason})` : ` Available: ${available.join(", ")}`),
+      );
+    }
+    console.error(`[naming] model ${model} resolved via GET /models`);
   }
-  console.error(`[naming] model ${model} resolved via GET /models`);
 
   try {
     const reasoning = values.reasoning === "on" ? {} : NO_REASONING;
@@ -85,6 +94,7 @@ if (values.naming === "llm" && apiKey) {
     snapshot = Snapshot.parse(await nameComponentsWithLlm(snapshot, { client, model, reasoning, log: (call) => console.error(formatCall(call)) }));
   } catch (error) {
     if (error instanceof BudgetExceededError) fail(`budget guard: ${error.message}. No snapshot written.`);
+    if (error instanceof CacheMissError) fail(`--cache-only: ${error.message}. No snapshot written; nothing was sent.`);
     throw error;
   }
   console.error(`[budget] this run ~$${budget.runSpent.toFixed(5)} · total now ~$${(budget.spentBeforeRun + budget.runSpent).toFixed(5)} of $${caps.totalUSD}`);

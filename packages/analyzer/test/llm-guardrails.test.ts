@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Budget, BudgetExceededError, capsFromEnv, DEFAULT_CAPS } from "../src/llm/budget.ts";
 import { ResponseCache } from "../src/llm/cache.ts";
-import { TokenFactoryClient, type ChatRequest } from "../src/llm/client.ts";
+import { CacheMissError, TokenFactoryClient, type ChatRequest } from "../src/llm/client.ts";
 import { SpendLedger, summarize } from "../src/llm/ledger.ts";
 import { costUSD, priceFor } from "../src/llm/prices.ts";
 import { fakeClient, TEST_PRICES } from "./helpers.ts";
@@ -83,6 +83,19 @@ describe("TokenFactoryClient", () => {
     // a new process (fresh client, same state dir) also hits the cache
     const second = fakeClient(scriptedFetch([ok()]).impl, { dir });
     expect((await second.client.chat(request(), { purpose: "p" })).cached).toBe(true);
+  });
+
+  it("offline (--cache-only) serves hits and throws on a miss without fetch, reservation or ledger", async () => {
+    const f = scriptedFetch([ok()]);
+    const { dir } = fakeClient(f.impl);
+    await fakeClient(f.impl, { dir }).client.chat(request(), { purpose: "p" }); // warm the cache
+    const offline = fakeClient(f.impl, { dir, offline: true });
+    expect((await offline.client.chat(request(), { purpose: "p" })).cached).toBe(true);
+    await expect(offline.client.chat(request(undefined, "not cached"), { purpose: "p", componentId: "c" })).rejects.toThrow(CacheMissError);
+    await expect(offline.client.listModels()).rejects.toThrow(CacheMissError);
+    expect(f.count()).toBe(1); // only the warm-up call
+    expect(offline.budget.runSpent).toBe(0);
+    expect(offline.ledger.entries()).toHaveLength(1); // the warm-up's entry, nothing new
   });
 
   it("keys the cache on the full prompt and model", async () => {
