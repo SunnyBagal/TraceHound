@@ -479,3 +479,31 @@ see the answer key. (d) `oven/bun` alone: it has no git, which the harness needs
 and diffs. Installing git over apt at build time would leave the package version unpinned.
 (e) Building the Contree provider now: its API permissions are unverified (FEEDBACK
 2026-09-30), so an untested second provider would just be guesswork.
+
+## 027 · Decider interface; Nemotron localizer over deterministic facts, with a visible fallback
+**Choice:** Localization (which components an issue is about) goes through a `Decider`:
+`decide({ issue, snapshot, k }) → { ranking: [{ componentId, reason }], decider, usage }`.
+- `lexical` is ranking v1 (025), unchanged.
+- `nemotron` sends Nemotron Nano, with reasoning off (`enable_thinking: false`) and
+  temperature 0, the issue plus deterministic facts per component: id, kind, files, routes,
+  exported symbols, Redis keys, error-message literals, and edges (kind, direction, other
+  component, label). It never sees model-written names or summaries.
+- **Validation:** the reply must be a strict JSON object (`JSON.parse` of the trimmed text; code
+  fences count as invalid) with exactly `min(k, #components)` entries. Every id must exist in
+  the snapshot, with no duplicates and a one-line reason.
+- **Retry and fallback:** on failure it retries once, sending back the previous reply plus the
+  exact error. The retry is a different prompt, so the response cache can't just replay the
+  bad answer. If the retry also fails, the result is the lexical ranking in full, with
+  `decider: "lexical (nemotron fallback)"` and `fallback: "nemotron fallback: <why>"`, logged
+  to stderr. The two rankings are never mixed.
+- **Spend:** calls go through the shared `TokenFactoryClient`: cache (model + full request
+  hash) → budget → request → ledger (purpose `localizer`). Cache hits cost $0 and aren't
+  ledgered, since the ledger records spend; the decider's `usage` still counts them.
+- `tracehound context --decider lexical|nemotron`. The default stays lexical until the held-out
+  evaluation decides.
+
+**Rejected:** (a) Merging the model's picks with lexical ones: nobody could tell which ranking
+produced a given component. (b) Giving the model source code or the naming summaries: that's
+more tokens, and the summaries contain unverified prose. (c) Tolerant parsing (stripping fences,
+fixing trailing commas): the output contract is strict JSON, and silent repair would hide how
+often the model breaks it.

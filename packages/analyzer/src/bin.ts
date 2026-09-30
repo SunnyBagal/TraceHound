@@ -12,11 +12,15 @@ if (command === "impact") {
   const { main } = await import("./impact/cli.ts");
   main(rest);
 } else if (command === "context") {
+  // --decider nemotron needs NEBIUS_API_KEY: load the workspace .env for this command only
+  const { existsSync } = await import("node:fs");
+  const envFile = new URL("../../../.env", import.meta.url).pathname;
+  if (existsSync(envFile) && !process.env.NEBIUS_API_KEY) process.loadEnvFile(envFile);
   const { main, runContext } = await import("./agent/cli.ts");
-  main(runContext, rest);
+  await main(runContext, rest);
 } else if (command === "query") {
   const { main, runQuery } = await import("./agent/cli.ts");
-  main(runQuery, rest);
+  await main(runQuery, rest);
 } else if (command === "mcp") {
   const { runMcp } = await import("./agent/mcp.ts");
   await runMcp(rest);
@@ -30,7 +34,7 @@ if (command === "impact") {
   console.error(
     "usage: tracehound <analyze|impact|context|query|mcp|repair> [...args]\n" +
       "  tracehound impact --repo <path> --diff <base>..<head> [--depth 2] [--json] [--out <file>]\n" +
-      '  tracehound context --issue "<text>" [--snapshot <path>] [--budget <tokens>] [--json]\n' +
+      '  tracehound context --issue "<text>" [--decider lexical|nemotron] [--k 3] [--snapshot <path>] [--budget <tokens>] [--json]\n' +
       "  tracehound query <search_components|get_neighbors|get_edge_evidence|get_related_tests> ... [--json]\n" +
       "  tracehound mcp [--snapshot <path>]\n" +
       "  tracehound repair --task <task.json> --agent oracle|noop [--patch <file>] --provider docker",

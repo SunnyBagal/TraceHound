@@ -23,6 +23,9 @@ on a canvas. Later: a graph-guided repair agent.
   `tracehound-sandbox:bun1.4.2-ts5.9.3-1` from `harness/sandbox.Dockerfile`. Toy fixture:
   `node eval/fixtures/build-toy-repo.ts`, tasks `eval/tasks/toy-*`. No LLM agent loop yet; the
   user writes CEX tasks.
+- **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
+  The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
+  validates ids, retries once, then falls back to lexical visibly.
 - **Agent tools (feature 5):** `context` / `query` / `mcp` over a snapshot. Ranking v1 is lexical
   and deterministic, confidence is a labelled heuristic, and token counts are estimates (chars/4).
   See decision 025.

@@ -1,6 +1,7 @@
 // Context packet v1: what an agent should read first for an issue, from the snapshot alone.
 // Ranking and confidence are deterministic heuristics (docs/decisions.md 025), not probabilities.
 import type { ComponentEdge, Snapshot } from "../schema.ts";
+import type { DeciderResult } from "./decider.ts";
 import { estimateTokens, rankComponents, repoTokens, type Ranked } from "./rank.ts";
 
 const BROKER_KINDS = new Set(["queue", "cache"]);
@@ -12,7 +13,7 @@ export type ConfidenceLevel = "high" | "medium" | "low" | "none";
 export interface ContextPacket {
   issue: string;
   snapshot: { repo: string; commitSha: string; analyzerVersion: string };
-  ranking: { method: string; terms: string[] };
+  ranking: { method: string; decider: string; terms: string[]; fallback?: string; model?: string; usage?: DeciderResult["usage"] };
   confidence: {
     level: ConfidenceLevel;
     topScore: number;
@@ -73,7 +74,12 @@ export function confidenceOf(ranked: Ranked[], idf: Record<string, number> = {})
 const FALLBACK =
   "Confidence is LOW. Do not rely on this packet: fall back to normal code search (grep/ripgrep for the issue's key terms, read entry points) and use the graph only to check what you find.";
 
-export function buildContext(snapshot: Snapshot, issue: string, opts: { budget?: number; evidencePerEdge?: number } = {}): ContextPacket {
+/**
+ * `decided`: a Decider's result. Lexical (or a nemotron fallback, which *is* the lexical ranking)
+ * builds the packet exactly as ranking v1 does. A nemotron ranking replaces the matches and is
+ * expanded the same way; the confidence shown is still the lexical heuristic's, labelled as such.
+ */
+export function buildContext(snapshot: Snapshot, issue: string, opts: { budget?: number; evidencePerEdge?: number; decided?: DeciderResult } = {}): ContextPacket {
   const budget = opts.budget ?? 2000;
   const { terms, idf, ranked } = rankComponents(snapshot, issue);
   const confidence = confidenceOf(ranked, idf);
@@ -83,8 +89,11 @@ export function buildContext(snapshot: Snapshot, issue: string, opts: { budget?:
   // 1. matches: top components with score > 0, at most 3, each at least half the top score.
   //    LOW/NONE confidence: at most the top 2 candidates and no expansion (the packet is a hint, not context)
   const top = ranked[0]?.score ?? 0;
-  const weak = confidence.level === "low" || confidence.level === "none";
-  const matches = ranked.filter((r) => r.score > 0 && r.score >= top / 2).slice(0, weak ? 2 : MAX_MATCHES);
+  const byModel = opts.decided?.decider === "nemotron";
+  const weak = !byModel && (confidence.level === "low" || confidence.level === "none");
+  const matches: Ranked[] = byModel
+    ? opts.decided!.ranking.map((r, i) => ({ id: r.componentId, score: 0, matches: [], reason: `nemotron #${i + 1}: ${r.reason}` }))
+    : ranked.filter((r) => r.score > 0 && r.score >= top / 2).slice(0, weak ? 2 : MAX_MATCHES);
   const included = new Map<string, { role: "match" | "neighbor"; score: number; reason: string }>(matches.map((m) => [m.id, { role: "match", score: m.score, reason: m.reason }]));
   const edgeIds = new Set<string>();
 
@@ -162,7 +171,16 @@ export function buildContext(snapshot: Snapshot, issue: string, opts: { budget?:
     const packet: ContextPacket = {
       issue,
       snapshot: { repo: snapshot.repo.name, commitSha: snapshot.repo.commitSha, analyzerVersion: snapshot.analyzerVersion },
-      ranking: { method: "v1 lexical: issue terms vs ids/names, routes, exported symbols, files, Redis keys, env vars (docs/decisions.md 025)", terms },
+      ranking: {
+        method: byModel
+          ? "nemotron: Nemotron Nano ranked components from deterministic facts (no model-written text); confidence below is the lexical heuristic's, for reference"
+          : "v1 lexical: issue terms vs ids/names, routes, exported symbols, files, Redis keys, error messages, env vars (docs/decisions.md 025)",
+        decider: opts.decided?.decider ?? "lexical",
+        terms,
+        ...(opts.decided?.fallback && { fallback: opts.decided.fallback }),
+        ...(opts.decided?.model && { model: opts.decided.model }),
+        ...(opts.decided && opts.decided.usage.calls > 0 && { usage: opts.decided.usage }),
+      },
       confidence,
       ...(confidence.level === "low" || confidence.level === "none" ? { advice: FALLBACK } : {}),
       components,
@@ -201,14 +219,19 @@ export function formatContext(p: ContextPacket): string {
   const out: string[] = [];
   out.push(`tracehound context · ${p.snapshot.repo}@${p.snapshot.commitSha.slice(0, 7)} · analyzer ${p.snapshot.analyzerVersion}`);
   out.push(`issue: ${JSON.stringify(p.issue)}`);
+  out.push(`decider: ${p.ranking.decider}${p.ranking.model ? ` (${p.ranking.model})` : ""}${p.ranking.fallback ? ` · ${p.ranking.fallback}` : ""}`);
+  if (p.ranking.usage) {
+    const u = p.ranking.usage;
+    out.push(`model usage: ${u.calls} call(s), ${u.cached} cached, ${u.inputTokens}+${u.outputTokens} tokens, ${u.latencyMs}ms, ~$${u.costUSD.toFixed(6)}`);
+  }
   out.push(`terms: ${p.ranking.terms.join(", ") || "(none)"}`);
   const c = p.confidence;
-  out.push(`confidence: ${c.level.toUpperCase()} (heuristic, not a probability) · top ${c.topScore} of max ${c.maxAchievable} (normalized ${c.normalizedTop}), #2 ${c.secondScore}, lead ${c.lead} · ${c.note}`);
+  out.push(`${p.ranking.decider === "nemotron" ? "lexical " : ""}confidence: ${c.level.toUpperCase()} (heuristic, not a probability) · top ${c.topScore} of max ${c.maxAchievable} (normalized ${c.normalizedTop}), #2 ${c.secondScore}, lead ${c.lead} · ${c.note}`);
   if (p.advice) out.push(`⚠ ${p.advice}`);
   out.push("");
   out.push(`Components (${p.components.length})`);
   for (const c of p.components) {
-    out.push(`  ${c.role === "match" ? `[${c.score}]` : "[hop]"} ${c.id}  ${c.name}  (${c.kind})`);
+    out.push(`  ${c.role === "match" ? (p.ranking.decider === "nemotron" ? "[model]" : `[${c.score}]`) : "[hop]"} ${c.id}  ${c.name}  (${c.kind})`);
     out.push(`      ${c.reason}`);
     if (c.files) out.push(`      files: ${c.files.join(", ")}`);
     else out.push(`      files: ${c.fileCount} (list trimmed for budget)`);
