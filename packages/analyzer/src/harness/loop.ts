@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { buildContext } from "../agent/context.ts";
-import { LexicalDecider, NemotronDecider } from "../agent/decider.ts";
+import { DECIDER_VERSION, LexicalDecider, NemotronDecider } from "../agent/decider.ts";
 import { getEdgeEvidence, getNeighbors, getRelatedTests, searchComponents, type Direction } from "../agent/query.ts";
 import type { ChatMessage, ChatRequest, ToolCall, ToolDefinition } from "../llm/client.ts";
 import { DEFAULT_MODEL, NO_REASONING } from "../naming/llm.ts";
@@ -54,6 +54,8 @@ export interface LoopTrace {
   renderedPromptSha256: string;
   graph: boolean;
   decider?: string;
+  /** DECIDER_VERSION of the code that ran (frozen for the evaluation) */
+  deciderVersion: string;
   tools: string[];
   turns: LoopTurn[];
   filesRead: string[];
@@ -102,6 +104,7 @@ export class RepairLoopAgent implements Agent {
       renderedPromptSha256: prompt.renderedSha256,
       graph: Boolean(opts.graph),
       ...(opts.graph && { decider: opts.graph.decider }),
+      deciderVersion: DECIDER_VERSION,
       tools: this.#tools.map((t) => t.function.name),
       turns: [],
       filesRead: [],

@@ -13,7 +13,7 @@ export type ConfidenceLevel = "high" | "medium" | "low" | "none";
 export interface ContextPacket {
   issue: string;
   snapshot: { repo: string; commitSha: string; analyzerVersion: string };
-  ranking: { method: string; decider: string; terms: string[]; fallback?: string; model?: string; usage?: DeciderResult["usage"]; signal?: string };
+  ranking: { method: string; decider: string; deciderVersion?: string; terms: string[]; fallback?: string; model?: string; usage?: DeciderResult["usage"]; signal?: string };
   /** Lexical ranking only. Absent with the nemotron decider: there, an empty or short ranking is the signal. */
   confidence?: {
     level: ConfidenceLevel;
@@ -179,6 +179,7 @@ export function buildContext(snapshot: Snapshot, issue: string, opts: { budget?:
           ? "nemotron: Nemotron Nano picked components by citing fact ids and a verbatim issue phrase (validated); fact text below comes from the snapshot"
           : "v1 lexical: issue terms vs ids/names, routes, exported symbols, files, Redis keys, error messages, env vars (docs/decisions.md 025)",
         decider: opts.decided?.decider ?? "lexical",
+        ...(opts.decided && { deciderVersion: opts.decided.version }),
         terms,
         ...(opts.decided?.fallback && { fallback: opts.decided.fallback }),
         ...(opts.decided?.model && { model: opts.decided.model }),
@@ -230,7 +231,7 @@ export function formatContext(p: ContextPacket): string {
   const out: string[] = [];
   out.push(`tracehound context · ${p.snapshot.repo}@${p.snapshot.commitSha.slice(0, 7)} · analyzer ${p.snapshot.analyzerVersion}`);
   out.push(`issue: ${JSON.stringify(p.issue)}`);
-  out.push(`decider: ${p.ranking.decider}${p.ranking.model ? ` (${p.ranking.model})` : ""}${p.ranking.fallback ? ` · ${p.ranking.fallback}` : ""}`);
+  out.push(`decider: ${p.ranking.decider}${p.ranking.deciderVersion ? ` [${p.ranking.deciderVersion}]` : ""}${p.ranking.model ? ` (${p.ranking.model})` : ""}${p.ranking.fallback ? ` · ${p.ranking.fallback}` : ""}`);
   if (p.ranking.usage) {
     const u = p.ranking.usage;
     out.push(`model usage: ${u.calls} call(s), ${u.cached} cached, ${u.inputTokens}+${u.outputTokens} tokens, ${u.latencyMs}ms, ~$${u.costUSD.toFixed(6)}`);

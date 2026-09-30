@@ -38,6 +38,8 @@ export interface DeciderResult {
   fallback?: string;
   /** The k that was asked for (a shorter ranking is itself a signal). */
   k: number;
+  /** DECIDER_VERSION */
+  version: string;
   model?: string;
 }
 
@@ -45,6 +47,16 @@ export interface Decider {
   readonly name: string;
   decide(input: { issue: string; snapshot: Snapshot; k?: number }): Promise<DeciderResult>;
 }
+
+/**
+ * Frozen for the evaluation (decision 027, 2026-09-30): prompt, facts, validation, retry and
+ * fallback. Any change to them needs a new version tag, and none is allowed until the evaluation
+ * is over. Recorded in every DeciderResult and every repair-run trace.
+ */
+export const DECIDER_VERSION = "decider-v1";
+/** issuePhrase is a short verbatim quote, not the whole issue copied back. */
+export const MAX_ISSUE_PHRASE_WORDS = 6;
+export const countWords = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 
 const NO_USAGE: DeciderUsage = { calls: 0, cached: 0, inputTokens: 0, outputTokens: 0, costUSD: 0, latencyMs: 0 };
 
@@ -56,6 +68,7 @@ export class LexicalDecider implements Decider {
       ranking: ranked.filter((r) => r.score > 0).slice(0, k).map((r) => ({ componentId: r.id, reason: `score ${r.score}: ${r.reason}` })),
       decider: this.name,
       k,
+      version: DECIDER_VERSION,
       usage: { ...NO_USAGE },
     };
   }
@@ -106,7 +119,7 @@ export const LOCALIZER_SYSTEM_PROMPT = [
   "You get the issue text and, for each component, facts extracted deterministically from its code. Every fact has an id like \"<componentId>#f<n>\".",
   "Use only these facts. Rank the components most likely to contain the cause or the fix of the issue.",
   'Reply with only a JSON object - no prose around it, no code fences: {"ranking":[{"componentId":"<id>","issuePhrase":"<exact words copied from the issue>","factIds":["<fact id>", ...],"note":"<optional, at most 120 characters>"}]}',
-  "Rules: at most k entries, most likely first, no duplicate components. issuePhrase must be copied verbatim from the issue text. factIds must be ids of facts listed under that same component, and they must be the facts that relate to issuePhrase.",
+  `Rules: at most k entries, most likely first, no duplicate components. issuePhrase must be copied verbatim from the issue text and be at most ${MAX_ISSUE_PHRASE_WORDS} words. factIds must be ids of facts listed under that same component, and they must be the facts that relate to issuePhrase.`,
   'If no fact relates to the issue, reply {"ranking":[]}. Fewer than k entries is fine; do not add components just to reach k.',
 ].join("\n");
 
@@ -144,6 +157,8 @@ export function validateLocalizerReply(
     if (seen.has(e.componentId)) return { ok: false, why: `duplicate component id "${e.componentId}"` };
     seen.add(e.componentId);
     if (!e.issuePhrase.trim() || !issue.includes(e.issuePhrase)) return { ok: false, why: `issuePhrase ${JSON.stringify(e.issuePhrase)} is not a verbatim substring of the issue` };
+    if (countWords(e.issuePhrase) > MAX_ISSUE_PHRASE_WORDS)
+      return { ok: false, why: `issuePhrase ${JSON.stringify(e.issuePhrase)} has ${countWords(e.issuePhrase)} words; at most ${MAX_ISSUE_PHRASE_WORDS} allowed` };
     if (!e.factIds.length) return { ok: false, why: `no factIds for "${e.componentId}"` };
     for (const f of e.factIds) {
       const fact = index.get(f);
@@ -224,7 +239,7 @@ export class NemotronDecider implements Decider {
       reply = await call(retry);
       check = validateLocalizerReply(reply.content, snapshot, issue, k, index);
     }
-    if (check.ok) return { ranking: check.ranking, decider: this.name, usage, model: this.#model, k };
+    if (check.ok) return { ranking: check.ranking, decider: this.name, usage, model: this.#model, k, version: DECIDER_VERSION };
 
     const fallback = `nemotron fallback: ${check.why}`;
     this.#log(`[localizer] ${fallback} (after 1 retry); using the lexical ranking`);

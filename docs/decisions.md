@@ -551,6 +551,24 @@ This is a structural fix, not a prompt tweak aimed at particular issues:
 - **Confidence:** with the nemotron decider, the lexical confidence isn't shown at all. The only
   low-confidence signal is the ranking itself: empty (the packet tells the agent to fall back
   to code search) or shorter than k (reported as `short ranking: n of k`).
+**Freeze: decider-v1 (2026-09-30).** One last rule: `issuePhrase` must be at most 6 words
+(whitespace-separated) and still verbatim. The model had been copying the whole issue back as
+its "phrase", which ties the facts to nothing in particular. The prompt states the limit;
+a longer phrase is invalid → retry with the exact error → lexical fallback. This version is
+tagged `DECIDER_VERSION = "decider-v1"` in `decider.ts`; it is in every `DeciderResult`, in the
+context packet (`ranking.deciderVersion`) and in every repair-run trace (`deciderVersion`).
+**No more decider changes until the evaluation is over, whatever the results show.**
+Dev issues under decider-v1 (one run each, Nano, reasoning off; development inputs, not
+evaluation results):
+- "Placing an order hangs and eventually returns a timeout error" → both replies repeated the
+  whole 10-word issue → **lexical fallback** (`backend:shared`, `backend:backend-server`;
+  `pending-response-registry` still missed). 2 calls.
+- "Signin accepts any password" (4 words, so the whole issue is a legal phrase) → nemotron,
+  full ranking: `redis-rpc-bridge` #1 (wrong; cited only import edges), `backend:auth-api` #2
+  (correct, via `POST /signin`), `engine:engine-worker` #3 (a TODO error message).
+- "The app feels slow sometimes" → nemotron, full ranking on "feels slow": `redis-rpc-bridge`,
+  `engine:engine-worker`, `redis:redis-url`, citing queue edges. A confident answer to a vague
+  issue; no abstention.
 **Rejected:** (a) Merging the model's picks with lexical ones: nobody could tell which ranking
 produced a given component. (b) Giving the model source code or the naming summaries: that's
 more tokens, and the summaries contain unverified prose. (c) Tolerant parsing (stripping fences,

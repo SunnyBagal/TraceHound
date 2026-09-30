@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { LexicalDecider, localizerFacts, LOCALIZER_SYSTEM_PROMPT, NemotronDecider, validateLocalizerReply } from "../src/agent/decider.ts";
+import { DECIDER_VERSION, LexicalDecider, localizerFacts, LOCALIZER_SYSTEM_PROMPT, NemotronDecider, validateLocalizerReply } from "../src/agent/decider.ts";
 import { buildContext } from "../src/agent/context.ts";
 import type { Snapshot } from "../src/schema.ts";
 import { makeFixtureRepo } from "./fixture-repo.ts";
@@ -154,6 +154,22 @@ describe("NemotronDecider (fake client)", () => {
       expect(r.decider).toBe("lexical (nemotron fallback)");
       expect(r.fallback).toMatch(why);
     }
+  });
+
+  it("decider-v1: issuePhrase is at most 6 words (still verbatim); the whole issue copied back is invalid → retry → lexical", async () => {
+    expect(DECIDER_VERSION).toBe("decider-v1");
+    expect(LOCALIZER_SYSTEM_PROMPT).toContain("at most 6 words");
+    const six = "handleOrder times out after placing an"; // verbatim, 6 words
+    expect(validateLocalizerReply(reply(entry("orders", six, [2])), snapshot, issue, 3)).toMatchObject({ ok: true });
+    expect(validateLocalizerReply(reply(entry("orders", issue, [2])), snapshot, issue, 3)).toEqual({ ok: false, why: `issuePhrase ${JSON.stringify(issue)} has 7 words; at most 6 allowed` });
+    const { decider, bodies } = scripted([reply(entry("orders", issue, [2])), reply(entry("orders", issue, [2]))]);
+    const r = await decider.decide({ issue, snapshot, k: 3 });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]!.messages.at(-1)!.content).toMatch(/has 7 words; at most 6 allowed/);
+    expect(r).toMatchObject({ decider: "lexical (nemotron fallback)", version: "decider-v1" });
+    const ok = await scripted([reply(entry("orders", "handleOrder", [2]))]).decider.decide({ issue, snapshot, k: 3 });
+    expect(ok).toMatchObject({ decider: "nemotron", version: "decider-v1" });
+    expect((await new LexicalDecider().decide({ issue, snapshot })).version).toBe("decider-v1");
   });
 
   it("a bad first reply fixed by the retry is used (not a fallback)", async () => {
