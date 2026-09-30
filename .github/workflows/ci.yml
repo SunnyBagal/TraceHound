@@ -21,6 +21,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Fetch pinned demo repo (public, for the integration test)
+        run: pnpm fixture
+
       - name: Tests (analyzer + viewer)
         run: pnpm test
 

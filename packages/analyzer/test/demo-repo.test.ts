@@ -5,8 +5,10 @@ import { analyzeRepo } from "../src/analyze.ts";
 
 const DEMO = path.resolve(import.meta.dirname, "../../../fixtures/demo-repo");
 
-// Run `pnpm fixture` first; skipped when the pinned demo repo isn't checked out.
-describe.skipIf(!existsSync(DEMO))("demo repo (cex-v2-boilercode @ da0e3d6)", () => {
+// Needs `pnpm fixture` (CI runs it). Without the checkout the suite isn't defined at all:
+// describe.skipIf would still execute this body (and analyzeRepo) during collection.
+if (!existsSync(DEMO)) describe.skip("demo repo (run `pnpm fixture`)", () => it("needs fixtures/demo-repo", () => {}));
+else describe("demo repo (cex-v2-boilercode @ da0e3d6)", () => {
   const snap = analyzeRepo(DEMO, { now: () => new Date(0) });
   const id = (name: string) => snap.components.find((c) => c.name === name)!.id;
   const edge = (from: string, to: string, kind: string) => snap.edges.find((e) => e.source === id(from) && e.target === id(to) && e.kind === kind);

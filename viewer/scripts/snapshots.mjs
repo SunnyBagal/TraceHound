@@ -1,7 +1,7 @@
 // Snapshot data for the static viewer. The repo's ../snapshots is the source of truth; the viewer
 // serves a copy of index.json + the snapshot files it references. Any missing piece is fatal:
 // a deploy that can't load data must not go green.
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const VIEWER = path.resolve(import.meta.dirname, "..");
@@ -45,13 +45,30 @@ export function copySnapshots() {
     );
   }
   const { referenced } = verifySnapshots(SOURCE, "../snapshots");
-  rmSync(PUBLIC, { recursive: true, force: true });
-  for (const rel of ["index.json", ...referenced]) {
-    mkdirSync(path.dirname(path.join(PUBLIC, rel)), { recursive: true });
-    copyFileSync(path.join(SOURCE, rel), path.join(PUBLIC, rel));
+  const wanted = new Set(["index.json", ...referenced]);
+  // Idempotent and safe to run concurrently (Next loads its config in several processes):
+  // write a file only when its bytes differ, via temp file + rename; prune only stale files.
+  for (const rel of wanted) {
+    const from = readFileSync(path.join(SOURCE, rel));
+    const to = path.join(PUBLIC, rel);
+    if (existsSync(to) && readFileSync(to).equals(from)) continue;
+    mkdirSync(path.dirname(to), { recursive: true });
+    const tmp = `${to}.${process.pid}.tmp`;
+    writeFileSync(tmp, from);
+    renameSync(tmp, to);
+  }
+  for (const rel of listFiles(PUBLIC)) {
+    if (!wanted.has(rel) && !rel.endsWith(".tmp")) rmSync(path.join(PUBLIC, rel), { force: true });
   }
   verifySnapshots(PUBLIC, "public/snapshots");
   return referenced;
+}
+
+function listFiles(dir, prefix = "") {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? listFiles(path.join(dir, e.name), `${prefix}${e.name}/`) : [`${prefix}${e.name}`],
+  );
 }
 
 // CLI: node scripts/snapshots.mjs copy | verify-export
