@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildToyRepo, TOY_BASE_SHA } from "../../../eval/fixtures/build-toy-repo.ts";
-import { NoopAgent, OracleAgent } from "../src/harness/agents.ts";
+import { NoopAgent, OracleAgent, type Agent } from "../src/harness/agents.ts";
 import { dockerAvailable, LocalDockerProvider, SANDBOX_IMAGE } from "../src/harness/docker.ts";
 import { NETWORK_PROBES, runRepair, type RunRecord } from "../src/harness/run.ts";
 import { loadTask } from "../src/harness/task.ts";
@@ -52,6 +52,64 @@ if (!docker.ok) {
       }
       expect(containerExists(h.id)).toBe(false);
     }, 120_000);
+
+    it("history leak closed: during PATCHING the repo has one base commit, no remotes, no reflog, and no trace of the task", async () => {
+      const probes: Record<string, string> = {
+        "git log --all --oneline": "git log --all --oneline",
+        "git log --format=%an|%ae|%aI|%cI|%s": "git log --format='%an|%ae|%aI|%cI|%s'",
+        "git remote -v": "git remote -v",
+        "git branch -a": "git branch -a",
+        "git tag": "git tag",
+        "git reflog": "git reflog 2>&1",
+        "git stash list": "git stash list",
+        "git rev-list --all --count": "git rev-list --all --count",
+        "git count-objects -v (packs)": "git count-objects -v | grep -E '^(count|in-pack|packs):'",
+        "pre-squash SHA": `git cat-file -e ${TOY_BASE_SHA}^{commit} 2>/dev/null && echo "RESOLVES" || echo "does not resolve"`,
+        "git fsck --lost-found (dangling)": "git fsck --no-reflogs --dangling 2>&1 | grep -c dangling || true",
+        "ls -A .git": "ls -A .git",
+        "ls -A /work": "ls -A",
+        "git status --porcelain --ignored": "git status --porcelain --ignored",
+        "files named like the task": "find / -xdev \\( -path /proc -o -path /sys -o -path /dev -o -path /usr \\) -prune -o \\( -iname '*repro*' -o -iname '*.patch' -o -iname 'task.json' -o -iname '*tracehound*' -o -iname '*.bundle' \\) -print 2>/dev/null",
+        "repro test text on disk": "grep -rlsF 'a 10% discount takes 10% off' / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev 2>/dev/null || true",
+        "fixture commit message on disk": "grep -rlsF 'buggy applyDiscount' / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev 2>/dev/null || true",
+        "ls -A /tmp": "ls -A /tmp",
+      };
+      const seen: Record<string, string> = {};
+      const probe: Agent = {
+        name: "leak-probe",
+        async run(ctx) {
+          for (const [label, cmd] of Object.entries(probes)) seen[label] = (await ctx.exec(cmd, { timeoutMs: 60_000 })).stdout.trim();
+        },
+      };
+      const task = loadTask(path.join(TASKS, "toy-discount", "task.json"));
+      const r = await runRepair({ task, agent: probe, provider: new LocalDockerProvider(), image: SANDBOX_IMAGE });
+      console.log(`leak probe (PATCHING, toy-discount):\n${Object.entries(seen).map(([k, v]) => `$ ${k}\n${v || "(empty)"}`).join("\n")}`);
+      expect(r.finalState).toBe("UNRESOLVED"); // the probe changes nothing
+      expect(r.baseCommit).toMatch(/^[0-9a-f]{40}$/);
+      expect(r.baseCommit).not.toBe(TOY_BASE_SHA);
+      expect(seen["git log --all --oneline"]).toBe(`${r.baseCommit!.slice(0, 7)} base`);
+      expect(seen["git log --format=%an|%ae|%aI|%cI|%s"]).toBe("base|base@sandbox.invalid|2000-01-01T00:00:00+00:00|2000-01-01T00:00:00+00:00|base");
+      expect(seen["git remote -v"]).toBe("");
+      expect(seen["git branch -a"]).toBe("* work");
+      expect(seen["git tag"]).toBe("");
+      expect(seen["git reflog"]).toBe("");
+      expect(seen["git stash list"]).toBe("");
+      expect(seen["git rev-list --all --count"]).toBe("1");
+      expect(seen["pre-squash SHA"]).toBe("does not resolve");
+      expect(seen["git fsck --lost-found (dangling)"]).toBe("0");
+      expect(seen["ls -A .git"]!.split("\n")).not.toContain("logs");
+      expect(seen["ls -A .git"]!.split("\n")).not.toContain("hooks");
+      expect(seen["ls -A /work"]!.split("\n")).toEqual([".git", "package.json", "src", "tests", "tsconfig.json"]);
+      expect(seen["git status --porcelain --ignored"]).toBe("");
+      expect(seen["files named like the task"]).toBe("");
+      expect(seen["repro test text on disk"]).toBe("");
+      expect(seen["fixture commit message on disk"]).toBe("");
+      // /tmp holds only TypeScript's own compile cache, written by the baseline `tsc` (compiler bytecode, no repo content)
+      expect(seen["ls -A /tmp"]).toMatch(/^(node-compile-cache)?$/);
+      // the same base commit for the same tree: fixed author, committer, dates and message
+      const again = await runRepair({ task, agent: new NoopAgent(), provider: new LocalDockerProvider(), image: SANDBOX_IMAGE });
+      expect(again.baseCommit).toBe(r.baseCommit);
+    }, 240_000);
 
     it("1. oracle + correct patch → RESOLVED", async () => {
       const r = await run("toy-discount", "oracle", "fix.patch");

@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { NoopAgent, OracleAgent, type Agent } from "../src/harness/agents.ts";
 import type { ExecResult, SandboxHandle, SandboxProvider } from "../src/harness/provider.ts";
 import { fakeClient } from "./helpers.ts";
-import { runRepair } from "../src/harness/run.ts";
+import { runRepair, SQUASH_HISTORY } from "../src/harness/run.ts";
 import { loadTask, type LoadedTask, type TaskSpec } from "../src/harness/task.ts";
 
 const SHA = "a".repeat(40);
@@ -34,6 +34,7 @@ class FakeProvider implements SandboxProvider {
   async exec(_h: SandboxHandle, cmd: string, opts: { timeoutMs: number }): Promise<ExecResult> {
     const custom = await this.onExec?.(cmd);
     if (custom) return custom;
+    if (cmd === SQUASH_HISTORY) return ok(`${"b".repeat(40)}\n`);
     if (cmd.startsWith("curl")) return this.network ? ok() : fail(6);
     if (cmd.startsWith("needs-network")) return this.network ? ok() : fail(6);
     if (cmd.startsWith("run-repro")) return this.files.get("state") === "fixed" || this.files.get("state") === "broken" ? ok() : fail();
@@ -143,12 +144,15 @@ describe("runRepair state machine (fake provider)", () => {
     expect(provider.destroyed).toEqual(["fake-1"]);
   });
 
-  it("network: on for setup, then disconnected and proven off before REPRODUCING", async () => {
+  it("network: on for setup, history squashed after setup, then disconnected and proven off before REPRODUCING", async () => {
     const provider = new FakeProvider();
     const r = await runRepair({ task: task({ setup: ["needs-network"] }), agent: new NoopAgent(), provider, image: "img" });
     expect(r.finalState).toBe("UNRESOLVED"); // noop: repro still fails
     const phases = r.commands.map((c) => `${c.phase}:${c.cmd.split(" ")[0]}:${c.exitCode}`);
-    expect(phases.slice(0, 4)).toEqual(["PREPARING_SANDBOX:git:0", "PREPARING_SANDBOX:needs-network:0", "NETWORK_OFF:curl:6", "NETWORK_OFF:curl:6"]);
+    expect(phases.slice(0, 5)).toEqual(["PREPARING_SANDBOX:git:0", "PREPARING_SANDBOX:needs-network:0", "PREPARING_SANDBOX:set:0", "NETWORK_OFF:curl:6", "NETWORK_OFF:curl:6"]);
+    expect(r.commands[2]!.cmd).toBe(SQUASH_HISTORY);
+    expect(r.baseCommit).toBe("b".repeat(40));
+    expect(r.commands.find((c) => c.phase === "VERIFYING" && c.cmd.startsWith("git add -A"))!.cmd).toBe(`git add -A && git diff --cached ${"b".repeat(40)}`); // diffed against the squashed commit
     expect(r.commands.find((c) => c.phase === "REPRODUCING")).toBeDefined();
   });
 

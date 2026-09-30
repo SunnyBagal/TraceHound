@@ -27,7 +27,7 @@ if (!enabled) {
       let handle: SandboxHandle | undefined;
       const started = performance.now();
       try {
-        await prepareSandbox({
+        const { baseCommit } = await prepareSandbox({
           provider,
           image: SANDBOX_IMAGE,
           source: { gitUrl: FORK, sha: PINNED },
@@ -42,6 +42,9 @@ if (!enabled) {
         expect(log.filter((c) => c.phase === "NETWORK_OFF").map((c) => [c.cmd, c.exitCode !== 0])).toEqual(NETWORK_PROBES.map((p) => [p, true]));
 
         const sh = makeSh(provider, () => handle!, log, 300_000);
+        // history squashed into one commit of the installed tree (decision 026)
+        const git = await sh("REPRODUCING", `git rev-list --all --count && git rev-parse HEAD && git remote && git status --porcelain && (git cat-file -e ${PINNED} 2>/dev/null && echo leaked || true)`);
+        expect(git.stdout.trim().split("\n")).toEqual(["1", baseCommit]);
         let t = performance.now();
         const baseline = await collectChecks(sh, "BASELINE", {
           regression: ["cd backend && bun test", "cd engine && bun test"],

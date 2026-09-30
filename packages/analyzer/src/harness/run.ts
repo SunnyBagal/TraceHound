@@ -34,6 +34,8 @@ export interface RunRecord {
   agent: string;
   image: string;
   baseSha: string;
+  /** The sandbox's single squashed commit of baseSha's tree (after setup); diffs are taken against it. */
+  baseCommit?: string;
   startedAt: string;
   endedAt?: string;
   states: { state: RunState; at: string; note?: string }[];
@@ -98,9 +100,41 @@ async function mustPass(sh: Sh, phase: Phase, cmd: string, what: string, timeout
   return r;
 }
 
+// Fixed identity for the squashed base commit: the same tree always gives the same SHA.
+const BASE_COMMIT_ENV = [
+  "GIT_AUTHOR_NAME=base",
+  "GIT_AUTHOR_EMAIL=base@sandbox.invalid",
+  "GIT_AUTHOR_DATE=2000-01-01T00:00:00Z",
+  "GIT_COMMITTER_NAME=base",
+  "GIT_COMMITTER_EMAIL=base@sandbox.invalid",
+  "GIT_COMMITTER_DATE=2000-01-01T00:00:00Z",
+].join(" ");
+export const BASE_BRANCH = "work";
+
 /**
- * PREPARING_SANDBOX: create (network on), check out baseSha, run setup (network on), then cut the
- * network and prove it's off. Shared by repair runs and the infrastructure test.
+ * Replace the checkout's history with one commit of the current tree (decision 026, history
+ * squash). For a seeded task the bug-introducing commit is HEAD, so `git log -p` would hand the
+ * agent the answer. No remotes, no source branches, no reflog, no hook samples; files that were
+ * tracked but match .gitignore stay tracked. Prints the new commit's SHA.
+ */
+export const SQUASH_HISTORY = [
+  "set -e",
+  "git ls-files -z > /tmp/.th-tracked",
+  "rm -rf .git",
+  `git init -q --template= -b ${BASE_BRANCH}`,
+  "git config core.logAllRefUpdates false",
+  "xargs -0 -r git add -f -- < /tmp/.th-tracked",
+  "rm -f /tmp/.th-tracked",
+  "git add -A",
+  `env ${BASE_COMMIT_ENV} git -c commit.gpgsign=false commit -q --allow-empty --no-verify -m base`,
+  "rm -rf .git/logs",
+  "git rev-parse HEAD",
+].join("\n");
+
+/**
+ * PREPARING_SANDBOX: create (network on), check out baseSha, run setup (network on), squash the
+ * history into one base commit, then cut the network and prove it's off. Shared by repair runs
+ * and the infrastructure test. Returns the handle and the squashed base commit (diffs use it).
  */
 export async function prepareSandbox(args: {
   provider: SandboxProvider;
@@ -113,7 +147,7 @@ export async function prepareSandbox(args: {
   signal?: AbortSignal;
   onHandle: (h: SandboxHandle) => void;
   timings?: Record<string, number>;
-}): Promise<SandboxHandle> {
+}): Promise<{ handle: SandboxHandle; baseCommit: string }> {
   const t = (label: string, start: number) => args.timings && (args.timings[label] = Math.round(performance.now() - start));
   let handle: SandboxHandle | undefined;
   const sh = makeSh(args.provider, () => handle!, args.log, args.commandTimeoutMs, args.signal);
@@ -130,13 +164,18 @@ export async function prepareSandbox(args: {
     t(`setup: ${cmd}`, start);
   }
   start = performance.now();
+  const squashed = await mustPass(sh, "PREPARING_SANDBOX", SQUASH_HISTORY, "squashing the history into one base commit");
+  const baseCommit = squashed.stdout.trim();
+  if (!/^[0-9a-f]{40}$/.test(baseCommit)) throw new RunFailed(`squashing the history printed no commit SHA: ${JSON.stringify(baseCommit.slice(0, 80))}`);
+  t("history squash", start);
+  start = performance.now();
   await args.provider.disableNetwork(handle);
   for (const probe of NETWORK_PROBES) {
     const r = await sh("NETWORK_OFF", probe, { timeoutMs: 20_000 });
     if (r.exitCode === 0) throw new RunFailed(`network is still reachable after disconnecting: ${probe}`);
   }
   t("network off + proof", start);
-  return handle;
+  return { handle, baseCommit };
 }
 
 /** Regression exit codes and `tsc` error counts per package (baseline and final). */
@@ -226,7 +265,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     enter("PREPARING_SANDBOX");
     const source: SandboxSource = "gitUrl" in spec.source ? { gitUrl: spec.source.gitUrl, sha: spec.baseSha } : { localPath: task.localPath! };
     record.sandbox.createStartedAt = now();
-    await prepareSandbox({
+    const prepared = await prepareSandbox({
       provider,
       image,
       source,
@@ -241,6 +280,11 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
       },
     });
     record.sandbox.networkOffAt = now();
+    record.baseCommit = prepared.baseCommit;
+    // everything on disk before REPRODUCING, ignored files (node_modules, caches) included: the
+    // repro run must leave nothing behind for the agent to find
+    const treeState = async (phase: Phase) => (await mustPass(sh, phase, "git status --porcelain --ignored", "listing the tree")).stdout;
+    const beforeRepro = await treeState("REPRODUCING");
 
     // ── REPRODUCING (+ baseline), network off ─────────────────────────────────────────────
     enter("REPRODUCING");
@@ -248,6 +292,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     if (record.repro.atBase.timedOut) throw new RunFailed(`repro command timed out: ${spec.repro.command}`);
     if (record.repro.atBase.exitCode === 0) throw new RunFailed("repro does not reproduce: the repro test passes at baseSha");
     await mustPass(sh, "REPRODUCING", `test -z "$(git status --porcelain)"`, "checking the tree is clean before the agent starts");
+    if ((await treeState("REPRODUCING")) !== beforeRepro) throw new RunFailed("the repro run left files behind (git status --porcelain --ignored changed)");
     record.baseline = await collectChecks(sh, "BASELINE", spec);
     if (Date.now() >= deadline) throw new RunFailed(`wall-clock limit ${spec.limits.wallClockMs}ms reached before the agent started`);
 
@@ -323,7 +368,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
 
     // ── VERIFYING: the harness's own checks only (not bounded by the agent's wall-clock) ────
     enter("VERIFYING");
-    const diff = await sh("VERIFYING", `git add -A && git diff --cached ${spec.baseSha}`);
+    const diff = await sh("VERIFYING", `git add -A && git diff --cached ${prepared.baseCommit}`);
     if (diff.exitCode !== 0) throw new RunFailed(`could not extract the diff (exit ${diff.exitCode})`);
     record.diff = diff.stdout;
     record.repro.afterPatch = await runRepro("VERIFYING");

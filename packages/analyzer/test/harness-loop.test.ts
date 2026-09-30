@@ -8,7 +8,7 @@ import type { ChatRequest, ChatResult, ToolCall } from "../src/llm/client.ts";
 import type { ExecResult, SandboxHandle, SandboxProvider } from "../src/harness/provider.ts";
 import { dockerAvailable, LocalDockerProvider, SANDBOX_IMAGE } from "../src/harness/docker.ts";
 import { AGENT_PROMPT_FILE, checkArgs, RepairLoopAgent, renderSystemPrompt, type LoopTrace } from "../src/harness/loop.ts";
-import { runRepair } from "../src/harness/run.ts";
+import { runRepair, SQUASH_HISTORY } from "../src/harness/run.ts";
 import { loadTask, type LoadedTask, type TaskSpec } from "../src/harness/task.ts";
 import { confinePath, REPO_TOOLS } from "../src/harness/tools.ts";
 
@@ -40,6 +40,7 @@ class FakeProvider implements SandboxProvider {
   async disableNetwork() {}
   async exec(_h: SandboxHandle, cmd: string): Promise<ExecResult> {
     this.execs.push(cmd);
+    if (cmd === SQUASH_HISTORY) return { exitCode: 0, stdout: `${"b".repeat(40)}\n`, stderr: "", durationMs: 1, timedOut: false };
     const fail = cmd.startsWith("curl") || cmd.startsWith("run-repro");
     return { exitCode: fail ? 1 : 0, stdout: "", stderr: "", durationMs: 1, timedOut: false };
   }

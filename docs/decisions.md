@@ -470,6 +470,35 @@ TF-IDF: needs corpus statistics that a 9-component repo can't provide in any mea
   create→destroy time.
 - Scripted agents for testing the harness: `oracle` (applies a given patch with `git apply`) and
   `noop`. There's no LLM loop yet.
+- **History squash (2026-09-30, closes a leak).** The sandbox used to hold the repo's full history
+  at `baseSha`. For a seeded task the bug-introducing commit is HEAD, so `git log -p` or
+  `git show` handed the agent the answer (and the toy fixture's commit message named the bug).
+  Now, after setup and before the network goes off, the harness runs `SQUASH_HISTORY`:
+  - it records `git ls-files`, removes `.git`, runs `git init --template= -b work` (no hook
+    samples), re-adds the tracked files with `-f` (so tracked-but-ignored files stay tracked)
+    plus everything else not ignored, and commits once as `base` with a fixed author, committer
+    and date (`base <base@sandbox.invalid>`, 2000-01-01T00:00:00Z). The same tree always gives
+    the same SHA.
+  - `core.logAllRefUpdates` is off and `.git/logs` is removed: no reflog. No remotes, no tags,
+    no source branch names; the pre-squash SHA doesn't resolve.
+  - Setup output that isn't ignored (e.g. a rewritten lockfile) becomes part of the base, so it
+    is no longer counted as the agent's change.
+  - The run records the squashed commit as `baseCommit`, and VERIFYING diffs against it
+    (`git add -A && git diff --cached <baseCommit>`), so agent commits are still included.
+  - Other leaks during PATCHING: the repro test and its directories are removed after
+    REPRODUCING (as before). The harness now also requires `git status --porcelain --ignored`
+    to be identical before and after the repro run, so a repro can't leave ignored artifacts
+    behind. Task files, patches and snapshots never enter the sandbox (the oracle's patch goes to
+    `/tmp` and is deleted, and only the oracle has one). The clone bundle is deleted after clone.
+    `/tmp` holds only `node-compile-cache`, TypeScript's own bytecode cache from the baseline
+    `tsc` (no repo content).
+  - Tested on the toy task from inside PATCHING (`harness-docker.test.ts`, "history leak
+    closed"): one commit, `git remote -v` empty, `git branch -a` = `* work`, empty reflog/tags/
+    stash, no dangling objects, pre-squash SHA unresolvable, and no file on disk named like the
+    task or containing the repro's test name or the fixture's commit message.
+  **Rejected:** (a) `git clone --depth 1`: a shallow clone still carries the real commit, its
+  message and author, and `.git/shallow` names the cut. (b) Hiding `.git` altogether: agents
+  legitimately use `git diff`/`git status` to review their own change.
 
 **Rejected:** (a) Mounting the repo into the container: that's fast, but it exposes the host
 tree (and any `.env`) and lets the sandbox write back to it. (b) Letting the agent report
