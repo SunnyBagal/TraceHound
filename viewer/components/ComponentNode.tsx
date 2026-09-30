@@ -6,11 +6,12 @@ import type { ImpactRole } from "@/lib/impact";
 import { memo } from "react";
 import { NODE_HEIGHT, NODE_WIDTH, type ComponentNode as ComponentNodeType } from "@/lib/graph";
 import { KIND_META } from "@/lib/kinds";
+import { ComponentIcon } from "./ComponentIcon";
 import { NameSourceBadge } from "./NameSourceBadge";
 
 function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
   const { component, warnings } = data;
-  const { icon: Icon, label } = KIND_META[component.kind];
+  const { label } = KIND_META[component.kind];
   return (
     <div
       data-testid="component-node"
@@ -24,8 +25,8 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
           : data.impact?.role === "affected"
             ? "border-2 border-dashed border-impact-affected"
             : selected
-              ? "border-accent shadow-[0_0_0_1px_var(--accent),0_0_28px_-6px_rgba(245,165,36,0.45)]"
-              : "border-line hover:border-line-strong hover:bg-card-hover hover:shadow-[0_0_24px_-8px_rgba(245,165,36,0.35)]",
+              ? "border-accent shadow-[0_0_0_1px_var(--accent),0_0_28px_-6px_var(--accent-glow)]"
+              : "border-line hover:border-line-strong hover:bg-card-hover hover:shadow-[0_0_24px_-8px_var(--accent-glow)]",
         data.highlighted ? "pulse-ring" : "",
         data.dimmed ? "opacity-35" : "opacity-100",
       ].join(" ")}
@@ -33,9 +34,7 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
       <Handle type="target" position={Position.Left} />
       {data.impact && <ImpactChip role={data.impact} />}
       <div className="flex items-center gap-2.5">
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-panel text-muted group-hover:text-accent">
-          <Icon className="size-4" aria-hidden />
-        </span>
+        <ComponentIcon kind={component.kind} tech={data.tech} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13.5px] font-semibold leading-tight text-text" title={component.name}>
             {component.name}
