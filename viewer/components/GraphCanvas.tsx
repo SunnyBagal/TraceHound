@@ -13,6 +13,7 @@ import { Maximize, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildGraph, neighbours, NODE_HEIGHT, NODE_WIDTH, type ComponentNode as ComponentNodeType } from "@/lib/graph";
 import { impactEdges, impactRoles, type ImpactReport } from "@/lib/impact";
+import type { Highlight } from "@/lib/highlight";
 import { elkLayout, type Positions } from "@/lib/layout";
 import { clearPositions, loadPositions, savePositions } from "@/lib/positions";
 import type { Snapshot } from "@/lib/types";
@@ -36,12 +37,14 @@ export interface GraphCanvasProps {
   impact?: ImpactReport;
   /** px of the canvas's right edge covered by the inspector overlay (0 when closed or on phones) */
   occludeRight?: number;
+  /** transient hover/focus highlight from an inspector row (styled apart from the selection) */
+  highlight?: Highlight | null;
 }
 
 const FIT = { padding: 0.18, duration: 300, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM };
 const MARGIN = 32; // px kept clear around a selection brought into view
 
-export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce, impact, occludeRight = 0 }: GraphCanvasProps) {
+export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce, impact, occludeRight = 0, highlight = null }: GraphCanvasProps) {
   const roles = useMemo(() => (impact ? impactRoles(impact) : null), [impact]);
   const chainEdges = useMemo(() => (impact ? impactEdges(impact) : null), [impact]);
   const base = useMemo(() => buildGraph(snapshot), [snapshot]);
@@ -126,33 +129,42 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
 
   const displayNodes = useMemo(
     () =>
-      nodes.map((n) => ({
-        ...n,
-        selected: selection?.type === "node" && selection.id === n.id,
-        data: {
-          ...n.data,
-          // hover/selection focus wins; otherwise impact mode dims everything outside the impact
-          dimmed: focusSet ? !focusSet.has(n.id) : roles ? !roles.has(n.id) : false,
-          highlighted: focusId === n.id,
-          impact: roles ? (roles.get(n.id) ?? null) : undefined,
-        },
-      })),
-    [nodes, selection, focusSet, focusId, roles],
+      nodes.map((n) => {
+        const panelHover = Boolean(highlight?.nodeIds.includes(n.id));
+        return {
+          ...n,
+          selected: selection?.type === "node" && selection.id === n.id,
+          data: {
+            ...n.data,
+            // a panel-hovered node is never dimmed; then hover/selection focus; then impact mode
+            // dims everything outside the impact
+            dimmed: panelHover ? false : focusSet ? !focusSet.has(n.id) : roles ? !roles.has(n.id) : false,
+            highlighted: focusId === n.id,
+            panelHover,
+            impact: roles ? (roles.get(n.id) ?? null) : undefined,
+          },
+        };
+      }),
+    [nodes, selection, focusSet, focusId, roles, highlight],
   );
   const displayEdges = useMemo(
     () =>
-      base.edges.map((e) => ({
-        ...e,
-        selected: selection?.type === "edge" && selection.id === e.id,
-        data: {
-          ...e.data!,
-          active: activeEdgeIds.has(e.id) || (!focusSet && Boolean(chainEdges?.has(e.id))),
-          dimmed: focusSet ? !activeEdgeIds.has(e.id) : chainEdges ? !chainEdges.has(e.id) : false,
-          onImpactChain: chainEdges?.has(e.id),
-          impactMode: Boolean(chainEdges),
-        },
-      })),
-    [base.edges, selection, activeEdgeIds, focusSet, chainEdges],
+      base.edges.map((e) => {
+        const panelHover = Boolean(highlight?.edgeIds.includes(e.id));
+        return {
+          ...e,
+          selected: selection?.type === "edge" && selection.id === e.id,
+          data: {
+            ...e.data!,
+            active: activeEdgeIds.has(e.id) || (!focusSet && Boolean(chainEdges?.has(e.id))),
+            dimmed: panelHover ? false : focusSet ? !activeEdgeIds.has(e.id) : chainEdges ? !chainEdges.has(e.id) : false,
+            panelHover,
+            onImpactChain: chainEdges?.has(e.id),
+            impactMode: Boolean(chainEdges),
+          },
+        };
+      }),
+    [base.edges, selection, activeEdgeIds, focusSet, chainEdges, highlight],
   );
 
   const persist = useCallback(() => {

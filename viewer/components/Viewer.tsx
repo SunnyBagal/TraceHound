@@ -2,6 +2,7 @@
 
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useState } from "react";
+import { useHighlight } from "@/lib/highlight";
 import { impactParam, type ImpactReport } from "@/lib/impact";
 import { current, usePanelNavigation } from "@/lib/navigation";
 import type { Snapshot } from "@/lib/types";
@@ -32,6 +33,10 @@ export function Viewer({ snapshot, impact }: { snapshot: Snapshot; impact?: Impa
   const [focus, setFocus] = useState<{ id: string | null; nonce: number }>({ id: null, nonce: 0 });
   const overlay = useOverlayWidth();
   const { close } = nav;
+  // inspector-row hover/focus highlight: transient, dropped whenever the panel shows something else
+  const highlight = useHighlight();
+  const { clear } = highlight;
+  useEffect(() => clear(), [clear, entry?.type, entry?.id, entry?.tab]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -56,6 +61,7 @@ export function Viewer({ snapshot, impact }: { snapshot: Snapshot; impact?: Impa
               focusNonce={focus.nonce}
               impact={impact}
               occludeRight={selection ? overlay : 0}
+              highlight={highlight.active}
             />
             {/* on phones the impact panel takes the warnings panel's corner */}
             <div className={impact ? "hidden md:block" : undefined}>
@@ -67,7 +73,7 @@ export function Viewer({ snapshot, impact }: { snapshot: Snapshot; impact?: Impa
                 }}
               />
             </div>
-            <Inspector snapshot={snapshot} nav={nav} />
+            <Inspector snapshot={snapshot} nav={nav} bind={highlight.bind} />
           </div>
         </main>
       </div>

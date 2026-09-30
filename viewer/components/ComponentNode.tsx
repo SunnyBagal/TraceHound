@@ -18,6 +18,7 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
       data-component-id={component.id}
       style={{ width: NODE_WIDTH, height: NODE_HEIGHT }}
       data-impact={data.impact?.role ?? (data.impact === null ? "none" : undefined)}
+      data-panel-hover={data.panelHover || undefined}
       className={[
         "group relative flex flex-col rounded-xl border bg-card px-3.5 py-3 transition-[opacity,box-shadow,border-color,background-color] duration-200",
         data.impact?.role === "changed"
@@ -28,6 +29,8 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
               ? "border-accent shadow-[0_0_0_1px_var(--accent),0_0_28px_-6px_var(--accent-glow)]"
               : "border-line hover:border-line-strong hover:bg-card-hover hover:shadow-[0_0_24px_-8px_var(--accent-glow)]",
         data.highlighted ? "pulse-ring" : "",
+        // inspector-row hover: an offset outline in its own colour, never the selection's accent
+        data.panelHover ? "outline-2 outline-offset-4 outline-highlight" : "",
         data.dimmed ? "opacity-35" : "opacity-100",
       ].join(" ")}
     >
