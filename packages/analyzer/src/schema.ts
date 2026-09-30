@@ -121,7 +121,7 @@ export const FileFacts = z.object({
   // `parent.use(prefix?, router)` — routers are keyed "file#variable"
   mounts: z.array(z.object({ parent: z.string(), router: z.string(), prefix: z.string().optional(), evidenceId: z.string() })),
   listens: z.array(z.object({ evidenceId: z.string() })),
-  startupCalls: z.array(z.object({ callee: z.string(), evidenceId: z.string() })), // top-level calls
+  startupCalls: z.array(z.object({ callee: z.string(), evidenceId: z.string() })).default([]), // top-level calls (0.3.0+)
   clients: z.array(ClientConstruction),
   redisOps: z.array(RedisOpFact),
   prismaOps: z.array(PrismaOpFact),
