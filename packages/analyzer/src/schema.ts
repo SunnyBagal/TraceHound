@@ -189,6 +189,8 @@ export const LlmCall = z.object({
   completionTokens: z.number().int().optional(),
   totalTokens: z.number().int().optional(),
   cached: z.boolean(), // served from .tracehound/cache: no request, $0
+  accepted: z.boolean().optional(), // reply passed naming checks (normalization, identifiers, scope)
+  rejectReason: z.string().optional(), // why a well-formed reply was not used
   estCostUSD: z.number().nonnegative(), // from config/prices.json (conservative if placeholder)
   ok: z.boolean(),
   error: z.string().optional(),

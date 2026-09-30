@@ -5,6 +5,7 @@ import { z } from "zod";
 import { BudgetExceededError } from "../llm/budget.ts";
 import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import type { Component, LlmCall, Snapshot } from "../schema.ts";
+import { checkReply } from "./checks.ts";
 import { componentFacts } from "./facts.ts";
 
 export { componentFacts } from "./facts.ts";
@@ -50,6 +51,7 @@ export function parseReply(content: string): z.infer<typeof Reply> | undefined {
 async function nameOne(snapshot: Snapshot, component: Component, client: LlmNamingConfig["client"], model: string) {
   const call: LlmCall = { purpose: "component-naming", componentId: component.id, model, latencyMs: 0, ok: false, cached: false, estCostUSD: 0 };
   const started = performance.now();
+  const facts = componentFacts(snapshot, component);
   try {
     const result = await client.chat(
       {
@@ -58,7 +60,7 @@ async function nameOne(snapshot: Snapshot, component: Component, client: LlmNami
         max_tokens: MAX_TOKENS,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: JSON.stringify(componentFacts(snapshot, component)) },
+          { role: "user", content: JSON.stringify(facts) },
         ],
       },
       { purpose: "component-naming", componentId: component.id },
@@ -71,10 +73,18 @@ async function nameOne(snapshot: Snapshot, component: Component, client: LlmNami
       completionTokens: result.outputTokens,
       totalTokens: result.inputTokens !== undefined && result.outputTokens !== undefined ? result.inputTokens + result.outputTokens : undefined,
     });
-    const reply = parseReply(result.content);
-    if (!reply) throw new Error(`reply was not a valid {name, summary} object: ${JSON.stringify(result.content.slice(0, 160))}`);
+    const parsed = parseReply(result.content);
+    if (!parsed) throw new Error(`reply was not a valid {name, summary} object: ${JSON.stringify(result.content.slice(0, 160))}`);
     call.ok = true;
-    return { call, reply };
+    const files = new Set(component.files);
+    const symbols = snapshot.files.filter((f) => files.has(f.path)).flatMap((f) => f.symbols.map((s) => s.name));
+    const checked = checkReply(parsed, facts, symbols);
+    if (!checked.ok) {
+      Object.assign(call, { accepted: false, rejectReason: checked.reason });
+      return { call, reply: undefined };
+    }
+    call.accepted = true;
+    return { call, reply: { name: checked.name, summary: checked.summary } };
   } catch (error) {
     if (error instanceof BudgetExceededError) throw error; // never degrade silently past a cap
     call.error = error instanceof Error ? error.message : String(error);
@@ -122,5 +132,6 @@ export async function nameComponentsWithLlm(snapshot: Snapshot, config: LlmNamin
 export function formatCall(call: LlmCall): string {
   const tokens = call.totalTokens !== undefined ? `${call.promptTokens}+${call.completionTokens}=${call.totalTokens} tok` : "tokens n/a";
   const cost = call.cached ? "cached $0" : `~$${call.estCostUSD.toFixed(5)}`;
-  return `[naming] ${call.componentId.padEnd(28)} ${call.model} ${String(call.latencyMs).padStart(6)}ms ${tokens} ${cost} ${call.ok ? "ok" : `FAILED (${call.error}) → heuristic name`}`;
+  const outcome = !call.ok ? `FAILED (${call.error}) → heuristic name` : call.accepted === false ? `REJECTED (${call.rejectReason}) → heuristic name` : "ok";
+  return `[naming] ${call.componentId.padEnd(28)} ${call.model} ${String(call.latencyMs).padStart(6)}ms ${tokens} ${cost} ${outcome}`;
 }
