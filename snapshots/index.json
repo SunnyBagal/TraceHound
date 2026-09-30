@@ -3,11 +3,18 @@
   "latest": {
     "repo": "SunnyBagal/cex-v2-boilercode",
     "sha": "da0e3d640a9c02f815fcca48f8328c94558cc058",
-    "analyzerVersion": "0.4.0",
-    "path": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.4.0.json",
-    "createdAt": "2026-09-30T09:16:37.753Z"
+    "analyzerVersion": "0.5.0",
+    "path": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.5.0.json",
+    "createdAt": "2026-09-30T10:09:21.559Z"
   },
   "snapshots": [
+    {
+      "repo": "SunnyBagal/cex-v2-boilercode",
+      "sha": "da0e3d640a9c02f815fcca48f8328c94558cc058",
+      "analyzerVersion": "0.5.0",
+      "path": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.5.0.json",
+      "createdAt": "2026-09-30T10:09:21.559Z"
+    },
     {
       "repo": "SunnyBagal/cex-v2-boilercode",
       "sha": "da0e3d640a9c02f815fcca48f8328c94558cc058",

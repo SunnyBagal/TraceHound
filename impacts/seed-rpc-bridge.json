@@ -3,9 +3,9 @@
   "base": "da0e3d640a9c02f815fcca48f8328c94558cc058",
   "head": "a21a534dffeaff66a760a7e556ee58c163a26655",
   "snapshot": {
-    "analyzerVersion": "0.4.0",
-    "file": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.4.0.json",
-    "path": "snapshots/da0e3d640a9c02f815fcca48f8328c94558cc058/0.4.0.json"
+    "analyzerVersion": "0.5.0",
+    "file": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.5.0.json",
+    "path": "snapshots/da0e3d640a9c02f815fcca48f8328c94558cc058/0.5.0.json"
   },
   "depth": 2,
   "directionRule": "imports, queries: reverse (dependents of the changed component) · produces, consumes, reads, writes: bidirectional (message/data contract) · crossing a queue/cache broker costs one hop of depth (decision 024)",

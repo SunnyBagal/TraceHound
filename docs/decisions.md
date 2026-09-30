@@ -313,3 +313,51 @@ real components.
 to fix a queue-only problem. (b) Dropping broker nodes from the chain: it would hide which queue
 couples the two sides, and the edge evidence would lose its middle. This supersedes 023's
 rejected option (c).
+
+## 025 · Agent context packets: deterministic lexical ranking v1, heuristic confidence
+**Choice:** `tracehound context`, `tracehound query` and `tracehound mcp` read one snapshot file
+and nothing else: no network, no model. The ranking was written down before running it on any
+real issue, and isn't tuned to specific strings.
+- **Terms:** the issue text is split on camelCase, snake_case, kebab-case, paths and
+  punctuation, then lowercased. A fixed list of English function words is dropped, and so are
+  words under 3 characters. What's left gets a light stem (`-ing`, `-ed`, `-es`, `-s`). Two
+  terms match if they're equal, or if one is a prefix of the other and the shorter is at least
+  4 characters.
+- **Facts per component, with weights:**
+  - id / heuristic name / override name: 3
+  - route paths: 3
+  - exported symbols: 2
+  - file paths: 2
+  - Redis keys: 2
+  - env vars: 1
+
+  Model-written names and summaries are **not** used, since their prose is unverified.
+- **Score:** the sum over distinct issue terms of the best weight that term matches in the
+  component. Each term counts once per component.
+- **Packet:**
+  1. Take the top components with score > 0: at most 3, each at least half the top score.
+  2. Expand one hop along every edge touching them.
+  3. **Queue partners:** any included component's queue edges (`produces`/`consumes`/`reads`/
+     `writes` to a queue/cache broker) bring in the broker and every component on its other
+     side. The message contract couples both sides (023/024). Without this, "an order times out"
+     would stop at the producer and never show the consumer.
+  4. List the edges among included components with up to 2 evidence `file:line` refs each, plus
+     linked tests.
+  5. If the packet's estimated size is over `--budget` (default 2000), trim in this order:
+     evidence per edge → neighbor file lists → neighbor components. Each step taken is reported.
+- **Confidence** (a heuristic, labelled as one, never a probability):
+  - **none** if the top score is 0
+  - **high** if the top score is ≥ 6 and leads #2 by ≥ 2
+  - **medium** if the top score is ≥ 3 (at least one name or route matched)
+  - **low** otherwise
+
+  On low or none, the packet tells the agent to fall back to normal code search.
+- **Tokens:** estimated as characters / 4, of the JSON packet and of the repo's source files.
+  The per-file `chars` fact was added in analyzer 0.5.0 for this. The word "estimated" appears
+  everywhere a count is shown.
+
+**Rejected:** (a) Embeddings or an LLM re-ranker: not deterministic, needs network and spend, and
+can't explain its ranking. (b) Using model-written summaries as ranking text: they contain
+unverified claims ("validates credentials"). (c) A calibrated probability: there's no labelled
+data to calibrate on, so a number that looks like a probability would be misleading. (d) BM25 /
+TF-IDF: needs corpus statistics that a 9-component repo can't provide in any meaningful way.

@@ -113,6 +113,7 @@ export const FileFacts = z.object({
   package: z.string(), // repo-relative package root ("." for the repo root)
   language: z.enum(["ts", "prisma"]),
   loc: z.number().int().nonnegative(),
+  chars: z.number().int().nonnegative().optional(), // 0.5.0+: source length, for chars/4 token estimates
   isEntry: z.boolean(),
   entryReason: z.string().optional(),
   imports: z.array(ImportFact),

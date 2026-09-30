@@ -7,9 +7,9 @@ on a canvas. Later: a graph-guided repair agent.
 - **Live:** https://tracehound-tau.vercel.app (Vercel, Root Directory `viewer`, auto-deploys
   from `main`; leave Output Directory unset). CI (`.github/workflows/ci.yml`) runs tests,
   typecheck, and the viewer build, and checks that `out/snapshots/index.json` exists.
-- **Built:** analyzer 0.4.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
+- **Built:** analyzer 0.5.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
   anchor-reach grouping; `tracehound.json` overrides; orphan warnings; `proven` /
-  `resolved-default` / `dynamic` labels; TESTS links from test files) → static snapshots + manifest → viewer (React Flow +
+  `resolved-default` / `dynamic` labels; TESTS links from test files; per-file `chars`) → static snapshots + manifest → viewer (React Flow +
   ELK, node/edge inspectors, GitHub permalinks, warnings panel, phone bottom sheet).
 - **Impact (feature 4, CLI only):** `pnpm tracehound impact --repo <path> --diff <base>..<head>
   [--depth 2] [--json]` → changed/affected components with evidence chains (decision 023).
@@ -17,6 +17,9 @@ on a canvas. Later: a graph-guided repair agent.
   writes a report the viewer serves at `?impact=<name>` (changed/affected styling, dynamic
   edges flagged, chain panel). The viewer build fails if an impact cites an id missing from its
   base snapshot. Precomputed: `seed-queue-consumer`, `seed-rpc-bridge`, `seed-pending-registry`.
+- **Agent tools (feature 5):** `context` / `query` / `mcp` over a snapshot. Ranking v1 is lexical
+  and deterministic, confidence is a labelled heuristic, and token counts are estimates (chars/4).
+  See decision 025.
   Compared with dependency-cruiser `--reaches` on 3 seeded fork branches in
   `docs/impact-comparison.md` (it found nothing TraceHound missed; TraceHound over-reports at
   component granularity). A queue crossing costs one hop of depth (decision 024).
@@ -78,6 +81,9 @@ repo) are recorded as facts but never produce edges.
 - `pnpm demo` — clone the pinned demo repo into `fixtures/demo-repo` and analyze it (uses
   `configs/cex-v2-boilercode.tracehound.json`; set `NEBIUS_API_KEY` in `.env` for LLM names).
 - `pnpm tracehound impact --repo fixtures/demo-repo --diff da0e3d6..<ref>` — impact of a diff.
+- `pnpm tracehound context --issue "<text>" [--budget 2000] [--json]` — context packet for an agent.
+- `pnpm tracehound query <search_components|get_neighbors|get_edge_evidence|get_related_tests> ...`
+  and `pnpm tracehound mcp` (stdio MCP server, same tools). All read one snapshot; no network.
 - `pnpm test` / `pnpm typecheck` — all packages.
 - `pnpm --filter @tracehound/viewer dev` — viewer on :3000 (copies ../snapshots first).
 - `pnpm --filter @tracehound/viewer build` — static export in `viewer/out/`.

@@ -66,6 +66,7 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
       package: pkg.root,
       language: "ts",
       loc: sf.getEndLineNumber(),
+      chars: sf.getFullText().length,
       isEntry: entryReason !== undefined,
       entryReason,
       imports: extractImports(sf, ctx),
@@ -83,7 +84,7 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
   }
   for (const { schema, models, datasource } of schemaFacts) {
     files.push({
-      path: schema.path, package: schema.package, language: "prisma", loc: schema.text.split("\n").length, isEntry: false,
+      path: schema.path, package: schema.package, language: "prisma", loc: schema.text.split("\n").length, chars: schema.text.length, isEntry: false,
       imports: [], symbols: [], routes: [], mounts: [], listens: [], startupCalls: [], clients: [], redisOps: [], prismaOps: [], envReads: [],
       prismaModels: models, prismaDatasource: datasource,
     });

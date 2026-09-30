@@ -11,27 +11,7 @@ import { computeImpact, parseNameStatus, type ImpactReport } from "../src/impact
 import { upsertManifest, writeManifest } from "../src/manifest.ts";
 import { ImpactReport as ImpactReportSchema, impactReferenceErrors, type Snapshot } from "../src/schema.ts";
 
-// A tiny two-package repo, committed for real so `git diff --name-status` does the work:
-//   api:api-app -imports-> orders -imports-> queue-client -produces-> redis:redis-url -consumes-> worker
-//   redis:redis-url -consumes (dynamic key)-> notifier          api/src/orders.test.ts TESTS orders
-const BASE_FILES: Record<string, string> = {
-  "package.json": JSON.stringify({ name: "mini", private: true, workspaces: ["api", "worker"] }),
-  "tracehound.json": JSON.stringify({
-    components: {
-      orders: { name: "Orders", kind: "service", files: ["api/src/orders.ts"] },
-      "queue-client": { name: "Queue Client", kind: "service", files: ["api/src/queue-client.ts"] },
-      notifier: { name: "Notifier", kind: "service", files: ["api/src/notifier.ts"] },
-    },
-  }),
-  "api/package.json": JSON.stringify({ name: "api", scripts: { dev: "bun run src/index.ts" } }),
-  "api/src/index.ts": 'import { handleOrder } from "./orders.ts";\nimport { listen } from "./notifier.ts";\nawait handleOrder({ id: "1", qty: 2 });\nawait listen(process.argv[2]!);\n',
-  "api/src/orders.ts": 'import { send } from "./queue-client.ts";\nexport async function handleOrder(order: { id: string; qty: number }) {\n  return send({ orderId: order.id, qty: order.qty });\n}\n',
-  "api/src/queue-client.ts": 'import { createClient } from "redis";\nconst client = createClient({ url: process.env.REDIS_URL });\nexport async function send(message: { orderId: string; qty: number }) {\n  await client.lPush("jobs", JSON.stringify(message));\n}\n',
-  "api/src/notifier.ts": 'import { createClient } from "redis";\nconst client = createClient({ url: process.env.REDIS_URL });\nexport async function listen(queue: string) {\n  return client.brPop(queue, 0);\n}\n',
-  "api/src/orders.test.ts": 'import { handleOrder } from "./orders.ts";\nhandleOrder({ id: "t", qty: 1 });\n',
-  "worker/package.json": JSON.stringify({ name: "worker", scripts: { start: "bun run src/index.ts" } }),
-  "worker/src/index.ts": 'import { createClient } from "redis";\nconst client = createClient({ url: process.env.REDIS_URL });\nconst item = await client.brPop("jobs", 0);\nif (item) console.log(JSON.parse(item.element).orderId);\n',
-};
+import { BASE_FILES } from "./fixture-repo.ts";
 
 let repo: string;
 let snapshotsDir: string;
