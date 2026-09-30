@@ -4,11 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "snapshots": "node scripts/copy-snapshots.mjs",
-    "predev": "node scripts/copy-snapshots.mjs",
-    "dev": "next dev",
-    "prebuild": "node scripts/copy-snapshots.mjs",
-    "build": "next build",
+    "snapshots": "node scripts/snapshots.mjs copy",
+    "dev": "node scripts/snapshots.mjs copy && next dev",
+    "build": "node scripts/snapshots.mjs copy && next build && node scripts/snapshots.mjs verify-export",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

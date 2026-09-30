@@ -183,8 +183,29 @@ screenshots, and colour is already used for hover/selection.
 
 ## 018 · Viewer serves copied snapshots; the repo's `snapshots/` stays the source of truth
 **Choice:** `snapshots/` is committed at the repo root, where the analyzer writes. The viewer's
-`predev`/`prebuild` step copies it into `viewer/public/snapshots` (gitignored), so the static
-export contains `index.json` plus the snapshot files and fetches them with relative URLs.
+`build`/`dev` scripts copy `index.json` plus only the snapshot files it references into
+`viewer/public/snapshots` (gitignored), so the static export fetches them with relative URLs.
+The copy is an explicit first step of `build`, not a `prebuild` hook: pnpm 8 silently skips
+`pre*` scripts, and the first Vercel deploy went green while serving no data (see 019). Any
+missing piece fails the build: no `../snapshots`, no `latest`, a missing referenced file, or
+missing `out/snapshots` after export. `next.config.ts` also refuses a bare `next build` without
+the data. CI builds the viewer and asserts `out/snapshots/index.json` and the latest file exist.
+No symlinks: Vercel and `next export` copy `public/` by value, and a dangling link would ship
+silently.
 **Rejected:** (a) Importing the snapshot JSON into the JS bundle. Adding a snapshot would need a
 rebuild of the code rather than just the data, and the manifest indirection would be pointless.
 (b) Writing snapshots straight into `viewer/public`. That couples the analyzer to one consumer.
+
+## 019 · Vercel Root Directory = `viewer`, with files outside the root included in the build
+**Choice:** The Vercel project builds from `viewer/` and reads `../snapshots` and
+`../packages/analyzer` at build time. That relies on Vercel's "Include files outside the root
+directory in the Build Step" (Project Settings → Build and Deployment → Root Directory). The
+first deploy shows it is on: the viewer imports `@tracehound/analyzer/schema` from `../packages`,
+and that build succeeded. If it's ever turned off, the snapshot copy fails with a message naming
+the setting, instead of deploying a viewer that 404s.
+**Rejected:** (a) Committing a second copy of the snapshots inside `viewer/public/`. That
+duplicates data in git, and the two copies drift. (b) Fetching snapshots from
+raw.githubusercontent.com at runtime. It adds a runtime dependency on GitHub, and the viewer
+would show `main`'s data rather than the deployed commit's. (c) Symlinking `viewer/public/snapshots`
+→ `../../snapshots`. Link handling in upload and export is platform-dependent, and a broken
+link fails silently.

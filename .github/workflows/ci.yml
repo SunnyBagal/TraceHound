@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    # Never needs NEBIUS_API_KEY: tests use a fake server and block the network.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # version from package.json "packageManager"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Tests (analyzer + viewer)
+        run: pnpm test
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build static viewer
+        run: pnpm --filter @tracehound/viewer build
+
+      - name: Assert the export can load data
+        run: |
+          test -f viewer/out/snapshots/index.json || { echo "::error::viewer/out/snapshots/index.json missing"; exit 1; }
+          latest=$(node -p "require('./viewer/out/snapshots/index.json').latest.path")
+          test -f "viewer/out/snapshots/$latest" || { echo "::error::latest snapshot $latest missing from export"; exit 1; }
+          echo "export OK: index.json + $latest"
