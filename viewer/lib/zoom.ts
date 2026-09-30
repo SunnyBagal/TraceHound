@@ -4,9 +4,19 @@
  */
 export const MIN_ZOOM = 0.4;
 export const MAX_ZOOM = 1.5;
+/**
+ * Phones (viewport narrower than 640px, where the rail hides) may zoom out to 0.2, so fit view
+ * shows the whole graph there; at 0.4 it cropped the demo at 390px wide.
+ */
+export const PHONE_MIN_ZOOM = 0.2;
+export const PHONE_MAX_WIDTH = 640;
 
-export function clampZoom(zoom: number): number {
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+export function minZoomFor(viewportWidth: number): number {
+  return viewportWidth < PHONE_MAX_WIDTH ? PHONE_MIN_ZOOM : MIN_ZOOM;
+}
+
+export function clampZoom(zoom: number, minZoom = MIN_ZOOM): number {
+  return Math.min(MAX_ZOOM, Math.max(minZoom, zoom));
 }
 
 export interface Viewport {
@@ -26,8 +36,9 @@ export function keepInView(
   pane: { width: number; height: number },
   occludeRight: number,
   margin: number,
+  minZoom = MIN_ZOOM,
 ): Viewport | null {
-  const zoom = clampZoom(viewport.zoom);
+  const zoom = clampZoom(viewport.zoom, minZoom);
   const { x, y } = viewport;
   const visible = { left: margin, top: margin, right: pane.width - occludeRight - margin, bottom: pane.height - margin };
   const screen = { left: bounds.minX * zoom + x, top: bounds.minY * zoom + y, right: bounds.maxX * zoom + x, bottom: bounds.maxY * zoom + y };

@@ -725,6 +725,7 @@ differ only by the tools and their one sentence.
   show everything. The 9-component demo fits on desktop (≈0.78 at 1440×900), but at 390×844 fit
   view stops at 0.4 and crops the right-hand column (it used to fit at 0.22, which was
   unreadable anyway). The user pans to see the rest.
+- **Update: phones (viewport < 640px) use minZoom 0.2**, so fit view shows the whole demo graph at 390×844 again; desktop stays 0.4–1.5.
 - **Header icon rule.** A technology logo goes in a node or panel header only when a fact shows
   the component *is* that technology (the Redis broker node, a PostgreSQL/Prisma data store) or
   that it is the component's framework or runtime (Express, Bun). Every fact in `lib/tech.ts`

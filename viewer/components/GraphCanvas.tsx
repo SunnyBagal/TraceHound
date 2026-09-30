@@ -17,7 +17,7 @@ import type { Highlight } from "@/lib/highlight";
 import { elkLayout, type Positions } from "@/lib/layout";
 import { clearPositions, loadPositions, savePositions } from "@/lib/positions";
 import type { Snapshot } from "@/lib/types";
-import { clampZoom, keepInView, MAX_ZOOM, MIN_ZOOM } from "@/lib/zoom";
+import { clampZoom, keepInView, MAX_ZOOM, MIN_ZOOM, minZoomFor } from "@/lib/zoom";
 import { ComponentNode } from "./ComponentNode";
 import { EdgeMarkers, EvidenceEdge } from "./EvidenceEdge";
 
@@ -41,7 +41,18 @@ export interface GraphCanvasProps {
   highlight?: Highlight | null;
 }
 
-const FIT = { padding: 0.18, duration: 300, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM };
+const fitOptions = (minZoom: number) => ({ padding: 0.18, duration: 300, minZoom, maxZoom: MAX_ZOOM });
+
+/** 0.4 on desktop, 0.2 on viewports narrower than 640px (lib/zoom.ts); follows resizes. */
+function useMinZoom(): number {
+  const [minZoom, setMinZoom] = useState(() => (typeof window === "undefined" ? MIN_ZOOM : minZoomFor(window.innerWidth)));
+  useEffect(() => {
+    const measure = () => setMinZoom(minZoomFor(window.innerWidth));
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  return minZoom;
+}
 const MARGIN = 32; // px kept clear around a selection brought into view
 
 export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce, impact, occludeRight = 0, highlight = null }: GraphCanvasProps) {
@@ -55,6 +66,10 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
   const [fitted, setFitted] = useState(0); // bumps when a layout's fitView lands
   const { fitView, setCenter, getViewport, setViewport } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
+  const minZoom = useMinZoom();
+  const fit = fitOptions(minZoom);
+  const fitRef = useRef(fit); // the layout effect reads the current limits without re-running ELK on resize
+  fitRef.current = fit;
 
   // ELK layout, then any positions this viewer saved for this snapshot.
   useEffect(() => {
@@ -68,7 +83,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
         if (cancelled) return;
         const saved = loadPositions(storageKey);
         setNodes(base.nodes.map((n) => ({ ...n, position: saved[n.id] ?? layout[n.id] ?? n.position })));
-        requestAnimationFrame(() => void fitView(FIT).then(() => !cancelled && setFitted((n) => n + 1)));
+        requestAnimationFrame(() => void fitView(fitRef.current).then(() => !cancelled && setFitted((n) => n + 1)));
       });
     return () => {
       cancelled = true;
@@ -85,7 +100,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
     if (!node) return;
     lastFocus.current = focusNonce;
     justFocused.current = `node:${focusId}`;
-    const zoom = clampZoom(1.05);
+    const zoom = clampZoom(1.05, minZoom);
     setCenter(node.position.x + NODE_WIDTH / 2 + occludeRight / 2 / zoom, node.position.y + NODE_HEIGHT / 2, { zoom, duration: 500 });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run per focus request, not per drag
   }, [focusId, focusNonce, nodes.length > 0]);
@@ -113,7 +128,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
       maxX: Math.max(...boxes.map((n) => n.position.x + NODE_WIDTH)),
       maxY: Math.max(...boxes.map((n) => n.position.y + NODE_HEIGHT)),
     };
-    const next = keepInView(bounds, getViewport(), { width: el.clientWidth, height: el.clientHeight }, occludeRight, MARGIN);
+    const next = keepInView(bounds, getViewport(), { width: el.clientWidth, height: el.clientHeight }, occludeRight, MARGIN, minZoom);
     if (next) setViewport(next, { duration: 350 });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- per selection / panel change, not per drag
   }, [selectionKey, occludeRight, fitted]);
@@ -190,7 +205,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
         onNodeMouseLeave={() => setHoverId(null)}
         nodesConnectable={false}
         elementsSelectable
-        minZoom={MIN_ZOOM}
+        minZoom={minZoom}
         maxZoom={MAX_ZOOM}
         proOptions={{ hideAttribution: true }}
         colorMode="dark"
@@ -199,7 +214,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
         <Panel position="top-right" className="flex flex-col gap-2 transition-[right] duration-300 sm:flex-row" style={{ right: occludeRight }}>
           <button
             type="button"
-            onClick={() => fitView(occludeRight ? { ...FIT, padding: { top: 0.12, bottom: 0.12, left: 0.06, right: `${occludeRight + MARGIN}px` } } : FIT)}
+            onClick={() => fitView(occludeRight ? { ...fit, padding: { top: 0.12, bottom: 0.12, left: 0.06, right: `${occludeRight + MARGIN}px` } } : fit)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel/90 px-2.5 py-1.5 text-xs text-muted backdrop-blur hover:border-line-strong hover:text-text"
             title="Fit every component in view (beside the inspector when it is open)"
           >

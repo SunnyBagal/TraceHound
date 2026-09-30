@@ -5,7 +5,7 @@ import { ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { GraphCanvas } from "@/components/GraphCanvas";
-import { clampZoom, keepInView, MAX_ZOOM, MIN_ZOOM } from "@/lib/zoom";
+import { clampZoom, keepInView, MAX_ZOOM, MIN_ZOOM, minZoomFor, PHONE_MIN_ZOOM } from "@/lib/zoom";
 
 const root = path.resolve(import.meta.dirname, "../../snapshots");
 const manifest = SnapshotManifest.parse(JSON.parse(readFileSync(path.join(root, "index.json"), "utf8")));
@@ -125,5 +125,57 @@ describe("zoom limits", () => {
     // a zoom outside the limits comes back clamped
     expect(keepInView(node, { x: 0, y: 0, zoom: 3 }, pane, 480, 32)!.zoom).toBe(MAX_ZOOM);
     expect(keepInView(node, { x: 0, y: 0, zoom: 0.1 }, pane, 0, 32)).toEqual({ x: 0, y: 0, zoom: MIN_ZOOM });
+  });
+});
+
+describe("phone zoom (viewport narrower than 640px)", () => {
+  const innerWidth = Object.getOwnPropertyDescriptor(window, "innerWidth")!;
+  const offsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetWidth")!;
+  const offsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight")!;
+  afterEach(() => {
+    cleanup();
+    flow = undefined;
+    Object.defineProperty(window, "innerWidth", innerWidth);
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", offsetWidth);
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", offsetHeight);
+  });
+
+  /** a 390×844 phone: the canvas pane is 390×796 under the 48px header */
+  function phone() {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    const pane = (el: HTMLElement, size: number, fallback: PropertyDescriptor) => (el.classList.contains("react-flow__renderer") ? size : fallback.get!.call(el));
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", { configurable: true, get() { return pane(this, 390, offsetWidth); } });
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", { configurable: true, get() { return pane(this, 796, offsetHeight); } });
+  }
+
+  it("the minimum drops to 0.2 below 640px only", () => {
+    expect(PHONE_MIN_ZOOM).toBe(0.2);
+    expect([minZoomFor(390), minZoomFor(639), minZoomFor(640), minZoomFor(1440)]).toEqual([0.2, 0.2, 0.4, 0.4]);
+    expect(clampZoom(0.05, PHONE_MIN_ZOOM)).toBe(0.2);
+    expect(keepInView({ minX: 200, minY: 200, maxX: 210, maxY: 210 }, { x: 0, y: 0, zoom: 0.1 }, { width: 390, height: 796 }, 0, 32, PHONE_MIN_ZOOM)).toEqual({ x: 0, y: 0, zoom: 0.2 });
+  });
+
+  it("fit view shows the whole demo graph on a 390px phone, and zoom stays within 0.2–1.5", async () => {
+    phone();
+    renderCanvas(snapshot);
+    await screen.findAllByTestId("component-node", {}, { timeout: 5000 });
+    const end = Date.now() + 3000;
+    while (!(flow!.getZoom() < 1) && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 400)); // let the 300ms fit animation land
+    const { x, y, zoom } = flow!.getViewport();
+    expect(zoom).toBeGreaterThanOrEqual(PHONE_MIN_ZOOM);
+    expect(zoom).toBeLessThan(MIN_ZOOM); // fits below the desktop minimum
+    for (const n of flow!.getNodes()) {
+      const left = n.position.x * zoom + x;
+      const top = n.position.y * zoom + y;
+      expect(left, n.id).toBeGreaterThanOrEqual(0);
+      expect(top, n.id).toBeGreaterThanOrEqual(0);
+      expect(left + n.measured!.width! * zoom, n.id).toBeLessThanOrEqual(390);
+      expect(top + n.measured!.height! * zoom, n.id).toBeLessThanOrEqual(796);
+    }
+    await act(() => flow!.zoomTo(0.01));
+    expect(flow!.getZoom()).toBe(PHONE_MIN_ZOOM);
+    await act(() => flow!.zoomTo(10));
+    expect(flow!.getZoom()).toBe(MAX_ZOOM);
   });
 });
