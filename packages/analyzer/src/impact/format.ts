@@ -7,7 +7,8 @@ function hopLine(h: Hop): string {
   const arrow = `${h.source} -${h.kind}-> ${h.target}`;
   const walk = h.walk === "reverse" ? `reverse: ${h.to} depends on ${h.from}` : "bidirectional: shared message contract";
   const label = h.confidenceLabel === "dynamic" ? "DYNAMIC ⚠" : h.confidenceLabel;
-  return `${arrow}  [${label}]  "${h.label}"  ${h.evidence.file}:${h.evidence.line}  (${walk})`;
+  const free = h.depthCost === 0 ? "; leaves the broker, no extra depth" : "";
+  return `${arrow}  [${label}]  "${h.label}"  ${h.evidence.file}:${h.evidence.line}  (${walk}${free})`;
 }
 
 export function formatImpact(r: ImpactReport): string {
@@ -51,7 +52,7 @@ export function formatImpact(r: ImpactReport): string {
   if (!r.linkedTests.length) out.push("  no *.test.ts, *.spec.ts or __tests__/** file imports a changed or affected component");
   out.push("");
 
-  out.push(`Direction rule (docs/decisions.md 023): ${r.directionRule}`);
+  out.push(`Direction rule (docs/decisions.md 023, 024): ${r.directionRule}`);
   if (anyModel) out.push("* model-written name (Nemotron Nano), prose not verified; ids are deterministic");
   return out.join("\n");
 }

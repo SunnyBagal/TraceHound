@@ -1,6 +1,6 @@
 // Impact analysis: which components a diff touches, and which others depend on them.
 // Pure over a base snapshot + a parsed `git diff --name-status`; no model, no network.
-import type { ComponentEdge, EdgeKind, Resolution, Snapshot } from "../schema.ts";
+import type { ComponentEdge, ComponentKind, EdgeKind, Resolution, Snapshot } from "../schema.ts";
 
 // ── git diff --name-status ─────────────────────────────────────────────────────────────────
 export type ChangeStatus = "added" | "modified" | "deleted" | "renamed" | "copied" | "type-changed";
@@ -34,7 +34,10 @@ export function parseNameStatus(text: string): FileChange[] {
 const REVERSE: EdgeKind[] = ["imports", "queries"];
 /** A message/data contract through a queue or store couples both sides: walk either way. */
 const BIDIRECTIONAL: EdgeKind[] = ["produces", "consumes", "reads", "writes"];
-export const DIRECTION_RULE = "imports, queries: reverse (dependents of the changed component) · produces, consumes, reads, writes: bidirectional (message/data contract)";
+/** Brokers: leaving one is free, so producer -> broker -> consumer costs one hop (decision 024). */
+const BROKER_KINDS: ComponentKind[] = ["queue", "cache"];
+export const DIRECTION_RULE =
+  "imports, queries: reverse (dependents of the changed component) · produces, consumes, reads, writes: bidirectional (message/data contract) · crossing a queue/cache broker costs one hop of depth (decision 024)";
 
 // ── Report ─────────────────────────────────────────────────────────────────────────────────
 export interface MappedFile extends FileChange {
@@ -53,13 +56,14 @@ export interface Hop {
   confidenceLabel: Resolution;
   label: string;
   evidence: { id: string; file: string; line: number };
+  depthCost?: 0 | 1; // 0 = leaving a broker (the crossing was paid on the way in)
 }
 
 export interface AffectedComponent {
   id: string;
   name: string;
   modelWrittenName: boolean;
-  depth: number;
+  depth: number; // hops of depth used (a broker crossing counts once), not chain.length
   chain: Hop[]; // changed component → … → this one
   dynamic: boolean; // some hop on the chain is only known at runtime
 }
@@ -138,27 +142,37 @@ export function computeImpact({ snapshot, changes, base, head, depth = 2, snapsh
       return [];
     });
 
-  const chains = new Map<string, Hop[]>(changedIds.map((id) => [id, []]));
-  let frontier = changedIds;
-  for (let d = 1; d <= depth && frontier.length; d++) {
-    const next = new Map<string, Hop[]>();
-    for (const id of frontier) {
-      for (const h of neighbours(id)) {
-        if (chains.has(h.to)) continue;
-        const candidate = [...chains.get(id)!, h];
-        const current = next.get(h.to);
-        if (!current || weakest(candidate) > weakest(current)) next.set(h.to, candidate);
-      }
+  // Cost-ordered search. A hop costs 1, except leaving a broker (queue/cache resource): crossing
+  // producer -> broker -> consumer costs one hop in total (decision 024). Among equally cheap
+  // chains keep the one whose weakest hop is strongest, then the shorter one.
+  const isBroker = (id: string) => BROKER_KINDS.includes(component.get(id)?.kind ?? "api");
+  type Reached = { cost: number; chain: Hop[] };
+  const better = (a: Reached, b: Reached) =>
+    a.cost !== b.cost ? a.cost < b.cost : weakest(a.chain) !== weakest(b.chain) ? weakest(a.chain) > weakest(b.chain) : a.chain.length < b.chain.length;
+  const best = new Map<string, Reached>(changedIds.map((id) => [id, { cost: 0, chain: [] }]));
+  const settled = new Set<string>();
+  for (;;) {
+    const open = [...best.entries()].filter(([id]) => !settled.has(id)).sort(([ia, a], [ib, b]) => (better(a, b) ? -1 : better(b, a) ? 1 : ia.localeCompare(ib)));
+    if (!open.length) break;
+    const [id, reached] = open[0]!;
+    settled.add(id);
+    for (const h of neighbours(id)) {
+      if (settled.has(h.to)) continue;
+      const step: 0 | 1 = isBroker(id) ? 0 : 1;
+      const candidate = { cost: reached.cost + step, chain: [...reached.chain, { ...h, depthCost: step }] };
+      if (candidate.cost > depth) continue;
+      const current = best.get(h.to);
+      if (!current || better(candidate, current)) best.set(h.to, candidate);
     }
-    for (const [id, chain] of next) chains.set(id, chain);
-    frontier = [...next.keys()].sort();
   }
+  const chains = new Map([...best.entries()].map(([id, r]) => [id, r.chain]));
+  const costs = new Map([...best.entries()].map(([id, r]) => [id, r.cost]));
 
   const affected = [...chains.entries()]
     .filter(([id]) => !changedIds.includes(id))
     .map(([id, chain]): AffectedComponent => {
       const c = component.get(id)!;
-      return { id, name: c.name, modelWrittenName: c.naming.source === "llm", depth: chain.length, chain, dynamic: chain.some((h) => h.confidenceLabel === "dynamic") };
+      return { id, name: c.name, modelWrittenName: c.naming.source === "llm", depth: costs.get(id)!, chain, dynamic: chain.some((h) => h.confidenceLabel === "dynamic") };
     })
     .sort((a, b) => a.depth - b.depth || a.id.localeCompare(b.id));
 

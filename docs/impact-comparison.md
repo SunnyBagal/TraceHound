@@ -1,5 +1,8 @@
 # Impact analysis: TraceHound vs dependency-cruiser on seeded changes
 
+> This is 3 hand-picked changes in one small repo. It shows direction only, not a general claim
+> about either tool's precision or recall.
+
 Demo repo: [`SunnyBagal/cex-v2-boilercode`](https://github.com/SunnyBagal/cex-v2-boilercode)
 (fork of `rahul-MyGit/cex-v2-boilercode`). `main` stays at `da0e3d6`. Each seed branch is one
 behavior-changing commit on top of `da0e3d6` that touches one file. The branches are never
@@ -7,6 +10,7 @@ merged.
 
 - **TraceHound** — `tracehound impact`, analyzer 0.4.0, default `--depth 2`, base snapshot
   `snapshots/da0e3d640a9c02f815fcca48f8328c94558cc058/0.4.0.json`. Reports **components**.
+  Depth rules: decision 023, plus decision 024 (crossing a queue costs one hop).
 - **dependency-cruiser** — 18.4.0 with `typescript@5.9.3`, run through `npx`; it isn't a
   dependency of anything. The docs' option for "what reaches this file" is `--reaches <regex>`:
   "show modules and their transitive dependents"; `--affected <rev>` is documented as sugar for
@@ -19,16 +23,22 @@ merged.
 
 ## Summary
 
-| Seed (changed file) | TraceHound affected (depth 2) | dependency-cruiser reaches (files → components) | Only TraceHound | Only dependency-cruiser |
+| Seed (changed file) | TraceHound affected (depth used) | dependency-cruiser reaches (files → components) | Only TraceHound | Only dependency-cruiser |
 |---|---|---|---|---|
-| `seed/impact-queue-consumer` (`engine/src/index.ts`) | `redis:redis-url`, `redis-rpc-bridge` | none | `redis:redis-url`, `redis-rpc-bridge` | none |
-| `seed/impact-rpc-bridge` (`backend/src/utils/engine-client.ts`) | `backend:backend-server`, `backend:exchange-api`, `pending-response-registry`, `redis:redis-url`, `engine:engine-worker` | 4 files → `backend:exchange-api`, `backend:backend-server` | `pending-response-registry` (false positive, see below), `redis:redis-url`, `engine:engine-worker` | none |
-| `seed/impact-pending-registry` (`backend/src/store/pending-responses.ts`) | `redis-rpc-bridge`, `backend:backend-server`, `backend:exchange-api`, `redis:redis-url` | 5 files → `redis-rpc-bridge`, `backend:exchange-api`, `backend:backend-server` | `redis:redis-url` | none |
+| `seed/impact-queue-consumer` (`engine/src/index.ts`) | `redis-rpc-bridge`@1, `redis:redis-url`@1, `backend:backend-server`@2, `backend:exchange-api`@2, `pending-response-registry`@2 | none | all five | none |
+| `seed/impact-rpc-bridge` (`backend/src/utils/engine-client.ts`) | `backend:backend-server`@1, `backend:exchange-api`@1, `engine:engine-worker`@1, `pending-response-registry`@1, `redis:redis-url`@1 | 4 files → `backend:exchange-api`, `backend:backend-server` | `engine:engine-worker`, `redis:redis-url`, `pending-response-registry` (false positive) | none |
+| `seed/impact-pending-registry` (`backend/src/store/pending-responses.ts`) | `redis-rpc-bridge`@1, `backend:backend-server`@2, `backend:exchange-api`@2, `engine:engine-worker`@2, `redis:redis-url`@2 | 5 files → `redis-rpc-bridge`, `backend:exchange-api`, `backend:backend-server` | `redis:redis-url`, `engine:engine-worker` (both over-reported) | none |
 
 **dependency-cruiser found nothing that TraceHound missed**, at file or component level, in
 any of the three seeds. Every file it reported belongs to a component TraceHound listed as
 changed or affected. There is no bug to report from this comparison. TraceHound's precision
 problems are listed per seed below.
+
+**Before decision 024** (a queue crossing cost two hops): seed 1 reached only `redis:redis-url`
+and `redis-rpc-bridge`, and stopped before `backend:exchange-api`, where the timeout is
+user-visible. Seed 2 had the same set, with `engine:engine-worker` at depth 2. Seed 3 had no
+`engine:engine-worker`. dependency-cruiser's results are unchanged, since they don't depend on
+TraceHound's depth rule.
 
 ---
 
@@ -40,22 +50,27 @@ problems are listed per seed below.
   `sendToEngine` call times out.
 - **Commit:** [`c389d3d`](https://github.com/SunnyBagal/cex-v2-boilercode/commit/c389d3df0cfa45579061ad5c79bd0d852901d664)
 - **TraceHound:** changed `engine:engine-worker`; affected:
-  - `redis:redis-url`, depth 1, via `redis:redis-url -consumes-> engine:engine-worker`
-    `[resolved-default]` "brPop backend-to-engine-broker", `engine/src/index.ts:96`.
-  - `redis-rpc-bridge`, depth 2. Adds `redis-rpc-bridge -produces-> redis:redis-url`
-    `[resolved-default]` "lPush backend-to-engine-broker", `backend/src/utils/engine-client.ts:43`.
+  - Depth 1, crossing the queue once:
+    - `redis:redis-url`, via `redis:redis-url -consumes-> engine:engine-worker`
+      `[resolved-default]` "brPop backend-to-engine-broker", `engine/src/index.ts:96`
+    - `redis-rpc-bridge`, via `redis-rpc-bridge -produces-> redis:redis-url`
+      `[resolved-default]` "lPush backend-to-engine-broker",
+      `backend/src/utils/engine-client.ts:43`
+  - Depth 2, all `imports` walked in reverse, `[proven]`:
+    - `backend:exchange-api` (`backend/src/controllers/exchange-controller.ts:7`, `sendToEngine`)
+      is where the timeout is user-visible
+    - `backend:backend-server` (`backend/src/index.ts:5`)
+    - `pending-response-registry` (`backend/src/store/pending-responses.ts:1`)
   - 0 linked tests.
 - **dependency-cruiser:** nothing reaches `engine/src/index.ts`. The engine is an entry point
   that no module imports, and the backend never imports engine code (the engine keeps its own
   copy of the message types).
-- **Only TraceHound:** the queue and the producer, `redis-rpc-bridge`, which is the side that
-  breaks. The link exists only through the Redis queue, which a module graph can't see.
+- **Only TraceHound:** everything. The link exists only through the Redis queue, which a module
+  graph can't see.
 - **Only dependency-cruiser:** none.
-- **Caveat (TraceHound):** the user-visible failure (timeouts in `sendToEngine` callers) is in
-  `backend:exchange-api`. That's 3 hops away (engine → queue → bridge → exchange-api), so the
-  default `--depth 2` cuts it off. `--depth 3` adds `backend:backend-server`,
-  `backend:exchange-api` and `pending-response-registry`. dependency-cruiser doesn't report it
-  at any depth.
+- **Precision:** `pending-response-registry` is a false positive. It imports only the
+  `EngineResponse` type from the bridge component's `types/engine.ts`, and the seed doesn't
+  change the response shape.
 
 ## 2 · `seed/impact-rpc-bridge`: backend `engine-client.ts` (Redis RPC Bridge)
 
@@ -63,15 +78,15 @@ problems are listed per seed below.
   the command as `command` instead of `type`. The engine still switches on `message.type`, so
   `create_order` stops matching.
 - **Commit:** [`a21a534`](https://github.com/SunnyBagal/cex-v2-boilercode/commit/a21a534dffeaff66a760a7e556ee58c163a26655)
-- **TraceHound:** changed `redis-rpc-bridge`; affected:
-  - Depth 1, all `imports` walked in reverse unless noted, `[proven]`:
+- **TraceHound:** changed `redis-rpc-bridge`; affected, all at depth 1:
+  - via `imports` walked in reverse, `[proven]`:
     - `backend:backend-server` (`backend/src/index.ts:5`)
     - `backend:exchange-api` (`backend/src/controllers/exchange-controller.ts:7`)
     - `pending-response-registry` (`backend/src/store/pending-responses.ts:1`)
-    - `redis:redis-url`, via `produces` "lPush backend-to-engine-broker" `[resolved-default]`,
-      `backend/src/utils/engine-client.ts:43`
-  - Depth 2: `engine:engine-worker`, via `consumes` "brPop backend-to-engine-broker"
-    `[resolved-default]`, `engine/src/index.ts:96`.
+  - `redis:redis-url`, via `produces` "lPush backend-to-engine-broker" `[resolved-default]`,
+    `backend/src/utils/engine-client.ts:43`
+  - `engine:engine-worker` (queue crossed once), via `consumes` "brPop backend-to-engine-broker"
+    `[resolved-default]`, `engine/src/index.ts:96`
   - 0 linked tests.
 - **dependency-cruiser:** `backend/src/controllers/exchange-controller.ts`,
   `backend/src/routes/exchange-routes.ts` (→ `backend:exchange-api`), `backend/src/index.ts`,
@@ -98,30 +113,33 @@ problems are listed per seed below.
   - Depth 2:
     - `backend:backend-server` (`backend/src/index.ts:5`)
     - `backend:exchange-api` (`backend/src/controllers/exchange-controller.ts:7`)
-    - `redis:redis-url`, via `produces` "lPush backend-to-engine-broker" `[resolved-default]`
+    - `redis:redis-url` and `engine:engine-worker`, via the bridge's queue edges (queue crossed
+      once)
   - 0 linked tests.
 - **dependency-cruiser:** `backend/src/utils/engine-client.ts` (→ `redis-rpc-bridge`),
   `backend/src/controllers/exchange-controller.ts`, `backend/src/routes/exchange-routes.ts`
   (→ `backend:exchange-api`), `backend/src/index.ts`, `backend/src/routes/index.ts`
   (→ `backend:backend-server`).
-- **Only TraceHound:** `redis:redis-url`. This is over-reporting: the timeout change doesn't
-  touch the queue message contract. The bridge is affected through an import, and the walk then
-  follows the bridge's queue edge, because decision 023 couples queue edges regardless of what
-  changed.
-- **Only dependency-cruiser:** none. The component sets match apart from the queue.
+- **Only TraceHound:** `redis:redis-url` and `engine:engine-worker`. Both are over-reported: the
+  timeout change stays inside the backend and doesn't touch the queue message contract. The
+  bridge is affected through an import, and the walk then follows the bridge's queue edges,
+  because decision 023 couples queue edges regardless of what changed. Decision 024 made this
+  worse: the engine is now within the default depth.
+- **Only dependency-cruiser:** none.
 
 ---
 
 ## What this shows
 
 - **Queues are where TraceHound adds information.** In seeds 1 and 2 the component that
-  actually breaks (the producer in 1, the consumer in 2) is connected only through Redis, and
-  dependency-cruiser can't see it. In seed 1 dependency-cruiser reports no impact at all.
+  actually breaks is connected only through Redis, and dependency-cruiser can't see it. In seed
+  1 dependency-cruiser reports no impact at all.
 - **Inside one process, dependency-cruiser is more precise.** It works per file, and TraceHound
-  works per component. Seed 2's `pending-response-registry` is a TraceHound false positive, and
-  in seeds 2 and 3 TraceHound's components include files the change doesn't reach.
-- **TraceHound's depth limit can hide the user-visible effect.** Crossing a queue costs two
-  hops, so the default depth 2 stops at the other side of the queue (seed 1).
+  works per component. `pending-response-registry` is a false positive in seeds 1 and 2, and in
+  seed 3 the queue coupling adds two components the change can't reach.
+- **Decision 024 is a trade-off.** Seed 1 now reaches the user-visible failure at the default
+  depth, and seed 3 now over-reports the engine. The walk has no notion of *what* changed
+  (message shape vs internal behavior), so it can't tell these two cases apart.
 - **Tests:** CEX has no test files, so every report says "0 linked tests". Neither tool had
   tests to point to.
 
@@ -138,8 +156,7 @@ for s in queue-consumer rpc-bridge pending-registry; do
 done
 ```
 
-TraceHound (text output; add `--json` for the machine-readable report, `--depth 3` for the
-seed 1 caveat):
+TraceHound (text output; add `--json` for the machine-readable report):
 
 ```sh
 node packages/analyzer/src/bin.ts impact --repo fixtures/demo-repo --diff da0e3d6..origin/seed/impact-queue-consumer

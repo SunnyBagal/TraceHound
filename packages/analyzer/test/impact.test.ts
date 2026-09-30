@@ -136,12 +136,23 @@ describe("tracehound impact on the fixture repo", () => {
       "redis:redis-url -consumes-> worker:worker-worker (bidirectional)",
       "queue-client -produces-> redis:redis-url (bidirectional)",
     ]);
-    expect(r.linkedTests).toEqual([]); // orders (the tested component) is 3 hops away
+    expect(r.linkedTests.map((t) => t.componentId)).toEqual(["orders"]); // orders: queue crossing (1) + import (1)
+  });
+
+  it("decision 024: crossing a queue costs one hop; the broker stays in the chain without consuming depth", () => {
+    const edit = () => write("worker/src/index.ts", BASE_FILES["worker/src/index.ts"]!.replace(".orderId", ".order_id"));
+    const one = impactOf("broker-depth-1", edit, 1);
+    expect(find(one, "queue-client")).toMatchObject({ depth: 1 });
+    expect(find(one, "queue-client").chain.map((h) => [h.to, h.depthCost])).toEqual([["redis:redis-url", 1], ["queue-client", 0]]);
+    expect(find(one, "redis:redis-url")).toMatchObject({ depth: 1 });
+    expect(ids(one)).not.toContain("orders"); // one more import hop: depth 2
+    expect(find(impactOf("broker-depth-2", edit, 2), "orders")).toMatchObject({ depth: 2 });
+    expect(formatImpact(one)).toContain("leaves the broker, no extra depth");
   });
 
   it("flags chains through a dynamic edge instead of hiding them", () => {
     const r = impactOf("dynamic", () => write("worker/src/index.ts", BASE_FILES["worker/src/index.ts"]!.replace(".orderId", ".order_id")));
-    expect(find(r, "notifier")).toMatchObject({ depth: 2, dynamic: true });
+    expect(find(r, "notifier")).toMatchObject({ depth: 1, dynamic: true });
     expect(find(r, "notifier").chain.at(-1)).toMatchObject({ kind: "consumes", confidenceLabel: "dynamic", evidence: { file: "api/src/notifier.ts", line: 4 } });
     expect(find(r, "queue-client").dynamic).toBe(false);
     expect(formatImpact(r)).toContain("[DYNAMIC ⚠]");
@@ -149,8 +160,8 @@ describe("tracehound impact on the fixture repo", () => {
 
   it("depth cutoff: --depth 1 stops after one hop, --depth 0 reports only the changed component", () => {
     const edit = () => write("api/src/queue-client.ts", BASE_FILES["api/src/queue-client.ts"]! + "// v2\n");
-    expect(ids(impactOf("depth-2", edit, 2))).toEqual(["orders", "redis:redis-url", "api:api-app", "notifier", "worker:worker-worker"]);
-    expect(ids(impactOf("depth-1", edit, 1))).toEqual(["orders", "redis:redis-url"]);
+    expect(ids(impactOf("depth-2", edit, 2))).toEqual(["notifier", "orders", "redis:redis-url", "worker:worker-worker", "api:api-app"]);
+    expect(ids(impactOf("depth-1", edit, 1))).toEqual(["notifier", "orders", "redis:redis-url", "worker:worker-worker"]);
     const zero = impactOf("depth-0", edit, 0);
     expect(zero.changed.map((c) => c.id)).toEqual(["queue-client"]);
     expect(zero.affected).toEqual([]);

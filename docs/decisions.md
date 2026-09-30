@@ -296,3 +296,20 @@ TESTS: test files (`*.test.ts`, `*.spec.ts`, `__tests__/**`) keep their facts bu
 from grouping and orphan warnings. `snapshot.tests` links each test file to the components whose
 files it imports (evidence = the import fact). The impact report lists tests linked to changed or
 affected components and says "0 linked tests" when there are none. (Analyzer 0.4.0.)
+
+## 024 · Crossing a queue costs one hop of impact depth
+**Choice:** Entering a broker component (`queue` or `cache` kind: a Redis resource) costs one
+hop; leaving it costs nothing. Producer → broker → consumer is one hop of `--depth`, the same as
+an import. The broker still appears in the chain (as an affected component, and as the middle
+hop marked "leaves the broker, no extra depth"), so the evidence for both edges stays visible.
+`depth` in the report is now the depth used, not the chain length. The walk is cost-ordered;
+ties are broken by the strongest weakest hop, then the shorter chain.
+**Why:** With 023's plain counting, a queue cost two hops. On `seed/impact-queue-consumer`
+(engine stops reading `responseQueue`), the default depth 2 stopped at `redis-rpc-bridge` and
+never reached `backend:exchange-api`, where the user-visible timeout happens. A broker is a
+transport, not a place where a change can break. It only relays the contract between the two
+real components.
+**Rejected:** (a) Raising the default depth to 3: every import chain would get one hop longer
+to fix a queue-only problem. (b) Dropping broker nodes from the chain: it would hide which queue
+couples the two sides, and the edge evidence would lose its middle. This supersedes 023's
+rejected option (c).

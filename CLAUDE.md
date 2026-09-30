@@ -16,7 +16,7 @@ on a canvas. Later: a graph-guided repair agent.
   Needs a current-version snapshot of `<base>` in `snapshots/`. No canvas highlight yet.
   Compared with dependency-cruiser `--reaches` on 3 seeded fork branches in
   `docs/impact-comparison.md` (it found nothing TraceHound missed; TraceHound over-reports at
-  component granularity and depth 2 can stop just past a queue).
+  component granularity). A queue crossing costs one hop of depth (decision 024).
 - **Demo:** `SunnyBagal/cex-v2-boilercode` (fork of `rahul-MyGit/cex-v2-boilercode`, used with
   the original author's agreement) @ `da0e3d6` → 9 components, 17 edges, 1 orphan warning
   (`engine/src/store/exchange-store.ts`). The fork's `main` must stay at `da0e3d6`; seeded
