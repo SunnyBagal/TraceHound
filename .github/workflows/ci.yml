@@ -26,6 +26,9 @@ jobs:
 
       - name: Tests (analyzer + viewer)
         run: pnpm test
+        env:
+          # harness-infra: clone the demo fork from GitHub + bun install inside a Docker sandbox
+          TRACEHOUND_NETWORK_TESTS: "1"
 
       - name: Typecheck
         run: pnpm typecheck
