@@ -9,7 +9,7 @@ import { SpendLedger } from "./llm/ledger.ts";
 import { closestModel } from "./llm/models.ts";
 import { loadPriceTable, priceFor } from "./llm/prices.ts";
 import { readManifest, upsertManifest, writeManifest } from "./manifest.ts";
-import { DEFAULT_MODEL, formatCall, nameComponentsWithLlm } from "./naming/llm.ts";
+import { DEFAULT_MODEL, formatCall, nameComponentsWithLlm, NO_REASONING } from "./naming/llm.ts";
 import { Snapshot } from "./schema.ts";
 
 const WORKSPACE_ROOT = path.resolve(import.meta.dirname, "../../..");
@@ -25,6 +25,7 @@ const { values } = parseArgs({
     naming: { type: "string", default: "llm" }, // "llm" (falls back per component) | "heuristic"
     model: { type: "string" }, // default Nano; Super/Ultra only when passed explicitly
     "no-cache": { type: "boolean", default: false },
+    reasoning: { type: "string", default: "off" }, // naming: "off" (enable_thinking=false) | "on" (model default)
   },
 });
 if (!values.repo || !["llm", "heuristic"].includes(values.naming!)) {
@@ -79,7 +80,9 @@ if (values.naming === "llm" && apiKey) {
   console.error(`[naming] model ${model} resolved via GET /models`);
 
   try {
-    snapshot = Snapshot.parse(await nameComponentsWithLlm(snapshot, { client, model, log: (call) => console.error(formatCall(call)) }));
+    const reasoning = values.reasoning === "on" ? {} : NO_REASONING;
+    console.error(`[naming] reasoning ${values.reasoning === "on" ? "on (model default)" : "off (chat_template_kwargs.enable_thinking=false)"}`);
+    snapshot = Snapshot.parse(await nameComponentsWithLlm(snapshot, { client, model, reasoning, log: (call) => console.error(formatCall(call)) }));
   } catch (error) {
     if (error instanceof BudgetExceededError) fail(`budget guard: ${error.message}. No snapshot written.`);
     throw error;

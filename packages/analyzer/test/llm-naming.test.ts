@@ -90,6 +90,16 @@ describe("nameComponentsWithLlm", () => {
     expect(junk.llmCalls[0]!.error).toMatch(/not a valid/);
   });
 
+  it("turns reasoning off by default and lets callers opt back in", async () => {
+    const off = fakeFetch({});
+    await nameComponentsWithLlm(base, { client: fakeClient(off.impl).client });
+    expect(off.bodies.every((b) => (b as { chat_template_kwargs?: unknown }).chat_template_kwargs !== undefined)).toBe(true);
+    expect((off.bodies[0] as { chat_template_kwargs?: unknown }).chat_template_kwargs).toEqual({ enable_thinking: false });
+    const on = fakeFetch({});
+    await nameComponentsWithLlm(base, { client: fakeClient(on.impl).client, reasoning: {} });
+    expect(on.bodies.every((b) => !("chat_template_kwargs" in b))).toBe(true);
+  });
+
   it("never sends source code, and skips components named by an override", async () => {
     const { impl, bodies } = fakeFetch({});
     await nameComponentsWithLlm(base, { client: fakeClient(impl).client, model: "custom/model" });

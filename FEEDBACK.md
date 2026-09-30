@@ -90,3 +90,29 @@ Observations from building TraceHound. Facts only; newest entries at the bottom.
 - Engine Worker summary: "Consumes messages from the backend‑to‑engine‑broker queue for Redis
   consumers." Its facts also list a `produces` relation (`lPush dynamic key`), which the
   summary doesn't mention.
+
+---
+
+## 2026-09-30 · Reasoning controls on Nemotron 3 Nano (`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`)
+
+- **Docs:** the Token Factory OpenAPI spec (`https://api.tokenfactory.nebius.com/openapi.json`,
+  `ChatCompletionRequest.reasoning_effort`) documents `reasoning_effort` with values
+  `none | minimal | low | medium | high | xhigh | max`, but doesn't say which models honor it.
+  `chat_template_kwargs` is not in the spec.
+- **Probe:** same facts payload (Backend Server component, 401 prompt tokens), temperature 0,
+  `max_tokens` 1500, cache off:
+
+  | Request variant | Latency | Completion tok | `message.reasoning` | `message.content` |
+  |---|---:|---:|---:|---|
+  | none (model default) | 2292 ms | 315 | 1216 chars | valid JSON |
+  | `reasoning_effort: "none"` | 899 ms | 29 | 131 chars | **empty** (second call: `null`, 30 tok) |
+  | `reasoning_effort: "low"` | 1381 ms | 215 | 733 chars | valid JSON |
+  | `chat_template_kwargs: {"enable_thinking": false}` | 874 ms | 29 | not present | valid JSON |
+
+- With `reasoning_effort: "none"`, the response was HTTP 200 with `finish_reason: "stop"` and
+  `content: null`. The complete JSON answer was in `message.reasoning`.
+- `usage.completion_tokens_details` was `null` in every response, so reasoning tokens aren't
+  reported separately.
+- **Full naming run with `enable_thinking: false`** (7 components): 915–1467 ms per call, 229
+  completion tokens total (2,021 with reasoning on the same facts), 2,513 total tokens. All 7
+  replies were valid JSON.

@@ -11,6 +11,10 @@ export interface ChatRequest {
   temperature: number;
   max_tokens: number;
   messages: { role: "system" | "user" | "assistant"; content: string }[];
+  /** Documented in the Token Factory OpenAPI spec: none|minimal|low|medium|high|xhigh|max. */
+  reasoning_effort?: string;
+  /** Not in the official spec; passed through for chat templates that read it (e.g. enable_thinking). */
+  chat_template_kwargs?: Record<string, unknown>;
 }
 
 export interface ChatResult {
@@ -20,11 +24,13 @@ export interface ChatResult {
   inputTokens?: number;
   outputTokens?: number;
   costUSD: number; // 0 for cache hits
+  reasoningChars?: number; // length of message.reasoning / reasoning_content, when returned
+  reasoningTokens?: number; // usage.completion_tokens_details.reasoning_tokens, when reported
 }
 
 interface CompletionBody {
-  choices?: { message?: { content?: string | null } }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+  choices?: { message?: { content?: string | null; reasoning?: string | null; reasoning_content?: string | null } }[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } | null };
   error?: { message?: string } | string;
   detail?: string;
 }
@@ -92,6 +98,7 @@ export class TokenFactoryClient {
           inputTokens: hit.usage?.prompt_tokens,
           outputTokens: hit.usage?.completion_tokens,
           costUSD: 0,
+          ...reasoningStats(hit),
         };
       }
     }
@@ -130,6 +137,7 @@ export class TokenFactoryClient {
         inputTokens: body.usage?.prompt_tokens,
         outputTokens: body.usage?.completion_tokens,
         costUSD: recorded ?? 0,
+        ...reasoningStats(body),
       };
     } finally {
       reservation.settle(recorded ?? estimate);
@@ -162,6 +170,15 @@ export class TokenFactoryClient {
     });
     return cost;
   }
+}
+
+function reasoningStats(body: CompletionBody): Pick<ChatResult, "reasoningChars" | "reasoningTokens"> {
+  const message = body.choices?.[0]?.message;
+  const reasoning = message?.reasoning ?? message?.reasoning_content;
+  return {
+    reasoningChars: typeof reasoning === "string" ? reasoning.length : undefined,
+    reasoningTokens: body.usage?.completion_tokens_details?.reasoning_tokens ?? undefined,
+  };
 }
 
 function errorText(body: CompletionBody): string {

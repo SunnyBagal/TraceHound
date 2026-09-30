@@ -213,3 +213,27 @@ raw.githubusercontent.com at runtime. It adds a runtime dependency on GitHub, an
 would show `main`'s data rather than the deployed commit's. (c) Symlinking `viewer/public/snapshots`
 → `../../snapshots`. Link handling in upload and export is platform-dependent, and a broken
 link fails silently.
+
+## 020 · Naming runs with reasoning off (`chat_template_kwargs.enable_thinking=false`)
+**Choice:** Naming requests send `chat_template_kwargs: {"enable_thinking": false}`. `--reasoning on`
+restores the model default. On the demo's 7 components (same facts, Nano) this cut completion
+tokens from 2,021 to 229 (8.8×), cut per-call latency from 1.4–2.8 s to 0.9–1.5 s, and cut cost
+from $0.00062 to $0.00019 per run. All 7 replies still passed the naming checks (021 below
+covers the checks).
+**Rejected:** (a) `reasoning_effort: "none"`, the parameter the Token Factory OpenAPI spec
+documents. On Nano it returned `content: null` with the JSON answer inside `message.reasoning`,
+which breaks standard OpenAI-style parsing. (b) `reasoning_effort: "low"`: 215 completion tokens
+and 1.4 s, a smaller saving. (c) Keeping reasoning on and raising `max_tokens`: it costs more
+for no measurable naming gain on facts-only prompts. `enable_thinking` is not in the official
+spec. If Nebius drops support, the check layer still rejects bad replies, and the per-call log
+would show completion tokens jumping back up.
+
+## 021 · Deterministic checks on model names before they're stored
+**Choice:** Every reply is Unicode-normalized to ASCII punctuation, then must pass two checks:
+identifier-like tokens in the summary must exactly match extracted facts, and the name must not
+describe just one route or file of a multi-part component. A rejected reply falls back to the
+heuristic name, and the reason goes into `llmCalls[].rejectReason`.
+**Rejected:** A second model call to judge the first. It doubles cost, it's non-deterministic,
+and it can hallucinate too. Rules are cheaper and testable against the real bad outputs.
+**Known gap:** Plain-English claims aren't checked: "cryptocurrency" (run 1), "validates
+credentials" (run 3, where `signin` is a TODO stub). Only identifier-like tokens are verified.

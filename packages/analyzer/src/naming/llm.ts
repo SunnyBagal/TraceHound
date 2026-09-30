@@ -6,7 +6,7 @@ import { BudgetExceededError } from "../llm/budget.ts";
 import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import type { Component, LlmCall, Snapshot } from "../schema.ts";
 import { checkReply } from "./checks.ts";
-import { componentFacts } from "./facts.ts";
+import { componentFacts, type NamingFacts } from "./facts.ts";
 
 export { componentFacts } from "./facts.ts";
 
@@ -18,6 +18,7 @@ export interface LlmNamingConfig {
   client: { chat(request: ChatRequest, meta: { purpose: string; componentId?: string }): Promise<ChatResult> };
   model?: string;
   concurrency?: number;
+  reasoning?: ReasoningMode;
   log?: (call: LlmCall) => void;
 }
 
@@ -34,6 +35,29 @@ const Reply = z.object({
   summary: z.string().trim().min(8).max(280),
 });
 
+/** Reasoning controls for the naming call (see docs/decisions.md 020). */
+export type ReasoningMode = { reasoning_effort?: string; chat_template_kwargs?: Record<string, unknown> };
+
+/**
+ * Naming default: no reasoning. `enable_thinking: false` measured 874 ms / 29 completion tokens vs
+ * 2292 ms / 315 with reasoning on the same facts. The documented `reasoning_effort: "none"` returned
+ * the answer in `message.reasoning` with `content: null`, so it isn't used.
+ */
+export const NO_REASONING: ReasoningMode = { chat_template_kwargs: { enable_thinking: false } };
+
+export function buildNamingRequest(facts: NamingFacts, model: string, reasoning: ReasoningMode = {}): ChatRequest {
+  return {
+    model,
+    temperature: 0,
+    max_tokens: MAX_TOKENS,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: JSON.stringify(facts) },
+    ],
+    ...reasoning,
+  };
+}
+
 /** Pull the JSON object out of a reply that may include <think> blocks or code fences. */
 export function parseReply(content: string): z.infer<typeof Reply> | undefined {
   const text = content.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/```(?:json)?/g, "");
@@ -48,23 +72,12 @@ export function parseReply(content: string): z.infer<typeof Reply> | undefined {
   }
 }
 
-async function nameOne(snapshot: Snapshot, component: Component, client: LlmNamingConfig["client"], model: string) {
+async function nameOne(snapshot: Snapshot, component: Component, client: LlmNamingConfig["client"], model: string, reasoning: ReasoningMode) {
   const call: LlmCall = { purpose: "component-naming", componentId: component.id, model, latencyMs: 0, ok: false, cached: false, estCostUSD: 0 };
   const started = performance.now();
   const facts = componentFacts(snapshot, component);
   try {
-    const result = await client.chat(
-      {
-        model,
-        temperature: 0,
-        max_tokens: MAX_TOKENS,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: JSON.stringify(facts) },
-        ],
-      },
-      { purpose: "component-naming", componentId: component.id },
-    );
+    const result = await client.chat(buildNamingRequest(facts, model, reasoning), { purpose: "component-naming", componentId: component.id });
     Object.assign(call, {
       latencyMs: result.latencyMs,
       cached: result.cached,
@@ -107,7 +120,7 @@ export async function nameComponentsWithLlm(snapshot: Snapshot, config: LlmNamin
   const worker = async () => {
     while (next < targets.length) {
       const component = targets[next++]!;
-      const result = await nameOne(snapshot, component, config.client, cfg.model);
+      const result = await nameOne(snapshot, component, config.client, cfg.model, config.reasoning ?? NO_REASONING);
       log(result.call);
       results.set(component.id, result);
     }
