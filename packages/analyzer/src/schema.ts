@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export const SCHEMA_VERSION = 1;
 
-export const ExtractorName = z.enum(["imports", "symbols", "http-routes", "redis", "prisma", "env", "startup"]);
+export const ExtractorName = z.enum(["imports", "symbols", "http-routes", "redis", "prisma", "env", "startup", "errors"]);
 export type ExtractorName = z.infer<typeof ExtractorName>;
 
 /**
@@ -99,6 +99,14 @@ export const EnvReadFact = z.object({
 });
 export type EnvReadFact = z.infer<typeof EnvReadFact>;
 
+/** An error-message string literal (0.6.0+): new Error / throw / reject / HTTP `{ error }` body. */
+export const ErrorMessageFact = z.object({
+  message: z.string(), // literal text; template holes become `*`
+  kind: z.enum(["new-error", "throw", "reject", "http-error"]),
+  evidenceId: z.string(),
+});
+export type ErrorMessageFact = z.infer<typeof ErrorMessageFact>;
+
 export const ClientConstruction = z.object({
   tech: z.enum(["redis", "prisma"]),
   variable: z.string(),
@@ -129,6 +137,7 @@ export const FileFacts = z.object({
   prismaModels: z.array(z.object({ name: z.string(), evidenceId: z.string() })),
   prismaDatasource: z.object({ provider: z.string(), evidenceId: z.string() }).optional(),
   envReads: z.array(EnvReadFact),
+  errorMessages: z.array(ErrorMessageFact).default([]), // 0.6.0+
 });
 export type FileFacts = z.infer<typeof FileFacts>;
 

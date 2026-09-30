@@ -7,9 +7,9 @@ on a canvas. Later: a graph-guided repair agent.
 - **Live:** https://tracehound-tau.vercel.app (Vercel, Root Directory `viewer`, auto-deploys
   from `main`; leave Output Directory unset). CI (`.github/workflows/ci.yml`) runs tests,
   typecheck, and the viewer build, and checks that `out/snapshots/index.json` exists.
-- **Built:** analyzer 0.5.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
+- **Built:** analyzer 0.6.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
   anchor-reach grouping; `tracehound.json` overrides; orphan warnings; `proven` /
-  `resolved-default` / `dynamic` labels; TESTS links from test files; per-file `chars`) → static snapshots + manifest → viewer (React Flow +
+  `resolved-default` / `dynamic` labels; TESTS links from test files; per-file `chars`; error-message literals) → static snapshots + manifest → viewer (React Flow +
   ELK, node/edge inspectors, GitHub permalinks, warnings panel, phone bottom sheet).
 - **Impact (feature 4, CLI only):** `pnpm tracehound impact --repo <path> --diff <base>..<head>
   [--depth 2] [--json]` → changed/affected components with evidence chains (decision 023).

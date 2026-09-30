@@ -329,13 +329,23 @@ real issue, and isn't tuned to specific strings.
   - exported symbols: 2
   - file paths: 2
   - Redis keys: 2
+  - error-message literals (0.6.0: `new Error`/`throw`/`reject`/HTTP `{ error }`): 2
   - env vars: 1
 
   Model-written names and summaries are **not** used, since their prose is unverified.
-- **Score:** the sum over distinct issue terms of the best weight that term matches in the
-  component. Each term counts once per component.
+- **Score (rarity-weighted, since 0.6.0):** `score(c) = Σ_t w(t, c) × idf(t)`. The sum runs over
+  distinct issue terms `t`. `w(t, c)` is the highest field weight among `c`'s facts that match
+  `t` (0 if none).
+  - `idf(t) = ln(1 + N/df(t)) / ln(1 + N)`, where `N` is the number of (component, fact) values
+    in the snapshot and `df(t)` is how many of them contain a term matching `t`.
+  - A term found in exactly one fact gets idf 1.0, so a unique name or route match still scores
+    3, and the confidence thresholds below keep their meaning. Common terms ("error", "order" in
+    CEX) fall toward 0. A term that matches no fact gets idf 0.
+  - Scores are rounded to 2 decimals. `reason` shows `weight×idf` per matched term.
 - **Packet:**
   1. Take the top components with score > 0: at most 3, each at least half the top score.
+     **At LOW or NONE confidence the packet shrinks:** fallback advice plus at most the top 2
+     candidates, with no expansion (steps 2–3 are skipped).
   2. Expand one hop along every edge touching them.
   3. **Queue partners:** any included component's queue edges (`produces`/`consumes`/`reads`/
      `writes` to a queue/cache broker) bring in the broker and every component on its other
@@ -356,6 +366,11 @@ real issue, and isn't tuned to specific strings.
   The per-file `chars` fact was added in analyzer 0.5.0 for this. The word "estimated" appears
   everywhere a count is shown.
 
+**Dev issues:** the three issues used while building this ("Placing an order hangs…", "Signin
+accepts any password", "The app feels slow sometimes") are development inputs. Their results are
+not evaluation results; a held-out set is written separately. After the 0.6.0 changes all three
+are LOW. Issue 1 still misses `pending-response-registry`: its "Engine response timed out" stems
+to `tim`, which doesn't match `timeout`. No rule was added to force it.
 **Rejected:** (a) Embeddings or an LLM re-ranker: not deterministic, needs network and spend, and
 can't explain its ranking. (b) Using model-written summaries as ranking text: they contain
 unverified claims ("validates credentials"). (c) A calibrated probability: there's no labelled

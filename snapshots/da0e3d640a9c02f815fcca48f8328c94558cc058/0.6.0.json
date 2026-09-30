@@ -1,0 +1,5377 @@
+{
+  "schemaVersion": 1,
+  "analyzerVersion": "0.6.0",
+  "repo": {
+    "name": "SunnyBagal/cex-v2-boilercode",
+    "url": "https://github.com/SunnyBagal/cex-v2-boilercode.git",
+    "commitSha": "da0e3d640a9c02f815fcca48f8328c94558cc058"
+  },
+  "generatedAt": "2026-09-30T12:25:10.581Z",
+  "components": [
+    {
+      "id": "redis-rpc-bridge",
+      "name": "Redis RPC Bridge",
+      "kind": "service",
+      "subtitle": "Pushes backend-to-engine-broker · awaits response-queue-*",
+      "naming": {
+        "source": "override",
+        "heuristicName": "Redis RPC Bridge"
+      },
+      "package": "backend",
+      "files": [
+        "backend/src/types/engine.ts",
+        "backend/src/utils/engine-client.ts"
+      ],
+      "entryPoints": [
+        {
+          "file": "backend/src/utils/engine-client.ts",
+          "symbol": "brPop response-queue-*",
+          "reason": "queue consumer"
+        },
+        {
+          "file": "backend/src/utils/engine-client.ts",
+          "symbol": "connectRedis",
+          "reason": "exported function"
+        },
+        {
+          "file": "backend/src/utils/engine-client.ts",
+          "symbol": "pingRedis",
+          "reason": "exported function"
+        },
+        {
+          "file": "backend/src/utils/engine-client.ts",
+          "symbol": "sendToEngine",
+          "reason": "exported function"
+        },
+        {
+          "file": "backend/src/utils/engine-client.ts",
+          "symbol": "listenForEngineResponses",
+          "reason": "exported function"
+        }
+      ],
+      "membership": [
+        {
+          "file": "backend/src/types/engine.ts",
+          "reason": "pinned by tracehound.json \"redis-rpc-bridge\" (backend/src/types/engine.ts)"
+        },
+        {
+          "file": "backend/src/utils/engine-client.ts",
+          "reason": "pinned by tracehound.json \"redis-rpc-bridge\" (backend/src/utils/engine-client.ts)"
+        }
+      ],
+      "routes": [],
+      "envVars": [],
+      "counts": {
+        "files": 2,
+        "routes": 0,
+        "envVars": 0
+      }
+    },
+    {
+      "id": "pending-response-registry",
+      "name": "Pending-Response Registry",
+      "kind": "service",
+      "subtitle": "Exports waitForEngineResponse, resolveEngineResponse",
+      "naming": {
+        "source": "override",
+        "heuristicName": "Pending-Response Registry"
+      },
+      "package": "backend",
+      "files": [
+        "backend/src/store/pending-responses.ts"
+      ],
+      "entryPoints": [
+        {
+          "file": "backend/src/store/pending-responses.ts",
+          "symbol": "waitForEngineResponse",
+          "reason": "exported function"
+        },
+        {
+          "file": "backend/src/store/pending-responses.ts",
+          "symbol": "resolveEngineResponse",
+          "reason": "exported function"
+        }
+      ],
+      "membership": [
+        {
+          "file": "backend/src/store/pending-responses.ts",
+          "reason": "pinned by tracehound.json \"pending-response-registry\" (backend/src/store/pending-responses.ts)"
+        }
+      ],
+      "routes": [],
+      "envVars": [],
+      "counts": {
+        "files": 1,
+        "routes": 0,
+        "envVars": 0
+      }
+    },
+    {
+      "id": "redis:redis-url",
+      "name": "Redis Queue",
+      "kind": "queue",
+      "subtitle": "Redis lists · backend-to-engine-broker, response-queue-*, <dynamic>",
+      "summary": "Redis queue stores and retrieves tasks for Engine Worker and Redis RPC Bridge using dynamic keys.",
+      "naming": {
+        "source": "llm",
+        "heuristicName": "Redis",
+        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+      },
+      "files": [],
+      "entryPoints": [],
+      "membership": [],
+      "routes": [],
+      "envVars": [],
+      "counts": {
+        "files": 0,
+        "routes": 0,
+        "envVars": 0
+      },
+      "resource": {
+        "tech": "redis",
+        "connection": "REDIS_URL",
+        "keys": [
+          "backend-to-engine-broker",
+          "response-queue-*",
+          "<dynamic>"
+        ]
+      }
+    },
+    {
+      "id": "db:backend",
+      "name": "User Data Store",
+      "kind": "db",
+      "subtitle": "Postgres via Prisma · models: User",
+      "summary": "Manages persistent user data and schema for the application.",
+      "naming": {
+        "source": "llm",
+        "heuristicName": "Postgres",
+        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+      },
+      "package": "backend",
+      "files": [
+        "backend/prisma.config.ts",
+        "backend/prisma/schema.prisma",
+        "backend/src/db.ts"
+      ],
+      "entryPoints": [],
+      "membership": [
+        {
+          "file": "backend/prisma.config.ts",
+          "reason": "not imported by any entry point; file name matches Postgres"
+        },
+        {
+          "file": "backend/prisma/schema.prisma",
+          "reason": "Prisma schema"
+        },
+        {
+          "file": "backend/src/db.ts",
+          "reason": "only constructs and exports the Postgres client (prisma)"
+        }
+      ],
+      "routes": [],
+      "envVars": [
+        "DATABASE_URL"
+      ],
+      "counts": {
+        "files": 3,
+        "routes": 0,
+        "envVars": 1
+      },
+      "resource": {
+        "tech": "prisma",
+        "engine": "postgresql",
+        "connection": "DATABASE_URL",
+        "models": [
+          "User"
+        ]
+      }
+    },
+    {
+      "id": "backend:backend-server",
+      "name": "Backend Server",
+      "kind": "api",
+      "subtitle": "HTTP server entry · GET /health",
+      "summary": "Manages API routing and Redis bridge interactions for authentication and exchange services.",
+      "naming": {
+        "source": "llm",
+        "heuristicName": "Backend Server",
+        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+      },
+      "package": "backend",
+      "files": [
+        "backend/src/index.ts",
+        "backend/src/routes/index.ts"
+      ],
+      "entryPoints": [
+        {
+          "file": "backend/src/index.ts",
+          "reason": "package.json script \"dev\": bun run src/index.ts"
+        },
+        {
+          "file": "backend/src/index.ts",
+          "symbol": "GET /health",
+          "reason": "HTTP route"
+        }
+      ],
+      "membership": [
+        {
+          "file": "backend/src/index.ts",
+          "reason": "entry point (package.json script \"dev\": bun run src/index.ts)"
+        },
+        {
+          "file": "backend/src/routes/index.ts",
+          "reason": "only reachable from Backend Server (backend/src/index.ts)"
+        }
+      ],
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/health",
+          "file": "backend/src/index.ts",
+          "evidenceId": "backend/src/index.ts#L19-22:http-routes"
+        }
+      ],
+      "envVars": [],
+      "counts": {
+        "files": 2,
+        "routes": 1,
+        "envVars": 0
+      }
+    },
+    {
+      "id": "backend:auth-api",
+      "name": "Authentication Service",
+      "kind": "api",
+      "subtitle": "POST /signup, POST /signin",
+      "summary": "Handles user registration and login requests, validates credentials, and interacts with Postgres and shared utilities.",
+      "naming": {
+        "source": "llm",
+        "heuristicName": "Auth API",
+        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+      },
+      "package": "backend",
+      "files": [
+        "backend/src/controllers/auth-controller.ts",
+        "backend/src/routes/auth-routes.ts",
+        "backend/src/types/auth-schema.ts",
+        "backend/src/utils/auth.ts"
+      ],
+      "entryPoints": [
+        {
+          "file": "backend/src/routes/auth-routes.ts",
+          "symbol": "POST /signup",
+          "reason": "HTTP route"
+        },
+        {
+          "file": "backend/src/routes/auth-routes.ts",
+          "symbol": "POST /signin",
+          "reason": "HTTP route"
+        }
+      ],
+      "membership": [
+        {
+          "file": "backend/src/controllers/auth-controller.ts",
+          "reason": "only reachable from Auth API (backend/src/routes/auth-routes.ts)"
+        },
+        {
+          "file": "backend/src/routes/auth-routes.ts",
+          "reason": "registers 2 HTTP route(s)"
+        },
+        {
+          "file": "backend/src/types/auth-schema.ts",
+          "reason": "only reachable from Auth API (backend/src/routes/auth-routes.ts)"
+        },
+        {
+          "file": "backend/src/utils/auth.ts",
+          "reason": "used by Auth API, Exchange API; file name matches Auth API"
+        }
+      ],
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/signup",
+          "file": "backend/src/routes/auth-routes.ts",
+          "evidenceId": "backend/src/routes/auth-routes.ts#L7-7:http-routes"
+        },
+        {
+          "method": "POST",
+          "path": "/signin",
+          "file": "backend/src/routes/auth-routes.ts",
+          "evidenceId": "backend/src/routes/auth-routes.ts#L8-8:http-routes"
+        }
+      ],
+      "envVars": [],
+      "counts": {
+        "files": 4,
+        "routes": 2,
+        "envVars": 0
+      }
+    },
+    {
+      "id": "backend:exchange-api",
+      "name": "Exchange API",
+      "kind": "api",
+      "subtitle": "POST /order, GET /depth/:symbol +3 more",
+      "summary": "Handles order placement, depth queries, balance checks, and order management for authenticated users.",
+      "naming": {
+        "source": "llm",
+        "heuristicName": "Exchange API",
+        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+      },
+      "package": "backend",
+      "files": [
+        "backend/src/controllers/exchange-controller.ts",
+        "backend/src/routes/exchange-routes.ts",
+        "backend/src/types/exchange-schema.ts"
+      ],
+      "entryPoints": [
+        {
+          "file": "backend/src/routes/exchange-routes.ts",
+          "symbol": "POST /order",
+          "reason": "HTTP route"
+        },
+        {
+          "file": "backend/src/routes/exchange-routes.ts",
+          "symbol": "GET /depth/:symbol",
+          "reason": "HTTP route"
+        },
+        {
+          "file": "backend/src/routes/exchange-routes.ts",
+          "symbol": "GET /balance",
+          "reason": "HTTP route"
+        },
+        {
+          "file": "backend/src/routes/exchange-routes.ts",
+          "symbol": "GET /order/:orderId",
+          "reason": "HTTP route"
+        },
+        {
+          "file": "backend/src/routes/exchange-routes.ts",
+          "symbol": "DELETE /order/:orderId",
+          "reason": "HTTP route"
+        }
+      ],
+      "membership": [
+        {
+          "file": "backend/src/controllers/exchange-controller.ts",
+          "reason": "only reachable from Exchange API (backend/src/routes/exchange-routes.ts)"
+        },
+        {
+          "file": "backend/src/routes/exchange-routes.ts",
+          "reason": "registers 5 HTTP route(s)"
+        },
+        {
+          "file": "backend/src/types/exchange-schema.ts",
+          "reason": "only reachable from Exchange API (backend/src/routes/exchange-routes.ts)"
+        }
+      ],
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/order",
+          "file": "backend/src/routes/exchange-routes.ts",
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L14-14:http-routes"
+        },
+        {
+          "method": "GET",
+          "path": "/depth/:symbol",
+          "file": "backend/src/routes/exchange-routes.ts",
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L15-15:http-routes"
+        },
+        {
+          "method": "GET",
+          "path": "/balance",
+          "file": "backend/src/routes/exchange-routes.ts",
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L16-16:http-routes"
+        },
+        {
+          "method": "GET",
+          "path": "/order/:orderId",
+          "file": "backend/src/routes/exchange-routes.ts",
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L17-17:http-routes"
+        },
+        {
+          "method": "DELETE",
+          "path": "/order/:orderId",
+          "file": "backend/src/routes/exchange-routes.ts",
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L18-18:http-routes"
+        }
+      ],
+      "envVars": [],
+      "counts": {
+        "files": 3,
+        "routes": 5,
+        "envVars": 0
+      }
+    },
+    {
+      "id": "backend:shared",
+      "name": "Backend Shared",
+      "kind": "library",
+      "subtitle": "Shared modules · express, async-handler, env…",
+      "summary": "Provides shared utilities and configuration for backend services, used by Auth API, Exchange API, and Redis RPC Bridge.",
+      "naming": {
+        "source": "llm",
+        "heuristicName": "Backend Shared",
+        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+      },
+      "package": "backend",
+      "files": [
+        "backend/src/types/express.d.ts",
+        "backend/src/utils/async-handler.ts",
+        "backend/src/utils/env.ts",
+        "backend/src/utils/validation.ts"
+      ],
+      "entryPoints": [],
+      "membership": [
+        {
+          "file": "backend/src/types/express.d.ts",
+          "reason": "not imported by any entry point; no single owner"
+        },
+        {
+          "file": "backend/src/utils/async-handler.ts",
+          "reason": "used by Auth API, Exchange API"
+        },
+        {
+          "file": "backend/src/utils/env.ts",
+          "reason": "used by Backend Server, Auth API, Exchange API, Redis RPC Bridge"
+        },
+        {
+          "file": "backend/src/utils/validation.ts",
+          "reason": "used by Auth API, Exchange API"
+        }
+      ],
+      "routes": [],
+      "envVars": [
+        "BACKEND_QUEUE_ID",
+        "ENGINE_TIMEOUT_MS",
+        "INCOMING_QUEUE",
+        "JWT_SECRET",
+        "PORT",
+        "REDIS_URL"
+      ],
+      "counts": {
+        "files": 4,
+        "routes": 0,
+        "envVars": 6
+      }
+    },
+    {
+      "id": "engine:engine-worker",
+      "name": "Engine Worker",
+      "kind": "worker",
+      "subtitle": "Consumes backend-to-engine-broker",
+      "summary": "Processes incoming messages and updates Redis queues for backend communication.",
+      "naming": {
+        "source": "llm",
+        "heuristicName": "Engine Worker",
+        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+      },
+      "package": "engine",
+      "files": [
+        "engine/src/index.ts",
+        "engine/src/store/exchange-store.ts",
+        "engine/src/utils/env.ts"
+      ],
+      "entryPoints": [
+        {
+          "file": "engine/src/index.ts",
+          "reason": "package.json script \"dev\": bun run src/index.ts"
+        },
+        {
+          "file": "engine/src/index.ts",
+          "symbol": "brPop backend-to-engine-broker",
+          "reason": "queue consumer"
+        }
+      ],
+      "membership": [
+        {
+          "file": "engine/src/index.ts",
+          "reason": "entry point (package.json script \"dev\": bun run src/index.ts)"
+        },
+        {
+          "file": "engine/src/store/exchange-store.ts",
+          "reason": "not imported by any entry point; only component in package Engine"
+        },
+        {
+          "file": "engine/src/utils/env.ts",
+          "reason": "only reachable from Engine Worker (engine/src/index.ts)"
+        }
+      ],
+      "routes": [],
+      "envVars": [
+        "INCOMING_QUEUE",
+        "REDIS_URL"
+      ],
+      "counts": {
+        "files": 3,
+        "routes": 0,
+        "envVars": 2
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "backend:auth-api->backend:shared:imports",
+      "source": "backend:auth-api",
+      "target": "backend:shared",
+      "kind": "imports",
+      "evidenceIds": [
+        "backend/src/controllers/auth-controller.ts#L6-6:imports",
+        "backend/src/routes/auth-routes.ts#L3-3:imports",
+        "backend/src/utils/auth.ts#L3-3:imports"
+      ],
+      "weight": 3,
+      "confidence": 1,
+      "confidenceLabel": "proven",
+      "label": "asyncHandler, env, sendValidationError"
+    },
+    {
+      "id": "backend:auth-api->db:backend:imports",
+      "source": "backend:auth-api",
+      "target": "db:backend",
+      "kind": "imports",
+      "evidenceIds": [
+        "backend/src/controllers/auth-controller.ts#L3-3:imports"
+      ],
+      "weight": 1,
+      "confidence": 1,
+      "confidenceLabel": "proven",
+      "label": "prisma"
+    },
+    {
+      "id": "backend:auth-api->db:backend:queries",
+      "source": "backend:auth-api",
+      "target": "db:backend",
+      "kind": "queries",
+      "evidenceIds": [
+        "backend/src/controllers/auth-controller.ts#L19-24:prisma"
+      ],
+      "weight": 1,
+      "confidence": 0.9,
+      "confidenceLabel": "proven",
+      "label": "User.create"
+    },
+    {
+      "id": "backend:backend-server->backend:auth-api:imports",
+      "source": "backend:backend-server",
+      "target": "backend:auth-api",
+      "kind": "imports",
+      "evidenceIds": [
+        "backend/src/routes/index.ts#L2-2:imports"
+      ],
+      "weight": 1,
+      "confidence": 1,
+      "confidenceLabel": "proven",
+      "label": "authRouter"
+    },
+    {
+      "id": "backend:backend-server->backend:exchange-api:imports",
+      "source": "backend:backend-server",
+      "target": "backend:exchange-api",
+      "kind": "imports",
+      "evidenceIds": [
+        "backend/src/routes/index.ts#L3-3:imports"
+      ],
+      "weight": 1,
+      "confidence": 1,
+      "confidenceLabel": "proven",
+      "label": "exchangeRouter"
+    },
+    {
+      "id": "backend:backend-server->backend:shared:imports",
+      "source": "backend:backend-server",
+      "target": "backend:shared",
+      "kind": "imports",
+      "evidenceIds": [
+        "backend/src/index.ts#L4-4:imports"
+      ],
+      "weight": 1,
+      "confidence": 1,
+      "confidenceLabel": "proven",
+      "label": "env"
+    },
+    {
+      "id": "backend:backend-server->redis-rpc-bridge:imports",
+      "source": "backend:backend-server",
+      "target": "redis-rpc-bridge",
+      "kind": "imports",
+      "evidenceIds": [
+        "backend/src/index.ts#L5-9:imports"
+      ],
+      "weight": 1,
+      "confidence": 1,
+      "confidenceLabel": "proven",
+      "label": "connectRedis, listenForEngineResponses, pingRedis"
+    },
+    {
+      "id": "backend:exchange-api->backend:auth-api:imports",
+      "source": "backend:exchange-api",
+      "target": "backend:auth-api",
+      "kind": "imports",
+      "evidenceIds": [
+        "backend/src/routes/exchange-routes.ts#L9-9:imports"
+      ],
+      "weight": 1,
+      "confidence": 1,
+      "confidenceLabel": "proven",
+      "label": "requireAuth"
+    },
+    {
+      "id": "backend:exchange-api->backend:shared:imports",
+      "source": "backend:exchange-api",
+      "target": "backend:shared",
+      "kind": "imports",
+      "evidenceIds": [
+        "backend/src/controllers/exchange-controller.ts#L8-8:imports",
+        "backend/src/routes/exchange-routes.ts#L10-10:imports"
+      ],
+      "weight": 2,
+      "confidence": 1,
+      "confidenceLabel": "proven",
+      "label": "asyncHandler, sendValidationError"
+    },
+    {
+      "id": "backend:exchange-api->redis-rpc-bridge:imports",
+      "source": "backend:exchange-api",
+      "target": "redis-rpc-bridge",
+      "kind": "imports",
+      "evidenceIds": [
+        "backend/src/controllers/exchange-controller.ts#L7-7:imports"
+      ],
+      "weight": 1,
+      "confidence": 1,
+      "confidenceLabel": "proven",
+      "label": "sendToEngine"
+    },
+    {
+      "id": "engine:engine-worker->redis:redis-url:produces",
+      "source": "engine:engine-worker",
+      "target": "redis:redis-url",
+      "kind": "produces",
+      "evidenceIds": [
+        "engine/src/index.ts#L50-50:redis"
+      ],
+      "weight": 1,
+      "confidence": 0.5,
+      "confidenceLabel": "dynamic",
+      "label": "lPush dynamic key"
+    },
+    {
+      "id": "pending-response-registry->redis-rpc-bridge:imports",
+      "source": "pending-response-registry",
+      "target": "redis-rpc-bridge",
+      "kind": "imports",
+      "evidenceIds": [
+        "backend/src/store/pending-responses.ts#L1-1:imports"
+      ],
+      "weight": 1,
+      "confidence": 1,
+      "confidenceLabel": "proven",
+      "label": "EngineResponse"
+    },
+    {
+      "id": "redis-rpc-bridge->backend:shared:imports",
+      "source": "redis-rpc-bridge",
+      "target": "backend:shared",
+      "kind": "imports",
+      "evidenceIds": [
+        "backend/src/utils/engine-client.ts#L2-2:imports"
+      ],
+      "weight": 1,
+      "confidence": 1,
+      "confidenceLabel": "proven",
+      "label": "env"
+    },
+    {
+      "id": "redis-rpc-bridge->pending-response-registry:imports",
+      "source": "redis-rpc-bridge",
+      "target": "pending-response-registry",
+      "kind": "imports",
+      "evidenceIds": [
+        "backend/src/utils/engine-client.ts#L3-6:imports"
+      ],
+      "weight": 1,
+      "confidence": 1,
+      "confidenceLabel": "proven",
+      "label": "resolveEngineResponse, waitForEngineResponse"
+    },
+    {
+      "id": "redis-rpc-bridge->redis:redis-url:produces",
+      "source": "redis-rpc-bridge",
+      "target": "redis:redis-url",
+      "kind": "produces",
+      "evidenceIds": [
+        "backend/src/utils/engine-client.ts#L43-43:redis"
+      ],
+      "weight": 1,
+      "confidence": 0.7,
+      "confidenceLabel": "resolved-default",
+      "label": "lPush backend-to-engine-broker"
+    },
+    {
+      "id": "redis:redis-url->engine:engine-worker:consumes",
+      "source": "redis:redis-url",
+      "target": "engine:engine-worker",
+      "kind": "consumes",
+      "evidenceIds": [
+        "engine/src/index.ts#L96-96:redis"
+      ],
+      "weight": 1,
+      "confidence": 0.7,
+      "confidenceLabel": "resolved-default",
+      "label": "brPop backend-to-engine-broker"
+    },
+    {
+      "id": "redis:redis-url->redis-rpc-bridge:consumes",
+      "source": "redis:redis-url",
+      "target": "redis-rpc-bridge",
+      "kind": "consumes",
+      "evidenceIds": [
+        "backend/src/utils/engine-client.ts#L51-51:redis"
+      ],
+      "weight": 1,
+      "confidence": 0.7,
+      "confidenceLabel": "dynamic",
+      "label": "brPop response-queue-*"
+    }
+  ],
+  "files": [
+    {
+      "path": "backend/prisma.config.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 15,
+      "chars": 374,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "dotenv/config",
+          "external": true,
+          "typeOnly": false,
+          "names": [],
+          "evidenceId": "backend/prisma.config.ts#L3-3:imports"
+        },
+        {
+          "specifier": "prisma/config",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "defineConfig"
+          ],
+          "evidenceId": "backend/prisma.config.ts#L4-4:imports"
+        }
+      ],
+      "symbols": [],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [
+        {
+          "name": "DATABASE_URL",
+          "evidenceId": "backend/prisma.config.ts#L12-12:env"
+        }
+      ],
+      "errorMessages": []
+    },
+    {
+      "path": "backend/prisma/schema.prisma",
+      "package": "backend",
+      "language": "prisma",
+      "loc": 20,
+      "chars": 401,
+      "isEntry": false,
+      "imports": [],
+      "symbols": [],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [
+        {
+          "name": "User",
+          "evidenceId": "backend/prisma/schema.prisma#L15-15:prisma"
+        }
+      ],
+      "prismaDatasource": {
+        "provider": "postgresql",
+        "evidenceId": "backend/prisma/schema.prisma#L12-12:prisma"
+      },
+      "envReads": [],
+      "errorMessages": []
+    },
+    {
+      "path": "backend/src/controllers/auth-controller.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 39,
+      "chars": 1077,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "bcryptjs",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "bcrypt"
+          ],
+          "evidenceId": "backend/src/controllers/auth-controller.ts#L1-1:imports"
+        },
+        {
+          "specifier": "express",
+          "external": true,
+          "typeOnly": true,
+          "names": [
+            "Request",
+            "Response"
+          ],
+          "evidenceId": "backend/src/controllers/auth-controller.ts#L2-2:imports"
+        },
+        {
+          "specifier": "../db.js",
+          "target": "backend/src/db.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "prisma"
+          ],
+          "evidenceId": "backend/src/controllers/auth-controller.ts#L3-3:imports"
+        },
+        {
+          "specifier": "../types/auth-schema.js",
+          "target": "backend/src/types/auth-schema.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "authSchema"
+          ],
+          "evidenceId": "backend/src/controllers/auth-controller.ts#L4-4:imports"
+        },
+        {
+          "specifier": "../utils/auth.js",
+          "target": "backend/src/utils/auth.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "createToken"
+          ],
+          "evidenceId": "backend/src/controllers/auth-controller.ts#L5-5:imports"
+        },
+        {
+          "specifier": "../utils/validation.js",
+          "target": "backend/src/utils/validation.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "sendValidationError"
+          ],
+          "evidenceId": "backend/src/controllers/auth-controller.ts#L6-6:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "signup",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 8,
+            "endLine": 34
+          }
+        },
+        {
+          "name": "signin",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 36,
+            "endLine": 38
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [
+        {
+          "client": "prisma",
+          "clientDecl": "backend/src/db.ts#prisma",
+          "model": "User",
+          "op": "create",
+          "evidenceId": "backend/src/controllers/auth-controller.ts#L19-24:prisma"
+        }
+      ],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": [
+        {
+          "message": "username already exists",
+          "kind": "http-error",
+          "evidenceId": "backend/src/controllers/auth-controller.ts#L32-32:errors"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/controllers/exchange-controller.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 100,
+      "chars": 2953,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "express",
+          "external": true,
+          "typeOnly": true,
+          "names": [
+            "Request",
+            "Response"
+          ],
+          "evidenceId": "backend/src/controllers/exchange-controller.ts#L1-1:imports"
+        },
+        {
+          "specifier": "../types/exchange-schema.js",
+          "target": "backend/src/types/exchange-schema.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "orderBodySchema",
+            "orderIdParamSchema",
+            "symbolParamSchema"
+          ],
+          "evidenceId": "backend/src/controllers/exchange-controller.ts#L2-6:imports"
+        },
+        {
+          "specifier": "../utils/engine-client.js",
+          "target": "backend/src/utils/engine-client.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "sendToEngine"
+          ],
+          "evidenceId": "backend/src/controllers/exchange-controller.ts#L7-7:imports"
+        },
+        {
+          "specifier": "../utils/validation.js",
+          "target": "backend/src/utils/validation.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "sendValidationError"
+          ],
+          "evidenceId": "backend/src/controllers/exchange-controller.ts#L8-8:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "getUserId",
+          "kind": "function",
+          "exported": false,
+          "range": {
+            "startLine": 10,
+            "endLine": 13
+          }
+        },
+        {
+          "name": "createOrder",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 15,
+            "endLine": 39
+          }
+        },
+        {
+          "name": "getDepth",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 41,
+            "endLine": 53
+          }
+        },
+        {
+          "name": "getBalance",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 55,
+            "endLine": 63
+          }
+        },
+        {
+          "name": "getOrder",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 65,
+            "endLine": 81
+          }
+        },
+        {
+          "name": "cancelOrder",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 83,
+            "endLine": 99
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": [
+        {
+          "message": "Missing authenticated user",
+          "kind": "throw",
+          "evidenceId": "backend/src/controllers/exchange-controller.ts#L11-11:errors"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/db.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 11,
+      "chars": 268,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "dotenv/config",
+          "external": true,
+          "typeOnly": false,
+          "names": [],
+          "evidenceId": "backend/src/db.ts#L1-1:imports"
+        },
+        {
+          "specifier": "./generated/prisma/client",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "PrismaClient"
+          ],
+          "evidenceId": "backend/src/db.ts#L2-2:imports"
+        },
+        {
+          "specifier": "@prisma/adapter-pg",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "PrismaPg"
+          ],
+          "evidenceId": "backend/src/db.ts#L3-3:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "adapter",
+          "kind": "variable",
+          "exported": false,
+          "range": {
+            "startLine": 5,
+            "endLine": 7
+          }
+        },
+        {
+          "name": "prisma",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 9,
+            "endLine": 11
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [
+        {
+          "tech": "prisma",
+          "variable": "prisma",
+          "exported": true,
+          "connection": "DATABASE_URL",
+          "evidenceId": "backend/src/db.ts#L9-11:prisma"
+        }
+      ],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [
+        {
+          "name": "DATABASE_URL",
+          "evidenceId": "backend/src/db.ts#L6-6:env"
+        }
+      ],
+      "errorMessages": []
+    },
+    {
+      "path": "backend/src/index.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 36,
+      "chars": 896,
+      "isEntry": true,
+      "entryReason": "package.json script \"dev\": bun run src/index.ts",
+      "imports": [
+        {
+          "specifier": "cors",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "cors"
+          ],
+          "evidenceId": "backend/src/index.ts#L1-1:imports"
+        },
+        {
+          "specifier": "express",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "express",
+            "NextFunction",
+            "Request",
+            "Response"
+          ],
+          "evidenceId": "backend/src/index.ts#L2-2:imports"
+        },
+        {
+          "specifier": "./routes/index.js",
+          "target": "backend/src/routes/index.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "appRouter"
+          ],
+          "evidenceId": "backend/src/index.ts#L3-3:imports"
+        },
+        {
+          "specifier": "./utils/env.js",
+          "target": "backend/src/utils/env.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "env"
+          ],
+          "evidenceId": "backend/src/index.ts#L4-4:imports"
+        },
+        {
+          "specifier": "./utils/engine-client.js",
+          "target": "backend/src/utils/engine-client.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "connectRedis",
+            "listenForEngineResponses",
+            "pingRedis"
+          ],
+          "evidenceId": "backend/src/index.ts#L5-9:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "app",
+          "kind": "variable",
+          "exported": false,
+          "range": {
+            "startLine": 14,
+            "endLine": 14
+          }
+        }
+      ],
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/health",
+          "router": "backend/src/index.ts#app",
+          "handlers": [
+            "<inline handler>"
+          ],
+          "evidenceId": "backend/src/index.ts#L19-22:http-routes"
+        }
+      ],
+      "mounts": [
+        {
+          "parent": "backend/src/index.ts#app",
+          "router": "backend/src/routes/index.ts#appRouter",
+          "evidenceId": "backend/src/index.ts#L24-24:http-routes"
+        }
+      ],
+      "listens": [
+        {
+          "evidenceId": "backend/src/index.ts#L33-36:http-routes"
+        }
+      ],
+      "startupCalls": [
+        {
+          "callee": "connectRedis",
+          "evidenceId": "backend/src/index.ts#L11-11:startup"
+        },
+        {
+          "callee": "listenForEngineResponses",
+          "evidenceId": "backend/src/index.ts#L12-12:startup"
+        },
+        {
+          "callee": "app.use",
+          "evidenceId": "backend/src/index.ts#L16-16:startup"
+        },
+        {
+          "callee": "app.use",
+          "evidenceId": "backend/src/index.ts#L17-17:startup"
+        },
+        {
+          "callee": "app.get",
+          "evidenceId": "backend/src/index.ts#L19-22:startup"
+        },
+        {
+          "callee": "app.use",
+          "evidenceId": "backend/src/index.ts#L24-24:startup"
+        },
+        {
+          "callee": "app.use",
+          "evidenceId": "backend/src/index.ts#L26-31:startup"
+        },
+        {
+          "callee": "app.listen",
+          "evidenceId": "backend/src/index.ts#L33-36:startup"
+        }
+      ],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": [
+        {
+          "message": "internal_server_error",
+          "kind": "http-error",
+          "evidenceId": "backend/src/index.ts#L29-29:errors"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/routes/auth-routes.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 9,
+      "chars": 298,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "express",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "Router"
+          ],
+          "evidenceId": "backend/src/routes/auth-routes.ts#L1-1:imports"
+        },
+        {
+          "specifier": "../controllers/auth-controller.js",
+          "target": "backend/src/controllers/auth-controller.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "signin",
+            "signup"
+          ],
+          "evidenceId": "backend/src/routes/auth-routes.ts#L2-2:imports"
+        },
+        {
+          "specifier": "../utils/async-handler.js",
+          "target": "backend/src/utils/async-handler.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "asyncHandler"
+          ],
+          "evidenceId": "backend/src/routes/auth-routes.ts#L3-3:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "authRouter",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 5,
+            "endLine": 5
+          }
+        }
+      ],
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/signup",
+          "router": "backend/src/routes/auth-routes.ts#authRouter",
+          "handlers": [
+            "asyncHandler(signup)"
+          ],
+          "evidenceId": "backend/src/routes/auth-routes.ts#L7-7:http-routes"
+        },
+        {
+          "method": "POST",
+          "path": "/signin",
+          "router": "backend/src/routes/auth-routes.ts#authRouter",
+          "handlers": [
+            "asyncHandler(signin)"
+          ],
+          "evidenceId": "backend/src/routes/auth-routes.ts#L8-8:http-routes"
+        }
+      ],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [
+        {
+          "callee": "authRouter.post",
+          "evidenceId": "backend/src/routes/auth-routes.ts#L7-7:startup"
+        },
+        {
+          "callee": "authRouter.post",
+          "evidenceId": "backend/src/routes/auth-routes.ts#L8-8:startup"
+        }
+      ],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": []
+    },
+    {
+      "path": "backend/src/routes/exchange-routes.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 19,
+      "chars": 682,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "express",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "Router"
+          ],
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L1-1:imports"
+        },
+        {
+          "specifier": "../controllers/exchange-controller.js",
+          "target": "backend/src/controllers/exchange-controller.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "cancelOrder",
+            "createOrder",
+            "getBalance",
+            "getDepth",
+            "getOrder"
+          ],
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L2-8:imports"
+        },
+        {
+          "specifier": "../utils/auth.js",
+          "target": "backend/src/utils/auth.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "requireAuth"
+          ],
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L9-9:imports"
+        },
+        {
+          "specifier": "../utils/async-handler.js",
+          "target": "backend/src/utils/async-handler.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "asyncHandler"
+          ],
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L10-10:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "exchangeRouter",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 12,
+            "endLine": 12
+          }
+        }
+      ],
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/order",
+          "router": "backend/src/routes/exchange-routes.ts#exchangeRouter",
+          "handlers": [
+            "requireAuth",
+            "asyncHandler(createOrder)"
+          ],
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L14-14:http-routes"
+        },
+        {
+          "method": "GET",
+          "path": "/depth/:symbol",
+          "router": "backend/src/routes/exchange-routes.ts#exchangeRouter",
+          "handlers": [
+            "requireAuth",
+            "asyncHandler(getDepth)"
+          ],
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L15-15:http-routes"
+        },
+        {
+          "method": "GET",
+          "path": "/balance",
+          "router": "backend/src/routes/exchange-routes.ts#exchangeRouter",
+          "handlers": [
+            "requireAuth",
+            "asyncHandler(getBalance)"
+          ],
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L16-16:http-routes"
+        },
+        {
+          "method": "GET",
+          "path": "/order/:orderId",
+          "router": "backend/src/routes/exchange-routes.ts#exchangeRouter",
+          "handlers": [
+            "requireAuth",
+            "asyncHandler(getOrder)"
+          ],
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L17-17:http-routes"
+        },
+        {
+          "method": "DELETE",
+          "path": "/order/:orderId",
+          "router": "backend/src/routes/exchange-routes.ts#exchangeRouter",
+          "handlers": [
+            "requireAuth",
+            "asyncHandler(cancelOrder)"
+          ],
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L18-18:http-routes"
+        }
+      ],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [
+        {
+          "callee": "exchangeRouter.post",
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L14-14:startup"
+        },
+        {
+          "callee": "exchangeRouter.get",
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L15-15:startup"
+        },
+        {
+          "callee": "exchangeRouter.get",
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L16-16:startup"
+        },
+        {
+          "callee": "exchangeRouter.get",
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L17-17:startup"
+        },
+        {
+          "callee": "exchangeRouter.delete",
+          "evidenceId": "backend/src/routes/exchange-routes.ts#L18-18:startup"
+        }
+      ],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": []
+    },
+    {
+      "path": "backend/src/routes/index.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 9,
+      "chars": 231,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "express",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "Router"
+          ],
+          "evidenceId": "backend/src/routes/index.ts#L1-1:imports"
+        },
+        {
+          "specifier": "./auth-routes.js",
+          "target": "backend/src/routes/auth-routes.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "authRouter"
+          ],
+          "evidenceId": "backend/src/routes/index.ts#L2-2:imports"
+        },
+        {
+          "specifier": "./exchange-routes.js",
+          "target": "backend/src/routes/exchange-routes.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "exchangeRouter"
+          ],
+          "evidenceId": "backend/src/routes/index.ts#L3-3:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "appRouter",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 5,
+            "endLine": 5
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [
+        {
+          "parent": "backend/src/routes/index.ts#appRouter",
+          "router": "backend/src/routes/auth-routes.ts#authRouter",
+          "evidenceId": "backend/src/routes/index.ts#L7-7:http-routes"
+        },
+        {
+          "parent": "backend/src/routes/index.ts#appRouter",
+          "router": "backend/src/routes/exchange-routes.ts#exchangeRouter",
+          "evidenceId": "backend/src/routes/index.ts#L8-8:http-routes"
+        }
+      ],
+      "listens": [],
+      "startupCalls": [
+        {
+          "callee": "appRouter.use",
+          "evidenceId": "backend/src/routes/index.ts#L7-7:startup"
+        },
+        {
+          "callee": "appRouter.use",
+          "evidenceId": "backend/src/routes/index.ts#L8-8:startup"
+        }
+      ],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": []
+    },
+    {
+      "path": "backend/src/store/pending-responses.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 37,
+      "chars": 971,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "../types/engine.js",
+          "target": "backend/src/types/engine.ts",
+          "external": false,
+          "typeOnly": true,
+          "names": [
+            "EngineResponse"
+          ],
+          "evidenceId": "backend/src/store/pending-responses.ts#L1-1:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "PendingResponse",
+          "kind": "interface",
+          "exported": false,
+          "range": {
+            "startLine": 3,
+            "endLine": 7
+          }
+        },
+        {
+          "name": "pendingResponses",
+          "kind": "variable",
+          "exported": false,
+          "range": {
+            "startLine": 9,
+            "endLine": 9
+          }
+        },
+        {
+          "name": "waitForEngineResponse",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 11,
+            "endLine": 27
+          }
+        },
+        {
+          "name": "resolveEngineResponse",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 29,
+            "endLine": 36
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": [
+        {
+          "message": "Engine response timed out",
+          "kind": "reject",
+          "evidenceId": "backend/src/store/pending-responses.ts#L18-18:errors"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/types/auth-schema.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 7,
+      "chars": 184,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "zod",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "z"
+          ],
+          "evidenceId": "backend/src/types/auth-schema.ts#L1-1:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "authSchema",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 3,
+            "endLine": 6
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": []
+    },
+    {
+      "path": "backend/src/types/engine.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 21,
+      "chars": 388,
+      "isEntry": false,
+      "imports": [],
+      "symbols": [
+        {
+          "name": "EngineCommandType",
+          "kind": "type",
+          "exported": true,
+          "range": {
+            "startLine": 1,
+            "endLine": 6
+          }
+        },
+        {
+          "name": "EngineRequest",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 8,
+            "endLine": 13
+          }
+        },
+        {
+          "name": "EngineResponse",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 15,
+            "endLine": 20
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": []
+    },
+    {
+      "path": "backend/src/types/exchange-schema.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 27,
+      "chars": 829,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "zod",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "z"
+          ],
+          "evidenceId": "backend/src/types/exchange-schema.ts#L1-1:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "symbolParamSchema",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 3,
+            "endLine": 5
+          }
+        },
+        {
+          "name": "orderIdParamSchema",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 7,
+            "endLine": 9
+          }
+        },
+        {
+          "name": "orderBodySchema",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 11,
+            "endLine": 26
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": []
+    },
+    {
+      "path": "backend/src/types/express.d.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 10,
+      "chars": 110,
+      "isEntry": false,
+      "imports": [],
+      "symbols": [],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": []
+    },
+    {
+      "path": "backend/src/utils/async-handler.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 10,
+      "chars": 314,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "express",
+          "external": true,
+          "typeOnly": true,
+          "names": [
+            "NextFunction",
+            "Request",
+            "RequestHandler",
+            "Response"
+          ],
+          "evidenceId": "backend/src/utils/async-handler.ts#L1-1:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "asyncHandler",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 3,
+            "endLine": 9
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": []
+    },
+    {
+      "path": "backend/src/utils/auth.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 33,
+      "chars": 870,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "express",
+          "external": true,
+          "typeOnly": true,
+          "names": [
+            "NextFunction",
+            "Request",
+            "Response"
+          ],
+          "evidenceId": "backend/src/utils/auth.ts#L1-1:imports"
+        },
+        {
+          "specifier": "jsonwebtoken",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "jwt"
+          ],
+          "evidenceId": "backend/src/utils/auth.ts#L2-2:imports"
+        },
+        {
+          "specifier": "./env.js",
+          "target": "backend/src/utils/env.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "env"
+          ],
+          "evidenceId": "backend/src/utils/auth.ts#L3-3:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "TokenPayload",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 5,
+            "endLine": 7
+          }
+        },
+        {
+          "name": "createToken",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 9,
+            "endLine": 11
+          }
+        },
+        {
+          "name": "requireAuth",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 13,
+            "endLine": 32
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": [
+        {
+          "message": "Missing auth token",
+          "kind": "http-error",
+          "evidenceId": "backend/src/utils/auth.ts#L21-21:errors"
+        },
+        {
+          "message": "Invalid auth token",
+          "kind": "http-error",
+          "evidenceId": "backend/src/utils/auth.ts#L30-30:errors"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/utils/engine-client.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 62,
+      "chars": 1692,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "redis",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "createClient"
+          ],
+          "evidenceId": "backend/src/utils/engine-client.ts#L1-1:imports"
+        },
+        {
+          "specifier": "./env.js",
+          "target": "backend/src/utils/env.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "env"
+          ],
+          "evidenceId": "backend/src/utils/engine-client.ts#L2-2:imports"
+        },
+        {
+          "specifier": "../store/pending-responses.js",
+          "target": "backend/src/store/pending-responses.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "resolveEngineResponse",
+            "waitForEngineResponse"
+          ],
+          "evidenceId": "backend/src/utils/engine-client.ts#L3-6:imports"
+        },
+        {
+          "specifier": "../types/engine.js",
+          "target": "backend/src/types/engine.ts",
+          "external": false,
+          "typeOnly": true,
+          "names": [
+            "EngineCommandType",
+            "EngineRequest",
+            "EngineResponse"
+          ],
+          "evidenceId": "backend/src/utils/engine-client.ts#L7-11:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "publisher",
+          "kind": "variable",
+          "exported": false,
+          "range": {
+            "startLine": 13,
+            "endLine": 15
+          }
+        },
+        {
+          "name": "subscriber",
+          "kind": "variable",
+          "exported": false,
+          "range": {
+            "startLine": 17,
+            "endLine": 19
+          }
+        },
+        {
+          "name": "connectRedis",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 21,
+            "endLine": 23
+          }
+        },
+        {
+          "name": "pingRedis",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 25,
+            "endLine": 27
+          }
+        },
+        {
+          "name": "sendToEngine",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 29,
+            "endLine": 45
+          }
+        },
+        {
+          "name": "listenForEngineResponses",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 47,
+            "endLine": 61
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [
+        {
+          "tech": "redis",
+          "variable": "publisher",
+          "exported": false,
+          "connection": "REDIS_URL",
+          "evidenceId": "backend/src/utils/engine-client.ts#L13-15:redis"
+        },
+        {
+          "tech": "redis",
+          "variable": "subscriber",
+          "exported": false,
+          "connection": "REDIS_URL",
+          "evidenceId": "backend/src/utils/engine-client.ts#L17-19:redis"
+        }
+      ],
+      "redisOps": [
+        {
+          "client": "publisher",
+          "connection": "REDIS_URL",
+          "op": "connect",
+          "role": "admin",
+          "evidenceId": "backend/src/utils/engine-client.ts#L22-22:redis"
+        },
+        {
+          "client": "subscriber",
+          "connection": "REDIS_URL",
+          "op": "connect",
+          "role": "admin",
+          "evidenceId": "backend/src/utils/engine-client.ts#L22-22:redis:2"
+        },
+        {
+          "client": "publisher",
+          "connection": "REDIS_URL",
+          "op": "ping",
+          "role": "admin",
+          "evidenceId": "backend/src/utils/engine-client.ts#L26-26:redis"
+        },
+        {
+          "client": "publisher",
+          "connection": "REDIS_URL",
+          "op": "lPush",
+          "role": "produce",
+          "key": {
+            "raw": "env.incomingQueue",
+            "value": "backend-to-engine-broker"
+          },
+          "evidenceId": "backend/src/utils/engine-client.ts#L43-43:redis"
+        },
+        {
+          "client": "subscriber",
+          "connection": "REDIS_URL",
+          "op": "brPop",
+          "role": "consume",
+          "key": {
+            "raw": "env.responseQueue",
+            "value": "response-queue-*"
+          },
+          "evidenceId": "backend/src/utils/engine-client.ts#L51-51:redis"
+        }
+      ],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": []
+    },
+    {
+      "path": "backend/src/utils/env.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 17,
+      "chars": 589,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "dotenv/config",
+          "external": true,
+          "typeOnly": false,
+          "names": [],
+          "evidenceId": "backend/src/utils/env.ts#L1-1:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "readRequiredEnv",
+          "kind": "function",
+          "exported": false,
+          "range": {
+            "startLine": 3,
+            "endLine": 7
+          }
+        },
+        {
+          "name": "env",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 9,
+            "endLine": 16
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [
+        {
+          "name": "PORT",
+          "evidenceId": "backend/src/utils/env.ts#L10-10:env"
+        },
+        {
+          "name": "REDIS_URL",
+          "evidenceId": "backend/src/utils/env.ts#L11-11:env"
+        },
+        {
+          "name": "JWT_SECRET",
+          "evidenceId": "backend/src/utils/env.ts#L12-12:env"
+        },
+        {
+          "name": "INCOMING_QUEUE",
+          "evidenceId": "backend/src/utils/env.ts#L13-13:env"
+        },
+        {
+          "name": "BACKEND_QUEUE_ID",
+          "evidenceId": "backend/src/utils/env.ts#L14-14:env"
+        },
+        {
+          "name": "ENGINE_TIMEOUT_MS",
+          "evidenceId": "backend/src/utils/env.ts#L15-15:env"
+        }
+      ],
+      "errorMessages": [
+        {
+          "message": "Missing required env variable: *",
+          "kind": "throw",
+          "evidenceId": "backend/src/utils/env.ts#L5-5:errors"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/utils/validation.ts",
+      "package": "backend",
+      "language": "ts",
+      "loc": 13,
+      "chars": 335,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "express",
+          "external": true,
+          "typeOnly": true,
+          "names": [
+            "Response"
+          ],
+          "evidenceId": "backend/src/utils/validation.ts#L1-1:imports"
+        },
+        {
+          "specifier": "zod",
+          "external": true,
+          "typeOnly": true,
+          "names": [
+            "ZodError"
+          ],
+          "evidenceId": "backend/src/utils/validation.ts#L2-2:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "sendValidationError",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 4,
+            "endLine": 12
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": [
+        {
+          "message": "validation_error",
+          "kind": "http-error",
+          "evidenceId": "backend/src/utils/validation.ts#L6-6:errors"
+        }
+      ]
+    },
+    {
+      "path": "engine/src/index.ts",
+      "package": "engine",
+      "language": "ts",
+      "loc": 122,
+      "chars": 3184,
+      "isEntry": true,
+      "entryReason": "package.json script \"dev\": bun run src/index.ts",
+      "imports": [
+        {
+          "specifier": "dotenv/config",
+          "external": true,
+          "typeOnly": false,
+          "names": [],
+          "evidenceId": "engine/src/index.ts#L1-1:imports"
+        },
+        {
+          "specifier": "redis",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "createClient"
+          ],
+          "evidenceId": "engine/src/index.ts#L2-2:imports"
+        },
+        {
+          "specifier": "./utils/env.js",
+          "target": "engine/src/utils/env.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "env"
+          ],
+          "evidenceId": "engine/src/index.ts#L3-3:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "EngineCommandType",
+          "kind": "type",
+          "exported": true,
+          "range": {
+            "startLine": 5,
+            "endLine": 10
+          }
+        },
+        {
+          "name": "EngineRequest",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 12,
+            "endLine": 17
+          }
+        },
+        {
+          "name": "EngineResponse",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 19,
+            "endLine": 24
+          }
+        },
+        {
+          "name": "brokerClient",
+          "kind": "variable",
+          "exported": false,
+          "range": {
+            "startLine": 26,
+            "endLine": 28
+          }
+        },
+        {
+          "name": "responseClient",
+          "kind": "variable",
+          "exported": false,
+          "range": {
+            "startLine": 30,
+            "endLine": 32
+          }
+        },
+        {
+          "name": "DUMMY_SELL_ORDER",
+          "kind": "variable",
+          "exported": false,
+          "range": {
+            "startLine": 37,
+            "endLine": 47
+          }
+        },
+        {
+          "name": "sendResponse",
+          "kind": "function",
+          "exported": false,
+          "range": {
+            "startLine": 49,
+            "endLine": 51
+          }
+        },
+        {
+          "name": "handleEngineRequest",
+          "kind": "function",
+          "exported": false,
+          "range": {
+            "startLine": 53,
+            "endLine": 91
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [
+        {
+          "callee": "Promise.all",
+          "evidenceId": "engine/src/index.ts#L34-34:startup"
+        }
+      ],
+      "clients": [
+        {
+          "tech": "redis",
+          "variable": "brokerClient",
+          "exported": false,
+          "connection": "REDIS_URL",
+          "evidenceId": "engine/src/index.ts#L26-28:redis"
+        },
+        {
+          "tech": "redis",
+          "variable": "responseClient",
+          "exported": false,
+          "connection": "REDIS_URL",
+          "evidenceId": "engine/src/index.ts#L30-32:redis"
+        }
+      ],
+      "redisOps": [
+        {
+          "client": "brokerClient",
+          "connection": "REDIS_URL",
+          "op": "connect",
+          "role": "admin",
+          "evidenceId": "engine/src/index.ts#L34-34:redis"
+        },
+        {
+          "client": "responseClient",
+          "connection": "REDIS_URL",
+          "op": "connect",
+          "role": "admin",
+          "evidenceId": "engine/src/index.ts#L34-34:redis:2"
+        },
+        {
+          "client": "responseClient",
+          "connection": "REDIS_URL",
+          "op": "lPush",
+          "role": "produce",
+          "key": {
+            "raw": "responseQueue"
+          },
+          "evidenceId": "engine/src/index.ts#L50-50:redis"
+        },
+        {
+          "client": "brokerClient",
+          "connection": "REDIS_URL",
+          "op": "brPop",
+          "role": "consume",
+          "key": {
+            "raw": "env.incomingQueue",
+            "value": "backend-to-engine-broker"
+          },
+          "evidenceId": "engine/src/index.ts#L96-96:redis"
+        }
+      ],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": [
+        {
+          "message": "TODO(student): implement this engine request type",
+          "kind": "throw",
+          "evidenceId": "engine/src/index.ts#L90-90:errors"
+        }
+      ]
+    },
+    {
+      "path": "engine/src/store/exchange-store.ts",
+      "package": "engine",
+      "language": "ts",
+      "loc": 75,
+      "chars": 1477,
+      "isEntry": false,
+      "imports": [],
+      "symbols": [
+        {
+          "name": "Side",
+          "kind": "type",
+          "exported": true,
+          "range": {
+            "startLine": 1,
+            "endLine": 1
+          }
+        },
+        {
+          "name": "OrderType",
+          "kind": "type",
+          "exported": true,
+          "range": {
+            "startLine": 2,
+            "endLine": 2
+          }
+        },
+        {
+          "name": "OrderStatus",
+          "kind": "type",
+          "exported": true,
+          "range": {
+            "startLine": 3,
+            "endLine": 3
+          }
+        },
+        {
+          "name": "Balance",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 5,
+            "endLine": 8
+          }
+        },
+        {
+          "name": "RestingOrder",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 10,
+            "endLine": 21
+          }
+        },
+        {
+          "name": "OrderRecord",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 23,
+            "endLine": 35
+          }
+        },
+        {
+          "name": "Fill",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 37,
+            "endLine": 45
+          }
+        },
+        {
+          "name": "OrderBook",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 47,
+            "endLine": 50
+          }
+        },
+        {
+          "name": "CreateOrderInput",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 52,
+            "endLine": 59
+          }
+        },
+        {
+          "name": "DepthLevel",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 61,
+            "endLine": 64
+          }
+        },
+        {
+          "name": "DepthResponse",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 66,
+            "endLine": 70
+          }
+        },
+        {
+          "name": "BALANCES",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 72,
+            "endLine": 72
+          }
+        },
+        {
+          "name": "ORDERBOOKS",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 73,
+            "endLine": 73
+          }
+        },
+        {
+          "name": "ORDERS",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 74,
+            "endLine": 74
+          }
+        },
+        {
+          "name": "FILLS",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 75,
+            "endLine": 75
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": []
+    },
+    {
+      "path": "engine/src/utils/env.ts",
+      "package": "engine",
+      "language": "ts",
+      "loc": 13,
+      "chars": 342,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "dotenv/config",
+          "external": true,
+          "typeOnly": false,
+          "names": [],
+          "evidenceId": "engine/src/utils/env.ts#L1-1:imports"
+        }
+      ],
+      "symbols": [
+        {
+          "name": "readRequiredEnv",
+          "kind": "function",
+          "exported": false,
+          "range": {
+            "startLine": 3,
+            "endLine": 7
+          }
+        },
+        {
+          "name": "env",
+          "kind": "variable",
+          "exported": true,
+          "range": {
+            "startLine": 9,
+            "endLine": 12
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [
+        {
+          "name": "REDIS_URL",
+          "evidenceId": "engine/src/utils/env.ts#L10-10:env"
+        },
+        {
+          "name": "INCOMING_QUEUE",
+          "evidenceId": "engine/src/utils/env.ts#L11-11:env"
+        }
+      ],
+      "errorMessages": [
+        {
+          "message": "Missing required env variable: *",
+          "kind": "throw",
+          "evidenceId": "engine/src/utils/env.ts#L5-5:errors"
+        }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "backend/prisma.config.ts#L12-12:env",
+      "file": "backend/prisma.config.ts",
+      "symbol": "DATABASE_URL",
+      "range": {
+        "startLine": 12,
+        "endLine": 12
+      },
+      "extractor": "env",
+      "confidence": 1,
+      "detail": "reads env DATABASE_URL (process.env[...])",
+      "snippet": {
+        "startLine": 10,
+        "lines": [
+          "  },",
+          "  datasource: {",
+          "    url: process.env[\"DATABASE_URL\"],",
+          "  },",
+          "});"
+        ]
+      }
+    },
+    {
+      "id": "backend/prisma.config.ts#L3-3:imports",
+      "file": "backend/prisma.config.ts",
+      "range": {
+        "startLine": 3,
+        "endLine": 3
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package dotenv/config",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "// This file was generated by Prisma, and assumes you have installed the following:",
+          "// npm install --save-dev prisma dotenv",
+          "import \"dotenv/config\";",
+          "import { defineConfig } from \"prisma/config\";",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/prisma.config.ts#L4-4:imports",
+      "file": "backend/prisma.config.ts",
+      "symbol": "defineConfig",
+      "range": {
+        "startLine": 4,
+        "endLine": 4
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package prisma/config",
+      "snippet": {
+        "startLine": 2,
+        "lines": [
+          "// npm install --save-dev prisma dotenv",
+          "import \"dotenv/config\";",
+          "import { defineConfig } from \"prisma/config\";",
+          "",
+          "export default defineConfig({"
+        ]
+      }
+    },
+    {
+      "id": "backend/prisma/schema.prisma#L12-12:prisma",
+      "file": "backend/prisma/schema.prisma",
+      "range": {
+        "startLine": 12,
+        "endLine": 12
+      },
+      "extractor": "prisma",
+      "confidence": 1,
+      "detail": "prisma datasource provider postgresql",
+      "snippet": {
+        "startLine": 10,
+        "lines": [
+          "",
+          "datasource db {",
+          "  provider = \"postgresql\"",
+          "}",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/prisma/schema.prisma#L15-15:prisma",
+      "file": "backend/prisma/schema.prisma",
+      "symbol": "User",
+      "range": {
+        "startLine": 15,
+        "endLine": 15
+      },
+      "extractor": "prisma",
+      "confidence": 1,
+      "detail": "prisma model User",
+      "snippet": {
+        "startLine": 13,
+        "lines": [
+          "}",
+          "",
+          "model User {",
+          "  id       String @id @default(uuid())",
+          "  username String @unique"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/controllers/auth-controller.ts#L1-1:imports",
+      "file": "backend/src/controllers/auth-controller.ts",
+      "symbol": "bcrypt",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package bcryptjs",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import bcrypt from \"bcryptjs\";",
+          "import type { Request, Response } from \"express\";",
+          "import { prisma } from \"../db.js\";"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/controllers/auth-controller.ts#L19-24:prisma",
+      "file": "backend/src/controllers/auth-controller.ts",
+      "symbol": "signup",
+      "range": {
+        "startLine": 19,
+        "endLine": 24
+      },
+      "extractor": "prisma",
+      "confidence": 0.9,
+      "resolution": "proven",
+      "detail": "User.create",
+      "snippet": {
+        "startLine": 17,
+        "lines": [
+          "",
+          "  try {",
+          "    const user = await prisma.user.create({",
+          "      data: {",
+          "        username,",
+          "        password: hashedPassword,",
+          "      },",
+          "    });",
+          "",
+          "    res.status(201).json({"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/controllers/auth-controller.ts#L2-2:imports",
+      "file": "backend/src/controllers/auth-controller.ts",
+      "symbol": "Request, Response",
+      "range": {
+        "startLine": 2,
+        "endLine": 2
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package express",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import bcrypt from \"bcryptjs\";",
+          "import type { Request, Response } from \"express\";",
+          "import { prisma } from \"../db.js\";",
+          "import { authSchema } from \"../types/auth-schema.js\";"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/controllers/auth-controller.ts#L3-3:imports",
+      "file": "backend/src/controllers/auth-controller.ts",
+      "symbol": "prisma",
+      "range": {
+        "startLine": 3,
+        "endLine": 3
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../db.js → backend/src/db.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import bcrypt from \"bcryptjs\";",
+          "import type { Request, Response } from \"express\";",
+          "import { prisma } from \"../db.js\";",
+          "import { authSchema } from \"../types/auth-schema.js\";",
+          "import { createToken } from \"../utils/auth.js\";"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/controllers/auth-controller.ts#L32-32:errors",
+      "file": "backend/src/controllers/auth-controller.ts",
+      "range": {
+        "startLine": 32,
+        "endLine": 32
+      },
+      "extractor": "errors",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "res.status(409).json { error }: \"username already exists\"",
+      "snippet": {
+        "startLine": 30,
+        "lines": [
+          "    });",
+          "  } catch {",
+          "    res.status(409).json({ error: \"username already exists\" });",
+          "  }",
+          "}"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/controllers/auth-controller.ts#L4-4:imports",
+      "file": "backend/src/controllers/auth-controller.ts",
+      "symbol": "authSchema",
+      "range": {
+        "startLine": 4,
+        "endLine": 4
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../types/auth-schema.js → backend/src/types/auth-schema.ts",
+      "snippet": {
+        "startLine": 2,
+        "lines": [
+          "import type { Request, Response } from \"express\";",
+          "import { prisma } from \"../db.js\";",
+          "import { authSchema } from \"../types/auth-schema.js\";",
+          "import { createToken } from \"../utils/auth.js\";",
+          "import { sendValidationError } from \"../utils/validation.js\";"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/controllers/auth-controller.ts#L5-5:imports",
+      "file": "backend/src/controllers/auth-controller.ts",
+      "symbol": "createToken",
+      "range": {
+        "startLine": 5,
+        "endLine": 5
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../utils/auth.js → backend/src/utils/auth.ts",
+      "snippet": {
+        "startLine": 3,
+        "lines": [
+          "import { prisma } from \"../db.js\";",
+          "import { authSchema } from \"../types/auth-schema.js\";",
+          "import { createToken } from \"../utils/auth.js\";",
+          "import { sendValidationError } from \"../utils/validation.js\";",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/controllers/auth-controller.ts#L6-6:imports",
+      "file": "backend/src/controllers/auth-controller.ts",
+      "symbol": "sendValidationError",
+      "range": {
+        "startLine": 6,
+        "endLine": 6
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../utils/validation.js → backend/src/utils/validation.ts",
+      "snippet": {
+        "startLine": 4,
+        "lines": [
+          "import { authSchema } from \"../types/auth-schema.js\";",
+          "import { createToken } from \"../utils/auth.js\";",
+          "import { sendValidationError } from \"../utils/validation.js\";",
+          "",
+          "export async function signup(req: Request, res: Response): Promise<void> {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/controllers/exchange-controller.ts#L1-1:imports",
+      "file": "backend/src/controllers/exchange-controller.ts",
+      "symbol": "Request, Response",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package express",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import type { Request, Response } from \"express\";",
+          "import {",
+          "  orderBodySchema,"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/controllers/exchange-controller.ts#L11-11:errors",
+      "file": "backend/src/controllers/exchange-controller.ts",
+      "range": {
+        "startLine": 11,
+        "endLine": 11
+      },
+      "extractor": "errors",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "throw new Error: \"Missing authenticated user\"",
+      "snippet": {
+        "startLine": 9,
+        "lines": [
+          "",
+          "function getUserId(req: Request): string {",
+          "  if (!req.userId) throw new Error(\"Missing authenticated user\");",
+          "  return req.userId;",
+          "}"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/controllers/exchange-controller.ts#L2-6:imports",
+      "file": "backend/src/controllers/exchange-controller.ts",
+      "symbol": "orderBodySchema, orderIdParamSchema, symbolParamSchema",
+      "range": {
+        "startLine": 2,
+        "endLine": 6
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../types/exchange-schema.js → backend/src/types/exchange-schema.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import type { Request, Response } from \"express\";",
+          "import {",
+          "  orderBodySchema,",
+          "  orderIdParamSchema,",
+          "  symbolParamSchema,",
+          "} from \"../types/exchange-schema.js\";",
+          "import { sendToEngine } from \"../utils/engine-client.js\";",
+          "import { sendValidationError } from \"../utils/validation.js\";"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/controllers/exchange-controller.ts#L7-7:imports",
+      "file": "backend/src/controllers/exchange-controller.ts",
+      "symbol": "sendToEngine",
+      "range": {
+        "startLine": 7,
+        "endLine": 7
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../utils/engine-client.js → backend/src/utils/engine-client.ts",
+      "snippet": {
+        "startLine": 5,
+        "lines": [
+          "  symbolParamSchema,",
+          "} from \"../types/exchange-schema.js\";",
+          "import { sendToEngine } from \"../utils/engine-client.js\";",
+          "import { sendValidationError } from \"../utils/validation.js\";",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/controllers/exchange-controller.ts#L8-8:imports",
+      "file": "backend/src/controllers/exchange-controller.ts",
+      "symbol": "sendValidationError",
+      "range": {
+        "startLine": 8,
+        "endLine": 8
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../utils/validation.js → backend/src/utils/validation.ts",
+      "snippet": {
+        "startLine": 6,
+        "lines": [
+          "} from \"../types/exchange-schema.js\";",
+          "import { sendToEngine } from \"../utils/engine-client.js\";",
+          "import { sendValidationError } from \"../utils/validation.js\";",
+          "",
+          "function getUserId(req: Request): string {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/db.ts#L1-1:imports",
+      "file": "backend/src/db.ts",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package dotenv/config",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import \"dotenv/config\";",
+          "import { PrismaClient } from \"./generated/prisma/client\";",
+          "import { PrismaPg } from \"@prisma/adapter-pg\";"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/db.ts#L2-2:imports",
+      "file": "backend/src/db.ts",
+      "symbol": "PrismaClient",
+      "range": {
+        "startLine": 2,
+        "endLine": 2
+      },
+      "extractor": "imports",
+      "confidence": 0.5,
+      "detail": "import ./generated/prisma/client (unresolved: no such file in repo)",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import \"dotenv/config\";",
+          "import { PrismaClient } from \"./generated/prisma/client\";",
+          "import { PrismaPg } from \"@prisma/adapter-pg\";",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/db.ts#L3-3:imports",
+      "file": "backend/src/db.ts",
+      "symbol": "PrismaPg",
+      "range": {
+        "startLine": 3,
+        "endLine": 3
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package @prisma/adapter-pg",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import \"dotenv/config\";",
+          "import { PrismaClient } from \"./generated/prisma/client\";",
+          "import { PrismaPg } from \"@prisma/adapter-pg\";",
+          "",
+          "const adapter = new PrismaPg({"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/db.ts#L6-6:env",
+      "file": "backend/src/db.ts",
+      "symbol": "DATABASE_URL",
+      "range": {
+        "startLine": 6,
+        "endLine": 6
+      },
+      "extractor": "env",
+      "confidence": 1,
+      "detail": "reads env DATABASE_URL (process.env)",
+      "snippet": {
+        "startLine": 4,
+        "lines": [
+          "",
+          "const adapter = new PrismaPg({",
+          "  connectionString: process.env.DATABASE_URL!,",
+          "});",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/db.ts#L9-11:prisma",
+      "file": "backend/src/db.ts",
+      "symbol": "prisma",
+      "range": {
+        "startLine": 9,
+        "endLine": 11
+      },
+      "extractor": "prisma",
+      "confidence": 0.9,
+      "detail": "prisma client prisma → connection DATABASE_URL",
+      "snippet": {
+        "startLine": 7,
+        "lines": [
+          "});",
+          "",
+          "export const prisma = new PrismaClient({",
+          "  adapter,",
+          "});"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L1-1:imports",
+      "file": "backend/src/index.ts",
+      "symbol": "cors",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package cors",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import cors from \"cors\";",
+          "import express, { type NextFunction, type Request, type Response } from \"express\";",
+          "import { appRouter } from \"./routes/index.js\";"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L11-11:startup",
+      "file": "backend/src/index.ts",
+      "symbol": "connectRedis",
+      "range": {
+        "startLine": 11,
+        "endLine": 11
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call connectRedis()",
+      "snippet": {
+        "startLine": 9,
+        "lines": [
+          "} from \"./utils/engine-client.js\";",
+          "",
+          "await connectRedis();",
+          "void listenForEngineResponses();",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L12-12:startup",
+      "file": "backend/src/index.ts",
+      "symbol": "listenForEngineResponses",
+      "range": {
+        "startLine": 12,
+        "endLine": 12
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call listenForEngineResponses()",
+      "snippet": {
+        "startLine": 10,
+        "lines": [
+          "",
+          "await connectRedis();",
+          "void listenForEngineResponses();",
+          "",
+          "const app = express();"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L16-16:startup",
+      "file": "backend/src/index.ts",
+      "symbol": "app.use",
+      "range": {
+        "startLine": 16,
+        "endLine": 16
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call app.use()",
+      "snippet": {
+        "startLine": 14,
+        "lines": [
+          "const app = express();",
+          "",
+          "app.use(cors());",
+          "app.use(express.json());",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L17-17:startup",
+      "file": "backend/src/index.ts",
+      "symbol": "app.use",
+      "range": {
+        "startLine": 17,
+        "endLine": 17
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call app.use()",
+      "snippet": {
+        "startLine": 15,
+        "lines": [
+          "",
+          "app.use(cors());",
+          "app.use(express.json());",
+          "",
+          "app.get(\"/health\", async (_req, res) => {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L19-22:http-routes",
+      "file": "backend/src/index.ts",
+      "symbol": "<inline handler>",
+      "range": {
+        "startLine": 19,
+        "endLine": 22
+      },
+      "extractor": "http-routes",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "GET /health → <inline handler>",
+      "snippet": {
+        "startLine": 17,
+        "lines": [
+          "app.use(express.json());",
+          "",
+          "app.get(\"/health\", async (_req, res) => {",
+          "  await pingRedis();",
+          "  res.json({ ok: true });",
+          "});",
+          "",
+          "app.use(appRouter);"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L19-22:startup",
+      "file": "backend/src/index.ts",
+      "symbol": "app.get",
+      "range": {
+        "startLine": 19,
+        "endLine": 22
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call app.get()",
+      "snippet": {
+        "startLine": 17,
+        "lines": [
+          "app.use(express.json());",
+          "",
+          "app.get(\"/health\", async (_req, res) => {",
+          "  await pingRedis();",
+          "  res.json({ ok: true });",
+          "});",
+          "",
+          "app.use(appRouter);"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L2-2:imports",
+      "file": "backend/src/index.ts",
+      "symbol": "express, NextFunction, Request, Response",
+      "range": {
+        "startLine": 2,
+        "endLine": 2
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package express",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import cors from \"cors\";",
+          "import express, { type NextFunction, type Request, type Response } from \"express\";",
+          "import { appRouter } from \"./routes/index.js\";",
+          "import { env } from \"./utils/env.js\";"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L24-24:http-routes",
+      "file": "backend/src/index.ts",
+      "symbol": "appRouter",
+      "range": {
+        "startLine": 24,
+        "endLine": 24
+      },
+      "extractor": "http-routes",
+      "confidence": 1,
+      "detail": "mount backend/src/routes/index.ts#appRouter on backend/src/index.ts#app",
+      "snippet": {
+        "startLine": 22,
+        "lines": [
+          "});",
+          "",
+          "app.use(appRouter);",
+          "",
+          "app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L24-24:startup",
+      "file": "backend/src/index.ts",
+      "symbol": "app.use",
+      "range": {
+        "startLine": 24,
+        "endLine": 24
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call app.use()",
+      "snippet": {
+        "startLine": 22,
+        "lines": [
+          "});",
+          "",
+          "app.use(appRouter);",
+          "",
+          "app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L26-31:startup",
+      "file": "backend/src/index.ts",
+      "symbol": "app.use",
+      "range": {
+        "startLine": 26,
+        "endLine": 31
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call app.use()",
+      "snippet": {
+        "startLine": 24,
+        "lines": [
+          "app.use(appRouter);",
+          "",
+          "app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {",
+          "  console.error(err);",
+          "  res.status(500).json({",
+          "    error: err instanceof Error ? err.message : \"internal_server_error\",",
+          "  });",
+          "});",
+          "",
+          "app.listen(env.port, () => {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L29-29:errors",
+      "file": "backend/src/index.ts",
+      "range": {
+        "startLine": 29,
+        "endLine": 29
+      },
+      "extractor": "errors",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "res.status(500).json { error }: \"internal_server_error\"",
+      "snippet": {
+        "startLine": 27,
+        "lines": [
+          "  console.error(err);",
+          "  res.status(500).json({",
+          "    error: err instanceof Error ? err.message : \"internal_server_error\",",
+          "  });",
+          "});"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L3-3:imports",
+      "file": "backend/src/index.ts",
+      "symbol": "appRouter",
+      "range": {
+        "startLine": 3,
+        "endLine": 3
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ./routes/index.js → backend/src/routes/index.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import cors from \"cors\";",
+          "import express, { type NextFunction, type Request, type Response } from \"express\";",
+          "import { appRouter } from \"./routes/index.js\";",
+          "import { env } from \"./utils/env.js\";",
+          "import {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L33-36:http-routes",
+      "file": "backend/src/index.ts",
+      "symbol": "app",
+      "range": {
+        "startLine": 33,
+        "endLine": 36
+      },
+      "extractor": "http-routes",
+      "confidence": 1,
+      "detail": "express server listen() on backend/src/index.ts#app",
+      "snippet": {
+        "startLine": 31,
+        "lines": [
+          "});",
+          "",
+          "app.listen(env.port, () => {",
+          "  console.log(`Backend running on http://localhost:${env.port}`);",
+          "  console.log(`Response queue: ${env.responseQueue}`);",
+          "});"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L33-36:startup",
+      "file": "backend/src/index.ts",
+      "symbol": "app.listen",
+      "range": {
+        "startLine": 33,
+        "endLine": 36
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call app.listen()",
+      "snippet": {
+        "startLine": 31,
+        "lines": [
+          "});",
+          "",
+          "app.listen(env.port, () => {",
+          "  console.log(`Backend running on http://localhost:${env.port}`);",
+          "  console.log(`Response queue: ${env.responseQueue}`);",
+          "});"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L4-4:imports",
+      "file": "backend/src/index.ts",
+      "symbol": "env",
+      "range": {
+        "startLine": 4,
+        "endLine": 4
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ./utils/env.js → backend/src/utils/env.ts",
+      "snippet": {
+        "startLine": 2,
+        "lines": [
+          "import express, { type NextFunction, type Request, type Response } from \"express\";",
+          "import { appRouter } from \"./routes/index.js\";",
+          "import { env } from \"./utils/env.js\";",
+          "import {",
+          "  connectRedis,"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/index.ts#L5-9:imports",
+      "file": "backend/src/index.ts",
+      "symbol": "connectRedis, listenForEngineResponses, pingRedis",
+      "range": {
+        "startLine": 5,
+        "endLine": 9
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ./utils/engine-client.js → backend/src/utils/engine-client.ts",
+      "snippet": {
+        "startLine": 3,
+        "lines": [
+          "import { appRouter } from \"./routes/index.js\";",
+          "import { env } from \"./utils/env.js\";",
+          "import {",
+          "  connectRedis,",
+          "  listenForEngineResponses,",
+          "  pingRedis,",
+          "} from \"./utils/engine-client.js\";",
+          "",
+          "await connectRedis();"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/auth-routes.ts#L1-1:imports",
+      "file": "backend/src/routes/auth-routes.ts",
+      "symbol": "Router",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package express",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { Router } from \"express\";",
+          "import { signin, signup } from \"../controllers/auth-controller.js\";",
+          "import { asyncHandler } from \"../utils/async-handler.js\";"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/auth-routes.ts#L2-2:imports",
+      "file": "backend/src/routes/auth-routes.ts",
+      "symbol": "signin, signup",
+      "range": {
+        "startLine": 2,
+        "endLine": 2
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../controllers/auth-controller.js → backend/src/controllers/auth-controller.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { Router } from \"express\";",
+          "import { signin, signup } from \"../controllers/auth-controller.js\";",
+          "import { asyncHandler } from \"../utils/async-handler.js\";",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/auth-routes.ts#L3-3:imports",
+      "file": "backend/src/routes/auth-routes.ts",
+      "symbol": "asyncHandler",
+      "range": {
+        "startLine": 3,
+        "endLine": 3
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../utils/async-handler.js → backend/src/utils/async-handler.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { Router } from \"express\";",
+          "import { signin, signup } from \"../controllers/auth-controller.js\";",
+          "import { asyncHandler } from \"../utils/async-handler.js\";",
+          "",
+          "export const authRouter = Router();"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/auth-routes.ts#L7-7:http-routes",
+      "file": "backend/src/routes/auth-routes.ts",
+      "symbol": "asyncHandler(signup)",
+      "range": {
+        "startLine": 7,
+        "endLine": 7
+      },
+      "extractor": "http-routes",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "POST /signup → asyncHandler(signup)",
+      "snippet": {
+        "startLine": 5,
+        "lines": [
+          "export const authRouter = Router();",
+          "",
+          "authRouter.post(\"/signup\", asyncHandler(signup));",
+          "authRouter.post(\"/signin\", asyncHandler(signin));",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/auth-routes.ts#L7-7:startup",
+      "file": "backend/src/routes/auth-routes.ts",
+      "symbol": "authRouter.post",
+      "range": {
+        "startLine": 7,
+        "endLine": 7
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call authRouter.post()",
+      "snippet": {
+        "startLine": 5,
+        "lines": [
+          "export const authRouter = Router();",
+          "",
+          "authRouter.post(\"/signup\", asyncHandler(signup));",
+          "authRouter.post(\"/signin\", asyncHandler(signin));",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/auth-routes.ts#L8-8:http-routes",
+      "file": "backend/src/routes/auth-routes.ts",
+      "symbol": "asyncHandler(signin)",
+      "range": {
+        "startLine": 8,
+        "endLine": 8
+      },
+      "extractor": "http-routes",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "POST /signin → asyncHandler(signin)",
+      "snippet": {
+        "startLine": 6,
+        "lines": [
+          "",
+          "authRouter.post(\"/signup\", asyncHandler(signup));",
+          "authRouter.post(\"/signin\", asyncHandler(signin));",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/auth-routes.ts#L8-8:startup",
+      "file": "backend/src/routes/auth-routes.ts",
+      "symbol": "authRouter.post",
+      "range": {
+        "startLine": 8,
+        "endLine": 8
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call authRouter.post()",
+      "snippet": {
+        "startLine": 6,
+        "lines": [
+          "",
+          "authRouter.post(\"/signup\", asyncHandler(signup));",
+          "authRouter.post(\"/signin\", asyncHandler(signin));",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L1-1:imports",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "Router",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package express",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { Router } from \"express\";",
+          "import {",
+          "  cancelOrder,"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L10-10:imports",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "asyncHandler",
+      "range": {
+        "startLine": 10,
+        "endLine": 10
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../utils/async-handler.js → backend/src/utils/async-handler.ts",
+      "snippet": {
+        "startLine": 8,
+        "lines": [
+          "} from \"../controllers/exchange-controller.js\";",
+          "import { requireAuth } from \"../utils/auth.js\";",
+          "import { asyncHandler } from \"../utils/async-handler.js\";",
+          "",
+          "export const exchangeRouter = Router();"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L14-14:http-routes",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "asyncHandler(createOrder)",
+      "range": {
+        "startLine": 14,
+        "endLine": 14
+      },
+      "extractor": "http-routes",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "POST /order → requireAuth, asyncHandler(createOrder)",
+      "snippet": {
+        "startLine": 12,
+        "lines": [
+          "export const exchangeRouter = Router();",
+          "",
+          "exchangeRouter.post(\"/order\", requireAuth, asyncHandler(createOrder));",
+          "exchangeRouter.get(\"/depth/:symbol\", requireAuth, asyncHandler(getDepth));",
+          "exchangeRouter.get(\"/balance\", requireAuth, asyncHandler(getBalance));"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L14-14:startup",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "exchangeRouter.post",
+      "range": {
+        "startLine": 14,
+        "endLine": 14
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call exchangeRouter.post()",
+      "snippet": {
+        "startLine": 12,
+        "lines": [
+          "export const exchangeRouter = Router();",
+          "",
+          "exchangeRouter.post(\"/order\", requireAuth, asyncHandler(createOrder));",
+          "exchangeRouter.get(\"/depth/:symbol\", requireAuth, asyncHandler(getDepth));",
+          "exchangeRouter.get(\"/balance\", requireAuth, asyncHandler(getBalance));"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L15-15:http-routes",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "asyncHandler(getDepth)",
+      "range": {
+        "startLine": 15,
+        "endLine": 15
+      },
+      "extractor": "http-routes",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "GET /depth/:symbol → requireAuth, asyncHandler(getDepth)",
+      "snippet": {
+        "startLine": 13,
+        "lines": [
+          "",
+          "exchangeRouter.post(\"/order\", requireAuth, asyncHandler(createOrder));",
+          "exchangeRouter.get(\"/depth/:symbol\", requireAuth, asyncHandler(getDepth));",
+          "exchangeRouter.get(\"/balance\", requireAuth, asyncHandler(getBalance));",
+          "exchangeRouter.get(\"/order/:orderId\", requireAuth, asyncHandler(getOrder));"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L15-15:startup",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "exchangeRouter.get",
+      "range": {
+        "startLine": 15,
+        "endLine": 15
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call exchangeRouter.get()",
+      "snippet": {
+        "startLine": 13,
+        "lines": [
+          "",
+          "exchangeRouter.post(\"/order\", requireAuth, asyncHandler(createOrder));",
+          "exchangeRouter.get(\"/depth/:symbol\", requireAuth, asyncHandler(getDepth));",
+          "exchangeRouter.get(\"/balance\", requireAuth, asyncHandler(getBalance));",
+          "exchangeRouter.get(\"/order/:orderId\", requireAuth, asyncHandler(getOrder));"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L16-16:http-routes",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "asyncHandler(getBalance)",
+      "range": {
+        "startLine": 16,
+        "endLine": 16
+      },
+      "extractor": "http-routes",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "GET /balance → requireAuth, asyncHandler(getBalance)",
+      "snippet": {
+        "startLine": 14,
+        "lines": [
+          "exchangeRouter.post(\"/order\", requireAuth, asyncHandler(createOrder));",
+          "exchangeRouter.get(\"/depth/:symbol\", requireAuth, asyncHandler(getDepth));",
+          "exchangeRouter.get(\"/balance\", requireAuth, asyncHandler(getBalance));",
+          "exchangeRouter.get(\"/order/:orderId\", requireAuth, asyncHandler(getOrder));",
+          "exchangeRouter.delete(\"/order/:orderId\", requireAuth, asyncHandler(cancelOrder));"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L16-16:startup",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "exchangeRouter.get",
+      "range": {
+        "startLine": 16,
+        "endLine": 16
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call exchangeRouter.get()",
+      "snippet": {
+        "startLine": 14,
+        "lines": [
+          "exchangeRouter.post(\"/order\", requireAuth, asyncHandler(createOrder));",
+          "exchangeRouter.get(\"/depth/:symbol\", requireAuth, asyncHandler(getDepth));",
+          "exchangeRouter.get(\"/balance\", requireAuth, asyncHandler(getBalance));",
+          "exchangeRouter.get(\"/order/:orderId\", requireAuth, asyncHandler(getOrder));",
+          "exchangeRouter.delete(\"/order/:orderId\", requireAuth, asyncHandler(cancelOrder));"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L17-17:http-routes",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "asyncHandler(getOrder)",
+      "range": {
+        "startLine": 17,
+        "endLine": 17
+      },
+      "extractor": "http-routes",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "GET /order/:orderId → requireAuth, asyncHandler(getOrder)",
+      "snippet": {
+        "startLine": 15,
+        "lines": [
+          "exchangeRouter.get(\"/depth/:symbol\", requireAuth, asyncHandler(getDepth));",
+          "exchangeRouter.get(\"/balance\", requireAuth, asyncHandler(getBalance));",
+          "exchangeRouter.get(\"/order/:orderId\", requireAuth, asyncHandler(getOrder));",
+          "exchangeRouter.delete(\"/order/:orderId\", requireAuth, asyncHandler(cancelOrder));",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L17-17:startup",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "exchangeRouter.get",
+      "range": {
+        "startLine": 17,
+        "endLine": 17
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call exchangeRouter.get()",
+      "snippet": {
+        "startLine": 15,
+        "lines": [
+          "exchangeRouter.get(\"/depth/:symbol\", requireAuth, asyncHandler(getDepth));",
+          "exchangeRouter.get(\"/balance\", requireAuth, asyncHandler(getBalance));",
+          "exchangeRouter.get(\"/order/:orderId\", requireAuth, asyncHandler(getOrder));",
+          "exchangeRouter.delete(\"/order/:orderId\", requireAuth, asyncHandler(cancelOrder));",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L18-18:http-routes",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "asyncHandler(cancelOrder)",
+      "range": {
+        "startLine": 18,
+        "endLine": 18
+      },
+      "extractor": "http-routes",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "DELETE /order/:orderId → requireAuth, asyncHandler(cancelOrder)",
+      "snippet": {
+        "startLine": 16,
+        "lines": [
+          "exchangeRouter.get(\"/balance\", requireAuth, asyncHandler(getBalance));",
+          "exchangeRouter.get(\"/order/:orderId\", requireAuth, asyncHandler(getOrder));",
+          "exchangeRouter.delete(\"/order/:orderId\", requireAuth, asyncHandler(cancelOrder));",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L18-18:startup",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "exchangeRouter.delete",
+      "range": {
+        "startLine": 18,
+        "endLine": 18
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call exchangeRouter.delete()",
+      "snippet": {
+        "startLine": 16,
+        "lines": [
+          "exchangeRouter.get(\"/balance\", requireAuth, asyncHandler(getBalance));",
+          "exchangeRouter.get(\"/order/:orderId\", requireAuth, asyncHandler(getOrder));",
+          "exchangeRouter.delete(\"/order/:orderId\", requireAuth, asyncHandler(cancelOrder));",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L2-8:imports",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "cancelOrder, createOrder, getBalance, getDepth, getOrder",
+      "range": {
+        "startLine": 2,
+        "endLine": 8
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../controllers/exchange-controller.js → backend/src/controllers/exchange-controller.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { Router } from \"express\";",
+          "import {",
+          "  cancelOrder,",
+          "  createOrder,",
+          "  getBalance,",
+          "  getDepth,",
+          "  getOrder,",
+          "} from \"../controllers/exchange-controller.js\";",
+          "import { requireAuth } from \"../utils/auth.js\";",
+          "import { asyncHandler } from \"../utils/async-handler.js\";"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/exchange-routes.ts#L9-9:imports",
+      "file": "backend/src/routes/exchange-routes.ts",
+      "symbol": "requireAuth",
+      "range": {
+        "startLine": 9,
+        "endLine": 9
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../utils/auth.js → backend/src/utils/auth.ts",
+      "snippet": {
+        "startLine": 7,
+        "lines": [
+          "  getOrder,",
+          "} from \"../controllers/exchange-controller.js\";",
+          "import { requireAuth } from \"../utils/auth.js\";",
+          "import { asyncHandler } from \"../utils/async-handler.js\";",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/index.ts#L1-1:imports",
+      "file": "backend/src/routes/index.ts",
+      "symbol": "Router",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package express",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { Router } from \"express\";",
+          "import { authRouter } from \"./auth-routes.js\";",
+          "import { exchangeRouter } from \"./exchange-routes.js\";"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/index.ts#L2-2:imports",
+      "file": "backend/src/routes/index.ts",
+      "symbol": "authRouter",
+      "range": {
+        "startLine": 2,
+        "endLine": 2
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ./auth-routes.js → backend/src/routes/auth-routes.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { Router } from \"express\";",
+          "import { authRouter } from \"./auth-routes.js\";",
+          "import { exchangeRouter } from \"./exchange-routes.js\";",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/index.ts#L3-3:imports",
+      "file": "backend/src/routes/index.ts",
+      "symbol": "exchangeRouter",
+      "range": {
+        "startLine": 3,
+        "endLine": 3
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ./exchange-routes.js → backend/src/routes/exchange-routes.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { Router } from \"express\";",
+          "import { authRouter } from \"./auth-routes.js\";",
+          "import { exchangeRouter } from \"./exchange-routes.js\";",
+          "",
+          "export const appRouter = Router();"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/index.ts#L7-7:http-routes",
+      "file": "backend/src/routes/index.ts",
+      "symbol": "authRouter",
+      "range": {
+        "startLine": 7,
+        "endLine": 7
+      },
+      "extractor": "http-routes",
+      "confidence": 1,
+      "detail": "mount backend/src/routes/auth-routes.ts#authRouter on backend/src/routes/index.ts#appRouter",
+      "snippet": {
+        "startLine": 5,
+        "lines": [
+          "export const appRouter = Router();",
+          "",
+          "appRouter.use(authRouter);",
+          "appRouter.use(exchangeRouter);",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/index.ts#L7-7:startup",
+      "file": "backend/src/routes/index.ts",
+      "symbol": "appRouter.use",
+      "range": {
+        "startLine": 7,
+        "endLine": 7
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call appRouter.use()",
+      "snippet": {
+        "startLine": 5,
+        "lines": [
+          "export const appRouter = Router();",
+          "",
+          "appRouter.use(authRouter);",
+          "appRouter.use(exchangeRouter);",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/index.ts#L8-8:http-routes",
+      "file": "backend/src/routes/index.ts",
+      "symbol": "exchangeRouter",
+      "range": {
+        "startLine": 8,
+        "endLine": 8
+      },
+      "extractor": "http-routes",
+      "confidence": 1,
+      "detail": "mount backend/src/routes/exchange-routes.ts#exchangeRouter on backend/src/routes/index.ts#appRouter",
+      "snippet": {
+        "startLine": 6,
+        "lines": [
+          "",
+          "appRouter.use(authRouter);",
+          "appRouter.use(exchangeRouter);",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/routes/index.ts#L8-8:startup",
+      "file": "backend/src/routes/index.ts",
+      "symbol": "appRouter.use",
+      "range": {
+        "startLine": 8,
+        "endLine": 8
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call appRouter.use()",
+      "snippet": {
+        "startLine": 6,
+        "lines": [
+          "",
+          "appRouter.use(authRouter);",
+          "appRouter.use(exchangeRouter);",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/store/pending-responses.ts#L1-1:imports",
+      "file": "backend/src/store/pending-responses.ts",
+      "symbol": "EngineResponse",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../types/engine.js → backend/src/types/engine.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import type { EngineResponse } from \"../types/engine.js\";",
+          "",
+          "interface PendingResponse {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/store/pending-responses.ts#L18-18:errors",
+      "file": "backend/src/store/pending-responses.ts",
+      "range": {
+        "startLine": 18,
+        "endLine": 18
+      },
+      "extractor": "errors",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "reject(new Error): \"Engine response timed out\"",
+      "snippet": {
+        "startLine": 16,
+        "lines": [
+          "    const timeout = setTimeout(() => {",
+          "      pendingResponses.delete(correlationId);",
+          "      reject(new Error(\"Engine response timed out\"));",
+          "    }, timeoutMs);",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/types/auth-schema.ts#L1-1:imports",
+      "file": "backend/src/types/auth-schema.ts",
+      "symbol": "z",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package zod",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { z } from \"zod\";",
+          "",
+          "export const authSchema = z.object({"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/types/exchange-schema.ts#L1-1:imports",
+      "file": "backend/src/types/exchange-schema.ts",
+      "symbol": "z",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package zod",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { z } from \"zod\";",
+          "",
+          "export const symbolParamSchema = z.object({"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/async-handler.ts#L1-1:imports",
+      "file": "backend/src/utils/async-handler.ts",
+      "symbol": "NextFunction, Request, RequestHandler, Response",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package express",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import type { NextFunction, Request, RequestHandler, Response } from \"express\";",
+          "",
+          "export function asyncHandler("
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/auth.ts#L1-1:imports",
+      "file": "backend/src/utils/auth.ts",
+      "symbol": "NextFunction, Request, Response",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package express",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import type { NextFunction, Request, Response } from \"express\";",
+          "import jwt from \"jsonwebtoken\";",
+          "import { env } from \"./env.js\";"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/auth.ts#L2-2:imports",
+      "file": "backend/src/utils/auth.ts",
+      "symbol": "jwt",
+      "range": {
+        "startLine": 2,
+        "endLine": 2
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package jsonwebtoken",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import type { NextFunction, Request, Response } from \"express\";",
+          "import jwt from \"jsonwebtoken\";",
+          "import { env } from \"./env.js\";",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/auth.ts#L21-21:errors",
+      "file": "backend/src/utils/auth.ts",
+      "range": {
+        "startLine": 21,
+        "endLine": 21
+      },
+      "extractor": "errors",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "res.status(401).json { error }: \"Missing auth token\"",
+      "snippet": {
+        "startLine": 19,
+        "lines": [
+          "",
+          "  if (!token) {",
+          "    res.status(401).json({ error: \"Missing auth token\" });",
+          "    return;",
+          "  }"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/auth.ts#L3-3:imports",
+      "file": "backend/src/utils/auth.ts",
+      "symbol": "env",
+      "range": {
+        "startLine": 3,
+        "endLine": 3
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ./env.js → backend/src/utils/env.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import type { NextFunction, Request, Response } from \"express\";",
+          "import jwt from \"jsonwebtoken\";",
+          "import { env } from \"./env.js\";",
+          "",
+          "export interface TokenPayload {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/auth.ts#L30-30:errors",
+      "file": "backend/src/utils/auth.ts",
+      "range": {
+        "startLine": 30,
+        "endLine": 30
+      },
+      "extractor": "errors",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "res.status(401).json { error }: \"Invalid auth token\"",
+      "snippet": {
+        "startLine": 28,
+        "lines": [
+          "    next();",
+          "  } catch {",
+          "    res.status(401).json({ error: \"Invalid auth token\" });",
+          "  }",
+          "}"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/engine-client.ts#L1-1:imports",
+      "file": "backend/src/utils/engine-client.ts",
+      "symbol": "createClient",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package redis",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { createClient } from \"redis\";",
+          "import { env } from \"./env.js\";",
+          "import {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/engine-client.ts#L13-15:redis",
+      "file": "backend/src/utils/engine-client.ts",
+      "symbol": "publisher",
+      "range": {
+        "startLine": 13,
+        "endLine": 15
+      },
+      "extractor": "redis",
+      "confidence": 0.9,
+      "detail": "redis client publisher → connection REDIS_URL",
+      "snippet": {
+        "startLine": 11,
+        "lines": [
+          "} from \"../types/engine.js\";",
+          "",
+          "const publisher = createClient({ url: env.redisUrl }).on(\"error\", (error) => {",
+          "  console.error(\"Redis publisher error\", error);",
+          "});",
+          "",
+          "const subscriber = createClient({ url: env.redisUrl }).on(\"error\", (error) => {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/engine-client.ts#L17-19:redis",
+      "file": "backend/src/utils/engine-client.ts",
+      "symbol": "subscriber",
+      "range": {
+        "startLine": 17,
+        "endLine": 19
+      },
+      "extractor": "redis",
+      "confidence": 0.9,
+      "detail": "redis client subscriber → connection REDIS_URL",
+      "snippet": {
+        "startLine": 15,
+        "lines": [
+          "});",
+          "",
+          "const subscriber = createClient({ url: env.redisUrl }).on(\"error\", (error) => {",
+          "  console.error(\"Redis subscriber error\", error);",
+          "});",
+          "",
+          "export async function connectRedis(): Promise<void> {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/engine-client.ts#L2-2:imports",
+      "file": "backend/src/utils/engine-client.ts",
+      "symbol": "env",
+      "range": {
+        "startLine": 2,
+        "endLine": 2
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ./env.js → backend/src/utils/env.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { createClient } from \"redis\";",
+          "import { env } from \"./env.js\";",
+          "import {",
+          "  resolveEngineResponse,"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/engine-client.ts#L22-22:redis",
+      "file": "backend/src/utils/engine-client.ts",
+      "symbol": "connectRedis",
+      "range": {
+        "startLine": 22,
+        "endLine": 22
+      },
+      "extractor": "redis",
+      "confidence": 0.9,
+      "resolution": "proven",
+      "detail": "connect (admin) via publisher",
+      "snippet": {
+        "startLine": 20,
+        "lines": [
+          "",
+          "export async function connectRedis(): Promise<void> {",
+          "  await Promise.all([publisher.connect(), subscriber.connect()]);",
+          "}",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/engine-client.ts#L22-22:redis:2",
+      "file": "backend/src/utils/engine-client.ts",
+      "symbol": "connectRedis",
+      "range": {
+        "startLine": 22,
+        "endLine": 22
+      },
+      "extractor": "redis",
+      "confidence": 0.9,
+      "resolution": "proven",
+      "detail": "connect (admin) via subscriber",
+      "snippet": {
+        "startLine": 20,
+        "lines": [
+          "",
+          "export async function connectRedis(): Promise<void> {",
+          "  await Promise.all([publisher.connect(), subscriber.connect()]);",
+          "}",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/engine-client.ts#L26-26:redis",
+      "file": "backend/src/utils/engine-client.ts",
+      "symbol": "pingRedis",
+      "range": {
+        "startLine": 26,
+        "endLine": 26
+      },
+      "extractor": "redis",
+      "confidence": 0.9,
+      "resolution": "proven",
+      "detail": "ping (admin) via publisher",
+      "snippet": {
+        "startLine": 24,
+        "lines": [
+          "",
+          "export async function pingRedis(): Promise<string> {",
+          "  return publisher.ping();",
+          "}",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/engine-client.ts#L3-6:imports",
+      "file": "backend/src/utils/engine-client.ts",
+      "symbol": "resolveEngineResponse, waitForEngineResponse",
+      "range": {
+        "startLine": 3,
+        "endLine": 6
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../store/pending-responses.js → backend/src/store/pending-responses.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { createClient } from \"redis\";",
+          "import { env } from \"./env.js\";",
+          "import {",
+          "  resolveEngineResponse,",
+          "  waitForEngineResponse,",
+          "} from \"../store/pending-responses.js\";",
+          "import type {",
+          "  EngineCommandType,"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/engine-client.ts#L43-43:redis",
+      "file": "backend/src/utils/engine-client.ts",
+      "symbol": "sendToEngine",
+      "range": {
+        "startLine": 43,
+        "endLine": 43
+      },
+      "extractor": "redis",
+      "confidence": 0.7,
+      "resolution": "resolved-default",
+      "detail": "lPush key=backend-to-engine-broker (produce) via publisher",
+      "snippet": {
+        "startLine": 41,
+        "lines": [
+          "  };",
+          "",
+          "  await publisher.lPush(env.incomingQueue, JSON.stringify(message));",
+          "  return responsePromise;",
+          "}"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/engine-client.ts#L51-51:redis",
+      "file": "backend/src/utils/engine-client.ts",
+      "symbol": "listenForEngineResponses",
+      "range": {
+        "startLine": 51,
+        "endLine": 51
+      },
+      "extractor": "redis",
+      "confidence": 0.7,
+      "resolution": "dynamic",
+      "detail": "brPop key=response-queue-* (consume) via subscriber",
+      "snippet": {
+        "startLine": 49,
+        "lines": [
+          "",
+          "  for (;;) {",
+          "    const response = await subscriber.brPop(env.responseQueue, 0);",
+          "    if (!response) continue;",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/engine-client.ts#L7-11:imports",
+      "file": "backend/src/utils/engine-client.ts",
+      "symbol": "EngineCommandType, EngineRequest, EngineResponse",
+      "range": {
+        "startLine": 7,
+        "endLine": 11
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../types/engine.js → backend/src/types/engine.ts",
+      "snippet": {
+        "startLine": 5,
+        "lines": [
+          "  waitForEngineResponse,",
+          "} from \"../store/pending-responses.js\";",
+          "import type {",
+          "  EngineCommandType,",
+          "  EngineRequest,",
+          "  EngineResponse,",
+          "} from \"../types/engine.js\";",
+          "",
+          "const publisher = createClient({ url: env.redisUrl }).on(\"error\", (error) => {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/env.ts#L1-1:imports",
+      "file": "backend/src/utils/env.ts",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package dotenv/config",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import \"dotenv/config\";",
+          "",
+          "function readRequiredEnv(name: string): string {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/env.ts#L10-10:env",
+      "file": "backend/src/utils/env.ts",
+      "symbol": "PORT",
+      "range": {
+        "startLine": 10,
+        "endLine": 10
+      },
+      "extractor": "env",
+      "confidence": 1,
+      "detail": "reads env PORT (process.env)",
+      "snippet": {
+        "startLine": 8,
+        "lines": [
+          "",
+          "export const env = {",
+          "  port: Number(process.env.PORT ?? \"3000\"),",
+          "  redisUrl: readRequiredEnv(\"REDIS_URL\"),",
+          "  jwtSecret: readRequiredEnv(\"JWT_SECRET\"),"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/env.ts#L11-11:env",
+      "file": "backend/src/utils/env.ts",
+      "symbol": "REDIS_URL",
+      "range": {
+        "startLine": 11,
+        "endLine": 11
+      },
+      "extractor": "env",
+      "confidence": 0.9,
+      "detail": "reads env REDIS_URL (via readRequiredEnv())",
+      "snippet": {
+        "startLine": 9,
+        "lines": [
+          "export const env = {",
+          "  port: Number(process.env.PORT ?? \"3000\"),",
+          "  redisUrl: readRequiredEnv(\"REDIS_URL\"),",
+          "  jwtSecret: readRequiredEnv(\"JWT_SECRET\"),",
+          "  incomingQueue: process.env.INCOMING_QUEUE ?? \"backend-to-engine-broker\","
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/env.ts#L12-12:env",
+      "file": "backend/src/utils/env.ts",
+      "symbol": "JWT_SECRET",
+      "range": {
+        "startLine": 12,
+        "endLine": 12
+      },
+      "extractor": "env",
+      "confidence": 0.9,
+      "detail": "reads env JWT_SECRET (via readRequiredEnv())",
+      "snippet": {
+        "startLine": 10,
+        "lines": [
+          "  port: Number(process.env.PORT ?? \"3000\"),",
+          "  redisUrl: readRequiredEnv(\"REDIS_URL\"),",
+          "  jwtSecret: readRequiredEnv(\"JWT_SECRET\"),",
+          "  incomingQueue: process.env.INCOMING_QUEUE ?? \"backend-to-engine-broker\",",
+          "  responseQueue: `response-queue-${process.env.BACKEND_QUEUE_ID ?? crypto.randomUUID()}`,"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/env.ts#L13-13:env",
+      "file": "backend/src/utils/env.ts",
+      "symbol": "INCOMING_QUEUE",
+      "range": {
+        "startLine": 13,
+        "endLine": 13
+      },
+      "extractor": "env",
+      "confidence": 1,
+      "detail": "reads env INCOMING_QUEUE (process.env)",
+      "snippet": {
+        "startLine": 11,
+        "lines": [
+          "  redisUrl: readRequiredEnv(\"REDIS_URL\"),",
+          "  jwtSecret: readRequiredEnv(\"JWT_SECRET\"),",
+          "  incomingQueue: process.env.INCOMING_QUEUE ?? \"backend-to-engine-broker\",",
+          "  responseQueue: `response-queue-${process.env.BACKEND_QUEUE_ID ?? crypto.randomUUID()}`,",
+          "  engineTimeoutMs: Number(process.env.ENGINE_TIMEOUT_MS ?? \"30000\"),"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/env.ts#L14-14:env",
+      "file": "backend/src/utils/env.ts",
+      "symbol": "BACKEND_QUEUE_ID",
+      "range": {
+        "startLine": 14,
+        "endLine": 14
+      },
+      "extractor": "env",
+      "confidence": 1,
+      "detail": "reads env BACKEND_QUEUE_ID (process.env)",
+      "snippet": {
+        "startLine": 12,
+        "lines": [
+          "  jwtSecret: readRequiredEnv(\"JWT_SECRET\"),",
+          "  incomingQueue: process.env.INCOMING_QUEUE ?? \"backend-to-engine-broker\",",
+          "  responseQueue: `response-queue-${process.env.BACKEND_QUEUE_ID ?? crypto.randomUUID()}`,",
+          "  engineTimeoutMs: Number(process.env.ENGINE_TIMEOUT_MS ?? \"30000\"),",
+          "};"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/env.ts#L15-15:env",
+      "file": "backend/src/utils/env.ts",
+      "symbol": "ENGINE_TIMEOUT_MS",
+      "range": {
+        "startLine": 15,
+        "endLine": 15
+      },
+      "extractor": "env",
+      "confidence": 1,
+      "detail": "reads env ENGINE_TIMEOUT_MS (process.env)",
+      "snippet": {
+        "startLine": 13,
+        "lines": [
+          "  incomingQueue: process.env.INCOMING_QUEUE ?? \"backend-to-engine-broker\",",
+          "  responseQueue: `response-queue-${process.env.BACKEND_QUEUE_ID ?? crypto.randomUUID()}`,",
+          "  engineTimeoutMs: Number(process.env.ENGINE_TIMEOUT_MS ?? \"30000\"),",
+          "};",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/env.ts#L5-5:errors",
+      "file": "backend/src/utils/env.ts",
+      "range": {
+        "startLine": 5,
+        "endLine": 5
+      },
+      "extractor": "errors",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "throw new Error: \"Missing required env variable: *\"",
+      "snippet": {
+        "startLine": 3,
+        "lines": [
+          "function readRequiredEnv(name: string): string {",
+          "  const value = process.env[name];",
+          "  if (!value) throw new Error(`Missing required env variable: ${name}`);",
+          "  return value;",
+          "}"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/validation.ts#L1-1:imports",
+      "file": "backend/src/utils/validation.ts",
+      "symbol": "Response",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package express",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import type { Response } from \"express\";",
+          "import type { ZodError } from \"zod\";",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/validation.ts#L2-2:imports",
+      "file": "backend/src/utils/validation.ts",
+      "symbol": "ZodError",
+      "range": {
+        "startLine": 2,
+        "endLine": 2
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package zod",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import type { Response } from \"express\";",
+          "import type { ZodError } from \"zod\";",
+          "",
+          "export function sendValidationError(res: Response, error: ZodError): void {"
+        ]
+      }
+    },
+    {
+      "id": "backend/src/utils/validation.ts#L6-6:errors",
+      "file": "backend/src/utils/validation.ts",
+      "range": {
+        "startLine": 6,
+        "endLine": 6
+      },
+      "extractor": "errors",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "res.status(400).json { error }: \"validation_error\"",
+      "snippet": {
+        "startLine": 4,
+        "lines": [
+          "export function sendValidationError(res: Response, error: ZodError): void {",
+          "  res.status(400).json({",
+          "    error: \"validation_error\",",
+          "    issues: error.issues.map((issue) => ({",
+          "      path: issue.path.join(\".\"),"
+        ]
+      }
+    },
+    {
+      "id": "engine/src/index.ts#L1-1:imports",
+      "file": "engine/src/index.ts",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package dotenv/config",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import \"dotenv/config\";",
+          "import { createClient } from \"redis\";",
+          "import { env } from \"./utils/env.js\";"
+        ]
+      }
+    },
+    {
+      "id": "engine/src/index.ts#L2-2:imports",
+      "file": "engine/src/index.ts",
+      "symbol": "createClient",
+      "range": {
+        "startLine": 2,
+        "endLine": 2
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package redis",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import \"dotenv/config\";",
+          "import { createClient } from \"redis\";",
+          "import { env } from \"./utils/env.js\";",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "engine/src/index.ts#L26-28:redis",
+      "file": "engine/src/index.ts",
+      "symbol": "brokerClient",
+      "range": {
+        "startLine": 26,
+        "endLine": 28
+      },
+      "extractor": "redis",
+      "confidence": 0.9,
+      "detail": "redis client brokerClient → connection REDIS_URL",
+      "snippet": {
+        "startLine": 24,
+        "lines": [
+          "}",
+          "",
+          "const brokerClient = createClient({ url: env.redisUrl }).on(\"error\", (error) => {",
+          "  console.error(\"Redis broker client error\", error);",
+          "});",
+          "",
+          "const responseClient = createClient({ url: env.redisUrl }).on(\"error\", (error) => {"
+        ]
+      }
+    },
+    {
+      "id": "engine/src/index.ts#L3-3:imports",
+      "file": "engine/src/index.ts",
+      "symbol": "env",
+      "range": {
+        "startLine": 3,
+        "endLine": 3
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ./utils/env.js → engine/src/utils/env.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import \"dotenv/config\";",
+          "import { createClient } from \"redis\";",
+          "import { env } from \"./utils/env.js\";",
+          "",
+          "export type EngineCommandType ="
+        ]
+      }
+    },
+    {
+      "id": "engine/src/index.ts#L30-32:redis",
+      "file": "engine/src/index.ts",
+      "symbol": "responseClient",
+      "range": {
+        "startLine": 30,
+        "endLine": 32
+      },
+      "extractor": "redis",
+      "confidence": 0.9,
+      "detail": "redis client responseClient → connection REDIS_URL",
+      "snippet": {
+        "startLine": 28,
+        "lines": [
+          "});",
+          "",
+          "const responseClient = createClient({ url: env.redisUrl }).on(\"error\", (error) => {",
+          "  console.error(\"Redis response client error\", error);",
+          "});",
+          "",
+          "await Promise.all([brokerClient.connect(), responseClient.connect()]);"
+        ]
+      }
+    },
+    {
+      "id": "engine/src/index.ts#L34-34:redis",
+      "file": "engine/src/index.ts",
+      "range": {
+        "startLine": 34,
+        "endLine": 34
+      },
+      "extractor": "redis",
+      "confidence": 0.9,
+      "resolution": "proven",
+      "detail": "connect (admin) via brokerClient",
+      "snippet": {
+        "startLine": 32,
+        "lines": [
+          "});",
+          "",
+          "await Promise.all([brokerClient.connect(), responseClient.connect()]);",
+          "",
+          "// :-)) I added this just to check the flow, remove it when you start"
+        ]
+      }
+    },
+    {
+      "id": "engine/src/index.ts#L34-34:redis:2",
+      "file": "engine/src/index.ts",
+      "range": {
+        "startLine": 34,
+        "endLine": 34
+      },
+      "extractor": "redis",
+      "confidence": 0.9,
+      "resolution": "proven",
+      "detail": "connect (admin) via responseClient",
+      "snippet": {
+        "startLine": 32,
+        "lines": [
+          "});",
+          "",
+          "await Promise.all([brokerClient.connect(), responseClient.connect()]);",
+          "",
+          "// :-)) I added this just to check the flow, remove it when you start"
+        ]
+      }
+    },
+    {
+      "id": "engine/src/index.ts#L34-34:startup",
+      "file": "engine/src/index.ts",
+      "symbol": "Promise.all",
+      "range": {
+        "startLine": 34,
+        "endLine": 34
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call Promise.all()",
+      "snippet": {
+        "startLine": 32,
+        "lines": [
+          "});",
+          "",
+          "await Promise.all([brokerClient.connect(), responseClient.connect()]);",
+          "",
+          "// :-)) I added this just to check the flow, remove it when you start"
+        ]
+      }
+    },
+    {
+      "id": "engine/src/index.ts#L50-50:redis",
+      "file": "engine/src/index.ts",
+      "symbol": "sendResponse",
+      "range": {
+        "startLine": 50,
+        "endLine": 50
+      },
+      "extractor": "redis",
+      "confidence": 0.5,
+      "resolution": "dynamic",
+      "detail": "lPush key=<dynamic: responseQueue> (produce) via responseClient",
+      "snippet": {
+        "startLine": 48,
+        "lines": [
+          "",
+          "async function sendResponse(responseQueue: string, response: EngineResponse): Promise<void> {",
+          "  await responseClient.lPush(responseQueue, JSON.stringify(response));",
+          "}",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "engine/src/index.ts#L90-90:errors",
+      "file": "engine/src/index.ts",
+      "range": {
+        "startLine": 90,
+        "endLine": 90
+      },
+      "extractor": "errors",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "throw new Error: \"TODO(student): implement this engine request type\"",
+      "snippet": {
+        "startLine": 88,
+        "lines": [
+          "  }",
+          "",
+          "  throw new Error(\"TODO(student): implement this engine request type\");",
+          "}",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "engine/src/index.ts#L96-96:redis",
+      "file": "engine/src/index.ts",
+      "range": {
+        "startLine": 96,
+        "endLine": 96
+      },
+      "extractor": "redis",
+      "confidence": 0.7,
+      "resolution": "resolved-default",
+      "detail": "brPop key=backend-to-engine-broker (consume) via brokerClient",
+      "snippet": {
+        "startLine": 94,
+        "lines": [
+          "",
+          "for (;;) {",
+          "  const item = await brokerClient.brPop(env.incomingQueue, 0);",
+          "  if (!item) continue;",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "engine/src/utils/env.ts#L1-1:imports",
+      "file": "engine/src/utils/env.ts",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package dotenv/config",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import \"dotenv/config\";",
+          "",
+          "function readRequiredEnv(name: string): string {"
+        ]
+      }
+    },
+    {
+      "id": "engine/src/utils/env.ts#L10-10:env",
+      "file": "engine/src/utils/env.ts",
+      "symbol": "REDIS_URL",
+      "range": {
+        "startLine": 10,
+        "endLine": 10
+      },
+      "extractor": "env",
+      "confidence": 0.9,
+      "detail": "reads env REDIS_URL (via readRequiredEnv())",
+      "snippet": {
+        "startLine": 8,
+        "lines": [
+          "",
+          "export const env = {",
+          "  redisUrl: readRequiredEnv(\"REDIS_URL\"),",
+          "  incomingQueue: process.env.INCOMING_QUEUE ?? \"backend-to-engine-broker\",",
+          "};"
+        ]
+      }
+    },
+    {
+      "id": "engine/src/utils/env.ts#L11-11:env",
+      "file": "engine/src/utils/env.ts",
+      "symbol": "INCOMING_QUEUE",
+      "range": {
+        "startLine": 11,
+        "endLine": 11
+      },
+      "extractor": "env",
+      "confidence": 1,
+      "detail": "reads env INCOMING_QUEUE (process.env)",
+      "snippet": {
+        "startLine": 9,
+        "lines": [
+          "export const env = {",
+          "  redisUrl: readRequiredEnv(\"REDIS_URL\"),",
+          "  incomingQueue: process.env.INCOMING_QUEUE ?? \"backend-to-engine-broker\",",
+          "};",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "engine/src/utils/env.ts#L5-5:errors",
+      "file": "engine/src/utils/env.ts",
+      "range": {
+        "startLine": 5,
+        "endLine": 5
+      },
+      "extractor": "errors",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "throw new Error: \"Missing required env variable: *\"",
+      "snippet": {
+        "startLine": 3,
+        "lines": [
+          "function readRequiredEnv(name: string): string {",
+          "  const value = process.env[name];",
+          "  if (!value) throw new Error(`Missing required env variable: ${name}`);",
+          "  return value;",
+          "}"
+        ]
+      }
+    }
+  ],
+  "warnings": [
+    {
+      "id": "orphan-file:engine/src/store/exchange-store.ts",
+      "kind": "orphan-file",
+      "severity": "warning",
+      "file": "engine/src/store/exchange-store.ts",
+      "componentId": "engine:engine-worker",
+      "message": "engine/src/store/exchange-store.ts is not imported by any file and is not an entry point (exports 15 symbols nobody uses)"
+    }
+  ],
+  "tests": [],
+  "llmCalls": [
+    {
+      "purpose": "component-naming",
+      "componentId": "redis:redis-url",
+      "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+      "latencyMs": 1,
+      "promptTokens": 306,
+      "completionTokens": 34,
+      "totalTokens": 340,
+      "cached": true,
+      "accepted": true,
+      "estCostUSD": 0,
+      "ok": true
+    },
+    {
+      "purpose": "component-naming",
+      "componentId": "db:backend",
+      "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+      "latencyMs": 0,
+      "promptTokens": 246,
+      "completionTokens": 28,
+      "totalTokens": 274,
+      "cached": true,
+      "accepted": true,
+      "estCostUSD": 0,
+      "ok": true
+    },
+    {
+      "purpose": "component-naming",
+      "componentId": "backend:backend-server",
+      "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+      "latencyMs": 0,
+      "promptTokens": 401,
+      "completionTokens": 30,
+      "totalTokens": 431,
+      "cached": true,
+      "accepted": true,
+      "estCostUSD": 0,
+      "ok": true
+    },
+    {
+      "purpose": "component-naming",
+      "componentId": "backend:auth-api",
+      "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+      "latencyMs": 0,
+      "promptTokens": 330,
+      "completionTokens": 36,
+      "totalTokens": 366,
+      "cached": true,
+      "accepted": true,
+      "estCostUSD": 0,
+      "ok": true
+    },
+    {
+      "purpose": "component-naming",
+      "componentId": "backend:exchange-api",
+      "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+      "latencyMs": 0,
+      "promptTokens": 325,
+      "completionTokens": 34,
+      "totalTokens": 359,
+      "cached": true,
+      "accepted": true,
+      "estCostUSD": 0,
+      "ok": true
+    },
+    {
+      "purpose": "component-naming",
+      "componentId": "backend:shared",
+      "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+      "latencyMs": 0,
+      "promptTokens": 332,
+      "completionTokens": 39,
+      "totalTokens": 371,
+      "cached": true,
+      "accepted": true,
+      "estCostUSD": 0,
+      "ok": true
+    },
+    {
+      "purpose": "component-naming",
+      "componentId": "engine:engine-worker",
+      "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+      "latencyMs": 0,
+      "promptTokens": 344,
+      "completionTokens": 28,
+      "totalTokens": 372,
+      "cached": true,
+      "accepted": true,
+      "estCostUSD": 0,
+      "ok": true
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import { isTestFile, testLinks } from "./aggregate/tests.ts";
 import { orphanWarnings } from "./aggregate/warnings.ts";
 import { EvidenceStore, type ExtractContext } from "./extract/evidence.ts";
 import { extractEnv } from "./extract/env.ts";
+import { extractErrorMessages } from "./extract/errors.ts";
 import { extractHttp } from "./extract/http-routes.ts";
 import { extractImports } from "./extract/imports.ts";
 import { extractPrisma, extractPrismaSchema } from "./extract/prisma.ts";
@@ -80,12 +81,13 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
       prismaOps: prisma.ops,
       prismaModels: [],
       envReads: extractEnv(sf, ctx),
+      errorMessages: extractErrorMessages(sf, ctx),
     });
   }
   for (const { schema, models, datasource } of schemaFacts) {
     files.push({
       path: schema.path, package: schema.package, language: "prisma", loc: schema.text.split("\n").length, chars: schema.text.length, isEntry: false,
-      imports: [], symbols: [], routes: [], mounts: [], listens: [], startupCalls: [], clients: [], redisOps: [], prismaOps: [], envReads: [],
+      imports: [], symbols: [], routes: [], mounts: [], listens: [], startupCalls: [], clients: [], redisOps: [], prismaOps: [], envReads: [], errorMessages: [],
       prismaModels: models, prismaDatasource: datasource,
     });
   }

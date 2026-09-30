@@ -59,9 +59,11 @@ export function buildContext(snapshot: Snapshot, issue: string, opts: { budget?:
   const byId = new Map(snapshot.components.map((c) => [c.id, c]));
   const evidence = new Map(snapshot.evidence.map((e) => [e.id, e]));
 
-  // 1. matches: top components with score > 0, at most 3, each at least half the top score
+  // 1. matches: top components with score > 0, at most 3, each at least half the top score.
+  //    LOW/NONE confidence: at most the top 2 candidates and no expansion (the packet is a hint, not context)
   const top = ranked[0]?.score ?? 0;
-  const matches = ranked.filter((r) => r.score > 0 && r.score >= top / 2).slice(0, MAX_MATCHES);
+  const weak = confidence.level === "low" || confidence.level === "none";
+  const matches = ranked.filter((r) => r.score > 0 && r.score >= top / 2).slice(0, weak ? 2 : MAX_MATCHES);
   const included = new Map<string, { role: "match" | "neighbor"; score: number; reason: string }>(matches.map((m) => [m.id, { role: "match", score: m.score, reason: m.reason }]));
   const edgeIds = new Set<string>();
 
@@ -69,7 +71,7 @@ export function buildContext(snapshot: Snapshot, issue: string, opts: { budget?:
   const touching = (id: string) => snapshot.edges.filter((e) => e.source === id || e.target === id);
   const other = (e: ComponentEdge, id: string) => (e.source === id ? e.target : e.source);
   const isBroker = (id: string) => BROKER_KINDS.has(byId.get(id)!.kind);
-  for (const m of matches) {
+  for (const m of weak ? [] : matches) {
     for (const e of touching(m.id)) {
       const n = other(e, m.id);
       edgeIds.add(e.id);
@@ -78,7 +80,7 @@ export function buildContext(snapshot: Snapshot, issue: string, opts: { budget?:
   }
   // 3. queue partners: a message contract couples both sides of a broker (decisions 023, 024), so
   //    any included component's queue edges bring in the broker and the components across it
-  for (const id of [...included.keys()]) {
+  for (const id of weak ? [] : [...included.keys()]) {
     for (const e of touching(id).filter((x) => QUEUE_EDGE_KINDS.has(x.kind))) {
       const broker = isBroker(id) ? id : other(e, id);
       if (!isBroker(broker)) continue;

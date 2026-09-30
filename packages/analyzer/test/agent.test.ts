@@ -26,18 +26,26 @@ describe("ranking v1 (decision 025)", () => {
     expect([termsMatch("order", "orderid"), termsMatch("tim", "timeout"), termsMatch("jobs", "job")]).toEqual([true, false, false]);
   });
 
-  it("scores each issue term once per component by its best field", () => {
-    const { ranked } = rankComponents(snapshot, "handleOrder in orders");
-    expect(ranked[0]).toMatchObject({ id: "orders", score: 5 }); // "handle" symbol 2 + "order" name 3
-    expect(ranked[0]!.reason).toBe('matched "handle" in symbol handleOrder, "order" in name orders');
+  it("scores each issue term once per component by its best field, weighted by rarity (IDF over facts)", () => {
+    const { idf, ranked } = rankComponents(snapshot, "handleOrder in orders");
+    // "handle" appears in one fact (idf 1); "order" in several (ids, names, files, symbols)
+    expect(idf).toEqual({ handle: 1, order: 0.57 });
+    expect(ranked[0]).toMatchObject({ id: "orders", score: 3.71 }); // 2×1 + 3×0.57
+    expect(ranked[0]!.reason).toBe('matched "handle" in symbol handleOrder (2×1), "order" in name orders (3×0.57)');
+  });
+
+  it("a term in every fact scores less than a term in one fact", () => {
+    const { idf } = rankComponents(snapshot, "src send");
+    expect(idf.send).toBe(1);
+    expect(idf.src).toBeLessThan(idf.send!);
   });
 });
 
 describe("query tools on the fixture snapshot", () => {
   it("search_components: best match first with the facts that matched; nothing for unrelated text", () => {
     const r = searchComponents(snapshot, "jobs queue");
-    expect(r.results.map((x) => `${x.id}:${x.score}`)).toEqual(["queue-client:5", "notifier:2", "redis:redis-url:2", "worker:worker-worker:2"]);
-    expect(r.results[0]!.reason).toBe('matched "job" in redis-key jobs, "queue" in name queue-client');
+    expect(r.results.map((x) => `${x.id}:${x.score}`)).toEqual(["queue-client:3.11", "redis:redis-url:1.4", "worker:worker-worker:1.4", "notifier:1.14"]);
+    expect(r.results[0]!.reason).toBe('matched "job" in redis-key jobs (2×0.7), "queue" in name queue-client (3×0.57)');
     expect(searchComponents(snapshot, "zebra giraffe").results).toEqual([]);
   });
 
@@ -66,8 +74,9 @@ describe("query tools on the fixture snapshot", () => {
 });
 
 describe("context packet", () => {
-  it("an order timing out surfaces components on both sides of the queue", () => {
-    const p = buildContext(snapshot, "An order is timing out");
+  it("an order timing out surfaces components on both sides of the queue (medium confidence)", () => {
+    const p = buildContext(snapshot, "handleOrder times out after placing an order");
+    expect(p.confidence.level).toBe("medium");
     const roles = Object.fromEntries(p.components.map((c) => [c.id, c.role]));
     expect(roles.orders).toBe("match");
     expect(roles["queue-client"]).toBe("neighbor"); // producer side
@@ -76,7 +85,7 @@ describe("context packet", () => {
     expect(p.components.find((c) => c.id === "worker:worker-worker")!.reason).toBe('queue partner of queue-client across redis:redis-url: consumes "brPop jobs" [proven]');
     expect(p.edges.map((e) => e.id)).toContain("redis:redis-url->worker:worker-worker:consumes");
     expect(p.edges.find((e) => e.id === "queue-client->redis:redis-url:produces")!.evidence).toEqual(["api/src/queue-client.ts:4"]);
-    expect(p.tests).toEqual([{ file: "api/src/orders.test.ts", componentId: "orders", importAt: "api/src/orders.test.ts:1" }]);
+    expect(p.tests.map((t) => t.file)).toContain("api/src/orders.test.ts");
     expect(p.tokens.method).toMatch(/^estimated/);
     expect(p.tokens.percentOfRepoEstimated).toBeGreaterThan(0);
     expect(formatContext(p)).toContain("estimated tokens");
@@ -86,15 +95,28 @@ describe("context packet", () => {
     const p = buildContext(snapshot, "the page feels slow"); // ("app" would match the fixture's api:api-app id)
     expect(["low", "none"]).toContain(p.confidence.level);
     expect(p.advice).toMatch(/fall back to normal code search/);
+    expect(p.components).toEqual([]);
     expect(formatContext(p)).toContain("(heuristic, not a probability)");
     expect(confidenceOf([])).toMatchObject({ level: "none", topScore: 0 });
     expect(confidenceOf([{ id: "a", score: 7, matches: [], reason: "" }, { id: "b", score: 3, matches: [], reason: "" }]).level).toBe("high");
     expect(confidenceOf([{ id: "a", score: 7, matches: [], reason: "" }, { id: "b", score: 6, matches: [], reason: "" }]).level).toBe("medium");
   });
 
+  it("LOW confidence shrinks the packet: fallback advice, at most 2 candidates, no neighbors", () => {
+    const p = buildContext(snapshot, "An order is timing out"); // only "order" matches, and it's common here
+    expect(p.confidence.level).toBe("low");
+    expect(p.advice).toMatch(/fall back to normal code search/);
+    expect(p.components.map((c) => [c.id, c.role])).toEqual([["orders", "match"]]);
+    expect(p.edges).toEqual([]);
+    const two = buildContext(snapshot, "queue timing"); // two weak candidates
+    expect(two.confidence.level).toBe("low");
+    expect(two.components.length).toBeLessThanOrEqual(2);
+    expect(two.components.every((c) => c.role === "match")).toBe(true);
+  });
+
   it("trims to the budget in the documented order and reports each step", () => {
-    const full = buildContext(snapshot, "An order is timing out");
-    const tight = buildContext(snapshot, "An order is timing out", { budget: 300 });
+    const full = buildContext(snapshot, "handleOrder times out after placing an order");
+    const tight = buildContext(snapshot, "handleOrder times out after placing an order", { budget: 300 });
     expect(tight.trimmed.slice(0, 3)).toEqual(["evidence per edge 2 -> 1", "neighbor file lists dropped (counts kept)", "neighbor components dropped (matches kept)"]);
     expect(tight.components.every((c) => c.role === "match")).toBe(true);
     expect(tight.tokens.packetEstimated).toBeLessThan(full.tokens.packetEstimated);

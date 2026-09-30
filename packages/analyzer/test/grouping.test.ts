@@ -9,7 +9,7 @@ function file(path: string, pkg: string, extra: Partial_ = {}): FileFacts {
   return {
     path, package: pkg, language: "ts", loc: 10, isEntry: false,
     imports: imports.map((target) => ({ specifier: target, target, external: false, typeOnly: false, names: [], evidenceId: `imp:${path}->${target}` })),
-    symbols: [], routes: [], mounts: [], listens: [], startupCalls: [], clients: [], redisOps: [], prismaOps: [], prismaModels: [], envReads: [],
+    symbols: [], routes: [], mounts: [], listens: [], startupCalls: [], clients: [], redisOps: [], prismaOps: [], prismaModels: [], envReads: [], errorMessages: [],
     ...rest,
   };
 }

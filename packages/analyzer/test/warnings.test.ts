@@ -4,7 +4,7 @@ import type { FileFacts } from "../src/schema.ts";
 
 const file = (path: string, extra: Partial<FileFacts> = {}): FileFacts => ({
   path, package: ".", language: "ts", loc: 1, isEntry: false, imports: [], symbols: [], routes: [], mounts: [], listens: [], startupCalls: [],
-  clients: [], redisOps: [], prismaOps: [], prismaModels: [], envReads: [], ...extra,
+  clients: [], redisOps: [], prismaOps: [], prismaModels: [], envReads: [], errorMessages: [], ...extra,
 });
 const imports = (target: string) => [{ specifier: target, target, external: false, typeOnly: false, names: [], evidenceId: "e" }];
 

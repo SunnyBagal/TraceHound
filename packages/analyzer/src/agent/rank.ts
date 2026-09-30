@@ -3,7 +3,7 @@
 import type { Component, Snapshot } from "../schema.ts";
 
 /** Where a term matched, and how much that kind of fact counts. */
-export const FIELD_WEIGHTS = { name: 3, route: 3, symbol: 2, file: 2, "redis-key": 2, env: 1 } as const;
+export const FIELD_WEIGHTS = { name: 3, route: 3, symbol: 2, file: 2, "redis-key": 2, "error-message": 2, env: 1 } as const;
 export type Field = keyof typeof FIELD_WEIGHTS;
 
 // Common English function words (plus "any"/"some" style quantifiers): they never identify code.
@@ -59,6 +59,7 @@ export function componentFields(snapshot: Snapshot, c: Component): FieldValue[] 
   const keys = new Set([...(c.resource?.keys ?? []), ...files.flatMap((f) => f.redisOps.flatMap((o) => (o.key ? [o.key.value ?? o.key.raw] : [])))]);
   for (const k of keys) if (k !== "<dynamic>") add("redis-key", k);
   for (const e of new Set([...c.envVars, ...files.flatMap((f) => f.envReads.map((r) => r.name))])) add("env", e);
+  for (const m of new Set(files.flatMap((f) => (f.errorMessages ?? []).map((e) => e.message)))) add("error-message", m);
   return out.filter((f) => f.terms.length);
 }
 
@@ -66,7 +67,9 @@ export interface Match {
   term: string;
   field: Field;
   value: string;
-  weight: number;
+  weight: number; // field weight
+  idf: number; // normalized rarity of the term across all facts, 0..1
+  points: number; // weight × idf, rounded to 2 decimals
 }
 
 export interface Ranked {
@@ -76,29 +79,49 @@ export interface Ranked {
   reason: string;
 }
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 /**
- * Score = Σ over distinct issue terms of the highest field weight that term matches in the
- * component (name/route 3, symbol/file/redis-key 2, env 1). Each term counts once per component.
+ * Normalized IDF over the snapshot's facts: N = number of (component, fact) values, df(t) = how
+ * many of them contain a term matching t. idf(t) = ln(1 + N/df) / ln(1 + N): 1.0 for a term found
+ * in exactly one fact, falling toward 0 as the term appears in more facts.
  */
-export function rankComponents(snapshot: Snapshot, text: string): { terms: string[]; ranked: Ranked[] } {
+export function idfTable(all: FieldValue[], issueTerms: string[]): Map<string, number> {
+  const n = all.length;
+  return new Map(
+    issueTerms.map((term) => {
+      const df = all.filter((f) => f.terms.some((t) => termsMatch(term, t))).length;
+      return [term, df === 0 ? 0 : round2(Math.log(1 + n / df) / Math.log(1 + n))];
+    }),
+  );
+}
+
+/**
+ * Score = Σ over distinct issue terms of (highest field weight the term matches in the component)
+ * × idf(term). Field weights: name/route 3, symbol/file/redis-key/error-message 2, env 1. Each term
+ * counts once per component.
+ */
+export function rankComponents(snapshot: Snapshot, text: string): { terms: string[]; idf: Record<string, number>; ranked: Ranked[] } {
   const issueTerms = terms(text);
+  const fieldsById = new Map(snapshot.components.map((c) => [c.id, componentFields(snapshot, c)]));
+  const idf = idfTable([...fieldsById.values()].flat(), issueTerms);
   const ranked = snapshot.components.map((c): Ranked => {
-    const fields = componentFields(snapshot, c);
+    const fields = fieldsById.get(c.id)!;
     const matches: Match[] = [];
     for (const term of issueTerms) {
-      let best: Match | undefined;
+      let best: Omit<Match, "idf" | "points"> | undefined;
       for (const f of fields) {
         const weight = FIELD_WEIGHTS[f.field];
         if ((!best || weight > best.weight) && f.terms.some((t) => termsMatch(term, t))) best = { term, field: f.field, value: f.value, weight };
       }
-      if (best) matches.push(best);
+      if (best) matches.push({ ...best, idf: idf.get(term)!, points: round2(best.weight * idf.get(term)!) });
     }
-    const score = matches.reduce((n, m) => n + m.weight, 0);
-    const reason = matches.length ? `matched ${matches.map((m) => `"${m.term}" in ${m.field} ${m.value}`).join(", ")}` : "no match";
+    const score = round2(matches.reduce((n, m) => n + m.points, 0));
+    const reason = matches.length ? `matched ${matches.map((m) => `"${m.term}" in ${m.field} ${m.value} (${m.weight}×${m.idf})`).join(", ")}` : "no match";
     return { id: c.id, score, matches, reason };
   });
   ranked.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-  return { terms: issueTerms, ranked };
+  return { terms: issueTerms, idf: Object.fromEntries(idf), ranked };
 }
 
 /** Estimated tokens: characters / 4. Always labelled "estimated" where shown. */

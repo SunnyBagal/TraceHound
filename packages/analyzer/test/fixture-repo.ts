@@ -29,10 +29,25 @@ export const BASE_FILES: Record<string, string> = {
 };
 
 
-/** Write BASE_FILES to a temp dir, commit them, and analyze the commit (heuristic names, no model). */
-export function makeFixtureRepo(): { repo: string; base: string; snapshot: Snapshot; cleanup: () => void } {
+// A key/value cache instead of a queue: writer -writes-> redis (kind "cache") <-reads- reader.
+export const CACHE_FILES: Record<string, string> = {
+  "package.json": JSON.stringify({ name: "cache-mini", private: true, workspaces: ["app"] }),
+  "tracehound.json": JSON.stringify({
+    components: {
+      "profile-writer": { name: "Profile Writer", kind: "service", files: ["app/src/writer.ts"] },
+      "profile-reader": { name: "Profile Reader", kind: "service", files: ["app/src/reader.ts"] },
+    },
+  }),
+  "app/package.json": JSON.stringify({ name: "app", scripts: { dev: "bun run src/index.ts" } }),
+  "app/src/index.ts": 'import { saveProfile } from "./writer.ts";\nimport { loadProfile } from "./reader.ts";\nawait saveProfile({ id: "1", name: "a" });\nconsole.log(await loadProfile("1"));\n',
+  "app/src/writer.ts": 'import { createClient } from "redis";\nconst client = createClient({ url: process.env.REDIS_URL });\nexport async function saveProfile(p: { id: string; name: string }) {\n  await client.set("profile-cache", JSON.stringify(p));\n}\n',
+  "app/src/reader.ts": 'import { createClient } from "redis";\nconst client = createClient({ url: process.env.REDIS_URL });\nexport async function loadProfile(id: string) {\n  return JSON.parse((await client.get("profile-cache")) ?? "null")?.[id];\n}\n',
+};
+
+/** Write a file set (default BASE_FILES) to a temp dir, commit it, and analyze the commit (heuristic names, no model). */
+export function makeFixtureRepo(files: Record<string, string> = BASE_FILES): { repo: string; base: string; snapshot: Snapshot; cleanup: () => void } {
   const repo = mkdtempSync(path.join(tmpdir(), "tracehound-fixture-"));
-  for (const [file, text] of Object.entries(BASE_FILES)) {
+  for (const [file, text] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(repo, file)), { recursive: true });
     writeFileSync(path.join(repo, file), text);
   }
