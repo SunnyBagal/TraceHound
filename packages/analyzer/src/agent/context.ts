@@ -13,7 +13,16 @@ export interface ContextPacket {
   issue: string;
   snapshot: { repo: string; commitSha: string; analyzerVersion: string };
   ranking: { method: string; terms: string[] };
-  confidence: { level: ConfidenceLevel; topScore: number; secondScore: number; margin: number; rule: string; note: string };
+  confidence: {
+    level: ConfidenceLevel;
+    topScore: number;
+    secondScore: number;
+    maxAchievable: number; // Σ 3·idf(t) over issue terms that match any fact
+    normalizedTop: number; // topScore / maxAchievable, 0..1
+    lead: number; // 1 − secondScore/topScore, 0..1
+    rule: string;
+    note: string;
+  };
   advice?: string;
   components: {
     id: string;
@@ -33,20 +42,32 @@ export interface ContextPacket {
 }
 
 export const CONFIDENCE_RULE =
-  "heuristic, not a probability: none if top score = 0; high if top score >= 6 and it leads #2 by >= 2; medium if top score >= 3; otherwise low";
+  "heuristic, not a probability: normalizedTop = top score / max achievable score (3·idf summed over issue terms found anywhere in the snapshot); " +
+  "lead = 1 − #2/top. none if nothing matches; high if normalizedTop >= 0.6 and lead >= 0.5; medium if normalizedTop >= 0.4; otherwise low";
 
-export function confidenceOf(ranked: Ranked[]): ContextPacket["confidence"] {
+const MAX_FIELD_WEIGHT = 3;
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Corpus-size-independent confidence (decision 025). Thresholds come from the field weights:
+ * a lone env-var match (weight 1) normalizes to 0.33 → low; a lone symbol/file/key/error match
+ * (weight 2) to 0.67; a lone name/route match (3) to 1.0. "high" also needs the top to at
+ * least double #2.
+ */
+export function confidenceOf(ranked: Ranked[], idf: Record<string, number> = {}): ContextPacket["confidence"] {
   const topScore = ranked[0]?.score ?? 0;
   const secondScore = ranked[1]?.score ?? 0;
-  const margin = topScore - secondScore;
-  const level: ConfidenceLevel = topScore === 0 ? "none" : topScore >= 6 && margin >= 2 ? "high" : topScore >= 3 ? "medium" : "low";
+  const maxAchievable = round2(Object.values(idf).reduce((n, v) => n + MAX_FIELD_WEIGHT * v, 0));
+  const normalizedTop = maxAchievable > 0 ? round2(Math.min(1, topScore / maxAchievable)) : 0;
+  const lead = topScore > 0 ? round2(1 - secondScore / topScore) : 0;
+  const level: ConfidenceLevel = topScore === 0 ? "none" : normalizedTop >= 0.6 && lead >= 0.5 ? "high" : normalizedTop >= 0.4 ? "medium" : "low";
   const note = {
-    high: "one component matches the issue's terms clearly better than the rest",
-    medium: topScore >= 6 ? "strong matches, but several components score about the same; the packet includes them" : "at least one name or route matched",
-    low: "only weak matches (a file, symbol or env var); the ranking is close to guessing",
-    none: "no component name, route, file, symbol, Redis key or env var matches the issue text",
+    high: "the top component explains most of what is matchable in the issue and clearly leads #2",
+    medium: lead < 0.5 ? "a reasonable match, but other components score close to it; the packet includes them" : "a partial match: some matchable issue terms point elsewhere or only match weak facts",
+    low: "only weak matches (e.g. an env var, or a small share of the matchable terms); the ranking is close to guessing",
+    none: "no component name, route, file, symbol, Redis key, error message or env var matches the issue text",
   }[level];
-  return { level, topScore, secondScore, margin, rule: CONFIDENCE_RULE, note };
+  return { level, topScore, secondScore, maxAchievable, normalizedTop, lead, rule: CONFIDENCE_RULE, note };
 }
 
 const FALLBACK =
@@ -54,8 +75,8 @@ const FALLBACK =
 
 export function buildContext(snapshot: Snapshot, issue: string, opts: { budget?: number; evidencePerEdge?: number } = {}): ContextPacket {
   const budget = opts.budget ?? 2000;
-  const { terms, ranked } = rankComponents(snapshot, issue);
-  const confidence = confidenceOf(ranked);
+  const { terms, idf, ranked } = rankComponents(snapshot, issue);
+  const confidence = confidenceOf(ranked, idf);
   const byId = new Map(snapshot.components.map((c) => [c.id, c]));
   const evidence = new Map(snapshot.evidence.map((e) => [e.id, e]));
 
@@ -181,7 +202,8 @@ export function formatContext(p: ContextPacket): string {
   out.push(`tracehound context · ${p.snapshot.repo}@${p.snapshot.commitSha.slice(0, 7)} · analyzer ${p.snapshot.analyzerVersion}`);
   out.push(`issue: ${JSON.stringify(p.issue)}`);
   out.push(`terms: ${p.ranking.terms.join(", ") || "(none)"}`);
-  out.push(`confidence: ${p.confidence.level.toUpperCase()} (heuristic, not a probability) · top ${p.confidence.topScore}, #2 ${p.confidence.secondScore}, margin ${p.confidence.margin} · ${p.confidence.note}`);
+  const c = p.confidence;
+  out.push(`confidence: ${c.level.toUpperCase()} (heuristic, not a probability) · top ${c.topScore} of max ${c.maxAchievable} (normalized ${c.normalizedTop}), #2 ${c.secondScore}, lead ${c.lead} · ${c.note}`);
   if (p.advice) out.push(`⚠ ${p.advice}`);
   out.push("");
   out.push(`Components (${p.components.length})`);

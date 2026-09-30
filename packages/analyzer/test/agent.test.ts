@@ -73,10 +73,55 @@ describe("query tools on the fixture snapshot", () => {
   });
 });
 
+// Synthetic cases that pin the thresholds to the field weights (decision 025), not to any issue.
+const r = (...scores: number[]) => scores.map((score, i) => ({ id: `c${i}`, score, matches: [], reason: "" }));
+describe("confidence (normalized, corpus-size independent)", () => {
+  it("a lone name/route match on a unique term, clearly ahead → high", () => {
+    expect(confidenceOf(r(3, 0), { signin: 1 })).toMatchObject({ level: "high", normalizedTop: 1, lead: 1, maxAchievable: 3 });
+  });
+  it("a lone symbol/file/key/error match (weight 2) that leads → high (0.67)", () => {
+    expect(confidenceOf(r(2, 0), { x: 1 })).toMatchObject({ level: "high", normalizedTop: 0.67 });
+  });
+  it("two components tied on a strong match → medium, not high", () => {
+    expect(confidenceOf(r(3, 3), { x: 1 })).toMatchObject({ level: "medium", lead: 0 });
+  });
+  it("the top explains half the matchable terms → medium", () => {
+    expect(confidenceOf(r(3, 0), { x: 1, y: 1 })).toMatchObject({ level: "medium", normalizedTop: 0.5 });
+  });
+  it("a lone env-var match (weight 1) → low (0.33)", () => {
+    expect(confidenceOf(r(1, 0), { x: 1 })).toMatchObject({ level: "low", normalizedTop: 0.33 });
+  });
+  it("nothing matches → none", () => {
+    expect(confidenceOf(r(0, 0), { x: 0 })).toMatchObject({ level: "none", normalizedTop: 0 });
+    expect(confidenceOf([])).toMatchObject({ level: "none" });
+  });
+  it("does not depend on corpus size: scaling every idf (and so every score) keeps the level", () => {
+    for (const k of [1, 0.5, 0.2]) {
+      expect(confidenceOf(r(3 * k, 0), { x: k }).level).toBe("high");
+      expect(confidenceOf(r(1 * k, 0), { x: k }).level).toBe("low");
+    }
+  });
+});
+
+describe("identifier splitting (0b)", () => {
+  it("splits camelCase, PascalCase, snake_case, SCREAMING_CASE and acronyms into words", () => {
+    expect(terms("ENGINE_TIMEOUT_MS")).toEqual(["engine", "timeout"]); // "ms" is under 3 characters
+    expect(terms("waitForEngineResponse")).toEqual(["wait", "engine", "response"]); // "for" is a stopword
+    expect(terms("send_validation_error HTTPServerError")).toEqual(["send", "validation", "error", "http", "server"]);
+  });
+  it("known limit: 'timed out' and 'timeout' stay different terms (no synonyms, no special case)", () => {
+    expect(terms("Engine response timed out")).toEqual(["engine", "response", "tim", "out"]);
+    expect(terms("timeout")).toEqual(["timeout"]);
+    expect(termsMatch("tim", "timeout")).toBe(false);
+  });
+});
+
 describe("context packet", () => {
-  it("an order timing out surfaces components on both sides of the queue (medium confidence)", () => {
+  // Limit (decision 025): this proves both-sides-of-the-queue only for issue text that names a
+  // symbol exactly (handleOrder); vaguer wording is not covered by this test.
+  it("an order timing out surfaces components on both sides of the queue (issue names a symbol)", () => {
     const p = buildContext(snapshot, "handleOrder times out after placing an order");
-    expect(p.confidence.level).toBe("medium");
+    expect(p.confidence.level).toBe("high");
     const roles = Object.fromEntries(p.components.map((c) => [c.id, c.role]));
     expect(roles.orders).toBe("match");
     expect(roles["queue-client"]).toBe("neighbor"); // producer side
@@ -97,21 +142,15 @@ describe("context packet", () => {
     expect(p.advice).toMatch(/fall back to normal code search/);
     expect(p.components).toEqual([]);
     expect(formatContext(p)).toContain("(heuristic, not a probability)");
-    expect(confidenceOf([])).toMatchObject({ level: "none", topScore: 0 });
-    expect(confidenceOf([{ id: "a", score: 7, matches: [], reason: "" }, { id: "b", score: 3, matches: [], reason: "" }]).level).toBe("high");
-    expect(confidenceOf([{ id: "a", score: 7, matches: [], reason: "" }, { id: "b", score: 6, matches: [], reason: "" }]).level).toBe("medium");
   });
 
   it("LOW confidence shrinks the packet: fallback advice, at most 2 candidates, no neighbors", () => {
-    const p = buildContext(snapshot, "An order is timing out"); // only "order" matches, and it's common here
-    expect(p.confidence.level).toBe("low");
+    // three components each match one term: the top explains 37% of what is matchable
+    const p = buildContext(snapshot, "notifier, worker and orders all misbehave");
+    expect(p.confidence).toMatchObject({ level: "low", normalizedTop: 0.37 });
     expect(p.advice).toMatch(/fall back to normal code search/);
-    expect(p.components.map((c) => [c.id, c.role])).toEqual([["orders", "match"]]);
+    expect(p.components.map((c) => [c.id, c.role])).toEqual([["worker:worker-worker", "match"], ["notifier", "match"]]);
     expect(p.edges).toEqual([]);
-    const two = buildContext(snapshot, "queue timing"); // two weak candidates
-    expect(two.confidence.level).toBe("low");
-    expect(two.components.length).toBeLessThanOrEqual(2);
-    expect(two.components.every((c) => c.role === "match")).toBe(true);
   });
 
   it("trims to the budget in the documented order and reports each step", () => {

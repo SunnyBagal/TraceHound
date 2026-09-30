@@ -355,22 +355,49 @@ real issue, and isn't tuned to specific strings.
      linked tests.
   5. If the packet's estimated size is over `--budget` (default 2000), trim in this order:
      evidence per edge → neighbor file lists → neighbor components. Each step taken is reported.
-- **Confidence** (a heuristic, labelled as one, never a probability):
-  - **none** if the top score is 0
-  - **high** if the top score is ≥ 6 and leads #2 by ≥ 2
-  - **medium** if the top score is ≥ 3 (at least one name or route matched)
+- **Confidence** (a heuristic, labelled as one, never a probability). Since 0.6.0 it's on a
+  normalized scale that doesn't depend on corpus size:
+  - `maxAchievable = Σ 3·idf(t)` over the issue terms that match *any* fact in the snapshot.
+  - `normalizedTop = s1 / maxAchievable`, from 0 to 1.
+  - `lead = 1 − s2/s1`.
+
+  Levels:
+  - **none** if nothing matches
+  - **high** if `normalizedTop ≥ 0.6` and `lead ≥ 0.5` (the top at least doubles #2)
+  - **medium** if `normalizedTop ≥ 0.4`
   - **low** otherwise
 
+  The thresholds come from the field weights and are pinned by synthetic tests, not by the dev
+  issues. A lone env-var match (weight 1 of 3) normalizes to 0.33, which is low. A lone
+  symbol/file/key/error match normalizes to 0.67, a lone name/route match to 1.0. Scaling every
+  idf keeps the level. The pre-IDF absolute thresholds (≥6 / ≥3) were retired because IDF
+  shrank all scores and every issue became LOW.
+  **Consequence:** issue words that match nothing in the snapshot don't lower confidence. If the
+  only matchable term matches fully, the level is high even when the rest of the issue is
+  unmatched ("An order is timing out" in the queue fixture is HIGH).
   On low or none, the packet tells the agent to fall back to normal code search.
 - **Tokens:** estimated as characters / 4, of the JSON packet and of the repo's source files.
   The per-file `chars` fact was added in analyzer 0.5.0 for this. The word "estimated" appears
   everywhere a count is shown.
 
+**Identifier splitting:** camelCase, PascalCase, snake_case, SCREAMING_CASE and acronym runs
+are split into words (`ENGINE_TIMEOUT_MS` → engine, timeout; `HTTPServerError` → http, server,
+error). **Known limit:** there are no synonym lists and no special cases. "timed out" (→ `tim`,
+`out`) and "timeout" stay different terms, so an issue saying "timeout" doesn't match the error
+literal "Engine response timed out".
+**Test limit:** the fixture test for "both sides of the queue" uses issue text that names a symbol
+exactly (`handleOrder`). It proves the queue-partner expansion for such issues only, not for
+vaguer wording.
 **Dev issues:** the three issues used while building this ("Placing an order hangs…", "Signin
 accepts any password", "The app feels slow sometimes") are development inputs. Their results are
-not evaluation results; a held-out set is written separately. After the 0.6.0 changes all three
-are LOW. Issue 1 still misses `pending-response-registry`: its "Engine response timed out" stems
-to `tim`, which doesn't match `timeout`. No rule was added to force it.
+not evaluation results; a held-out set is written separately. With the normalized confidence:
+- issue 1 is LOW (0.38; top pick `backend:shared` is wrong, and `pending-response-registry` is
+  still missed because of timed out vs timeout)
+- issue 2 is HIGH (`backend:auth-api` via `/signin`, correct)
+- issue 3 is HIGH, a false high: "app" matches the `appRouter` symbol, and the rest of the text
+  matches nothing (see "Consequence" above)
+
+No rules were added for any of them.
 **Rejected:** (a) Embeddings or an LLM re-ranker: not deterministic, needs network and spend, and
 can't explain its ranking. (b) Using model-written summaries as ranking text: they contain
 unverified claims ("validates credentials"). (c) A calibrated probability: there's no labelled
