@@ -180,6 +180,14 @@ export const ComponentEdge = z.object({
 });
 export type ComponentEdge = z.infer<typeof ComponentEdge>;
 
+/** TESTS: a test file (*.test.ts, *.spec.ts, __tests__/**) imports files of `componentId`. */
+export const TestLink = z.object({
+  file: z.string(),
+  componentId: z.string(),
+  evidenceIds: z.array(z.string()).min(1), // the import facts
+});
+export type TestLink = z.infer<typeof TestLink>;
+
 export const LlmCall = z.object({
   purpose: z.literal("component-naming"),
   componentId: z.string(),
@@ -218,6 +226,7 @@ export const Snapshot = z
     files: z.array(FileFacts),
     evidence: z.array(Evidence),
     warnings: z.array(Warning),
+    tests: z.array(TestLink).default([]), // 0.4.0+; older snapshots didn't detect test files
     llmCalls: z.array(LlmCall), // every model call made while building this snapshot
   })
   .superRefine((snap, ctx) => {
@@ -229,6 +238,12 @@ export const Snapshot = z
       }
       for (const end of [edge.source, edge.target]) {
         if (!componentIds.has(end)) ctx.addIssue({ code: "custom", message: `edge ${edge.id} references missing component ${end}` });
+      }
+    }
+    for (const t of snap.tests) {
+      if (!componentIds.has(t.componentId)) ctx.addIssue({ code: "custom", message: `test link ${t.file} references missing component ${t.componentId}` });
+      for (const id of t.evidenceIds) {
+        if (!evidenceIds.has(id)) ctx.addIssue({ code: "custom", message: `test link ${t.file} cites missing evidence ${id}` });
       }
     }
     for (const w of snap.warnings) {

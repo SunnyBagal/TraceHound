@@ -264,3 +264,35 @@ does, and can generate types from the spec later if the surface grows.
 convenience (image objects, branching helpers) over the same REST calls. The docs say
 `contree_sdk` "performs no auth, transport, or configuration of its own". A bridge would add a
 second runtime, packaging and IPC to a Node-only stack for no capability we need.
+
+## 023 · Impact analysis: which way to walk each edge kind
+**Choice:** `tracehound impact` maps changed files to components through the **base** commit's
+snapshot, then walks component edges breadth-first up to `--depth` (default 2):
+- `imports`, `queries`: **reverse**. The edge points from the dependent to its dependency, so a
+  change to the target reaches the source ("who depends on the changed component"). These are
+  the snapshot's equivalents of IMPORTS / CALLS: the analyzer emits no separate CALLS or
+  HANDLES_ROUTE edges (route handling is a file fact inside a component), so none are walked.
+- `produces`, `consumes` (PUBLISHES_TO / CONSUMES_FROM), and `reads`, `writes`: **bidirectional**.
+  A queue message or stored value is a contract, so changing the consumer's expectations breaks
+  producers just as changing the producer breaks consumers. Queues are components of their own
+  (`redis:<connection>`), so producer → consumer is two hops.
+
+Deleted and renamed files map by their base path. Added files, or any file not in the base
+snapshot, are listed as **unmapped**, never dropped. Each affected component gets one shortest
+chain; among equally short chains the one with the strongest weakest hop wins. Every hop shows
+kind, `confidenceLabel` and one evidence `file:line`. Chains with a `dynamic` hop are flagged, not
+hidden. The base snapshot must be the current analyzer version; if it's missing the CLI fails
+and prints how to create one (with `--naming heuristic`, so no model call).
+**Rejected:** (a) Forward-only walking (follow imports from the change outward): that answers
+"what does this code use", not "what could this break". (b) Treating queue edges as one-way
+data flow: a consumer-side payload change would then report nothing on the producer side,
+which is exactly the break a queue hides from import graphs. (c) Not counting the queue node as
+a hop: depth would stop being "edges walked", and the same `--depth` would mean different
+things for different paths. (d) Key-level queue matching (only couple producers and consumers of
+the same key): more precise, but dynamic keys (`lPush` with a runtime key) would then silently
+drop out. Component-level coupling over-reports; the hop's label shows which key it is.
+
+TESTS: test files (`*.test.ts`, `*.spec.ts`, `__tests__/**`) keep their facts but are excluded
+from grouping and orphan warnings. `snapshot.tests` links each test file to the components whose
+files it imports (evidence = the import fact). The impact report lists tests linked to changed or
+affected components and says "0 linked tests" when there are none. (Analyzer 0.4.0.)

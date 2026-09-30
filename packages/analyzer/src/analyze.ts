@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { aggregateEdges } from "./aggregate/edges.ts";
 import { loadConfig, normalizeOverrides } from "./config.ts";
+import { isTestFile, testLinks } from "./aggregate/tests.ts";
 import { orphanWarnings } from "./aggregate/warnings.ts";
 import { EvidenceStore, type ExtractContext } from "./extract/evidence.ts";
 import { extractEnv } from "./extract/env.ts";
@@ -89,7 +90,9 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
   }
   files.sort((a, b) => a.path.localeCompare(b.path));
 
-  const grouping = groupComponents(files, ws.packages, { overrides: normalizeOverrides(config) });
+  // Test files keep their facts but belong to no component; they link in via `tests` instead.
+  const sourceFiles = files.filter((f) => !isTestFile(f.path));
+  const grouping = groupComponents(sourceFiles, ws.packages, { overrides: normalizeOverrides(config) });
   const allEvidence = evidence.all();
   const edges = aggregateEdges(files, grouping, new Map(allEvidence.map((e) => [e.id, e])));
 
@@ -103,7 +106,7 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
     files,
     evidence: allEvidence,
     warnings: [
-      ...orphanWarnings(files, grouping.fileToComponent),
+      ...orphanWarnings(sourceFiles, grouping.fileToComponent),
       ...grouping.unmatchedOverrides.map((id) => ({
         id: `override-unmatched:${id}`,
         kind: "override-unmatched" as const,
@@ -111,6 +114,7 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
         message: `override "${id}" in ${path.basename(configSource ?? "tracehound.json")} matched no files`,
       })),
     ],
+    tests: testLinks(files, grouping.fileToComponent),
     llmCalls: [],
   });
 }

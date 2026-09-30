@@ -12,7 +12,8 @@
     "demo": "pnpm fixture && pnpm analyze",
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck",
-    "spend": "node packages/analyzer/src/spend.ts"
+    "spend": "node packages/analyzer/src/spend.ts",
+    "tracehound": "node packages/analyzer/src/bin.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

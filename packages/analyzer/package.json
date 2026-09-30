@@ -1,11 +1,14 @@
 {
   "name": "@tracehound/analyzer",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts"
+  },
+  "bin": {
+    "tracehound": "./src/bin.ts"
   },
   "scripts": {
     "analyze": "node --env-file-if-exists=../../.env src/cli.ts --repo ../../fixtures/demo-repo --config ../../configs/cex-v2-boilercode.tracehound.json --out ../../snapshots",

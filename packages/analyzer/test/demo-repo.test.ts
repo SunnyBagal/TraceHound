@@ -17,6 +17,10 @@ else describe("demo repo (cex-v2-boilercode @ da0e3d6)", () => {
     expect(snap.repo).toMatchObject({ name: "SunnyBagal/cex-v2-boilercode", commitSha: "da0e3d640a9c02f815fcca48f8328c94558cc058" });
   });
 
+  it("has no test files, so no TESTS links (impact reports must say 0 linked tests)", () => {
+    expect(snap.tests).toEqual([]);
+  });
+
   it("groups 22 files into 8 responsibility components", () => {
     expect(snap.files).toHaveLength(22);
     expect(snap.components.map((c) => c.name).sort()).toEqual([

@@ -7,10 +7,13 @@ on a canvas. Later: a graph-guided repair agent.
 - **Live:** https://tracehound-tau.vercel.app (Vercel, Root Directory `viewer`, auto-deploys
   from `main`; leave Output Directory unset). CI (`.github/workflows/ci.yml`) runs tests,
   typecheck, and the viewer build, and checks that `out/snapshots/index.json` exists.
-- **Built:** analyzer 0.3.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
+- **Built:** analyzer 0.4.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
   anchor-reach grouping; `tracehound.json` overrides; orphan warnings; `proven` /
-  `resolved-default` / `dynamic` labels) → static snapshots + manifest → viewer (React Flow +
+  `resolved-default` / `dynamic` labels; TESTS links from test files) → static snapshots + manifest → viewer (React Flow +
   ELK, node/edge inspectors, GitHub permalinks, warnings panel, phone bottom sheet).
+- **Impact (feature 4, CLI only):** `pnpm tracehound impact --repo <path> --diff <base>..<head>
+  [--depth 2] [--json]` → changed/affected components with evidence chains (decision 023).
+  Needs a current-version snapshot of `<base>` in `snapshots/`. No canvas highlight yet.
 - **Demo:** `SunnyBagal/cex-v2-boilercode` (fork of `rahul-MyGit/cex-v2-boilercode`, used with
   the original author's agreement) @ `da0e3d6` → 9 components, 17 edges, 1 orphan warning
   (`engine/src/store/exchange-store.ts`). The fork's `main` must stay at `da0e3d6`; seeded
@@ -68,6 +71,7 @@ repo) are recorded as facts but never produce edges.
 ## Commands
 - `pnpm demo` — clone the pinned demo repo into `fixtures/demo-repo` and analyze it (uses
   `configs/cex-v2-boilercode.tracehound.json`; set `NEBIUS_API_KEY` in `.env` for LLM names).
+- `pnpm tracehound impact --repo fixtures/demo-repo --diff da0e3d6..<ref>` — impact of a diff.
 - `pnpm test` / `pnpm typecheck` — all packages.
 - `pnpm --filter @tracehound/viewer dev` — viewer on :3000 (copies ../snapshots first).
 - `pnpm --filter @tracehound/viewer build` — static export in `viewer/out/`.
