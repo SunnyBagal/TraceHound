@@ -9,8 +9,9 @@ import type { Snapshot } from "@/lib/types";
 import { GraphCanvas, type Selection } from "./GraphCanvas";
 import { ImpactPanel } from "./ImpactPanel";
 import { Inspector } from "./Inspector";
+import { Rail } from "./Rail";
 import { TopBar } from "./TopBar";
-import { WarningsPanel } from "./WarningsPanel";
+import { WarningsControl } from "./WarningsControl";
 
 /** Inspector overlay width on desktop; mirrors md:w-[clamp(420px,34vw,600px)] in Inspector. 0 on phones. */
 function useOverlayWidth(): number {
@@ -33,6 +34,7 @@ export function Viewer({ snapshot, impact }: { snapshot: Snapshot; impact?: Impa
   const [focus, setFocus] = useState<{ id: string | null; nonce: number }>({ id: null, nonce: 0 });
   const overlay = useOverlayWidth();
   const { close } = nav;
+  const occludeRight = selection ? overlay : 0;
   // inspector-row hover/focus highlight: transient, dropped whenever the panel shows something else
   const highlight = useHighlight();
   const { clear } = highlight;
@@ -48,34 +50,35 @@ export function Viewer({ snapshot, impact }: { snapshot: Snapshot; impact?: Impa
 
   return (
     <ReactFlowProvider>
-      <div className="flex h-dvh flex-col overflow-hidden">
-        <TopBar snapshot={snapshot} />
-        <main className="relative flex min-h-0 flex-1">
-          {impact && <ImpactPanel name={impactName ?? "impact"} impact={impact} snapshot={snapshot} onSelect={nav.open} />}
-          <div className="relative min-w-0 flex-1 overflow-hidden">
-            <GraphCanvas
-              snapshot={snapshot}
-              selection={selection}
-              onSelect={nav.open}
-              focusId={focus.id}
-              focusNonce={focus.nonce}
-              impact={impact}
-              occludeRight={selection ? overlay : 0}
-              highlight={highlight.active}
-            />
-            {/* on phones the impact panel takes the warnings panel's corner */}
-            <div className={impact ? "hidden md:block" : undefined}>
-              <WarningsPanel
+      <div className="flex h-dvh overflow-hidden">
+        <Rail />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar snapshot={snapshot} />
+          <main className="relative flex min-h-0 flex-1">
+            {impact && <ImpactPanel name={impactName ?? "impact"} impact={impact} snapshot={snapshot} onSelect={nav.open} />}
+            <div className="relative min-w-0 flex-1 overflow-hidden">
+              <GraphCanvas
                 snapshot={snapshot}
+                selection={selection}
+                onSelect={nav.open}
+                focusId={focus.id}
+                focusNonce={focus.nonce}
+                impact={impact}
+                occludeRight={occludeRight}
+                highlight={highlight.active}
+              />
+              <WarningsControl
+                snapshot={snapshot}
+                right={occludeRight}
                 onFocus={(id) => {
                   nav.open({ type: "node", id });
                   setFocus((f) => ({ id, nonce: f.nonce + 1 }));
                 }}
               />
+              <Inspector snapshot={snapshot} nav={nav} bind={highlight.bind} />
             </div>
-            <Inspector snapshot={snapshot} nav={nav} bind={highlight.bind} />
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
     </ReactFlowProvider>
   );
