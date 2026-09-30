@@ -3,6 +3,35 @@
 Analyzes a TypeScript repo and renders it as an interactive, evidence-backed component graph
 on a canvas. Later: a graph-guided repair agent.
 
+## Current state (2026-09-30)
+- **Live:** https://tracehound-tau.vercel.app (Vercel, Root Directory `viewer`, auto-deploys
+  from `main`; leave Output Directory unset). CI (`.github/workflows/ci.yml`) runs tests,
+  typecheck, and the viewer build, and checks that `out/snapshots/index.json` exists.
+- **Built:** analyzer 0.3.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
+  anchor-reach grouping; `tracehound.json` overrides; orphan warnings; `proven` /
+  `resolved-default` / `dynamic` labels) → static snapshots + manifest → viewer (React Flow +
+  ELK, node/edge inspectors, GitHub permalinks, warnings panel, phone bottom sheet).
+- **Demo:** `rahul-MyGit/cex-v2-boilercode` @ `da0e3d6` → 9 components, 17 edges, 1 orphan
+  warning (`engine/src/store/exchange-store.ts`).
+- **Naming:** Nano with reasoning off (`chat_template_kwargs.enable_thinking=false`, decision
+  020) plus deterministic checks (021). Nano beat Super on cost and tied on checks, so Nano
+  stays the default. Spend so far is about $0.043 (`pnpm spend`).
+- **Prices:** `config/prices.json` has Nano/Super rates from third-party trackers, not yet
+  verified in the Nebius console.
+
+### Open blockers
+1. **Sandbox spike pending.** `NEBIUS_AI_PROJECT` is now in `.env`. Run
+   `node --env-file=.env scripts/sandbox-spike.ts` (one disposable run: echo, bun, npm
+   reachability, redis-server), then log the results in FEEDBACK.md. Decision 022 already
+   chose TypeScript over REST.
+2. **CEX has no license.** There's no LICENSE file or license field anywhere, so it stays
+   all-rights-reserved. Don't create a modified fork for the repair harness until that's
+   resolved (ask the author, or use another demo repo).
+3. **Naming check bug (slash identifiers).** `isIdentifierLike` in `src/naming/checks.ts` only
+   flags `a/b` tokens that also contain `.`, `_` or `-`, so Super's "BRPOP/LPUSH" passed even
+   though the facts spell them `brPop`/`lPush`. Prose claims ("uses Prisma models",
+   "validates credentials") are also unchecked.
+
 ## Product rule (non-negotiable)
 Every edge in the graph must be backed by evidence: file, symbol, line range, extractor name,
 confidence. Extraction, grouping and edges are deterministic — no model is involved. Never draw
