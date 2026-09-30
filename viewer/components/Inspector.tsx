@@ -1,21 +1,33 @@
 "use client";
 
-import { ArrowRight, ExternalLink, TriangleAlert, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, ChevronRight, ExternalLink, Spline, TriangleAlert, X } from "lucide-react";
+import { useMemo, type ReactNode } from "react";
 import { EDGE_STYLES, redisKeys } from "@/lib/graph";
 import { permalink } from "@/lib/github";
 import { KIND_META } from "@/lib/kinds";
+import { current, type Entry, type PanelNavigation, type Tab } from "@/lib/navigation";
+import { TECH_META, techFacts, type TechFact } from "@/lib/tech";
 import type { Component, ComponentEdge, Snapshot } from "@/lib/types";
 import { CodeSnippet } from "./CodeSnippet";
-import type { Selection } from "./GraphCanvas";
+import { ComponentIcon, TechLogo } from "./ComponentIcon";
 import { NameSourceBadge } from "./NameSourceBadge";
+
+const NODE_TABS: { id: Tab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "files", label: "Files" },
+  { id: "connections", label: "Connections" },
+];
+const EDGE_TABS: { id: Tab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "evidence", label: "Evidence" },
+];
 
 function Section({ title, children, count }: { title: string; children: ReactNode; count?: number }) {
   return (
-    <section className="border-t border-line px-4 py-3.5">
-      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-faint">
+    <section className="border-b border-line px-5 py-4 last:border-b-0">
+      <h3 className="mb-2.5 text-[12px] font-semibold uppercase tracking-wider text-faint">
         {title}
-        {count !== undefined && <span className="ml-1.5 font-normal text-faint/80">{count}</span>}
+        {count !== undefined && <span className="ml-1.5 font-normal">{count}</span>}
       </h3>
       {children}
     </section>
@@ -25,11 +37,11 @@ function Section({ title, children, count }: { title: string; children: ReactNod
 function FileLink({ snapshot, file, start, end, children }: { snapshot: Snapshot; file: string; start?: number; end?: number; children?: ReactNode }) {
   const href = permalink(snapshot.repo, file, start, end);
   const label = children ?? `${file}${start ? `:${start}${end && end !== start ? `-${end}` : ""}` : ""}`;
-  if (!href) return <span className="font-mono text-[11.5px] text-text">{label}</span>;
+  if (!href) return <span className="break-all font-mono text-[13px] text-text">{label}</span>;
   return (
-    <a href={href} target="_blank" rel="noreferrer" className="group inline-flex items-center gap-1 break-all font-mono text-[11.5px] text-text hover:text-accent">
+    <a href={href} target="_blank" rel="noreferrer" className="group inline-flex items-baseline gap-1 break-all font-mono text-[13px] text-text hover:text-accent">
       {label}
-      <ExternalLink className="size-3 shrink-0 text-faint group-hover:text-accent" aria-label="GitHub permalink" />
+      <ExternalLink className="size-3.5 shrink-0 self-center text-faint group-hover:text-accent" aria-label="GitHub permalink" />
     </a>
   );
 }
@@ -37,79 +49,105 @@ function FileLink({ snapshot, file, start, end, children }: { snapshot: Snapshot
 function ConfidenceTag({ edge }: { edge: ComponentEdge }) {
   const style = EDGE_STYLES[edge.confidenceLabel];
   return (
-    <span className="inline-flex items-center gap-2 rounded-md border border-line px-1.5 py-0.5 text-[11px] text-text" title={style.meaning}>
-      <svg width="26" height="6" aria-hidden>
-        <line x1="1" y1="3" x2="25" y2="3" stroke="currentColor" strokeWidth="1.8" strokeDasharray={style.dash} strokeLinecap={edge.confidenceLabel === "dynamic" ? "round" : "butt"} />
+    <span className="inline-flex shrink-0 items-center gap-2 rounded-md border border-line px-1.5 py-0.5 text-[12px] text-text" title={style.meaning}>
+      <svg width="22" height="6" aria-hidden>
+        <line x1="1" y1="3" x2="21" y2="3" stroke="currentColor" strokeWidth="1.8" strokeDasharray={style.dash} strokeLinecap={edge.confidenceLabel === "dynamic" ? "round" : "butt"} />
       </svg>
       {style.text}
     </span>
   );
 }
 
-function NodeInspector({ snapshot, component, onSelect }: { snapshot: Snapshot; component: Component; onSelect: (s: Selection) => void }) {
-  const { icon: Icon, label } = KIND_META[component.kind];
-  const keys = redisKeys(snapshot, component);
-  const warnings = snapshot.warnings.filter((w) => w.componentId === component.id);
-  const name = (id: string) => snapshot.components.find((c) => c.id === id)?.name ?? id;
-  const outgoing = snapshot.edges.filter((e) => e.source === component.id);
-  const incoming = snapshot.edges.filter((e) => e.target === component.id);
+function Tabs({ tabs, active, onChange, counts }: { tabs: { id: Tab; label: string }[]; active: Tab; onChange: (t: Tab) => void; counts: Partial<Record<Tab, number>> }) {
   return (
-    <>
-      <header className="px-4 pb-3.5 pt-4">
-        <div className="flex items-center gap-2.5">
-          <span className="grid size-9 place-items-center rounded-lg border border-line bg-card text-accent">
-            <Icon className="size-4.5" aria-hidden />
+    <div role="tablist" aria-label="Inspector sections" className="flex gap-1 px-3">
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="tab"
+          id={`tab-${t.id}`}
+          aria-selected={active === t.id}
+          aria-controls="inspector-tabpanel"
+          onClick={() => onChange(t.id)}
+          className={[
+            "-mb-px border-b-2 px-2.5 py-2 text-[14px] font-medium transition-colors",
+            active === t.id ? "border-accent text-text" : "border-transparent text-muted hover:text-text",
+          ].join(" ")}
+        >
+          {t.label}
+          {counts[t.id] !== undefined && <span className="ml-1.5 text-[12px] font-normal text-faint">{counts[t.id]}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ───────────── component ───────────── */
+
+function StackList({ snapshot, facts }: { snapshot: Snapshot; facts: TechFact[] }) {
+  return (
+    <ul className="space-y-2.5">
+      {facts.map((f) => (
+        <li key={`${f.tech}:${f.file}:${f.line}`} className="flex gap-2.5">
+          <span className="grid size-6 shrink-0 place-items-center rounded-md border border-line bg-card">
+            <TechLogo fact={f} className="size-3.5" />
           </span>
           <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold">{component.name}</h2>
-            <div className="text-xs text-faint">
-              {label} · <span className="font-mono">{component.id}</span>
-            </div>
+            <div className="text-[14px] font-medium text-text">{TECH_META[f.tech].label}</div>
+            <FileLink snapshot={snapshot} file={f.file} start={f.line} />
+            <div className="text-[13px] leading-normal text-faint">{f.detail}</div>
           </div>
-        </div>
-        <div className="mt-2.5 flex flex-wrap items-center gap-2">
-          <NameSourceBadge naming={component.naming} />
-          {component.naming.source === "llm" && (
-            <span className="text-[11px] text-faint">
-              heuristic: <span className="text-muted">{component.naming.heuristicName}</span>
-            </span>
-          )}
-        </div>
-        {component.summary && <p className="mt-2.5 text-[13px] leading-relaxed text-muted">{component.summary}</p>}
-        <p className="mt-1.5 text-xs text-faint">{component.subtitle}</p>
-      </header>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot; component: Component; facts: TechFact[] }) {
+  const keys = redisKeys(snapshot, component);
+  const warnings = snapshot.warnings.filter((w) => w.componentId === component.id);
+  return (
+    <>
+      <Section title="Summary">
+        {component.summary && <p className="text-[15px] leading-normal text-text">{component.summary}</p>}
+        <p className={`${component.summary ? "mt-2" : ""} text-[14px] leading-normal text-muted`}>
+          <span className="text-faint">From facts: </span>
+          {component.subtitle}
+        </p>
+        {component.naming.source === "llm" && (
+          <p className="mt-1 text-[13px] text-faint">
+            Heuristic name: <span className="text-muted">{component.naming.heuristicName}</span>
+          </p>
+        )}
+      </Section>
 
       {warnings.length > 0 && (
         <Section title="Warnings" count={warnings.length}>
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {warnings.map((w) => (
-              <li key={w.id} className="flex gap-2 text-[12.5px] text-warn">
-                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden /> {w.message}
+              <li key={w.id} className="flex gap-2 text-[14px] leading-normal text-warn">
+                <TriangleAlert className="mt-1 size-4 shrink-0" aria-hidden /> {w.message}
               </li>
             ))}
           </ul>
         </Section>
       )}
 
-      <Section title="Files · why each is here" count={component.files.length}>
-        <ul className="space-y-2">
-          {component.membership.map((m) => (
-            <li key={m.file}>
-              <FileLink snapshot={snapshot} file={m.file} />
-              <div className="mt-0.5 text-[11.5px] leading-snug text-faint">{m.reason}</div>
-            </li>
-          ))}
-        </ul>
-      </Section>
+      {facts.length > 0 && (
+        <Section title="Stack · from facts" count={facts.length}>
+          <StackList snapshot={snapshot} facts={facts} />
+        </Section>
+      )}
 
       {component.routes.length > 0 && (
         <Section title="Routes" count={component.routes.length}>
-          <ul className="space-y-1">
+          <ul className="space-y-1.5">
             {component.routes.map((r) => {
               const ev = snapshot.evidence.find((e) => e.id === r.evidenceId);
               return (
-                <li key={r.evidenceId} className="flex items-baseline gap-2 font-mono text-[12px]">
-                  <span className="w-14 shrink-0 text-accent">{r.method}</span>
+                <li key={r.evidenceId} className="flex items-baseline gap-3">
+                  <span className="w-16 shrink-0 font-mono text-[13px] font-semibold text-accent">{r.method}</span>
                   <FileLink snapshot={snapshot} file={r.file} start={ev?.range.startLine} end={ev?.range.endLine}>
                     {r.path}
                   </FileLink>
@@ -124,7 +162,7 @@ function NodeInspector({ snapshot, component, onSelect }: { snapshot: Snapshot; 
         <Section title="Redis keys" count={keys.length}>
           <ul className="flex flex-wrap gap-1.5">
             {keys.map((k) => (
-              <li key={k} className="rounded-md border border-line bg-card px-1.5 py-0.5 font-mono text-[11px] text-muted">
+              <li key={k} className="rounded-md border border-line bg-card px-2 py-0.5 font-mono text-[12.5px] text-muted">
                 {k}
               </li>
             ))}
@@ -134,110 +172,312 @@ function NodeInspector({ snapshot, component, onSelect }: { snapshot: Snapshot; 
 
       {component.resource?.models && component.resource.models.length > 0 && (
         <Section title="Models">
-          <p className="font-mono text-[12px] text-muted">{component.resource.models.join(", ")}</p>
+          <p className="font-mono text-[13px] text-muted">{component.resource.models.join(", ")}</p>
         </Section>
       )}
 
       {component.envVars.length > 0 && (
         <Section title="Env vars" count={component.envVars.length}>
-          <p className="font-mono text-[11.5px] leading-relaxed text-muted">{component.envVars.join(" · ")}</p>
+          <ul className="flex flex-wrap gap-1.5">
+            {component.envVars.map((v) => (
+              <li key={v} className="rounded-md border border-line bg-card px-2 py-0.5 font-mono text-[12.5px] text-muted">
+                {v}
+              </li>
+            ))}
+          </ul>
         </Section>
       )}
+    </>
+  );
+}
 
-      <Section title="Connections" count={outgoing.length + incoming.length}>
-        <ul className="space-y-1.5">
-          {[...outgoing.map((e) => ({ e, other: e.target, dir: "→" })), ...incoming.map((e) => ({ e, other: e.source, dir: "←" }))].map(({ e, other, dir }) => (
-            <li key={e.id}>
-              <button type="button" onClick={() => onSelect({ type: "edge", id: e.id })} className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[12.5px] hover:bg-card">
-                <span className="text-faint">{dir}</span>
-                <span className="text-text">{name(other)}</span>
-                <span className="text-faint">{e.kind}</span>
-                <span className="ml-auto">
-                  <ConfidenceTag edge={e} />
-                </span>
-              </button>
+function ComponentFiles({ snapshot, component }: { snapshot: Snapshot; component: Component }) {
+  return (
+    <Section title="Files · why each is here" count={component.files.length}>
+      {component.membership.length ? (
+        <ul className="space-y-3">
+          {component.membership.map((m) => (
+            <li key={m.file}>
+              <FileLink snapshot={snapshot} file={m.file} />
+              <div className="mt-0.5 text-[14px] leading-normal text-muted">{m.reason}</div>
             </li>
           ))}
         </ul>
+      ) : (
+        <p className="text-[14px] text-muted">No files: this is infrastructure seen through its clients.</p>
+      )}
+    </Section>
+  );
+}
+
+function ConnectionList({ snapshot, edges, direction, onOpen }: { snapshot: Snapshot; edges: ComponentEdge[]; direction: "out" | "in"; onOpen: (e: ComponentEdge) => void }) {
+  const name = (id: string) => snapshot.components.find((c) => c.id === id)?.name ?? id;
+  const Dir = direction === "out" ? ArrowUpRight : ArrowDownLeft;
+  if (!edges.length) return <p className="text-[14px] text-faint">None</p>;
+  return (
+    <ul className="-mx-2 space-y-0.5">
+      {edges.map((e) => (
+        <li key={e.id}>
+          <button
+            type="button"
+            data-testid="connection"
+            onClick={() => onOpen(e)}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-card"
+            title={`Open the ${e.kind} edge and its evidence`}
+          >
+            <Dir className="size-4 shrink-0 text-faint" aria-label={direction === "out" ? "outgoing" : "incoming"} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[14px] font-medium text-text">{name(direction === "out" ? e.target : e.source)}</span>
+              <span className="text-[13px] text-muted">
+                {e.kind}
+                {e.weight > 1 && <span className="text-faint"> · {e.weight} evidence</span>}
+              </span>
+            </span>
+            <ConfidenceTag edge={e} />
+            <ChevronRight className="size-4 shrink-0 text-faint" aria-hidden />
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ComponentConnections({ snapshot, component, onOpen }: { snapshot: Snapshot; component: Component; onOpen: (e: ComponentEdge) => void }) {
+  const outgoing = snapshot.edges.filter((e) => e.source === component.id);
+  const incoming = snapshot.edges.filter((e) => e.target === component.id);
+  return (
+    <>
+      <Section title="Outgoing" count={outgoing.length}>
+        <ConnectionList snapshot={snapshot} edges={outgoing} direction="out" onOpen={onOpen} />
+      </Section>
+      <Section title="Incoming" count={incoming.length}>
+        <ConnectionList snapshot={snapshot} edges={incoming} direction="in" onOpen={onOpen} />
       </Section>
     </>
   );
 }
 
-function EdgeInspector({ snapshot, edge, onSelect }: { snapshot: Snapshot; edge: ComponentEdge; onSelect: (s: Selection) => void }) {
-  const name = (id: string) => snapshot.components.find((c) => c.id === id)?.name ?? id;
-  const evidence = edge.evidenceIds.map((id) => snapshot.evidence.find((e) => e.id === id)!).filter(Boolean);
+/* ───────────── edge ───────────── */
+
+function Endpoint({ snapshot, id, role, onOpen }: { snapshot: Snapshot; id: string; role: string; onOpen: () => void }) {
+  const component = snapshot.components.find((c) => c.id === id);
+  const facts = useMemo(() => (component ? techFacts(snapshot, component) : []), [snapshot, component]);
+  return (
+    <button type="button" onClick={onOpen} data-testid={`endpoint-${role}`} className="flex w-full items-center gap-3 rounded-lg border border-line bg-card px-3 py-2.5 text-left hover:border-line-strong hover:bg-card-hover">
+      {component && <ComponentIcon kind={component.kind} tech={facts} />}
+      <span className="min-w-0 flex-1">
+        <span className="block text-[12px] uppercase tracking-wider text-faint">{role}</span>
+        <span className="block truncate text-[14px] font-medium text-text">{component?.name ?? id}</span>
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-faint" aria-hidden />
+    </button>
+  );
+}
+
+function EdgeOverview({ snapshot, edge, onOpenNode, onEvidence }: { snapshot: Snapshot; edge: ComponentEdge; onOpenNode: (id: string) => void; onEvidence: () => void }) {
+  const evidence = edge.evidenceIds.map((id) => snapshot.evidence.find((e) => e.id === id)).filter((e) => e !== undefined);
   const detectors = [...new Set(evidence.map((e) => e.extractor))];
   return (
     <>
-      <header className="px-4 pb-3.5 pt-4">
-        <div className="flex flex-wrap items-center gap-2 text-[15px] font-semibold">
-          <button type="button" className="hover:text-accent" onClick={() => onSelect({ type: "node", id: edge.source })}>
-            {name(edge.source)}
-          </button>
-          <ArrowRight className="size-4 text-faint" aria-hidden />
-          <button type="button" className="hover:text-accent" onClick={() => onSelect({ type: "node", id: edge.target })}>
-            {name(edge.target)}
-          </button>
+      <Section title="Endpoints">
+        <div className="space-y-2">
+          <Endpoint snapshot={snapshot} id={edge.source} role="from" onOpen={() => onOpenNode(edge.source)} />
+          <Endpoint snapshot={snapshot} id={edge.target} role="to" onOpen={() => onOpenNode(edge.target)} />
         </div>
-        <dl className="mt-3 grid grid-cols-[92px_1fr] gap-x-3 gap-y-1.5 text-[12.5px]">
+      </Section>
+      <Section title="Details">
+        <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2.5 text-[14px] leading-normal">
           <dt className="text-faint">Relationship</dt>
-          <dd className="font-mono text-text">{edge.kind}</dd>
+          <dd className="text-text">{edge.kind}</dd>
           <dt className="text-faint">Label</dt>
-          <dd className="font-mono text-muted">{edge.label}</dd>
+          <dd className="break-words font-mono text-[13px] text-muted">{edge.label}</dd>
           <dt className="text-faint">Confidence</dt>
-          <dd>
-            <ConfidenceTag edge={edge} /> <span className="ml-1 text-[11px] text-faint">{EDGE_STYLES[edge.confidenceLabel].meaning}</span>
+          <dd className="flex flex-wrap items-center gap-2">
+            <ConfidenceTag edge={edge} /> <span className="text-[13px] text-muted">{EDGE_STYLES[edge.confidenceLabel].meaning}</span>
           </dd>
           <dt className="text-faint">Detector</dt>
-          <dd className="font-mono text-muted">{detectors.map((d) => `${d} extractor`).join(", ")}</dd>
+          <dd className="text-muted">{detectors.map((d) => `${d} extractor`).join(", ")}</dd>
+          <dt className="text-faint">Evidence</dt>
+          <dd>
+            <button type="button" onClick={onEvidence} className="text-accent hover:underline">
+              {evidence.length} item{evidence.length === 1 ? "" : "s"} →
+            </button>
+          </dd>
         </dl>
-      </header>
-      <Section title="Evidence" count={evidence.length}>
-        <ol className="space-y-4">
-          {evidence.map((ev) => (
-            <li key={ev.id} data-testid="evidence-item">
-              <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                <FileLink snapshot={snapshot} file={ev.file} start={ev.range.startLine} end={ev.range.endLine} />
-                {ev.symbol && <span className="font-mono text-[11px] text-faint">in {ev.symbol}</span>}
-              </div>
-              <p className="mb-1.5 text-[12px] text-muted">
-                {ev.detail}
-                {ev.resolution && <span className="text-faint"> · {ev.resolution}</span>}
-              </p>
-              <CodeSnippet evidence={ev} />
-            </li>
-          ))}
-        </ol>
       </Section>
     </>
   );
 }
 
-/** Right panel on desktop, bottom sheet on phones. */
-export function Inspector({ snapshot, selection, onSelect }: { snapshot: Snapshot; selection: Selection; onSelect: (s: Selection) => void }) {
-  const component = selection?.type === "node" ? snapshot.components.find((c) => c.id === selection.id) : undefined;
-  const edge = selection?.type === "edge" ? snapshot.edges.find((e) => e.id === selection.id) : undefined;
+function EdgeEvidence({ snapshot, edge }: { snapshot: Snapshot; edge: ComponentEdge }) {
+  const evidence = edge.evidenceIds.map((id) => snapshot.evidence.find((e) => e.id === id)).filter((e) => e !== undefined);
+  return (
+    <Section title="Evidence" count={evidence.length}>
+      <ol className="space-y-5">
+        {evidence.map((ev) => (
+          <li key={ev.id} data-testid="evidence-item" className="min-w-0">
+            <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <FileLink snapshot={snapshot} file={ev.file} start={ev.range.startLine} end={ev.range.endLine} />
+              {ev.symbol && <span className="text-[13px] text-faint">in <span className="font-mono">{ev.symbol}</span></span>}
+            </div>
+            <p className="mb-2 text-[14px] leading-normal text-muted">
+              {ev.detail}
+              {ev.resolution && <span className="text-faint"> · {ev.resolution}</span>}
+            </p>
+            <CodeSnippet evidence={ev} />
+          </li>
+        ))}
+      </ol>
+    </Section>
+  );
+}
+
+/* ───────────── shell ───────────── */
+
+function crumbLabel(snapshot: Snapshot, entry: Entry, previous: Entry | undefined): string {
+  const name = (id: string) => snapshot.components.find((c) => c.id === id)?.name ?? id;
+  if (entry.type === "node") return name(entry.id);
+  const edge = snapshot.edges.find((e) => e.id === entry.id);
+  if (!edge) return entry.id;
+  const fromEndpoint = previous?.type === "node" && (previous.id === edge.source || previous.id === edge.target);
+  return fromEndpoint ? edge.kind : `${name(edge.source)} → ${name(edge.target)}`;
+}
+
+function Breadcrumbs({ snapshot, nav }: { snapshot: Snapshot; nav: PanelNavigation }) {
+  const { stack } = nav;
+  return (
+    <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
+      <ol className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[13px] leading-snug">
+        {stack.map((entry, i) => {
+          const label = crumbLabel(snapshot, entry, stack[i - 1]);
+          const last = i === stack.length - 1;
+          return (
+            <li key={`${i}:${entry.type}:${entry.id}`} className="flex min-w-0 items-center gap-1">
+              {i > 0 && <ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden />}
+              {last ? (
+                <span aria-current="page" className="truncate font-medium text-text" data-testid="crumb">
+                  {label}
+                </span>
+              ) : (
+                <button type="button" onClick={() => nav.jump(i)} className="truncate text-muted hover:text-accent" data-testid="crumb">
+                  {label}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+/** Right overlay on desktop (Railway-style), full-screen sheet on phones. */
+export function Inspector({ snapshot, nav }: { snapshot: Snapshot; nav: PanelNavigation }) {
+  const entry = current(nav.stack);
+  const component = entry?.type === "node" ? snapshot.components.find((c) => c.id === entry.id) : undefined;
+  const edge = entry?.type === "edge" ? snapshot.edges.find((e) => e.id === entry.id) : undefined;
   const open = Boolean(component || edge);
+  const facts = useMemo(() => (component ? techFacts(snapshot, component) : []), [snapshot, component]);
+  const tabs = edge ? EDGE_TABS : NODE_TABS;
+  const tab = tabs.some((t) => t.id === entry?.tab) ? entry!.tab! : "overview";
+  const openNode = (id: string) => nav.push({ type: "node", id });
+
+  let header: ReactNode = null;
+  let body: ReactNode = null;
+  let counts: Partial<Record<Tab, number>> = {};
+  if (component) {
+    const { label } = KIND_META[component.kind];
+    counts = { files: component.files.length, connections: snapshot.edges.filter((e) => e.source === component.id || e.target === component.id).length };
+    header = (
+      <div className="flex gap-3 px-5 pb-3 pt-2">
+        <ComponentIcon kind={component.kind} tech={facts} size="lg" />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[18px] font-semibold leading-snug text-text">{component.name}</h2>
+          <div className="mt-0.5 text-[13px] text-muted">
+            {label} · <span className="break-all font-mono text-[12.5px]">{component.id}</span>
+          </div>
+          <div className="mt-2 flex">
+            <NameSourceBadge naming={component.naming} />
+          </div>
+        </div>
+      </div>
+    );
+    body =
+      tab === "files" ? (
+        <ComponentFiles snapshot={snapshot} component={component} />
+      ) : tab === "connections" ? (
+        <ComponentConnections snapshot={snapshot} component={component} onOpen={(e) => nav.push({ type: "edge", id: e.id })} />
+      ) : (
+        <ComponentOverview snapshot={snapshot} component={component} facts={facts} />
+      );
+  } else if (edge) {
+    const name = (id: string) => snapshot.components.find((c) => c.id === id)?.name ?? id;
+    counts = { evidence: edge.evidenceIds.length };
+    header = (
+      <div className="flex gap-3 px-5 pb-3 pt-2">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-panel text-muted" aria-hidden>
+          <Spline className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="flex flex-wrap items-center gap-x-1.5 text-[17px] font-semibold leading-snug">
+            <button type="button" className="text-left text-text hover:text-accent" onClick={() => openNode(edge.source)}>
+              {name(edge.source)}
+            </button>
+            <ArrowRight className="size-4 shrink-0 text-faint" aria-label="to" />
+            <button type="button" className="text-left text-text hover:text-accent" onClick={() => openNode(edge.target)}>
+              {name(edge.target)}
+            </button>
+          </h2>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-muted">
+            Edge · {edge.kind} <ConfidenceTag edge={edge} />
+          </div>
+        </div>
+      </div>
+    );
+    body =
+      tab === "evidence" ? (
+        <EdgeEvidence snapshot={snapshot} edge={edge} />
+      ) : (
+        <EdgeOverview snapshot={snapshot} edge={edge} onOpenNode={openNode} onEvidence={() => nav.setTab("evidence")} />
+      );
+  }
+
   return (
     <aside
       aria-label="Inspector"
       aria-hidden={!open}
+      inert={!open}
+      data-testid="inspector"
       className={[
-        "fixed inset-x-0 bottom-0 z-20 max-h-[62dvh] overflow-y-auto rounded-t-2xl border-t border-line bg-panel shadow-[0_-12px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out",
-        "md:static md:z-auto md:max-h-none md:w-[420px] md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:shadow-none md:transition-[margin] ",
-        open ? "translate-y-0 md:mr-0" : "translate-y-full md:-mr-[420px] md:translate-y-0",
+        "fixed inset-0 z-30 flex flex-col bg-panel transition-transform duration-300 ease-out",
+        "md:absolute md:inset-y-0 md:left-auto md:right-0 md:z-20 md:w-[clamp(420px,34vw,600px)] md:border-l md:border-line md:shadow-[-16px_0_40px_-12px_var(--scrim)]",
+        open ? "translate-x-0 translate-y-0" : "translate-y-full md:translate-x-full md:translate-y-0",
       ].join(" ")}
     >
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-panel/95 px-4 py-2 backdrop-blur">
-        <span className="mx-auto h-1 w-10 rounded-full bg-line-strong md:hidden" aria-hidden />
-        <span className="hidden text-[11px] font-semibold uppercase tracking-wider text-faint md:inline">{edge ? "Edge" : "Component"}</span>
-        <button type="button" onClick={() => onSelect(null)} className="absolute right-2 top-1.5 rounded-md p-1 text-faint hover:bg-card hover:text-text" aria-label="Close inspector">
-          <X className="size-4" />
-        </button>
-      </div>
-      {component && <NodeInspector snapshot={snapshot} component={component} onSelect={onSelect} />}
-      {edge && <EdgeInspector snapshot={snapshot} edge={edge} onSelect={onSelect} />}
+      {open && (
+        <>
+          <div className="shrink-0 border-b border-line bg-panel">
+            <div className="flex items-center gap-1.5 px-3 pt-3">
+              {nav.stack.length > 1 && (
+                <button type="button" onClick={nav.back} className="rounded-md p-1.5 text-muted hover:bg-card hover:text-text" aria-label="Back" data-testid="panel-back">
+                  <ArrowLeft className="size-4.5" />
+                </button>
+              )}
+              <div className="flex min-w-0 flex-1 px-1.5">
+                <Breadcrumbs snapshot={snapshot} nav={nav} />
+              </div>
+              <button type="button" onClick={nav.close} className="rounded-md p-1.5 text-muted hover:bg-card hover:text-text" aria-label="Close inspector" title="Close (Esc)">
+                <X className="size-4.5" />
+              </button>
+            </div>
+            {header}
+            <Tabs tabs={tabs} active={tab} onChange={nav.setTab} counts={counts} />
+          </div>
+          <div id="inspector-tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {body}
+          </div>
+        </>
+      )}
     </aside>
   );
 }
