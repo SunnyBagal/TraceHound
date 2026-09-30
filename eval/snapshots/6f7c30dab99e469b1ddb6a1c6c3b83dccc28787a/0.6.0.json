@@ -1,0 +1,264 @@
+{
+  "schemaVersion": 1,
+  "analyzerVersion": "0.6.0",
+  "repo": {
+    "name": "toy-cart",
+    "commitSha": "6f7c30dab99e469b1ddb6a1c6c3b83dccc28787a"
+  },
+  "generatedAt": "2026-09-30T14:44:46.798Z",
+  "components": [
+    {
+      "id": "toy-cart:toy-cart",
+      "name": "Toy Cart",
+      "kind": "library",
+      "subtitle": "Shared modules · cart",
+      "naming": {
+        "source": "heuristic",
+        "heuristicName": "Toy Cart"
+      },
+      "package": ".",
+      "files": [
+        "src/cart.ts"
+      ],
+      "entryPoints": [],
+      "membership": [
+        {
+          "file": "src/cart.ts",
+          "reason": "package has no entry points, routes or clients"
+        }
+      ],
+      "routes": [],
+      "envVars": [],
+      "counts": {
+        "files": 1,
+        "routes": 0,
+        "envVars": 0
+      }
+    }
+  ],
+  "edges": [],
+  "files": [
+    {
+      "path": "src/cart.ts",
+      "package": ".",
+      "language": "ts",
+      "loc": 19,
+      "chars": 524,
+      "isEntry": false,
+      "imports": [],
+      "symbols": [
+        {
+          "name": "Item",
+          "kind": "interface",
+          "exported": true,
+          "range": {
+            "startLine": 1,
+            "endLine": 4
+          }
+        },
+        {
+          "name": "subtotal",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 6,
+            "endLine": 8
+          }
+        },
+        {
+          "name": "applyDiscount",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 11,
+            "endLine": 13
+          }
+        },
+        {
+          "name": "checkoutTotal",
+          "kind": "function",
+          "exported": true,
+          "range": {
+            "startLine": 16,
+            "endLine": 18
+          }
+        }
+      ],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": []
+    },
+    {
+      "path": "tests/cart.test.ts",
+      "package": ".",
+      "language": "ts",
+      "loc": 11,
+      "chars": 373,
+      "isEntry": false,
+      "imports": [
+        {
+          "specifier": "bun:test",
+          "external": true,
+          "typeOnly": false,
+          "names": [
+            "expect",
+            "test"
+          ],
+          "evidenceId": "tests/cart.test.ts#L1-1:imports"
+        },
+        {
+          "specifier": "../src/cart.ts",
+          "target": "src/cart.ts",
+          "external": false,
+          "typeOnly": false,
+          "names": [
+            "checkoutTotal",
+            "subtotal"
+          ],
+          "evidenceId": "tests/cart.test.ts#L2-2:imports"
+        }
+      ],
+      "symbols": [],
+      "routes": [],
+      "mounts": [],
+      "listens": [],
+      "startupCalls": [
+        {
+          "callee": "test",
+          "evidenceId": "tests/cart.test.ts#L4-6:startup"
+        },
+        {
+          "callee": "test",
+          "evidenceId": "tests/cart.test.ts#L8-10:startup"
+        }
+      ],
+      "clients": [],
+      "redisOps": [],
+      "prismaOps": [],
+      "prismaModels": [],
+      "envReads": [],
+      "errorMessages": []
+    }
+  ],
+  "evidence": [
+    {
+      "id": "tests/cart.test.ts#L1-1:imports",
+      "file": "tests/cart.test.ts",
+      "symbol": "expect, test",
+      "range": {
+        "startLine": 1,
+        "endLine": 1
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import external package bun:test",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { expect, test } from \"bun:test\";",
+          "import { checkoutTotal, subtotal } from \"../src/cart.ts\";",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "tests/cart.test.ts#L2-2:imports",
+      "file": "tests/cart.test.ts",
+      "symbol": "checkoutTotal, subtotal",
+      "range": {
+        "startLine": 2,
+        "endLine": 2
+      },
+      "extractor": "imports",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "import ../src/cart.ts → src/cart.ts",
+      "snippet": {
+        "startLine": 1,
+        "lines": [
+          "import { expect, test } from \"bun:test\";",
+          "import { checkoutTotal, subtotal } from \"../src/cart.ts\";",
+          "",
+          "test(\"subtotal multiplies price by quantity\", () => {"
+        ]
+      }
+    },
+    {
+      "id": "tests/cart.test.ts#L4-6:startup",
+      "file": "tests/cart.test.ts",
+      "symbol": "test",
+      "range": {
+        "startLine": 4,
+        "endLine": 6
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call test()",
+      "snippet": {
+        "startLine": 2,
+        "lines": [
+          "import { checkoutTotal, subtotal } from \"../src/cart.ts\";",
+          "",
+          "test(\"subtotal multiplies price by quantity\", () => {",
+          "  expect(subtotal([{ price: 2.5, qty: 4 }, { price: 1, qty: 1 }])).toBe(11);",
+          "});",
+          "",
+          "test(\"checkoutTotal keeps cents when there is no discount\", () => {"
+        ]
+      }
+    },
+    {
+      "id": "tests/cart.test.ts#L8-10:startup",
+      "file": "tests/cart.test.ts",
+      "symbol": "test",
+      "range": {
+        "startLine": 8,
+        "endLine": 10
+      },
+      "extractor": "startup",
+      "confidence": 1,
+      "resolution": "proven",
+      "detail": "top-level call test()",
+      "snippet": {
+        "startLine": 6,
+        "lines": [
+          "});",
+          "",
+          "test(\"checkoutTotal keeps cents when there is no discount\", () => {",
+          "  expect(checkoutTotal([{ price: 19.99, qty: 1 }])).toBe(19.99);",
+          "});",
+          ""
+        ]
+      }
+    }
+  ],
+  "warnings": [
+    {
+      "id": "orphan-file:src/cart.ts",
+      "kind": "orphan-file",
+      "severity": "warning",
+      "file": "src/cart.ts",
+      "componentId": "toy-cart:toy-cart",
+      "message": "src/cart.ts is not imported by any file and is not an entry point (exports 4 symbols nobody uses)"
+    }
+  ],
+  "tests": [
+    {
+      "file": "tests/cart.test.ts",
+      "componentId": "toy-cart:toy-cart",
+      "evidenceIds": [
+        "tests/cart.test.ts#L2-2:imports"
+      ]
+    }
+  ],
+  "llmCalls": []
+}

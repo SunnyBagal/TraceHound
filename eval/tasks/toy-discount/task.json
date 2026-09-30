@@ -4,6 +4,7 @@
     "localPath": "../../fixtures/.build/toy-cart"
   },
   "baseSha": "6f7c30dab99e469b1ddb6a1c6c3b83dccc28787a",
+  "snapshot": "../../snapshots/6f7c30dab99e469b1ddb6a1c6c3b83dccc28787a/0.6.0.json",
   "setup": [],
   "issue": "Discounts are wrong: a 10% discount on a 200 cart charges 190 instead of 180.",
   "repro": {

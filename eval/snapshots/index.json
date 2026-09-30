@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "latest": {
+    "repo": "toy-cart",
+    "sha": "6f7c30dab99e469b1ddb6a1c6c3b83dccc28787a",
+    "analyzerVersion": "0.6.0",
+    "path": "6f7c30dab99e469b1ddb6a1c6c3b83dccc28787a/0.6.0.json",
+    "createdAt": "2026-09-30T14:44:46.798Z"
+  },
+  "snapshots": [
+    {
+      "repo": "toy-cart",
+      "sha": "6f7c30dab99e469b1ddb6a1c6c3b83dccc28787a",
+      "analyzerVersion": "0.6.0",
+      "path": "6f7c30dab99e469b1ddb6a1c6c3b83dccc28787a/0.6.0.json",
+      "createdAt": "2026-09-30T14:44:46.798Z"
+    }
+  ]
+}
