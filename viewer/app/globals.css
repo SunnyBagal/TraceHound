@@ -77,9 +77,6 @@ body {
 .react-flow {
   --xy-background-color: var(--canvas-bg);
   --xy-background-pattern-color: var(--canvas-dot);
-  --xy-minimap-background-color: var(--panel-bg);
-  --xy-minimap-mask-background-color: rgba(11, 17, 32, 0.7);
-  --xy-minimap-node-background-color: var(--node-border-strong);
 }
 .react-flow__handle {
   opacity: 0;

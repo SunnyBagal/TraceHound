@@ -3,7 +3,6 @@
 import {
   Background,
   BackgroundVariant,
-  MiniMap,
   Panel,
   ReactFlow,
   useNodesState,
@@ -17,6 +16,7 @@ import { impactEdges, impactRoles, type ImpactReport } from "@/lib/impact";
 import { elkLayout, type Positions } from "@/lib/layout";
 import { clearPositions, loadPositions, savePositions } from "@/lib/positions";
 import type { Snapshot } from "@/lib/types";
+import { clampZoom, keepInView, MAX_ZOOM, MIN_ZOOM } from "@/lib/zoom";
 import { ComponentNode } from "./ComponentNode";
 import { EdgeMarkers, EvidenceEdge } from "./EvidenceEdge";
 
@@ -38,7 +38,7 @@ export interface GraphCanvasProps {
   occludeRight?: number;
 }
 
-const FIT = { padding: 0.18, duration: 300 };
+const FIT = { padding: 0.18, duration: 300, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM };
 const MARGIN = 32; // px kept clear around a selection brought into view
 
 export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce, impact, occludeRight = 0 }: GraphCanvasProps) {
@@ -82,13 +82,14 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
     if (!node) return;
     lastFocus.current = focusNonce;
     justFocused.current = `node:${focusId}`;
-    const zoom = 1.05;
+    const zoom = clampZoom(1.05);
     setCenter(node.position.x + NODE_WIDTH / 2 + occludeRight / 2 / zoom, node.position.y + NODE_HEIGHT / 2, { zoom, duration: 500 });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run per focus request, not per drag
   }, [focusId, focusNonce, nodes.length > 0]);
 
   // Keep the selected node (or both ends of the selected edge) visible while the inspector is
-  // open: if the overlay would cover it, pan (same zoom) so it sits in the uncovered area.
+  // open: if the overlay would cover it, pan (same zoom, within the limits) so it sits in the
+  // uncovered area.
   const selectionKey = selection ? `${selection.type}:${selection.id}` : null;
   useEffect(() => {
     const el = containerRef.current;
@@ -103,18 +104,14 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
     })();
     const boxes = nodes.filter((n) => ids.includes(n.id));
     if (!boxes.length) return;
-    const minX = Math.min(...boxes.map((n) => n.position.x));
-    const minY = Math.min(...boxes.map((n) => n.position.y));
-    const maxX = Math.max(...boxes.map((n) => n.position.x + NODE_WIDTH));
-    const maxY = Math.max(...boxes.map((n) => n.position.y + NODE_HEIGHT));
-    const { x, y, zoom } = getViewport();
-    const visible = { left: MARGIN, top: MARGIN, right: el.clientWidth - occludeRight - MARGIN, bottom: el.clientHeight - MARGIN };
-    const screen = { left: minX * zoom + x, top: minY * zoom + y, right: maxX * zoom + x, bottom: maxY * zoom + y };
-    const inside = screen.left >= visible.left && screen.right <= visible.right && screen.top >= visible.top && screen.bottom <= visible.bottom;
-    if (inside || visible.right <= visible.left) return;
-    const dx = (visible.left + visible.right) / 2 - (screen.left + screen.right) / 2;
-    const dy = screen.top < visible.top || screen.bottom > visible.bottom ? (visible.top + visible.bottom) / 2 - (screen.top + screen.bottom) / 2 : 0;
-    setViewport({ x: x + dx, y: y + dy, zoom }, { duration: 350 });
+    const bounds = {
+      minX: Math.min(...boxes.map((n) => n.position.x)),
+      minY: Math.min(...boxes.map((n) => n.position.y)),
+      maxX: Math.max(...boxes.map((n) => n.position.x + NODE_WIDTH)),
+      maxY: Math.max(...boxes.map((n) => n.position.y + NODE_HEIGHT)),
+    };
+    const next = keepInView(bounds, getViewport(), { width: el.clientWidth, height: el.clientHeight }, occludeRight, MARGIN);
+    if (next) setViewport(next, { duration: 350 });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- per selection / panel change, not per drag
   }, [selectionKey, occludeRight, fitted]);
 
@@ -181,13 +178,12 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
         onNodeMouseLeave={() => setHoverId(null)}
         nodesConnectable={false}
         elementsSelectable
-        minZoom={0.2}
-        maxZoom={2}
+        minZoom={MIN_ZOOM}
+        maxZoom={MAX_ZOOM}
         proOptions={{ hideAttribution: true }}
         colorMode="dark"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.4} color="var(--canvas-dot)" />
-        <MiniMap pannable zoomable nodeStrokeWidth={0} className="!hidden transition-[right] duration-300 md:!block" style={{ right: occludeRight }} />
         <Panel position="top-right" className="flex flex-col gap-2 transition-[right] duration-300 sm:flex-row" style={{ right: occludeRight }}>
           <button
             type="button"
