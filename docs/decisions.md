@@ -714,3 +714,46 @@ normal. (c) Fuzzy matching beyond whitespace (edit distance): it could silently 
 model didn't mean. (d) Hard-rejecting every empty finish: legitimate no-op answers would become
 impossible. (e) Graph-specific hints ("start with context_packet"): the graph condition must
 differ only by the tools and their one sentence.
+
+## 031 · Viewer: capped zoom, a header icon rule, transient panel↔canvas highlight, left rail
+**Choice:**
+- **Zoom is capped at 0.4–1.5 on an unbounded canvas** (Railway-style): panning is free, zoom is
+  not. The limits live in `viewer/lib/zoom.ts` and apply to the React Flow props, both fit views
+  (after layout, and the Fit view button), the warnings focus pan and the keep-selection-visible
+  pan (`keepInView`, which pans at the current zoom and never zooms to make something fit).
+  **Consequence:** fit view never goes below 0.4, so on a larger repo, or on a phone, it may not
+  show everything. The 9-component demo fits on desktop (≈0.78 at 1440×900), but at 390×844 fit
+  view stops at 0.4 and crops the right-hand column (it used to fit at 0.22, which was
+  unreadable anyway). The user pans to see the rest.
+- **Header icon rule.** A technology logo goes in a node or panel header only when a fact shows
+  the component *is* that technology (the Redis broker node, a PostgreSQL/Prisma data store) or
+  that it is the component's framework or runtime (Express, Bun). Every fact in `lib/tech.ts`
+  now carries a `role` (`is` · `framework` · `runtime` · `uses`), and `headerFact()` takes the
+  first that isn't `uses`. A component that merely constructs a Redis client or touches Redis
+  keys gets its framework/runtime icon or its kind icon; Redis stays in its "Stack · from facts"
+  list. Demo result: Redis Queue → Redis, User Data Store → PostgreSQL, Engine Worker → Bun,
+  Backend Server / Authentication Service / Exchange API → Express, Redis RPC Bridge → service
+  kind icon, Backend Shared / Pending-Response Registry → kind icons.
+- **Panel↔canvas highlight is transient state, not navigation.** Hovering or keyboard-focusing
+  a Connections row lights the row, its edge and the node at the other end; a Files row lights
+  every edge with evidence in that file (only the row if none); an edge's FROM/TO card lights
+  that node. The state is a small reducer (`lib/highlight.ts`): hover wins over focus, a
+  leave/blur only clears its own row, and it is cleared whenever the panel shows something else
+  (unmounting a row fires no leave). It never touches the URL or history. It is drawn in its own
+  colour (`--highlight`, lavender: an offset outline on nodes, a thicker stroke on edges) so it
+  can't be confused with the amber selection.
+- **Warnings are a compact count button**, vertically centred on the canvas's right edge (moved
+  left by the inspector's width while it is open, never under it) and bottom right above the
+  safe area on phones. The list opens as a popover that grows leftward. The minimap is gone.
+- **Left rail** (56px, hidden below 640px): logo at the top linking to the default canvas view,
+  and at the bottom an author credit (vendored GitHub avatar → github.com/SunnyBagal, tooltip
+  "Built by Sunny Bagal", with a small ↗ badge). There is no login, so it has no menu. The
+  analyzer version moved from its own header chip into the commit chip's tooltip.
+
+**Rejected:** (a) The old 0.2–2 range: node text is unreadable well before 0.2 (the phone fit
+landed at 0.22), and at 2 one node fills most of a laptop screen. (b) Picking the header icon by precedence alone
+(first fact wins, as in 028): that gave Redis Queue, Engine Worker and Redis RPC Bridge the
+same Redis logo, which says "these are Redis" about two components that only talk to it.
+(c) Keeping the highlight in the navigation stack or the URL: hover is not a place you can go
+back to, and every mouse movement would create a history entry. (d) Reusing the selection
+style for hover: then you can't tell what is selected from what the pointer is over.
