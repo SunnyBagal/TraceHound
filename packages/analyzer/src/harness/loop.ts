@@ -11,21 +11,22 @@ import { getEdgeEvidence, getNeighbors, getRelatedTests, searchComponents, type 
 import type { ChatMessage, ChatRequest, ToolCall, ToolDefinition } from "../llm/client.ts";
 import { DEFAULT_MODEL, NO_REASONING } from "../naming/llm.ts";
 import type { Snapshot } from "../schema.ts";
-import { AgentStopped, type Agent, type AgentContext } from "./agents.ts";
+import { AgentStopped, type Agent, type AgentContext, type RepoState } from "./agents.ts";
 import { capOutput, confinePath, GRAPH_TOOLS, REPO_TOOLS, sandboxCommand, ToolInputError, truncate, WORKDIR } from "./tools.ts";
 
 const PROMPTS = path.resolve(import.meta.dirname, "../../../../harness/prompts");
-export const AGENT_PROMPT_FILE = path.join(PROMPTS, "agent-v3.md");
-/** Kept for reference and for reproducing earlier runs; agent-v3 is the default (decision 033). */
+export const AGENT_PROMPT_FILE = path.join(PROMPTS, "agent-v4.md");
+/** Kept for reference and for reproducing earlier runs; agent-v4 is the default (decision 034). */
 export const AGENT_PROMPT_V1_FILE = path.join(PROMPTS, "agent-v1.md");
 export const AGENT_PROMPT_V2_FILE = path.join(PROMPTS, "agent-v2.md");
+export const AGENT_PROMPT_V3_FILE = path.join(PROMPTS, "agent-v3.md");
 /** The loop's own behaviour (guards, edit fallback, finish check, cap, stops), recorded next to the prompt hashes. */
-export const LOOP_VERSION = "agent-v3";
+export const LOOP_VERSION = "agent-v4";
 /** agent-v3: this many refused calls in a row end the run UNRESOLVED "stuck". */
 export const STUCK_AFTER_REFUSALS = 3;
 /** reasoning "on": thinking explicitly enabled (reasoning "off" sends enable_thinking: false). */
 export const THINKING_ON = { chat_template_kwargs: { enable_thinking: true } } as const;
-/** agent-v3: once per run, if the diff is still empty after this many steps. */
+/** agent-v3: once per run, if no base file has changed after this many steps (agent-v4 accounting). */
 export const NUDGE_AFTER_STEPS = 15;
 export const noEditNudge = (limit: number) => `Step ${NUDGE_AFTER_STEPS} of ${limit} and no file has been changed. If you have found the bug, fix it now with edit_file.`;
 const RECORD_RESULT_CHARS = 1500; // tool results kept in the run record (the model saw up to MAX_TOOL_RESULT)
@@ -33,8 +34,9 @@ const RECORD_RESULT_CHARS = 1500; // tool results kept in the run record (the mo
 const MUTATING_TOOLS = new Set(["edit_file", "write_file", "run"]);
 /** The 3rd identical call on an unchanged repository (and every later one) is refused. */
 const MAX_IDENTICAL_CALLS = 2;
+/** agent-v4: sent on the first finish while no file that existed at the start is modified or deleted. */
 export const EMPTY_FINISH_MESSAGE =
-  "not finished: no changes were made, so the repository is identical to its starting state. If you are sure no code change is needed, call finish again to confirm; otherwise continue working.";
+  "not finished: no file that existed at the start has been modified or deleted. If you are sure no code change is needed, call finish again to confirm; otherwise continue working.";
 
 /**
  * The frozen prompt file. `GRAPH: ` lines are included (without the prefix) only when graph tools
@@ -100,6 +102,10 @@ export interface LoopTrace {
   tools: string[];
   turns: LoopTurn[];
   filesRead: string[];
+  /** agent-v4: files read that exist in the base commit (feature 7 metrics use these only) */
+  baseFilesRead: string[];
+  /** agent-v4: files read that the agent created (in the repo or in /scratch) */
+  agentFilesRead: string[];
   graphCalls: { turn: number; tool: string; args: unknown }[];
   toolCallCount: number;
   guards: { repeatsBlocked: number; emptyFinishRejected: number; editWhitespaceFallbacks: number };
@@ -131,7 +137,7 @@ export class RepairLoopAgent implements Agent {
   readonly #opts: Required<Omit<LoopOptions, "graph">> & { graph?: LoopOptions["graph"] };
   readonly #tools: ToolDefinition[];
   /** repo state (vs the base commit) now; re-read after every call that can change the repo */
-  #state: { hash: string; empty: boolean } = { hash: "", empty: true };
+  #state: RepoState = { hash: "", empty: true, baseChanged: false };
   readonly #calls: { key: string; state: string }[] = [];
   #emptyFinishRejected = false;
   #refusedInARow = 0;
@@ -139,7 +145,7 @@ export class RepairLoopAgent implements Agent {
   constructor(opts: LoopOptions = {}) {
     this.#opts = {
       model: opts.model ?? DEFAULT_MODEL,
-      reasoning: opts.reasoning ?? "off",
+      reasoning: opts.reasoning ?? "on", // agent-v4 default (decision 034)
       temperature: opts.temperature ?? 0,
       promptFile: opts.promptFile ?? AGENT_PROMPT_FILE,
       graph: opts.graph,
@@ -160,6 +166,8 @@ export class RepairLoopAgent implements Agent {
       tools: this.#tools.map((t) => t.function.name),
       turns: [],
       filesRead: [],
+      baseFilesRead: [],
+      agentFilesRead: [],
       graphCalls: [],
       toolCallCount: 0,
       guards: { repeatsBlocked: 0, emptyFinishRejected: 0, editWhitespaceFallbacks: 0 },
@@ -248,7 +256,7 @@ export class RepairLoopAgent implements Agent {
 
   /** agent-v3: one user message per run if nothing has changed after NUDGE_AFTER_STEPS steps. */
   #maybeNudge(ctx: AgentContext, messages: ChatMessage[]): void {
-    if (this.trace.noEditNudge.fired || ctx.stepsUsed() < NUDGE_AFTER_STEPS || !this.#state.empty) return;
+    if (this.trace.noEditNudge.fired || ctx.stepsUsed() < NUDGE_AFTER_STEPS || this.#state.baseChanged) return;
     messages.push({ role: "user", content: noEditNudge(ctx.limits.steps) });
     this.trace.noEditNudge = { fired: true, atStep: ctx.stepsUsed() };
   }
@@ -278,7 +286,7 @@ export class RepairLoopAgent implements Agent {
     if (name === "finish") {
       ctx.step("finish");
       // the first finish on an unchanged repo asks for confirmation; a second finish is accepted
-      if (this.#state.empty && !this.#emptyFinishRejected) {
+      if (!this.#state.baseChanged && !this.#emptyFinishRejected) {
         this.#emptyFinishRejected = true;
         this.trace.guards.emptyFinishRejected++;
         return { ok: false, content: EMPTY_FINISH_MESSAGE };
@@ -324,8 +332,12 @@ export class RepairLoopAgent implements Agent {
     if (name === "run") return { ok: r.exitCode === 0, content: `exit code ${r.exitCode}${r.timedOut ? " (timed out)" : ""}\n${output || "(no output)"}` };
     if (r.exitCode === 0) {
       if (name === "read_file") {
-        const rel = path.posix.relative(WORKDIR, confinePath(args.path)) || ".";
-        if (!this.trace.filesRead.includes(rel)) this.trace.filesRead.push(rel);
+        const abs = confinePath(args.path);
+        const rel = abs === WORKDIR || abs.startsWith(`${WORKDIR}/`) ? path.posix.relative(WORKDIR, abs) || "." : abs; // /scratch paths stay absolute
+        if (!this.trace.filesRead.includes(rel)) {
+          this.trace.filesRead.push(rel);
+          (ctx.baseFiles.includes(rel) ? this.trace.baseFilesRead : this.trace.agentFilesRead).push(rel);
+        }
       }
       return { ok: true, content: r.stdout || "(no output)" };
     }

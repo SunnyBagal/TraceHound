@@ -11,6 +11,7 @@ import {
   AGENT_PROMPT_FILE,
   AGENT_PROMPT_V1_FILE,
   AGENT_PROMPT_V2_FILE,
+  AGENT_PROMPT_V3_FILE,
   checkArgs,
   EMPTY_FINISH_MESSAGE,
   formatTestCommands,
@@ -42,11 +43,15 @@ function fakeModel(script: (turn: number, req: ChatRequest) => ToolCall[] | stri
   };
 }
 
-/** Fake sandbox: every edit_file/write_file (or a `run` containing "touch") changes the repo state. */
+/**
+ * Fake sandbox: every edit_file/write_file (or a `run` containing "touch") changes the repo state;
+ * only edit_file (or the `run` command "delete-base-file") changes a file that existed at the base commit.
+ */
 class FakeProvider implements SandboxProvider {
   readonly name = "fake";
   execs: string[] = [];
   changes = 0;
+  baseChanges = 0;
   async create(): Promise<SandboxHandle> {
     return { id: "fake-1", provider: this.name };
   }
@@ -54,8 +59,11 @@ class FakeProvider implements SandboxProvider {
   async exec(_h: SandboxHandle, cmd: string): Promise<ExecResult> {
     this.execs.push(cmd);
     if (cmd === SQUASH_HISTORY) return { exitCode: 0, stdout: `${"b".repeat(40)}\n`, stderr: "", durationMs: 1, timedOut: false };
-    if (cmd === repoStateCommand("b".repeat(40))) return { exitCode: 0, stdout: `${String(this.changes).padStart(64, "0")}\n${this.changes ? 100 : 0}\n`, stderr: "", durationMs: 1, timedOut: false };
-    if (/ (edit_file|write_file)$/.test(cmd) || cmd.includes("touch")) this.changes++;
+    if (cmd === repoStateCommand("b".repeat(40)))
+      return { exitCode: 0, stdout: `${String(this.changes).padStart(64, "0")}\n${this.changes ? 100 : 0}\n${this.baseChanges}\n`, stderr: "", durationMs: 1, timedOut: false };
+    if (cmd.startsWith("git ls-tree")) return { exitCode: 0, stdout: "package.json\0src/cart.ts\0tests/cart.test.ts\0", stderr: "", durationMs: 1, timedOut: false };
+    if (/ (edit_file|write_file)$/.test(cmd) || cmd.includes("touch") || cmd === "delete-base-file") this.changes++;
+    if (/ edit_file$/.test(cmd) || cmd === "delete-base-file") this.baseChanges++;
     if (cmd === "print-long") return { exitCode: 0, stdout: Array.from({ length: 10_000 }, (_, i) => String.fromCharCode(97 + (i % 26))).join(""), stderr: "", durationMs: 1, timedOut: false };
     const fail = cmd.startsWith("curl") || cmd.startsWith("run-repro");
     return { exitCode: fail ? 1 : 0, stdout: "", stderr: "", durationMs: 1, timedOut: false };
@@ -85,7 +93,7 @@ const fakeTask = (limits: Partial<TaskSpec["limits"]> = {}): LoadedTask => ({
 const trace = (r: { agentRun?: { trace?: unknown } }) => r.agentRun!.trace as LoopTrace;
 
 describe("prompt", () => {
-  it("agent-v3 is the default: one frozen file for both conditions; only the GRAPH sentence differs; environment facts identical", () => {
+  it("agent-v4 is the default: one frozen file for both conditions; only the GRAPH sentence differs; environment facts identical", () => {
     const vars = { TEST_COMMANDS: formatTestCommands(["bun test ./tests", "tsc --noEmit"]) };
     const off = renderSystemPrompt(AGENT_PROMPT_FILE, false, vars);
     const on = renderSystemPrompt(AGENT_PROMPT_FILE, true, vars);
@@ -96,13 +104,15 @@ describe("prompt", () => {
     expect(off.text).toContain("- Test commands for this repository (run from /work):\n  - `bun test ./tests`\n  - `tsc --noEmit`");
     expect(off.text).toMatch(/Not installed: node, npm, npx, yarn, ts-node, ripgrep \(rg\)/);
     expect(() => renderSystemPrompt(AGENT_PROMPT_FILE, false)).toThrow(/no value for \{\{TEST_COMMANDS\}\}/);
-    // agent-v3: exactly one way to run scratch code; no `bun -e`
-    expect(off.text).toContain("- To run scratch code: write a .ts file with write_file, then run it with `bun run <file.ts>`. This is the only way to run scratch code.");
+    // agent-v4: one way to run scratch code, in /scratch; no `bun -e`
+    expect(off.text).toContain("- To run scratch code: write the file in /scratch with write_file");
+    expect(off.text).toContain("then run it with `bun run /scratch/check.ts`. /scratch is outside the repository and never part of your change. This is the only way to run scratch code.");
     expect(off.text).not.toContain("bun -e");
-    // v1 and v2 are kept, and their GRAPH sentence is the same one
-    for (const file of [AGENT_PROMPT_V1_FILE, AGENT_PROMPT_V2_FILE]) expect(renderSystemPrompt(file, true, vars).text.split("\n").at(-1)).toBe(on.text.split("\n").at(-1));
+    // v1-v3 are kept, and their GRAPH sentence is the same one
+    for (const file of [AGENT_PROMPT_V1_FILE, AGENT_PROMPT_V2_FILE, AGENT_PROMPT_V3_FILE]) expect(renderSystemPrompt(file, true, vars).text.split("\n").at(-1)).toBe(on.text.split("\n").at(-1));
+    expect(new RepairLoopAgent().trace.reasoning).toBe("on"); // agent-v4 default
     const agent = new RepairLoopAgent({ reasoning: "off" });
-    expect(agent.trace).toMatchObject({ loopVersion: "agent-v3", promptFile: "agent-v3.md", promptSha256: off.fileSha256, graph: false, deciderVersion: "decider-v1" });
+    expect(agent.trace).toMatchObject({ loopVersion: "agent-v4", promptFile: "agent-v4.md", promptSha256: off.fileSha256, graph: false, reasoning: "off", deciderVersion: "decider-v1" });
     expect(agent.trace.tools).toEqual(["list_dir", "read_file", "search", "edit_file", "write_file", "run", "finish"]);
   });
 
@@ -126,7 +136,10 @@ describe("path confinement", () => {
   it("rejects paths that leave /work on the host side", () => {
     expect(confinePath("src/cart.ts")).toBe("/work/src/cart.ts");
     expect(confinePath("/work/src")).toBe("/work/src");
-    for (const bad of ["../etc/passwd", "/etc/passwd", "src/../../root", "/workshop/x"]) expect(() => confinePath(bad)).toThrow(/escapes the repository/);
+    for (const bad of ["../etc/passwd", "/etc/passwd", "src/../../root", "/workshop/x", "/scratchy/x", "/scratch/../etc/passwd", "../scratch2"]) expect(() => confinePath(bad)).toThrow(/escapes the repository/);
+    // agent-v4: /scratch is the one place outside the repo
+    expect(confinePath("/scratch/check.ts")).toBe("/scratch/check.ts");
+    expect(confinePath("../scratch/check.ts")).toBe("/scratch/check.ts");
   });
   it("checks arguments against the tool schema", () => {
     const read = REPO_TOOLS.find((t) => t.function.name === "read_file")!;
@@ -304,6 +317,44 @@ describe("agent-v3: output cap, stuck stop, no-edit nudge (fake provider, fake m
   }
 });
 
+describe("agent-v4: edit accounting and reads (fake provider, fake model; identical with graph on and off)", () => {
+  const conditions = [
+    ["graph off", () => new RepairLoopAgent()],
+    ["graph on", () => new RepairLoopAgent({ graph: { snapshot: { components: [], edges: [], files: [] } as never, decider: "lexical" } })],
+  ] as const;
+  for (const [label, make] of conditions) {
+    it(`only modifying or deleting a base file counts as a change (${label}): new files alone still get the nudge and the finish check`, async () => {
+      const { client, requests } = fakeModel((turn) =>
+        turn === 1 ? [call("write_file", { path: "notes.ts", content: "x" }), call("write_file", { path: "/scratch/check.ts", content: "x" })] : turn <= 16 ? [call("list_dir", { path: `d${turn}` })] : [call("finish", { summary: "x" })],
+      );
+      const r = await runRepair({ task: fakeTask({ steps: 40 }), agent: make(), provider: new FakeProvider(), image: "img", llm: client });
+      const t = trace(r);
+      expect(requests.some((q) => q.messages.some((m) => m.content === noEditNudge(40)))).toBe(true);
+      expect(t.noEditNudge.fired).toBe(true);
+      expect(t.guards.emptyFinishRejected).toBe(1);
+      expect(t.turns.at(-2)!.toolResults[0]!.result).toBe(EMPTY_FINISH_MESSAGE);
+      expect(EMPTY_FINISH_MESSAGE).toMatch(/^not finished: no file that existed at the start has been modified or deleted\./);
+    });
+
+    it(`deleting a base file counts as a change (${label})`, async () => {
+      const { client } = fakeModel((turn) => (turn === 1 ? [call("run", { cmd: "delete-base-file" })] : [call("finish", { summary: "x" })]));
+      const t = trace(await runRepair({ task: fakeTask(), agent: make(), provider: new FakeProvider(), image: "img", llm: client }));
+      expect(t.guards.emptyFinishRejected).toBe(0);
+      expect(t.finishSummary).toBe("x");
+    });
+
+    it(`files read are split into base files and agent-created ones (${label})`, async () => {
+      const { client } = fakeModel((turn) =>
+        turn === 1 ? [call("read_file", { path: "src/cart.ts" }), call("read_file", { path: "/scratch/check.ts" }), call("read_file", { path: "notes.ts" }), call("read_file", { path: "./src/cart.ts" })] : [call("finish", { summary: "x" }), call("finish", { summary: "x" })],
+      );
+      const t = trace(await runRepair({ task: fakeTask(), agent: make(), provider: new FakeProvider(), image: "img", llm: client }));
+      expect(t.filesRead).toEqual(["src/cart.ts", "/scratch/check.ts", "notes.ts"]);
+      expect(t.baseFilesRead).toEqual(["src/cart.ts"]);
+      expect(t.agentFilesRead).toEqual(["/scratch/check.ts", "notes.ts"]);
+    });
+  }
+});
+
 describe("edit_file whitespace fallback (the sandbox helper's JS, evaluated on the host)", () => {
   const { wsNormalizedEdit, closestRegion } = new Function(`${EDIT_FALLBACK_JS}\nreturn { wsNormalizedEdit, closestRegion };`)() as {
     wsNormalizedEdit: (t: string, o: string, n: string) => { ok: true; text: string; startLine: number; endLine: number; reindent: string } | { ok: false; lines: number[] };
@@ -395,6 +446,33 @@ if (!docker.ok) {
       // the state probes ran as harness commands (not agent steps), once at the start and after each mutating call
       expect(r.commands.filter((c) => c.phase === "PATCHING" && c.actor === "harness" && c.cmd.startsWith("d=$(git diff"))).toHaveLength(4);
       expect(r.agentRun!.steps).toBe(5);
+    }, 180_000);
+
+    it("agent-v4 on a real sandbox: /scratch imports repo code and stays out of the diff; an agent-added failing test is removed before the verdict", async () => {
+      const { client } = fakeModel((turn) => {
+        if (turn === 1)
+          return [call("write_file", { path: "/scratch/check.ts", content: 'import { applyDiscount } from "/work/src/cart.ts";\nconsole.log("got", applyDiscount(200, 10));\n' })];
+        if (turn === 2) return [call("run", { cmd: "bun run /scratch/check.ts" }), call("list_dir", { path: "/scratch" })];
+        if (turn === 3) return [call("write_file", { path: "tests/agent.test.ts", content: 'import { expect, test } from "bun:test";\ntest("agent-written, fails", () => expect(1).toBe(2));\n' })];
+        if (turn === 4) return [call("read_file", { path: "/scratch/check.ts" }), call("read_file", { path: "src/cart.ts" }), call("run", { cmd: "ln -s /etc /scratch/etc-link" })];
+        if (turn === 5) return [call("read_file", { path: "/scratch/etc-link/passwd" }), call("edit_file", { path: "src/cart.ts", oldText: "  return total - percent;", newText: "  return total * (1 - percent / 100);" })];
+        return [call("finish", { summary: "fixed" })];
+      });
+      const r = await runRepair({ task: loadTask(TASK), agent: new RepairLoopAgent(), provider: new LocalDockerProvider(), image: SANDBOX_IMAGE, llm: client });
+      const t = trace(r);
+      expect(t.turns[1]!.toolResults.map((x) => x.result)).toEqual(["exit code 0\ngot 190\n", "check.ts\n"]);
+      expect(t.turns[4]!.toolResults[0]!.result).toBe("error: path escapes the repository: /scratch/etc-link/passwd"); // realpath check in the sandbox
+      expect(r).toMatchObject({
+        finalState: "RESOLVED", // the agent's failing test was removed, so it can't decide the verdict
+        changes: { modifiedBase: ["src/cart.ts"], deletedBase: [], addedInRepo: ["tests/agent.test.ts"] },
+        removedBeforeVerify: ["tests/agent.test.ts"],
+      });
+      expect(r.diff).toContain("tests/agent.test.ts"); // recorded as the agent wrote it
+      expect(r.diff).not.toContain("scratch");
+      expect(t.baseFilesRead).toEqual(["src/cart.ts"]);
+      expect(t.agentFilesRead).toEqual(["/scratch/check.ts"]);
+      expect(t.guards.emptyFinishRejected).toBe(0);
+      expect(r.commands.find((c) => c.cmd === "bun test ./tests" && c.phase === "VERIFYING")!.exitCode).toBe(0);
     }, 180_000);
 
     it("edit_file fails clearly on 0 and >1 matches; write_file refuses existing files; a symlink out of /work is rejected", async () => {

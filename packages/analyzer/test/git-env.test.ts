@@ -88,6 +88,6 @@ describe("git env hygiene (decision 032)", () => {
         fixture?.cleanup();
         rmSync(tmp, { recursive: true, force: true });
       }
-    });
+    }, 60_000); // synchronous git + analyzeRepo; slow when the Docker suites run in parallel
   }
 });

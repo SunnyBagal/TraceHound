@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { NoopAgent, OracleAgent, type Agent } from "../src/harness/agents.ts";
 import type { ExecResult, SandboxHandle, SandboxProvider } from "../src/harness/provider.ts";
 import { fakeClient } from "./helpers.ts";
-import { runRepair, SQUASH_HISTORY } from "../src/harness/run.ts";
+import { PREPARE_SCRATCH, runRepair, splitChanges, SQUASH_HISTORY } from "../src/harness/run.ts";
 import { loadTask, type LoadedTask, type TaskSpec } from "../src/harness/task.ts";
 
 const SHA = "a".repeat(40);
@@ -149,8 +149,9 @@ describe("runRepair state machine (fake provider)", () => {
     const r = await runRepair({ task: task({ setup: ["needs-network"] }), agent: new NoopAgent(), provider, image: "img" });
     expect(r.finalState).toBe("UNRESOLVED"); // noop: repro still fails
     const phases = r.commands.map((c) => `${c.phase}:${c.cmd.split(" ")[0]}:${c.exitCode}`);
-    expect(phases.slice(0, 5)).toEqual(["PREPARING_SANDBOX:git:0", "PREPARING_SANDBOX:needs-network:0", "PREPARING_SANDBOX:set:0", "NETWORK_OFF:curl:6", "NETWORK_OFF:curl:6"]);
+    expect(phases.slice(0, 6)).toEqual(["PREPARING_SANDBOX:git:0", "PREPARING_SANDBOX:needs-network:0", "PREPARING_SANDBOX:set:0", "PREPARING_SANDBOX:rm:0", "NETWORK_OFF:curl:6", "NETWORK_OFF:curl:6"]);
     expect(r.commands[2]!.cmd).toBe(SQUASH_HISTORY);
+    expect(r.commands[3]!.cmd).toBe(PREPARE_SCRATCH);
     expect(r.baseCommit).toBe("b".repeat(40));
     expect(r.commands.find((c) => c.phase === "VERIFYING" && c.cmd.startsWith("git add -A"))!.cmd).toBe(`git add -A && git diff --cached ${"b".repeat(40)}`); // diffed against the squashed commit
     expect(r.commands.find((c) => c.phase === "REPRODUCING")).toBeDefined();
@@ -239,6 +240,42 @@ describe("token accounting (0g): the harness counts, from API usage, through the
   it("scripted agents have no model client and use 0 tokens", async () => {
     const r = await runRepair({ task: task(), agent: new NoopAgent(), provider: new FakeProvider(), image: "img" });
     expect(r.usage).toEqual({ llmCalls: 0, inputTokens: 0, outputTokens: 0, tokens: 0, costUSD: 0 });
+  });
+});
+
+describe("agent-v4 verification: the diff by kind, and agent-added tests removed before the verdict", () => {
+  const nameStatus = ["M", "src/cart.ts", "D", "src/old.ts", "A", "tests/agent.test.ts", "A", "src/helper.ts", "A", "notes_spec.js", "A", "it's.test.ts", "T", "bin/run"].join("\0") + "\0";
+
+  it("splitChanges reads `git diff --name-status -z`", () => {
+    expect(splitChanges(nameStatus)).toEqual({ modifiedBase: ["src/cart.ts", "bin/run"], deletedBase: ["src/old.ts"], addedInRepo: ["tests/agent.test.ts", "src/helper.ts", "notes_spec.js", "it's.test.ts"] });
+    expect(splitChanges("")).toEqual({ modifiedBase: [], deletedBase: [], addedInRepo: [] });
+  });
+
+  it("files matching the task's test discovery pattern (default: bun's) are removed before the repro and checks run, and recorded", async () => {
+    const provider = new FakeProvider();
+    provider.onExec = (cmd) => (cmd.startsWith("git diff --cached --no-renames --name-status -z") ? ok(nameStatus) : undefined);
+    const r = await runRepair({ task: task(), agent: writer("fixed"), provider, image: "img" });
+    expect(r.changes).toEqual(splitChanges(nameStatus));
+    expect(r.removedBeforeVerify).toEqual(["tests/agent.test.ts", "notes_spec.js", "it's.test.ts"]);
+    const verifying = r.commands.filter((c) => c.phase === "VERIFYING").map((c) => c.cmd);
+    const rm = verifying.findIndex((c) => c.startsWith("git rm -q -f -- "));
+    expect(verifying[rm]).toBe(`git rm -q -f -- 'tests/agent.test.ts' 'notes_spec.js' 'it'\\''s.test.ts'`);
+    expect(rm).toBeGreaterThan(verifying.findIndex((c) => c.startsWith("git add -A && git diff --cached"))); // the recorded diff is the agent's full diff
+    expect(rm).toBeLessThan(verifying.indexOf("run-repro")); // removed before the repro,
+    expect(rm).toBeLessThan(verifying.indexOf("run-regression")); // the regressions
+    expect(rm).toBeLessThan(verifying.findIndex((c) => c.includes("tsc --noEmit"))); // and the typecheck
+    expect(r.finalState).toBe("RESOLVED");
+  });
+
+  it("a task's own testFilePattern replaces the default; nothing matching means nothing is removed", async () => {
+    const provider = new FakeProvider();
+    provider.onExec = (cmd) => (cmd.startsWith("git diff --cached --no-renames --name-status -z") ? ok(nameStatus) : undefined);
+    const r = await runRepair({ task: task({ testFilePattern: String.raw`^src/helper\.ts$` }), agent: writer("fixed"), provider, image: "img" });
+    expect(r.removedBeforeVerify).toEqual(["src/helper.ts"]);
+    const none = new FakeProvider();
+    const r2 = await runRepair({ task: task(), agent: writer("fixed"), provider: none, image: "img" });
+    expect(r2.removedBeforeVerify).toEqual([]);
+    expect(r2.commands.some((c) => c.cmd.startsWith("git rm"))).toBe(false);
   });
 });
 

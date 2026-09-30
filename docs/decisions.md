@@ -847,3 +847,50 @@ and without the graph; none reads, mentions or special-cases a graph tool.** `ag
 refusal. (b) Repeating the nudge: a nudge every N steps becomes noise, and v3 is meant to
 measure one intervention. (c) Hiding `bun run`'s usage text: that special-cases one command.
 The generic cap bounds every noisy output instead.
+
+## 034 · agent-v4: reasoning on by default, /scratch outside the repo, base-file edit accounting, agent tests out of the verdict
+**Context:** in the agent-v3 diagnostic runs (dev, toy-discount, graph off), reasoning on
+resolved 5/5 and off 4/5. Scratch files written into the repo showed up in the final diff, and
+agents added their own test files, which the regression command then ran. v4 fixes the
+bookkeeping around that. As always, **every change applies identically with and without the
+graph**. `agent-v1..v3.md` are kept; `agent-v4.md` is the default (`loopVersion: "agent-v4"`).
+- **(a) Reasoning on is the agent default** (`enable_thinking: true`); `--reasoning off` stays.
+  The decider (decider-v1, frozen) and naming keep their own settings (reasoning off).
+- **(b) /scratch.** After the history squash the harness runs `rm -rf /scratch && mkdir -p
+  /scratch`. The file tools accept paths under `/work` or `/scratch`, with both confinement
+  checks (host-side normalization, and sandbox-side realpath, so a symlink out of /scratch is
+  still rejected). /scratch is outside the git work tree, so it's never in the diff and never
+  verified. Checked first in the toy container: `/scratch/check.ts` importing
+  `/work/src/cart.ts` by absolute path runs with `bun run` (exit 0, prints 190), and `git status`
+  in /work doesn't see it. Limit: a bare package import written *in* the scratch file resolves
+  from /scratch (no node_modules); repo files it imports resolve their own imports normally.
+  The prompt's recipe: write the file in /scratch, then `bun run /scratch/<file>.ts`, importing
+  repo code by absolute path.
+  - The repo-state hash (repeat guard) now also covers /scratch's files, so re-running a scratch
+    script after changing it is not a repeat.
+- **(c) Edit accounting.** For the no-edit nudge and the empty-finish check, a change counts
+  only if it modifies or deletes a file that existed at the base commit
+  (`git diff --no-renames --diff-filter=MDT <base>`). New files, in the repo or in /scratch,
+  don't count. The finish message now says "no file that existed at the start has been modified
+  or deleted".
+- **(d) Run record.** `changes { modifiedBase, deletedBase, addedInRepo }` comes from
+  `git diff --cached --no-renames --name-status -z <base>`, taken before anything is removed;
+  `diff` stays the agent's full diff. The trace splits `filesRead` into `baseFilesRead` (paths
+  in `git ls-tree` of the base commit) and `agentFilesRead` (created by the agent, /scratch
+  paths absolute). Feature 7 metrics use `baseFilesRead` only.
+- **(e) Verification.** Before VERIFYING runs anything, agent-added files (`addedInRepo`) that
+  match the task's test discovery pattern are removed with `git rm -f`, and recorded as
+  `removedBeforeVerify`. The pattern is `task.json` `testFilePattern` (a regex over
+  repo-relative paths); the default is bun test's discovery,
+  `(^|/)[^/]+[._](test|spec)\.[cm]?[jt]sx?$`. Typecheck errors are counted as before, wherever
+  they occur; only the removed files can no longer contribute any.
+  Then VERIFYING runs, in order: the repro (`repro.command`, the single copied-in file); each
+  `regression` command (what it runs is up to that command, e.g. `bun test ./tests` discovers
+  bun test files under `./tests`); and `typecheck.command` in each package (tsc checks what that
+  package's tsconfig includes).
+**Rejected:** (a) Deleting scratch files from the repo before verification: the model can't
+know which of its new files the harness would keep. A separate directory makes the boundary
+explicit. (b) Keeping agent tests and counting them: a test the agent wrote isn't evidence of
+the fix, and a wrong one would decide the verdict. (c) Making /scratch a subdirectory of /work
+with a .gitignore entry: it would still be visible to the repo's own tools (tsc includes, test
+discovery with some configs).

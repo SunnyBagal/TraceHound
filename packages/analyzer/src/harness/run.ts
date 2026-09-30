@@ -5,8 +5,9 @@ import { randomUUID } from "node:crypto";
 import { BudgetExceededError } from "../llm/budget.ts";
 import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import { AgentStopped, type Agent, type AgentContext } from "./agents.ts";
+import { SCRATCH } from "./tools.ts";
 import type { ExecResult, SandboxHandle, SandboxProvider, SandboxSource } from "./provider.ts";
-import type { LoadedTask, TaskSpec } from "./task.ts";
+import { BUN_TEST_FILE_PATTERN, type LoadedTask, type TaskSpec } from "./task.ts";
 
 export type RunState = "PREPARING_SANDBOX" | "REPRODUCING" | "PATCHING" | "VERIFYING" | "RESOLVED" | "UNRESOLVED" | "FAILED" | "CANCELLED";
 export type Phase = "PREPARING_SANDBOX" | "NETWORK_OFF" | "REPRODUCING" | "BASELINE" | "PATCHING" | "VERIFYING";
@@ -48,6 +49,10 @@ export interface RunRecord {
   final?: CheckResults;
   comparison?: { newFailures: string[]; preExistingFailures: string[] };
   diff?: string;
+  /** agent-v4: the diff by kind (repo-relative paths), taken before anything is removed */
+  changes?: { modifiedBase: string[]; deletedBase: string[]; addedInRepo: string[] };
+  /** agent-added files matching the task's test discovery pattern, removed before verification */
+  removedBeforeVerify?: string[];
   agentRun?: { steps: number; budgetExhausted?: string; stopped?: string; error?: string; trace?: unknown };
   /** Counted by the harness from API usage fields (via the shared client), never from the agent. */
   usage: {
@@ -138,11 +143,34 @@ export function taskTestCommands(spec: Pick<TaskSpec, "regression" | "typecheck"
 }
 
 /**
- * Prints a hash of everything that differs from `base` (tracked diff + untracked, non-ignored
- * files with their content hashes), then the byte length of that diff (0 = no changes).
+ * Prints 3 lines: a hash over everything the agent can change (the diff vs `base`, untracked
+ * non-ignored files, and /scratch's files with their content hashes); the byte length of the
+ * repo part (0 = no repo changes); and how many base files are modified or deleted.
  */
 export const repoStateCommand = (base: string) =>
-  `d=$(git diff --binary ${base} --; git ls-files -z -o --exclude-standard | xargs -0 -r sha256sum --); printf '%s' "$d" | sha256sum | cut -c1-64; printf '%s' "$d" | wc -c`;
+  [
+    `d=$(git diff --binary ${base} --; git ls-files -z -o --exclude-standard | xargs -0 -r sha256sum --)`,
+    `s=$(find ${SCRATCH} -type f -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum --)`,
+    `printf '%s\\n%s' "$d" "$s" | sha256sum | cut -c1-64`,
+    `printf '%s' "$d" | wc -c`,
+    `git diff --no-renames --name-only --diff-filter=MDT ${base} -- | wc -l`,
+  ].join("; ");
+
+/** agent-v4: an empty, writable /scratch outside the repo (never in the diff, never verified). */
+export const PREPARE_SCRATCH = `rm -rf ${SCRATCH} && mkdir -p ${SCRATCH}`;
+
+/** `git diff --name-status -z` output → paths by kind. */
+export function splitChanges(nameStatusZ: string): { modifiedBase: string[]; deletedBase: string[]; addedInRepo: string[] } {
+  const parts = nameStatusZ.split("\0").filter(Boolean);
+  const out = { modifiedBase: [] as string[], deletedBase: [] as string[], addedInRepo: [] as string[] };
+  for (let i = 0; i + 1 < parts.length; i += 2) {
+    const [status, file] = [parts[i]!, parts[i + 1]!];
+    if (status.startsWith("A")) out.addedInRepo.push(file);
+    else if (status.startsWith("D")) out.deletedBase.push(file);
+    else out.modifiedBase.push(file); // M, T
+  }
+  return out;
+}
 
 /**
  * PREPARING_SANDBOX: create (network on), check out baseSha, run setup (network on), squash the
@@ -181,6 +209,7 @@ export async function prepareSandbox(args: {
   const baseCommit = squashed.stdout.trim();
   if (!/^[0-9a-f]{40}$/.test(baseCommit)) throw new RunFailed(`squashing the history printed no commit SHA: ${JSON.stringify(baseCommit.slice(0, 80))}`);
   t("history squash", start);
+  await mustPass(sh, "PREPARING_SANDBOX", PREPARE_SCRATCH, "creating /scratch");
   start = performance.now();
   await args.provider.disableNetwork(handle);
   for (const probe of NETWORK_PROBES) {
@@ -298,6 +327,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     // repro run must leave nothing behind for the agent to find
     const treeState = async (phase: Phase) => (await mustPass(sh, phase, "git status --porcelain --ignored", "listing the tree")).stdout;
     const beforeRepro = await treeState("REPRODUCING");
+    const baseFiles = (await mustPass(sh, "REPRODUCING", "git ls-tree -r -z --name-only HEAD", "listing the base files")).stdout.split("\0").filter(Boolean);
 
     // ── REPRODUCING (+ baseline), network off ─────────────────────────────────────────────
     enter("REPRODUCING");
@@ -324,12 +354,13 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
       issue: spec.issue,
       limits: spec.limits,
       testCommands: taskTestCommands(spec),
+      baseFiles,
       repoState: async () => {
         budget();
         const r = await mustPass(sh, "PATCHING", repoStateCommand(prepared.baseCommit), "computing the repo state");
-        const [hash = "", size = ""] = r.stdout.trim().split("\n").map((x) => x.trim());
-        if (!/^[0-9a-f]{64}$/.test(hash) || !/^\d+$/.test(size)) throw new RunFailed(`repo state probe printed ${JSON.stringify(r.stdout.slice(0, 120))}`);
-        return { hash, empty: size === "0" };
+        const [hash = "", size = "", base = ""] = r.stdout.trim().split("\n").map((x) => x.trim());
+        if (!/^[0-9a-f]{64}$/.test(hash) || !/^\d+$/.test(size) || !/^\d+$/.test(base)) throw new RunFailed(`repo state probe printed ${JSON.stringify(r.stdout.slice(0, 120))}`);
+        return { hash, empty: size === "0", baseChanged: base !== "0" };
       },
       exec: async (cmd, o) => {
         step();
@@ -395,6 +426,13 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     const diff = await sh("VERIFYING", `git add -A && git diff --cached ${prepared.baseCommit}`);
     if (diff.exitCode !== 0) throw new RunFailed(`could not extract the diff (exit ${diff.exitCode})`);
     record.diff = diff.stdout;
+    const status = await mustPass(sh, "VERIFYING", `git diff --cached --no-renames --name-status -z ${prepared.baseCommit}`, "listing the changed files");
+    record.changes = splitChanges(status.stdout);
+    // agent-added tests must not affect the verdict: remove those the test runner would discover
+    const testFile = new RegExp(spec.testFilePattern ?? BUN_TEST_FILE_PATTERN);
+    record.removedBeforeVerify = record.changes.addedInRepo.filter((f) => testFile.test(f));
+    if (record.removedBeforeVerify.length)
+      await mustPass(sh, "VERIFYING", `git rm -q -f -- ${record.removedBeforeVerify.map((f) => `'${f.replace(/'/g, `'\\''`)}'`).join(" ")}`, "removing agent-added test files");
     record.repro.afterPatch = await runRepro("VERIFYING");
     record.final = await collectChecks(sh, "VERIFYING", spec);
     record.comparison = compareChecks(record.baseline, record.final);

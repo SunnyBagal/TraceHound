@@ -12,6 +12,15 @@ export class AgentStopped extends Error {
   override name = "AgentStopped";
 }
 
+export interface RepoState {
+  /** hash over the repo diff vs the base commit, untracked files and /scratch's contents */
+  hash: string;
+  /** the repo diff vs the base commit is empty (untracked files included; /scratch never counts) */
+  empty: boolean;
+  /** agent-v4: a file that existed at the base commit has been modified or deleted */
+  baseChanged: boolean;
+}
+
 export interface AgentContext {
   issue: string;
   limits: TaskSpec["limits"];
@@ -21,7 +30,9 @@ export interface AgentContext {
    * The repo's state relative to the sandbox's base commit: a hash over the diff (untracked files
    * included) and whether that diff is empty. A harness probe: not a step, not the agent's exec.
    */
-  repoState(): Promise<{ hash: string; empty: boolean }>;
+  repoState(): Promise<RepoState>;
+  /** Repo-relative paths of every file in the base commit (agent-v4: base vs agent-created reads). */
+  baseFiles: string[];
   exec(cmd: string, opts?: { timeoutMs?: number }): Promise<ExecResult>;
   writeFile(path: string, content: string): Promise<void>;
   readFile(path: string): Promise<string>;

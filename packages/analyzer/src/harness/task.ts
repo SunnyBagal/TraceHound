@@ -23,6 +23,11 @@ export const TaskSpec = z.object({
   /** Snapshot of the repo at baseSha, for --graph on (relative to the task dir). */
   snapshot: z.string().optional(),
   typecheck: z.object({ packages: z.array(z.string()).min(1), command: z.string().default("tsc --noEmit") }).optional(),
+  /**
+   * Regex over repo-relative paths: the files the task's test runner discovers. Agent-added files
+   * that match are removed before VERIFYING (decision 034). Default: bun test's discovery.
+   */
+  testFilePattern: z.string().optional(),
   limits: z.object({
     steps: z.number().int().positive(), // provider operations the agent may make
     wallClockMs: z.number().int().positive(), // from create; exceeded in PATCHING = budget exhausted, before it = FAILED
@@ -32,6 +37,9 @@ export const TaskSpec = z.object({
   }),
 });
 export type TaskSpec = z.infer<typeof TaskSpec>;
+
+/** bun test discovers *.test.*, *_test.*, *.spec.*, *_spec.* with a JS/TS extension. */
+export const BUN_TEST_FILE_PATTERN = String.raw`(^|/)[^/]+[._](test|spec)\.[cm]?[jt]sx?$`;
 
 export interface LoadedTask {
   spec: TaskSpec;

@@ -1,11 +1,15 @@
 // Repair-agent tools (decision 029). Every repo tool is exactly ONE provider operation (so one
-// step), executed inside the offline sandbox. Paths are confined to /work twice: on the host
-// (normalized path must stay under /work) and in the sandbox (realpath of the nearest existing
-// ancestor must stay under /work, which also catches symlinks pointing outside).
+// step), executed inside the offline sandbox. Paths are confined to /work or /scratch (agent-v4,
+// decision 034) twice: on the host (the normalized path must stay under one of them) and in the
+// sandbox (the realpath of the nearest existing ancestor must too, which also catches symlinks
+// pointing outside).
 import path from "node:path";
 import type { ToolDefinition } from "../llm/client.ts";
 
 export const WORKDIR = "/work";
+/** agent-v4 (decision 034): writable scratch space outside the repo, never part of the diff. */
+export const SCRATCH = "/scratch";
+const underRoot = (abs: string) => [WORKDIR, SCRATCH].some((root) => abs === root || abs.startsWith(`${root}/`));
 export const MAX_TOOL_RESULT = 8000; // characters sent back to the model per tool call
 export const MAX_WRITE_BYTES = 64_000; // write_file/edit_file payloads travel in an env var
 
@@ -63,7 +67,7 @@ export class ToolInputError extends Error {
 export function confinePath(p: unknown): string {
   if (typeof p !== "string" || !p.length || p.includes("\0")) throw new ToolInputError("path must be a non-empty string");
   const abs = path.posix.normalize(path.posix.isAbsolute(p) ? p : path.posix.join(WORKDIR, p));
-  if (abs !== WORKDIR && !abs.startsWith(`${WORKDIR}/`)) throw new ToolInputError(`path escapes the repository: ${p}`);
+  if (!underRoot(abs)) throw new ToolInputError(`path escapes the repository: ${p}`);
   return abs;
 }
 
@@ -150,7 +154,7 @@ const SANDBOX_HELPER =
   EDIT_FALLBACK_JS +
   String.raw`
 const fs = require("fs"), path = require("path");
-const ROOT = "/work";
+const ROOT = "/work", SCRATCH = "/scratch";
 const fail = (m) => { process.stderr.write(m); process.exit(2); };
 const args = JSON.parse(Buffer.from(process.env.TH_ARGS || "e30=", "base64").toString("utf8"));
 function confine(p) {
@@ -158,7 +162,7 @@ function confine(p) {
   let probe = abs, rest = "";
   while (!fs.existsSync(probe)) { rest = path.join(path.basename(probe), rest); probe = path.dirname(probe); }
   const real = path.join(fs.realpathSync(probe), rest);
-  if (real !== ROOT && !real.startsWith(ROOT + "/")) fail("path escapes the repository: " + p);
+  if (![ROOT, SCRATCH].some((r) => real === r || real.startsWith(r + "/"))) fail("path escapes the repository: " + p);
   return real;
 }
 const op = process.argv[1];
@@ -216,7 +220,7 @@ export function sandboxCommand(name: string, args: Record<string, unknown>): str
     const dir = confinePath(args.path ?? ".");
     return [
       `p=$(realpath -m -- ${shq(dir)})`,
-      `case "$p" in ${WORKDIR}|${WORKDIR}/*) ;; *) echo "path escapes the repository: ${String(args.path ?? ".").replace(/[^\w./-]/g, "")}" >&2; exit 2;; esac`,
+      `case "$p" in ${WORKDIR}|${WORKDIR}/*|${SCRATCH}|${SCRATCH}/*) ;; *) echo "path escapes the repository: ${String(args.path ?? ".").replace(/[^\w./-]/g, "")}" >&2; exit 2;; esac`,
       `grep -rnIE --exclude-dir=.git --exclude-dir=node_modules -e ${shq(String(args.pattern))} "$p" | sed "s#^${WORKDIR}/##" | head -n 200`,
     ].join("; ");
   }

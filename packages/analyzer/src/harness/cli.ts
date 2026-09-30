@@ -33,7 +33,7 @@ export async function main(argv: string[]): Promise<number> {
       provider: { type: "string", default: "docker" },
       "runs-dir": { type: "string", default: path.join(WORKSPACE_ROOT, "runs") },
       graph: { type: "string", default: "off" },
-      reasoning: { type: "string", default: "off" },
+      reasoning: { type: "string", default: "on" }, // agent-v4 default (decision 034); the decider and naming keep their own settings
       decider: { type: "string", default: "lexical" },
     },
   });
