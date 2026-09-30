@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { BudgetExceededError } from "../llm/budget.ts";
 import type { ChatRequest, ChatResult } from "../llm/client.ts";
-import type { Agent, AgentContext } from "./agents.ts";
+import { AgentStopped, type Agent, type AgentContext } from "./agents.ts";
 import type { ExecResult, SandboxHandle, SandboxProvider, SandboxSource } from "./provider.ts";
 import type { LoadedTask, TaskSpec } from "./task.ts";
 
@@ -48,7 +48,7 @@ export interface RunRecord {
   final?: CheckResults;
   comparison?: { newFailures: string[]; preExistingFailures: string[] };
   diff?: string;
-  agentRun?: { steps: number; budgetExhausted?: string; error?: string; trace?: unknown };
+  agentRun?: { steps: number; budgetExhausted?: string; stopped?: string; error?: string; trace?: unknown };
   /** Counted by the harness from API usage fields (via the shared client), never from the agent. */
   usage: {
     llmCalls: number;
@@ -340,6 +340,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
       writeFile: async (p, content) => (step(), provider.writeFile(handle!, p, content)),
       readFile: async (p) => (step(), provider.readFile(handle!, p)),
       step: () => step(),
+      stepsUsed: () => steps,
       ...(opts.llm && {
         llm: {
           chat: async (request: ChatRequest, meta?: { purpose: string }) => {
@@ -382,6 +383,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     } catch (error) {
       if (error instanceof RunCancelled || error instanceof RunFailed) throw error; // an infrastructure fault (e.g. a harness probe), not the agent's
       if (error instanceof BudgetExhausted) record.agentRun.budgetExhausted = error.message;
+      else if (error instanceof AgentStopped) record.agentRun.stopped = error.message;
       else record.agentRun.error = (error as Error).message;
     } finally {
       record.agentRun.steps = Math.min(steps, spec.limits.steps);
@@ -399,6 +401,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
 
     const reproPasses = record.repro.afterPatch.exitCode === 0 && !record.repro.afterPatch.timedOut;
     if (record.agentRun.budgetExhausted) finish("UNRESOLVED", `budget exhausted: ${record.agentRun.budgetExhausted}`);
+    else if (record.agentRun.stopped) finish("UNRESOLVED", record.agentRun.stopped);
     else if (reproPasses && record.comparison.newFailures.length === 0) finish("RESOLVED", "repro passes and nothing fails that passed at baseline");
     else
       finish(

@@ -67,6 +67,16 @@ export function confinePath(p: unknown): string {
   return abs;
 }
 
+/** agent-v3 (decision 033): results longer than this keep their head and tail, the middle is omitted. */
+export const OUTPUT_CAP = { over: 4000, head: 2000, tail: 1500 } as const;
+
+/** Every tool result the model sees goes through this: head + "[harness: N characters omitted]" + tail. */
+export function capOutput(text: string): { text: string; omitted: number } {
+  if (text.length <= OUTPUT_CAP.over) return { text, omitted: 0 };
+  const omitted = text.length - OUTPUT_CAP.head - OUTPUT_CAP.tail;
+  return { text: `${text.slice(0, OUTPUT_CAP.head)}\n[harness: ${omitted} characters omitted]\n${text.slice(-OUTPUT_CAP.tail)}`, omitted };
+}
+
 export function truncate(text: string, max = MAX_TOOL_RESULT): string {
   if (text.length <= max) return text;
   return `${text.slice(0, max)}\n[output truncated: showing the first ${max} of ${text.length} characters]`;

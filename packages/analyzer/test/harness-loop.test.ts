@@ -7,10 +7,21 @@ import { buildToyRepo, TOY_BASE_SHA } from "../../../eval/fixtures/build-toy-rep
 import type { ChatRequest, ChatResult, ToolCall } from "../src/llm/client.ts";
 import type { ExecResult, SandboxHandle, SandboxProvider } from "../src/harness/provider.ts";
 import { dockerAvailable, LocalDockerProvider, SANDBOX_IMAGE } from "../src/harness/docker.ts";
-import { AGENT_PROMPT_FILE, AGENT_PROMPT_V1_FILE, checkArgs, EMPTY_FINISH_MESSAGE, formatTestCommands, RepairLoopAgent, renderSystemPrompt, type LoopTrace } from "../src/harness/loop.ts";
+import {
+  AGENT_PROMPT_FILE,
+  AGENT_PROMPT_V1_FILE,
+  AGENT_PROMPT_V2_FILE,
+  checkArgs,
+  EMPTY_FINISH_MESSAGE,
+  formatTestCommands,
+  noEditNudge,
+  RepairLoopAgent,
+  renderSystemPrompt,
+  type LoopTrace,
+} from "../src/harness/loop.ts";
 import { repoStateCommand, runRepair, SQUASH_HISTORY } from "../src/harness/run.ts";
 import { loadTask, type LoadedTask, type TaskSpec } from "../src/harness/task.ts";
-import { confinePath, EDIT_FALLBACK_JS, REPO_TOOLS } from "../src/harness/tools.ts";
+import { capOutput, confinePath, EDIT_FALLBACK_JS, REPO_TOOLS } from "../src/harness/tools.ts";
 
 let n = 0;
 const call = (name: string, args: unknown, raw?: string): ToolCall => ({ id: `call-${++n}`, type: "function", function: { name, arguments: raw ?? JSON.stringify(args) } });
@@ -45,6 +56,7 @@ class FakeProvider implements SandboxProvider {
     if (cmd === SQUASH_HISTORY) return { exitCode: 0, stdout: `${"b".repeat(40)}\n`, stderr: "", durationMs: 1, timedOut: false };
     if (cmd === repoStateCommand("b".repeat(40))) return { exitCode: 0, stdout: `${String(this.changes).padStart(64, "0")}\n${this.changes ? 100 : 0}\n`, stderr: "", durationMs: 1, timedOut: false };
     if (/ (edit_file|write_file)$/.test(cmd) || cmd.includes("touch")) this.changes++;
+    if (cmd === "print-long") return { exitCode: 0, stdout: Array.from({ length: 10_000 }, (_, i) => String.fromCharCode(97 + (i % 26))).join(""), stderr: "", durationMs: 1, timedOut: false };
     const fail = cmd.startsWith("curl") || cmd.startsWith("run-repro");
     return { exitCode: fail ? 1 : 0, stdout: "", stderr: "", durationMs: 1, timedOut: false };
   }
@@ -73,7 +85,7 @@ const fakeTask = (limits: Partial<TaskSpec["limits"]> = {}): LoadedTask => ({
 const trace = (r: { agentRun?: { trace?: unknown } }) => r.agentRun!.trace as LoopTrace;
 
 describe("prompt", () => {
-  it("agent-v2 is the default: one frozen file for both conditions; only the GRAPH sentence differs; environment facts identical", () => {
+  it("agent-v3 is the default: one frozen file for both conditions; only the GRAPH sentence differs; environment facts identical", () => {
     const vars = { TEST_COMMANDS: formatTestCommands(["bun test ./tests", "tsc --noEmit"]) };
     const off = renderSystemPrompt(AGENT_PROMPT_FILE, false, vars);
     const on = renderSystemPrompt(AGENT_PROMPT_FILE, true, vars);
@@ -84,11 +96,13 @@ describe("prompt", () => {
     expect(off.text).toContain("- Test commands for this repository (run from /work):\n  - `bun test ./tests`\n  - `tsc --noEmit`");
     expect(off.text).toMatch(/Not installed: node, npm, npx, yarn, ts-node, ripgrep \(rg\)/);
     expect(() => renderSystemPrompt(AGENT_PROMPT_FILE, false)).toThrow(/no value for \{\{TEST_COMMANDS\}\}/);
-    // v1 is kept, unchanged, and its GRAPH sentence is the same one
-    const v1 = renderSystemPrompt(AGENT_PROMPT_V1_FILE, true);
-    expect(v1.text.split("\n").at(-1)).toBe(on.text.split("\n").at(-1));
+    // agent-v3: exactly one way to run scratch code; no `bun -e`
+    expect(off.text).toContain("- To run scratch code: write a .ts file with write_file, then run it with `bun run <file.ts>`. This is the only way to run scratch code.");
+    expect(off.text).not.toContain("bun -e");
+    // v1 and v2 are kept, and their GRAPH sentence is the same one
+    for (const file of [AGENT_PROMPT_V1_FILE, AGENT_PROMPT_V2_FILE]) expect(renderSystemPrompt(file, true, vars).text.split("\n").at(-1)).toBe(on.text.split("\n").at(-1));
     const agent = new RepairLoopAgent({ reasoning: "off" });
-    expect(agent.trace).toMatchObject({ loopVersion: "agent-v2", promptFile: "agent-v2.md", promptSha256: off.fileSha256, graph: false, deciderVersion: "decider-v1" });
+    expect(agent.trace).toMatchObject({ loopVersion: "agent-v3", promptFile: "agent-v3.md", promptSha256: off.fileSha256, graph: false, deciderVersion: "decider-v1" });
     expect(agent.trace.tools).toEqual(["list_dir", "read_file", "search", "edit_file", "write_file", "run", "finish"]);
   });
 
@@ -220,6 +234,72 @@ describe("agent-v2 competence guards (fake provider, fake model; identical with 
       const [unknownTool, unknownArg] = trace(r).turns[0]!.toolResults.map((x) => x.result);
       expect(unknownTool).toBe(`error: unknown tool "str_replace_editor". Available: ${agent.trace.tools.join(", ")}`);
       expect(unknownArg).toBe('error: edit_file: unknown argument "command" (valid arguments: path, oldText, newText)');
+    });
+  }
+});
+
+describe("agent-v3: output cap, stuck stop, no-edit nudge (fake provider, fake model; identical with graph on and off)", () => {
+  it("capOutput keeps the first 2,000 and last 1,500 characters of anything over 4,000", () => {
+    expect(capOutput("x".repeat(4000))).toEqual({ text: "x".repeat(4000), omitted: 0 });
+    const long = `${"h".repeat(2000)}${"m".repeat(1001)}${"t".repeat(1500)}`;
+    expect(capOutput(long)).toEqual({ text: `${"h".repeat(2000)}\n[harness: 1001 characters omitted]\n${"t".repeat(1500)}`, omitted: 1001 });
+  });
+
+  const conditions = [
+    ["graph off", () => new RepairLoopAgent()],
+    ["graph on", () => new RepairLoopAgent({ graph: { snapshot: { components: [], edges: [], files: [] } as never, decider: "lexical" } })],
+  ] as const;
+  for (const [label, make] of conditions) {
+    it(`output cap (${label}): the model sees head + "[harness: N characters omitted]" + tail; truncations are counted`, async () => {
+      const { client, requests } = fakeModel((turn) => (turn === 1 ? [call("run", { cmd: "print-long" })] : turn === 2 ? [call("run", { cmd: "touch x" })] : [call("finish", { summary: "x" })]));
+      const r = await runRepair({ task: fakeTask(), agent: make(), provider: new FakeProvider(), image: "img", llm: client });
+      const full = `exit code 0\n${Array.from({ length: 10_000 }, (_, i) => String.fromCharCode(97 + (i % 26))).join("")}`;
+      const seen = requests[1]!.messages.at(-1)!;
+      expect(seen).toMatchObject({ role: "tool" });
+      expect(seen.content).toBe(`${full.slice(0, 2000)}\n[harness: ${full.length - 3500} characters omitted]\n${full.slice(-1500)}`);
+      expect(trace(r).outputTruncations).toEqual({ count: 1, charsOmitted: full.length - 3500 });
+    });
+
+    it(`stuck stop (${label}): 3 refused calls in a row end the run UNRESOLVED "stuck"`, async () => {
+      const { client } = fakeModel(() => [call("run", { cmd: "bun run -e 'x'" })]);
+      const r = await runRepair({ task: fakeTask({ steps: 40 }), agent: make(), provider: new FakeProvider(), image: "img", llm: client });
+      expect(r).toMatchObject({ finalState: "UNRESOLVED", reason: "stuck" });
+      const t = trace(r);
+      expect(t.stuckStop).toBe(true);
+      expect(t.guards.repeatsBlocked).toBe(3);
+      expect(r.agentRun!.steps).toBe(5); // 2 executed + 3 refused
+      expect(r.states.map((s) => s.state)).toEqual(["PREPARING_SANDBOX", "REPRODUCING", "PATCHING", "VERIFYING", "UNRESOLVED"]); // verification still ran
+    });
+
+    it(`stuck stop (${label}): any call that isn't refused resets the count`, async () => {
+      const script = [["run", { cmd: "x" }], ["run", { cmd: "x" }], ["run", { cmd: "x" }], ["run", { cmd: "x" }], ["list_dir", { path: "." }], ["run", { cmd: "x" }], ["run", { cmd: "x" }], ["finish", { summary: "a" }], ["finish", { summary: "b" }]] as const;
+      const { client } = fakeModel((turn) => [call(script[turn - 1]![0], script[turn - 1]![1])]);
+      const r = await runRepair({ task: fakeTask({ steps: 40 }), agent: make(), provider: new FakeProvider(), image: "img", llm: client });
+      const t = trace(r);
+      expect(t.guards.repeatsBlocked).toBe(4); // refused, refused, (list_dir), refused, refused
+      expect(t.stuckStop).toBe(false);
+      expect(t.finishSummary).toBe("b");
+      expect(r.reason).not.toBe("stuck");
+    });
+
+    it(`no-edit nudge (${label}): one message after step 15 while the diff is empty, never again`, async () => {
+      const { client, requests } = fakeModel((turn) => (turn <= 20 ? [call("list_dir", { path: `d${turn}` })] : [call("finish", { summary: "x" })]));
+      const r = await runRepair({ task: fakeTask({ steps: 40 }), agent: make(), provider: new FakeProvider(), image: "img", llm: client });
+      const nudge = noEditNudge(40);
+      expect(nudge).toBe("Step 15 of 40 and no file has been changed. If you have found the bug, fix it now with edit_file.");
+      expect(requests[14]!.messages.filter((m) => m.content === nudge)).toHaveLength(0); // before step 15
+      expect(requests[15]!.messages.at(-1)).toEqual({ role: "user", content: nudge }); // right after the 15th step's result
+      expect(requests.at(-1)!.messages.filter((m) => m.content === nudge)).toHaveLength(1); // once per run
+      expect(trace(r).noEditNudge).toEqual({ fired: true, atStep: 15 });
+    });
+
+    it(`no-edit nudge (${label}): not sent when a file has already changed`, async () => {
+      const { client, requests } = fakeModel((turn) =>
+        turn === 1 ? [call("edit_file", { path: "src/cart.ts", oldText: "a", newText: "b" })] : turn <= 20 ? [call("list_dir", { path: `d${turn}` })] : [call("finish", { summary: "x" })],
+      );
+      const r = await runRepair({ task: fakeTask({ steps: 40 }), agent: make(), provider: new FakeProvider(), image: "img", llm: client });
+      expect(requests.at(-1)!.messages.some((m) => m.role === "user" && String(m.content).startsWith("Step 15"))).toBe(false);
+      expect(trace(r).noEditNudge).toEqual({ fired: false });
     });
   }
 });

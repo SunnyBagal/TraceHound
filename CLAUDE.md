@@ -29,6 +29,9 @@ on a canvas. Later: a graph-guided repair agent.
   finish) **failed the toy gate: graph off resolved 2/5, needed 4/5**
   (`eval/dev-log/2026-09-30-toy-gate.md`). The toy is a single-file bug, so on/off there says
   nothing about the graph.
+  agent-v3 is now the default (decision 033): tool output capped at 4,000 chars (head + tail),
+  "stuck" stop after 3 refused calls in a row, one no-edit nudge at step 15, and one way to run
+  scratch code (`bun run <file.ts>`). v1/v2 prompts are kept.
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**

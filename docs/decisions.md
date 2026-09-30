@@ -805,3 +805,37 @@ still read the wrong repo. (b) Passing `--git-dir`/`--work-tree` explicitly ever
 easy to forget on one call, and `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY` and
 `GIT_CONFIG_PARAMETERS` would still leak. (c) Dropping every `GIT_*` variable: `GIT_ASKPASS`,
 `GIT_SSH_COMMAND` and similar are legitimate for clones.
+
+## 033 · agent-v3: output cap, stuck stop, one no-edit nudge, one way to run scratch code
+**Context:** agent-v2 failed the toy gate (graph off 2/5; decision 030 addendum,
+`eval/dev-log/2026-09-30-toy-gate.md`). The failed runs were dominated by `bun run -e`, whose
+~1,900-token usage text filled the context; by the model re-sending a refused call for up to
+31 turns; and by never editing. v3 changes only these. **Every change applies identically with
+and without the graph; none reads, mentions or special-cases a graph tool.** `agent-v1.md` and
+`agent-v2.md` are kept; `agent-v3.md` is the default, and the trace records `loopVersion:
+"agent-v3"` plus the prompt hashes as before.
+- **(a) Output cap.** Every tool result the model sees (repo tools, graph tools, errors) that
+  is over 4,000 characters keeps its first 2,000 and last 1,500 characters, joined by the line
+  `[harness: N characters omitted]`. This replaces v2's 8,000-character head-only cut, which
+  dropped the end of test output. The trace counts `outputTruncations { count, charsOmitted }`.
+- **(b) Stuck stop.** A refused call is one the repeat guard declined to run (030 b). After 3
+  refused calls in a row, the loop throws `AgentStopped("stuck")`. The harness still runs
+  VERIFYING and records the run as UNRESOLVED with reason `stuck` (never RESOLVED, like an
+  exhausted budget). Any call that isn't refused resets the count. The trace records
+  `stuckStop`.
+- **(c) No-edit nudge.** After a turn, if at least 15 steps are used and the diff against the
+  base commit is still empty, the loop adds one user message, once per run: "Step 15 of 40 and
+  no file has been changed. If you have found the bug, fix it now with edit_file." (the 40 is
+  the task's step limit). The trace records `noEditNudge { fired, atStep }`. The step count is
+  the harness's own (`AgentContext.stepsUsed()`).
+- **(d) Environment facts.** Exactly one way to run scratch code: write a .ts file with
+  `write_file`, then `bun run <file.ts>`. The `bun -e` mention is gone, from the bullet and from
+  "How to work" step 2. **Known side effect:** a scratch file is a change, so it shows up in the
+  diff and suppresses (c) and the empty-finish check. Verification is unaffected unless the file
+  is inside a typechecked or tested path.
+- **(e) Nothing else:** no new tools, no near-duplicate detection, no aliases for invented tool
+  names.
+**Rejected:** (a) Stopping on the first refusal: the model sometimes recovers after one
+refusal. (b) Repeating the nudge: a nudge every N steps becomes noise, and v3 is meant to
+measure one intervention. (c) Hiding `bun run`'s usage text: that special-cases one command.
+The generic cap bounds every noisy output instead.

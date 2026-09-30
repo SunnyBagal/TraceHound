@@ -11,15 +11,21 @@ import { getEdgeEvidence, getNeighbors, getRelatedTests, searchComponents, type 
 import type { ChatMessage, ChatRequest, ToolCall, ToolDefinition } from "../llm/client.ts";
 import { DEFAULT_MODEL, NO_REASONING } from "../naming/llm.ts";
 import type { Snapshot } from "../schema.ts";
-import type { Agent, AgentContext } from "./agents.ts";
-import { confinePath, GRAPH_TOOLS, REPO_TOOLS, sandboxCommand, ToolInputError, truncate, WORKDIR } from "./tools.ts";
+import { AgentStopped, type Agent, type AgentContext } from "./agents.ts";
+import { capOutput, confinePath, GRAPH_TOOLS, REPO_TOOLS, sandboxCommand, ToolInputError, truncate, WORKDIR } from "./tools.ts";
 
 const PROMPTS = path.resolve(import.meta.dirname, "../../../../harness/prompts");
-export const AGENT_PROMPT_FILE = path.join(PROMPTS, "agent-v2.md");
-/** Kept for reference and for reproducing earlier runs; agent-v2 is the default (decision 030). */
+export const AGENT_PROMPT_FILE = path.join(PROMPTS, "agent-v3.md");
+/** Kept for reference and for reproducing earlier runs; agent-v3 is the default (decision 033). */
 export const AGENT_PROMPT_V1_FILE = path.join(PROMPTS, "agent-v1.md");
-/** The loop's own behaviour (guards, edit fallback, finish check), recorded next to the prompt hashes. */
-export const LOOP_VERSION = "agent-v2";
+export const AGENT_PROMPT_V2_FILE = path.join(PROMPTS, "agent-v2.md");
+/** The loop's own behaviour (guards, edit fallback, finish check, cap, stops), recorded next to the prompt hashes. */
+export const LOOP_VERSION = "agent-v3";
+/** agent-v3: this many refused calls in a row end the run UNRESOLVED "stuck". */
+export const STUCK_AFTER_REFUSALS = 3;
+/** agent-v3: once per run, if the diff is still empty after this many steps. */
+export const NUDGE_AFTER_STEPS = 15;
+export const noEditNudge = (limit: number) => `Step ${NUDGE_AFTER_STEPS} of ${limit} and no file has been changed. If you have found the bug, fix it now with edit_file.`;
 const RECORD_RESULT_CHARS = 1500; // tool results kept in the run record (the model saw up to MAX_TOOL_RESULT)
 /** Tools that can change the repository; the repo state is re-read after each of them. */
 const MUTATING_TOOLS = new Set(["edit_file", "write_file", "run"]);
@@ -93,6 +99,12 @@ export interface LoopTrace {
   graphCalls: { turn: number; tool: string; args: unknown }[];
   toolCallCount: number;
   guards: { repeatsBlocked: number; emptyFinishRejected: number; editWhitespaceFallbacks: number };
+  /** agent-v3: tool results cut to head + tail (and the characters omitted in total) */
+  outputTruncations: { count: number; charsOmitted: number };
+  /** agent-v3: the one no-edit nudge */
+  noEditNudge: { fired: boolean; atStep?: number };
+  /** agent-v3: ended after STUCK_AFTER_REFUSALS consecutive refused calls */
+  stuckStop: boolean;
   finishSummary?: string;
   stoppedBy?: string;
 }
@@ -106,7 +118,8 @@ export interface LoopOptions {
   graph?: { snapshot: Snapshot; decider: "lexical" | "nemotron" };
 }
 
-type ToolOutcome = { ok: boolean; content: string; finished?: boolean };
+/** refused: the loop declined to run the call (repeat guard); counts toward the stuck stop. */
+type ToolOutcome = { ok: boolean; content: string; finished?: boolean; refused?: boolean };
 
 export class RepairLoopAgent implements Agent {
   readonly name = "nemotron";
@@ -117,6 +130,7 @@ export class RepairLoopAgent implements Agent {
   #state: { hash: string; empty: boolean } = { hash: "", empty: true };
   readonly #calls: { key: string; state: string }[] = [];
   #emptyFinishRejected = false;
+  #refusedInARow = 0;
 
   constructor(opts: LoopOptions = {}) {
     this.#opts = {
@@ -145,6 +159,9 @@ export class RepairLoopAgent implements Agent {
       graphCalls: [],
       toolCallCount: 0,
       guards: { repeatsBlocked: 0, emptyFinishRejected: 0, editWhitespaceFallbacks: 0 },
+      outputTruncations: { count: 0, charsOmitted: 0 },
+      noEditNudge: { fired: false },
+      stuckStop: false,
     };
   }
 
@@ -195,6 +212,7 @@ export class RepairLoopAgent implements Agent {
         messages.push({ role: "assistant", content: res.content || "" });
         messages.push({ role: "user", content: "You must act through tool calls. Continue with a tool call, or call finish if you are done." });
         record.toolResults.push({ id: "-", name: "(none)", ok: false, result: "no tool call: nudged to use tools" });
+        this.#maybeNudge(ctx, messages);
         continue;
       }
       messages.push({ role: "assistant", content: res.content || null, tool_calls: calls });
@@ -203,11 +221,30 @@ export class RepairLoopAgent implements Agent {
         const outcome: ToolOutcome = finished ? { ok: false, content: "not executed: finish was already called in this turn" } : await this.#execute(call, ctx, turn);
         this.trace.toolCallCount++;
         finished ||= Boolean(outcome.finished);
-        messages.push({ role: "tool", tool_call_id: call.id, content: outcome.content });
-        record.toolResults.push({ id: call.id, name: call.function.name, ok: outcome.ok, result: truncate(outcome.content, RECORD_RESULT_CHARS) });
+        const capped = capOutput(outcome.content);
+        if (capped.omitted) {
+          this.trace.outputTruncations.count++;
+          this.trace.outputTruncations.charsOmitted += capped.omitted;
+        }
+        messages.push({ role: "tool", tool_call_id: call.id, content: capped.text });
+        record.toolResults.push({ id: call.id, name: call.function.name, ok: outcome.ok, result: truncate(capped.text, RECORD_RESULT_CHARS) });
+        this.#refusedInARow = outcome.refused ? this.#refusedInARow + 1 : 0;
+        if (this.#refusedInARow >= STUCK_AFTER_REFUSALS) {
+          this.trace.stuckStop = true;
+          this.trace.stoppedBy = `stuck: ${STUCK_AFTER_REFUSALS} refused calls in a row`;
+          throw new AgentStopped("stuck");
+        }
       }
       if (finished) return;
+      this.#maybeNudge(ctx, messages);
     }
+  }
+
+  /** agent-v3: one user message per run if nothing has changed after NUDGE_AFTER_STEPS steps. */
+  #maybeNudge(ctx: AgentContext, messages: ChatMessage[]): void {
+    if (this.trace.noEditNudge.fired || ctx.stepsUsed() < NUDGE_AFTER_STEPS || !this.#state.empty) return;
+    messages.push({ role: "user", content: noEditNudge(ctx.limits.steps) });
+    this.trace.noEditNudge = { fired: true, atStep: ctx.stepsUsed() };
   }
 
   async #execute(call: ToolCall, ctx: AgentContext, turn: number): Promise<ToolOutcome> {
@@ -252,6 +289,7 @@ export class RepairLoopAgent implements Agent {
       this.trace.guards.repeatsBlocked++;
       return {
         ok: false,
+        refused: true,
         content: `error: not run - this exact call (${name} with the same arguments) was already made ${earlier} times and the repository has not changed since, so the result won't change. Do something different.`,
       };
     }
@@ -259,7 +297,7 @@ export class RepairLoopAgent implements Agent {
       ctx.step(`graph:${name}`);
       this.trace.graphCalls.push({ turn, tool: name, args });
       try {
-        return { ok: true, content: truncate(JSON.stringify(await this.#graphTool(name, args, ctx))) };
+        return { ok: true, content: JSON.stringify(await this.#graphTool(name, args, ctx)) };
       } catch (error) {
         return { ok: false, content: `error: ${(error as Error).message}` };
       }
@@ -277,15 +315,15 @@ export class RepairLoopAgent implements Agent {
     if (MUTATING_TOOLS.has(name)) this.#state = await ctx.repoState(); // a harness probe, not a step
     if (name === "edit_file" && r.exitCode === 0 && r.stdout.includes("whitespace-normalized match")) this.trace.guards.editWhitespaceFallbacks++;
     const output = `${r.stdout}${r.stderr ? (r.stdout ? "\n" : "") + r.stderr : ""}`;
-    if (name === "run") return { ok: r.exitCode === 0, content: truncate(`exit code ${r.exitCode}${r.timedOut ? " (timed out)" : ""}\n${output || "(no output)"}`) };
+    if (name === "run") return { ok: r.exitCode === 0, content: `exit code ${r.exitCode}${r.timedOut ? " (timed out)" : ""}\n${output || "(no output)"}` };
     if (r.exitCode === 0) {
       if (name === "read_file") {
         const rel = path.posix.relative(WORKDIR, confinePath(args.path)) || ".";
         if (!this.trace.filesRead.includes(rel)) this.trace.filesRead.push(rel);
       }
-      return { ok: true, content: truncate(r.stdout || "(no output)") };
+      return { ok: true, content: r.stdout || "(no output)" };
     }
-    return { ok: false, content: truncate(`error: ${(r.stderr || r.stdout).trim() || `exit code ${r.exitCode}`}`) };
+    return { ok: false, content: `error: ${(r.stderr || r.stdout).trim() || `exit code ${r.exitCode}`}` };
   }
 
   async #graphTool(name: string, args: Record<string, unknown>, ctx: AgentContext): Promise<unknown> {

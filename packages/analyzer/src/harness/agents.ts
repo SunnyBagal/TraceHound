@@ -4,6 +4,14 @@ import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import type { ExecResult } from "./provider.ts";
 import type { TaskSpec } from "./task.ts";
 
+/**
+ * An agent may end its own run with a stop reason (e.g. "stuck"). The harness still verifies, and
+ * records the run as UNRESOLVED with exactly that reason - like an exhausted budget, never RESOLVED.
+ */
+export class AgentStopped extends Error {
+  override name = "AgentStopped";
+}
+
 export interface AgentContext {
   issue: string;
   limits: TaskSpec["limits"];
@@ -28,6 +36,8 @@ export interface AgentContext {
    * rejected or malformed tool call). Provider operations count themselves.
    */
   step(label: string): void;
+  /** Steps counted so far (the harness's count, the same one the step limit uses). */
+  stepsUsed(): number;
   /** Read-only graph tools over the target's snapshot, when the harness has one. */
   graph?: {
     searchComponents(query: string): unknown;
