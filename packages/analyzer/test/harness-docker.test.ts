@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { buildToyRepo, TOY_BASE_SHA } from "../../../eval/fixtures/build-toy-repo.ts";
 import { NoopAgent, OracleAgent } from "../src/harness/agents.ts";
 import { dockerAvailable, LocalDockerProvider, SANDBOX_IMAGE } from "../src/harness/docker.ts";
-import { runRepair, type RunRecord } from "../src/harness/run.ts";
+import { NETWORK_PROBES, runRepair, type RunRecord } from "../src/harness/run.ts";
 import { loadTask } from "../src/harness/task.ts";
 
 const TASKS = path.resolve(import.meta.dirname, "../../../eval/tasks");
@@ -33,14 +33,16 @@ if (!docker.ok) {
       await LocalDockerProvider.ensureImage();
     }, 15 * 60_000);
 
-    it("the sandbox has no host mounts, no network and no host environment", async () => {
+    it("the sandbox has no host mounts, no host environment, and no network once disconnected", async () => {
       const provider = new LocalDockerProvider();
       const h = await provider.create({ image: SANDBOX_IMAGE, source: { localPath: path.resolve(TASKS, "../fixtures/.build/toy-cart") } });
       try {
+        await provider.disableNetwork(h);
         const inspect = JSON.parse(spawnSync("docker", ["inspect", h.id], { encoding: "utf8" }).stdout)[0];
         expect(inspect.Mounts).toEqual([]);
-        expect(inspect.HostConfig.NetworkMode).toBe("none");
+        expect(inspect.NetworkSettings.Networks).toEqual({});
         expect(inspect.HostConfig.CapDrop).toEqual(["ALL"]);
+        for (const probe of NETWORK_PROBES) expect((await provider.exec(h, probe, { timeoutMs: 20_000 })).exitCode).not.toBe(0);
         const env = await provider.exec(h, "env | cut -d= -f1 | sort", { timeoutMs: 10_000 });
         expect(env.stdout.trim().split("\n")).toEqual(["BUN_INSTALL", "HOME", "HOSTNAME", "PATH", "PWD"]);
         const head = await provider.exec(h, "git rev-parse HEAD && git status --porcelain", { timeoutMs: 10_000 });
@@ -54,6 +56,8 @@ if (!docker.ok) {
     it("1. oracle + correct patch → RESOLVED", async () => {
       const r = await run("toy-discount", "oracle", "fix.patch");
       expect(r).toMatchObject({ finalState: "RESOLVED", repro: { atBase: { exitCode: 1 }, afterPatch: { exitCode: 0 } } });
+      expect(r.commands.filter((c) => c.phase === "NETWORK_OFF").map((c) => c.exitCode === 0)).toEqual([false, false]); // proven off
+      expect(r.commands.findIndex((c) => c.phase === "NETWORK_OFF")).toBeLessThan(r.commands.findIndex((c) => c.phase === "REPRODUCING"));
       expect(r.diff).toContain("+  return total * (1 - percent / 100);");
       expect(r.diff).not.toContain("repro"); // the repro test is never part of the agent's diff
     }, 120_000);

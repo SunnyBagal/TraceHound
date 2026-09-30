@@ -16,8 +16,10 @@ export interface ExecResult {
 
 export interface SandboxProvider {
   readonly name: string;
-  /** Start a sandbox with the repo checked out at /work. Cleans up after itself if it fails. */
-  create(opts: { image: string; source: SandboxSource; network?: boolean }): Promise<SandboxHandle>;
+  /** Start a sandbox (network ON, for clone and setup) with the repo at /work. Cleans up after itself if it fails. */
+  create(opts: { image: string; source: SandboxSource }): Promise<SandboxHandle>;
+  /** Cut the sandbox off from every network; the harness then proves it with outbound requests. */
+  disableNetwork(handle: SandboxHandle): Promise<void>;
   /** Run a shell command in /work. Never throws for a non-zero exit or a timeout. */
   exec(handle: SandboxHandle, cmd: string, opts: { timeoutMs: number }): Promise<ExecResult>;
   /** Relative paths are inside /work. */

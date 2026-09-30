@@ -421,7 +421,12 @@ TF-IDF: needs corpus statistics that a 9-component repo can't provide in any mea
     - Nothing is mounted. The repo goes in as a `git bundle --all` (committed history only, so
       untracked `.env`/keys can't come along) via `docker cp`.
     - No `-e`: the container's environment is exactly `BUN_INSTALL HOME HOSTNAME PATH PWD`.
-    - `--network none` unless the task sets `network: true`.
+    - **Network by phase (since 2026-09-30):** on during PREPARING_SANDBOX (clone and
+      setup, e.g. `bun install`). The harness then runs `docker network disconnect` and proves
+      the network is off with two outbound requests that must fail (a DNS name and a raw IP)
+      before REPRODUCING. REPRODUCING, PATCHING and VERIFYING run with no network: the agent
+      loop runs on the host, so the sandbox never needs network after setup. If a probe
+      succeeds, the run ends FAILED. The old per-task `network` flag is gone.
     - `--cap-drop ALL`, `no-new-privileges`, 2 GB memory, 2 CPUs, 512 pids.
   - **Timeouts:** each command runs under coreutils `timeout` inside the container, with a
     host-side kill as a backstop.
@@ -438,20 +443,27 @@ TF-IDF: needs corpus statistics that a 9-component repo can't provide in any mea
     does not reproduce". Then remove it, require a clean tree, and record the baseline:
     regression exit codes, plus `tsc --noEmit` error counts per package.
   - **PATCHING:** the agent gets only `AgentContext`: exec/readFile/writeFile scoped to its
-    sandbox, the issue, the limits, `reportUsage`, and optional graph tools. Each operation
+    sandbox, the issue, the limits, `llm.chat` (harness-metered), and optional graph tools. Each operation
     counts as a step. An agent error or a hit limit is recorded, and verification runs anyway.
   - **VERIFYING:** the harness itself extracts `git add -A && git diff --cached <baseSha>`, puts
     the repro back and runs it, then runs regressions and typecheck. **RESOLVED** only if the
     repro passes and nothing fails (or has more TS errors) that passed at baseline. Pre-existing
     failures, like CEX's Prisma import error, are reported as baseline, not regressions. Nothing
     the agent says is read.
-- **Terminal states:**
-  - **FAILED:** the task or infrastructure is at fault (repro doesn't reproduce, setup
-    fails or times out, harness/provider error).
-  - **CANCELLED:** stopped from outside (a signal) or the run's wall-clock limit is reached,
-    including a command cut short by that deadline.
-  - **UNRESOLVED:** the agent ran and verification says the bug isn't fixed, or something
-    regressed.
+- **Terminal states (revised):**
+  - **FAILED:** the task or infrastructure is at fault: repro doesn't reproduce, setup fails
+    or times out, the network is still reachable after disconnect, a harness/provider error,
+    or the wall-clock limit ran out before the agent started.
+  - **CANCELLED:** only an external signal (Ctrl-C, SIGTERM, explicit abort).
+  - **UNRESOLVED:** the agent ran and verification says the bug isn't fixed or something
+    regressed. It's also UNRESOLVED, with the reason `budget exhausted: <limit>`, if the agent
+    hit its wall-clock, step or token limit. VERIFYING still runs and is recorded, but a
+    budget-exhausted run is never RESOLVED.
+- **Token accounting:** the agent's model calls go through `ctx.llm.chat`, which wraps the
+  shared `TokenFactoryClient` (cache → budget → request → ledger). The harness counts calls,
+  input/output tokens and cost from the usage fields that client returns from the API
+  response. There's no channel for an agent to report its own usage, and anything it claims is
+  never read. The token limit is enforced on the harness's count.
 - Every run writes `runs/<runId>.json`: task, provider, agent, image, state history with
   timestamps, diff, every command (phase, actor, exit code, duration, timeout flag, output
   tails), baseline vs final, tokens/cost (0 for scripted agents), final state + reason, and

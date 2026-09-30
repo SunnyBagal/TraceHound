@@ -6,6 +6,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { NoopAgent, OracleAgent, type Agent } from "../src/harness/agents.ts";
 import type { ExecResult, SandboxHandle, SandboxProvider } from "../src/harness/provider.ts";
+import { fakeClient } from "./helpers.ts";
 import { runRepair } from "../src/harness/run.ts";
 import { loadTask, type LoadedTask, type TaskSpec } from "../src/harness/task.ts";
 
@@ -19,14 +20,22 @@ class FakeProvider implements SandboxProvider {
   files = new Map<string, string>();
   created = 0;
   destroyed: string[] = [];
+  network = false;
+  disconnectWorks = true;
   onExec?: (cmd: string) => ExecResult | undefined | Promise<ExecResult | undefined>;
   async create(): Promise<SandboxHandle> {
     this.created++;
+    this.network = true; // like Docker: on while preparing
     return { id: `fake-${this.created}`, provider: this.name };
+  }
+  async disableNetwork() {
+    if (this.disconnectWorks) this.network = false;
   }
   async exec(_h: SandboxHandle, cmd: string, opts: { timeoutMs: number }): Promise<ExecResult> {
     const custom = await this.onExec?.(cmd);
     if (custom) return custom;
+    if (cmd.startsWith("curl")) return this.network ? ok() : fail(6);
+    if (cmd.startsWith("needs-network")) return this.network ? ok() : fail(6);
     if (cmd.startsWith("run-repro")) return this.files.get("state") === "fixed" || this.files.get("state") === "broken" ? ok() : fail();
     if (cmd.startsWith("run-regression")) return this.files.get("state") === "broken" ? fail() : ok();
     if (cmd.startsWith("git add -A")) return ok(`diff for ${this.files.get("state") ?? "nothing"}`);
@@ -50,7 +59,6 @@ function task(overrides: Partial<TaskSpec> = {}): LoadedTask {
     id: "fake",
     source: { localPath: "/nowhere" },
     baseSha: SHA,
-    network: false,
     setup: [],
     issue: "it is broken",
     repro: { testFile: "repro.test.ts", dest: "repro/x.test.ts", command: "run-repro" },
@@ -72,7 +80,7 @@ describe("runRepair state machine (fake provider)", () => {
     expect(r.repro).toEqual({ atBase: { exitCode: 1, timedOut: false }, afterPatch: { exitCode: 0, timedOut: false } });
     expect(r.diff).toBe("diff for fixed");
     expect(provider.destroyed).toEqual(["fake-1"]);
-    expect(r.usage).toEqual({ tokens: 0, costUSD: 0 });
+    expect(r.usage).toEqual({ llmCalls: 0, inputTokens: 0, outputTokens: 0, tokens: 0, costUSD: 0 });
   });
 
   it("UNRESOLVED names the regression that newly fails", async () => {
@@ -134,26 +142,53 @@ describe("runRepair state machine (fake provider)", () => {
     expect(provider.destroyed).toEqual(["fake-1"]);
   });
 
-  it("CANCELLED on abort and on the wall-clock limit; destroy runs both times", async () => {
-    const aborted = new FakeProvider();
-    const ac = new AbortController();
-    const r1 = await runRepair({ task: task(), agent: { name: "aborter", run: async (ctx) => (ac.abort(), void (await ctx.exec("echo"))) }, provider: aborted, image: "img", signal: ac.signal });
-    expect(r1).toMatchObject({ finalState: "CANCELLED", reason: "cancelled by signal" });
-    expect(aborted.destroyed).toHaveLength(1);
-
-    const slow = new FakeProvider();
-    slow.onExec = async (cmd) => (cmd === "run-regression" ? (await new Promise((r) => setTimeout(r, 60)), undefined) : undefined);
-    const r2 = await runRepair({ task: task({ limits: { steps: 10, wallClockMs: 50, tokens: 0, commandTimeoutMs: 5_000 } }), agent: new NoopAgent(), provider: slow, image: "img" });
-    expect(r2.finalState).toBe("CANCELLED");
-    expect(r2.reason).toMatch(/^wall-clock limit 50ms reached/);
-    expect(slow.destroyed).toHaveLength(1);
+  it("network: on for setup, then disconnected and proven off before REPRODUCING", async () => {
+    const provider = new FakeProvider();
+    const r = await runRepair({ task: task({ setup: ["needs-network"] }), agent: new NoopAgent(), provider, image: "img" });
+    expect(r.finalState).toBe("UNRESOLVED"); // noop: repro still fails
+    const phases = r.commands.map((c) => `${c.phase}:${c.cmd.split(" ")[0]}:${c.exitCode}`);
+    expect(phases.slice(0, 4)).toEqual(["PREPARING_SANDBOX:git:0", "PREPARING_SANDBOX:needs-network:0", "NETWORK_OFF:curl:6", "NETWORK_OFF:curl:6"]);
+    expect(r.commands.find((c) => c.phase === "REPRODUCING")).toBeDefined();
   });
 
-  it("the step limit stops the agent; verification still decides the outcome", async () => {
+  it("FAILED if the network is still reachable after disconnecting", async () => {
+    const provider = new FakeProvider();
+    provider.disconnectWorks = false;
+    const r = await runRepair({ task: task(), agent: new NoopAgent(), provider, image: "img" });
+    expect(r).toMatchObject({ finalState: "FAILED", reason: "network is still reachable after disconnecting: curl -sS -o /dev/null --max-time 5 https://registry.npmjs.org/" });
+    expect(r.states.map((x) => x.state)).not.toContain("REPRODUCING");
+    expect(provider.destroyed).toHaveLength(1);
+  });
+
+  it("CANCELLED only for an external signal; destroy still runs", async () => {
+    const provider = new FakeProvider();
+    const ac = new AbortController();
+    const r = await runRepair({ task: task(), agent: { name: "aborter", run: async (ctx) => (ac.abort(), void (await ctx.exec("echo"))) }, provider, image: "img", signal: ac.signal });
+    expect(r).toMatchObject({ finalState: "CANCELLED", reason: "cancelled by signal" });
+    expect(provider.destroyed).toHaveLength(1);
+  });
+
+  it('an agent past its wall-clock limit is UNRESOLVED "budget exhausted", not CANCELLED', async () => {
+    const provider = new FakeProvider();
+    const sleeper: Agent = { name: "sleeper", run: async (ctx) => { await new Promise((r) => setTimeout(r, 80)); await ctx.exec("echo late"); } };
+    const r = await runRepair({ task: task({ limits: { steps: 10, wallClockMs: 60, tokens: 0, commandTimeoutMs: 5_000 } }), agent: sleeper, provider, image: "img" });
+    expect(r).toMatchObject({ finalState: "UNRESOLVED", reason: "budget exhausted: wall-clock 60ms" });
+    expect(r.states.map((x) => x.state)).toContain("VERIFYING"); // the harness still records what the repo looks like
+    expect(provider.destroyed).toHaveLength(1);
+  });
+
+  it('the step limit ends the run UNRESOLVED "budget exhausted: steps N"', async () => {
     const looper: Agent = { name: "looper", run: async (ctx) => { for (;;) await ctx.exec("echo busy"); } };
     const r = await runRepair({ task: task({ limits: { steps: 3, wallClockMs: 60_000, tokens: 0, commandTimeoutMs: 5_000 } }), agent: looper, provider: new FakeProvider(), image: "img" });
-    expect(r.agentRun).toEqual({ steps: 4, stoppedBy: "step limit 3 reached" });
-    expect(r.finalState).toBe("UNRESOLVED");
+    expect(r.agentRun).toEqual({ steps: 3, budgetExhausted: "steps 3" });
+    expect(r).toMatchObject({ finalState: "UNRESOLVED", reason: "budget exhausted: steps 3" });
+  });
+
+  it("even a fixed repo is UNRESOLVED when the agent ran out of budget", async () => {
+    const fixThenLoop: Agent = { name: "fix-then-loop", run: async (ctx) => { await ctx.writeFile("state", "fixed"); for (;;) await ctx.exec("echo"); } };
+    const r = await runRepair({ task: task({ limits: { steps: 2, wallClockMs: 60_000, tokens: 0, commandTimeoutMs: 5_000 } }), agent: fixThenLoop, provider: new FakeProvider(), image: "img" });
+    expect(r.repro.afterPatch!.exitCode).toBe(0);
+    expect(r).toMatchObject({ finalState: "UNRESOLVED", reason: "budget exhausted: steps 2" });
   });
 
   it("an agent error (e.g. a patch that doesn't apply) is recorded, not trusted, and verification still runs", async () => {
@@ -165,6 +200,43 @@ describe("runRepair state machine (fake provider)", () => {
   });
 });
 
+describe("token accounting (0g): the harness counts, from API usage, through the shared client", () => {
+  const completion = (prompt: number, completion: number) =>
+    new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }], usage: { prompt_tokens: prompt, completion_tokens: completion, total_tokens: prompt + completion } }));
+  const request = (content: string) => ({ model: "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", temperature: 0, max_tokens: 100, messages: [{ role: "user" as const, content }] });
+
+  it("sums usage fields from the responses, ledgers each call, and ignores anything the agent claims", async () => {
+    const responses = [completion(120, 30), completion(200, 50)];
+    const { client, ledger } = fakeClient((async () => responses.shift()!) as unknown as typeof fetch);
+    const claimer: Agent = {
+      name: "claimer",
+      run: async (ctx) => {
+        await ctx.llm!.chat(request("one"));
+        await ctx.llm!.chat(request("two"));
+        // there is no API to self-report usage; a claim like this is never read
+        (ctx as unknown as { usage: unknown }).usage = { tokens: 1, costUSD: 0 };
+      },
+    };
+    const r = await runRepair({ task: task({ limits: { steps: 10, wallClockMs: 60_000, tokens: 10_000, commandTimeoutMs: 5_000 } }), agent: claimer, provider: new FakeProvider(), image: "img", llm: client });
+    expect(r.usage).toMatchObject({ llmCalls: 2, inputTokens: 320, outputTokens: 80, tokens: 400 });
+    expect(r.usage.costUSD).toBeCloseTo(ledger.entries().reduce((n, e) => n + e.estCostUSD, 0), 10);
+    expect(ledger.entries().map((e) => [e.inputTokens, e.outputTokens, e.purpose])).toEqual([[120, 30, "repair-agent:claimer"], [200, 50, "repair-agent:claimer"]]);
+  });
+
+  it('crossing the token limit ends UNRESOLVED "budget exhausted: tokens N"', async () => {
+    const { client } = fakeClient((async () => completion(900, 200)) as unknown as typeof fetch);
+    const chatty: Agent = { name: "chatty", run: async (ctx) => { for (let i = 0; ; i++) await ctx.llm!.chat(request(`msg ${i}`)); } };
+    const r = await runRepair({ task: task({ limits: { steps: 10, wallClockMs: 60_000, tokens: 2_000, commandTimeoutMs: 5_000 } }), agent: chatty, provider: new FakeProvider(), image: "img", llm: client });
+    expect(r).toMatchObject({ finalState: "UNRESOLVED", reason: "budget exhausted: tokens 2000" });
+    expect(r.usage).toMatchObject({ llmCalls: 2, tokens: 2200 });
+  });
+
+  it("scripted agents have no model client and use 0 tokens", async () => {
+    const r = await runRepair({ task: task(), agent: new NoopAgent(), provider: new FakeProvider(), image: "img" });
+    expect(r.usage).toEqual({ llmCalls: 0, inputTokens: 0, outputTokens: 0, tokens: 0, costUSD: 0 });
+  });
+});
+
 describe("task.json", () => {
   it("resolves paths against the task dir and rejects a repro dest outside the repo", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "tracehound-task-"));
@@ -173,7 +245,7 @@ describe("task.json", () => {
     writeFileSync(path.join(dir, "task.json"), JSON.stringify(spec));
     const t = loadTask(path.join(dir, "task.json"));
     expect(t.localPath).toBe(path.resolve(dir, "../repo"));
-    expect(t.spec).toMatchObject({ network: false, setup: [], regression: [], limits: { commandTimeoutMs: 120_000 } });
+    expect(t.spec).toMatchObject({ setup: [], regression: [], limits: { commandTimeoutMs: 120_000 } });
     writeFileSync(path.join(dir, "task.json"), JSON.stringify({ ...spec, repro: { ...spec.repro, dest: "../escape.test.ts" } }));
     expect(() => loadTask(path.join(dir, "task.json"))).toThrow(/repro.dest must be a path inside the repo/);
   });

@@ -12,7 +12,6 @@ export const TaskSpec = z.object({
   source: z.union([z.object({ gitUrl: z.string().min(1) }).strict(), z.object({ localPath: z.string().min(1) }).strict()]),
   baseSha: Sha, // the buggy commit
   image: z.string().optional(), // default: the pinned sandbox image
-  network: z.boolean().default(false), // container network during the whole run
   setup: z.array(z.string()).default([]), // run in /work after checkout; each must exit 0
   issue: z.string().min(1),
   repro: z.object({
@@ -24,8 +23,8 @@ export const TaskSpec = z.object({
   typecheck: z.object({ packages: z.array(z.string()).min(1), command: z.string().default("tsc --noEmit") }).optional(),
   limits: z.object({
     steps: z.number().int().positive(), // provider operations the agent may make
-    wallClockMs: z.number().int().positive(), // whole run, create to destroy
-    tokens: z.number().int().nonnegative(), // model tokens the agent may report (0 for scripted agents)
+    wallClockMs: z.number().int().positive(), // from create; exceeded in PATCHING = budget exhausted, before it = FAILED
+    tokens: z.number().int().nonnegative(), // model tokens the agent may use, counted by the harness from API usage
     commandTimeoutMs: z.number().int().positive().default(120_000), // per harness/agent command
   }),
 });

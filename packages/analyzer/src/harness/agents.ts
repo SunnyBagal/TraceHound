@@ -1,5 +1,6 @@
 // Agents act only through AgentContext: provider operations scoped to one sandbox, the issue text,
 // the limits and (optionally) graph tools. They never see the handle, the task dir or the repro test.
+import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import type { ExecResult } from "./provider.ts";
 import type { TaskSpec } from "./task.ts";
 
@@ -9,8 +10,12 @@ export interface AgentContext {
   exec(cmd: string, opts?: { timeoutMs?: number }): Promise<ExecResult>;
   writeFile(path: string, content: string): Promise<void>;
   readFile(path: string): Promise<string>;
-  /** Model usage, for agents that call one (scripted agents report nothing: 0 tokens, $0). */
-  reportUsage(usage: { tokens: number; costUSD: number }): void;
+  /**
+   * Model calls go through the harness's shared client (cache → budget → request → ledger). The
+   * harness counts tokens and cost from the API responses' usage fields; agents can't report their
+   * own. Absent when the run has no client (scripted agents).
+   */
+  llm?: { chat(request: ChatRequest): Promise<ChatResult> };
   /** Read-only graph tools over the target's snapshot, when the harness has one. */
   graph?: {
     searchComponents(query: string): unknown;

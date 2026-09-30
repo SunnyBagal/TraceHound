@@ -2,7 +2,8 @@
 // - nothing from the host is mounted; the repo goes in as a `git bundle` of committed history
 //   (untracked files such as .env can't be in it), copied with `docker cp`
 // - no -e/--env-file: the container sees only the image's own environment
-// - --network none unless the task asks for network; no capabilities; memory/cpu/pid limits
+// - network only while preparing (clone + setup); the harness then disconnects it and proves it's
+//   off before REPRODUCING; no capabilities; memory/cpu/pid limits
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -72,7 +73,7 @@ export class LocalDockerProvider implements SandboxProvider {
     if (r.exitCode !== 0) throw new Error(`docker build ${image} failed: ${r.stderr.slice(-2000)}`);
   }
 
-  async create(opts: { image: string; source: SandboxSource; network?: boolean }): Promise<SandboxHandle> {
+  async create(opts: { image: string; source: SandboxSource }): Promise<SandboxHandle> {
     const name = `th-${randomUUID().slice(0, 12)}`;
     const handle: SandboxHandle = { id: name, provider: this.name };
     const scratch = mkdtempSync(path.join(tmpdir(), "tracehound-src-"));
@@ -82,7 +83,7 @@ export class LocalDockerProvider implements SandboxProvider {
       this.#live.add(name);
       const created = await run("docker", [
         "create", "--name", name, "--label", "tracehound.sandbox=1",
-        "--network", opts.network ? "bridge" : "none",
+        "--network", "bridge",
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
         "--memory", "2g", "--cpus", "2", "--pids-limit", "512",
         "--workdir", WORKDIR, opts.image, "sleep", "infinity",
@@ -126,6 +127,11 @@ export class LocalDockerProvider implements SandboxProvider {
     const r = await run("docker", ["exec", "-w", WORKDIR, handle.id, "timeout", "-k", "2", String(secs), "sh", "-c", cmd], { timeoutMs: opts.timeoutMs + 10_000 });
     const hitLimit = (r.exitCode === 124 || r.exitCode === 137) && r.durationMs >= secs * 1000 - 250;
     return { ...r, timedOut: r.timedOut || hitLimit };
+  }
+
+  async disableNetwork(handle: SandboxHandle): Promise<void> {
+    const r = await run("docker", ["network", "disconnect", "--force", "bridge", handle.id], { timeoutMs: 60_000 });
+    if (r.exitCode !== 0) throw new Error(`docker network disconnect failed: ${r.stderr.trim()}`);
   }
 
   async writeFile(handle: SandboxHandle, file: string, content: string): Promise<void> {
