@@ -1,7 +1,7 @@
 {
   "id": "toy-already-passes",
   "source": { "localPath": "../../fixtures/.build/toy-cart" },
-  "baseSha": "6f7c30dab99e469b1ddb6a1c6c3b83dccc28787a",
+  "baseSha": "3582f355e884dc4512ee157ee59848796893ec27",
   "issue": "subtotal is wrong (it isn't: this task's repro passes at baseSha, so the run must end FAILED).",
   "repro": { "testFile": "repro.test.ts", "dest": "repro/subtotal.repro.test.ts", "command": "bun test ./repro/subtotal.repro.test.ts" },
   "regression": ["bun test ./tests"],

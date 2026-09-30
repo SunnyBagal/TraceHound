@@ -7,7 +7,7 @@ import path from "node:path";
 
 export const TOY_SOURCE = path.resolve(import.meta.dirname, "toy-cart");
 export const TOY_REPO = path.resolve(import.meta.dirname, ".build/toy-cart");
-export const TOY_BASE_SHA = "6f7c30dab99e469b1ddb6a1c6c3b83dccc28787a";
+export const TOY_BASE_SHA = "3582f355e884dc4512ee157ee59848796893ec27";
 
 const headOf = (dir: string) => {
   try {
