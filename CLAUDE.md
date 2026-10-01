@@ -38,7 +38,10 @@ on a canvas. Later: a graph-guided repair agent.
   `tracehound-sandbox:bun1.4.2-ts5.9.3-2` (`harness/sandbox.Dockerfile`, digest-pinned bases),
   `docker-provider@2`: uid 1000 (not root), caps dropped, 2 GB / 2 CPUs / 512 pids, no mounts or
   socket, network disconnected after setup and proven off, `--rm` plus a bounded lifetime so a
-  crashed harness can't leak a container. Each test-backed property and the gaps are listed in
+  crashed harness can't leak a container. A container that expires or disappears ends the run
+  FAILED "sandbox lifetime expired (N s)" / "sandbox container disappeared", never UNRESOLVED and
+  never a tool error the agent sees (decision 037); docker create/start/cp time out at
+  60/60/120 s. Each test-backed property and the gaps are listed in
   decision 036 and the README's Sandbox section. Run records carry `sandboxEnv` (image id, Docker
   and provider versions) and `snapshot` (path, analyzerVersion, commit, sha256, or `"none"`).
   The sandbox's history is squashed to one fixed `base` commit after setup (no `git log -p`

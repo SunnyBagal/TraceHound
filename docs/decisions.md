@@ -1039,3 +1039,54 @@ the same interface, once access exists, with the parked spike as its starting po
 **Rejected:** (a) Waiting for Sandboxes: no date, and the evaluation needs a sandbox now.
 (b) gVisor/Firecracker for a stronger boundary: not available on the macOS dev machine or by
 default on GitHub runners, and more setup for judges to reproduce.
+
+## 037 · A sandbox that expires or disappears is a harness failure with a named reason
+**Context:** decision 036 gave each container a lifetime (`--rm` plus a bounded `sleep`; for
+toy-discount 600 s + 8 × 60 s + 10 min = 1,680 s, against an estimated worst case of about
+1,216 s for a run that reaches a verdict). If it expired anyway, or the container vanished
+otherwise, nothing named it. A failed `docker exec` reached the agent as a tool error (and cost a
+step). The run ended FAILED with an unrelated reason ("could not extract the diff (exit 1)").
+Worst, a container killed during VERIFYING after the repro made the regression and typecheck
+"fail", which recorded **UNRESOLVED** "regression … now fails (exit 1; passed at baseline);
+typecheck . failed (exit 1) without TS errors": indistinguishable from an agent breaking the
+tests (reproduced by the test below with the fix reverted).
+**Choice:**
+- **Detection:** `LocalDockerProvider.status()` (`docker inspect --format {{.State.Running}}`
+  → running / stopped / gone / unknown). A gone or stopped container raises `SandboxGoneError`,
+  which is never a tool result and never a test result:
+  - `exec`, `writeFile`, `readFile` and `disableNetwork` raise it when docker's own error says
+    "No such container" / "is not running" *and* `status()` confirms. A command that merely
+    prints those words doesn't trigger it.
+  - The harness's `sh` checks `status()` after **every** failed or timed-out command, in every
+    phase. This also catches a container killed *during* a command, where docker reports no
+    such text. So before VERIFYING records any failed repro, regression or typecheck result,
+    the container is confirmed running.
+- **Outcome:** the run ends immediately as **FAILED** with
+  `sandbox lifetime expired (<N> s)` when the handle's deadline has passed (`expiresAt`, set
+  just before `docker start`; 2 s tolerance), else `sandbox container disappeared`. The agent
+  is not given the error, and the call is not counted as a step (the agent's step counter is
+  decremented). A dead container can no longer produce UNRESOLVED.
+- **Truthful cleanup:** `sandbox.removedBy` is `harness` (the provider's `destroy()` removed a
+  container that still existed), `lifetime` (it was gone and its deadline had passed) or
+  `unknown`. `destroyed` is true only if `status()` says gone afterwards. `docker rm -f` exits 0
+  even for a container that no longer exists, so `destroy()` checks status first. The record
+  also keeps `lifetimeMs`.
+- **Timeouts for the docker calls that had none:** `docker create` 60 s, `docker start` 60 s,
+  `docker cp` of the repo bundle 120 s (`DOCKER_TIMEOUTS`; overridable per provider). A timeout
+  names the step: "docker cp of the repo bundle timed out after 120 s". The run ends FAILED and
+  the half-made container is removed.
+- **Tests** (`harness-expiry.test.ts`, Docker), each failing with its fix reverted:
+  - lifetime 40 s, expiring during PATCHING → FAILED "sandbox lifetime expired (40 s)". The
+    agent's second call got no result, the model never saw the error, steps = 1, removedBy
+    `lifetime`. Reverted: FAILED "could not extract the diff (exit 1)" after the agent saw the
+    error.
+  - container removed between two VERIFYING regressions → FAILED "sandbox container
+    disappeared", no `final` checks recorded. Reverted: UNRESOLVED with the regression/typecheck
+    reason above.
+  - a `docker cp` that hangs (a wrapper CLI) with a 2 s cp timeout → FAILED "harness error:
+    docker cp of the repo bundle timed out after 2 s" within seconds, container gone. Reverted:
+    hung 60 s, then failed differently.
+**Rejected:** (a) Retrying in a fresh sandbox: the agent's state is gone, and a retry hides an
+infrastructure problem the record should show. (b) Detecting by stderr text alone: an agent
+command can print "No such container". (c) Extending the lifetime instead: it only moves the
+edge; the outcome has to be right when it's hit.

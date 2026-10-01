@@ -6,7 +6,7 @@ import { BudgetExceededError } from "../llm/budget.ts";
 import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import { AgentStopped, type Agent, type AgentContext } from "./agents.ts";
 import { SCRATCH } from "./tools.ts";
-import type { ExecResult, SandboxDescription, SandboxHandle, SandboxProvider, SandboxSource } from "./provider.ts";
+import { SandboxGoneError, type ExecResult, type SandboxDescription, type SandboxHandle, type SandboxProvider, type SandboxSource } from "./provider.ts";
 import { BUN_TEST_FILE_PATTERN, type LoadedTask, type TaskSpec } from "./task.ts";
 
 export type RunState = "PREPARING_SANDBOX" | "REPRODUCING" | "PATCHING" | "VERIFYING" | "RESOLVED" | "UNRESOLVED" | "FAILED" | "CANCELLED";
@@ -46,7 +46,19 @@ export interface RunRecord {
   states: { state: RunState; at: string; note?: string }[];
   finalState?: RunState;
   reason?: string;
-  sandbox: { id?: string; createStartedAt?: string; createdAt?: string; networkOffAt?: string; destroyedAt?: string; createToDestroyMs?: number; destroyed: boolean };
+  sandbox: {
+    id?: string;
+    createStartedAt?: string;
+    createdAt?: string;
+    networkOffAt?: string;
+    destroyedAt?: string;
+    createToDestroyMs?: number;
+    /** true only when the container is verifiably gone after cleanup */
+    destroyed: boolean;
+    /** decision 037: who removed it - the harness's destroy(), its own lifetime deadline, or unknown */
+    removedBy?: "harness" | "lifetime" | "unknown";
+    lifetimeMs?: number;
+  };
   commands: CommandRecord[];
   repro: { atBase?: { exitCode: number; timedOut: boolean }; afterPatch?: { exitCode: number; timedOut: boolean } };
   baseline?: CheckResults;
@@ -99,15 +111,30 @@ export const NETWORK_PROBES = ["curl -sS -o /dev/null --max-time 5 https://regis
 /** Runs a harness command in the sandbox and logs it; the harness's only way to execute. */
 export type Sh = (phase: Phase, cmd: string, opts?: { actor?: CommandRecord["actor"]; timeoutMs?: number }) => Promise<ExecResult>;
 
+/** The sandbox is still running? Checked after every failed command (decision 037). */
+async function assertAlive(provider: SandboxProvider, handle: SandboxHandle, what: string): Promise<void> {
+  const status = await provider.status?.(handle);
+  if (status === "gone" || status === "stopped") throw new SandboxGoneError(`${what}: sandbox ${handle.id} is ${status}`);
+}
+
 export function makeSh(provider: SandboxProvider, getHandle: () => SandboxHandle, log: CommandRecord[], defaultTimeoutMs: number, signal?: AbortSignal): Sh {
   return async (phase, cmd, opts = {}) => {
     if (signal?.aborted) throw new RunCancelled("cancelled by signal");
     const r = await provider.exec(getHandle(), cmd, { timeoutMs: opts.timeoutMs ?? defaultTimeoutMs });
     log.push({ phase, actor: opts.actor ?? "harness", cmd, exitCode: r.exitCode, durationMs: r.durationMs, timedOut: r.timedOut, stdoutTail: tail(r.stdout), stderrTail: tail(r.stderr) });
     if (signal?.aborted) throw new RunCancelled("cancelled by signal");
+    // a failed command in a dead sandbox is not a result: not for the agent, not for verification
+    if (r.exitCode !== 0 || r.timedOut) await assertAlive(provider, getHandle(), `${phase} command`);
     return r;
   };
 }
+
+/** "sandbox lifetime expired (N s)" when its deadline has passed, else "sandbox container disappeared". */
+export function sandboxGoneReason(handle: SandboxHandle | undefined, at = Date.now()): string {
+  return lifetimeExpired(handle, at) ? `sandbox lifetime expired (${Math.round(handle!.lifetimeMs! / 1000)} s)` : "sandbox container disappeared";
+}
+// the provider sets expiresAt just before `docker start`, so the real end is a little later
+const lifetimeExpired = (handle: SandboxHandle | undefined, at: number) => handle?.expiresAt !== undefined && handle.lifetimeMs !== undefined && at >= handle.expiresAt - 2000;
 
 async function mustPass(sh: Sh, phase: Phase, cmd: string, what: string, timeoutMs?: number): Promise<ExecResult> {
   const r = await sh(phase, cmd, { timeoutMs });
@@ -277,6 +304,8 @@ export interface RunOptions {
   graph?: AgentContext["graph"];
   /** The snapshot the agent's graph tools read (graph-on runs); recorded, never used to verify. */
   snapshot?: GraphSnapshotRef;
+  /** Override the sandbox's self-removal deadline (default: derived from the task's limits). */
+  sandboxLifetimeMs?: number;
   /** Abort the run (Ctrl-C, SIGTERM, explicit cancel): it ends CANCELLED after cleanup. */
   signal?: AbortSignal;
   onState?: (state: RunState, note?: string) => void;
@@ -308,8 +337,17 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
   };
   let handle: SandboxHandle | undefined;
   const sh = makeSh(provider, () => handle!, record.commands, spec.limits.commandTimeoutMs, opts.signal);
+  /** A provider file operation; a failure in a dead sandbox becomes SandboxGoneError. */
+  const guarded = async <T>(what: string, fn: () => Promise<T>): Promise<T> => {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!(error instanceof SandboxGoneError) && handle) await assertAlive(provider, handle, what);
+      throw error;
+    }
+  };
   const runRepro = async (phase: Phase) => {
-    await provider.writeFile(handle!, spec.repro.dest, task.reproContent);
+    await guarded("copying the repro test", () => provider.writeFile(handle!, spec.repro.dest, task.reproContent));
     const r = await sh(phase, spec.repro.command);
     // remove the file AND any directories created for it: an empty repro/ dir would show up in
     // the agent's list_dir (git status can't see empty directories)
@@ -327,7 +365,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     // the run's own budget plus every verification command at its timeout, and margin
     const verifyCommands = spec.regression.length + (spec.typecheck?.packages.length ?? 0) + spec.setup.length + 6;
     const prepared = await prepareSandbox({
-      maxLifetimeMs: spec.limits.wallClockMs + verifyCommands * spec.limits.commandTimeoutMs + 10 * 60_000,
+      maxLifetimeMs: opts.sandboxLifetimeMs ?? spec.limits.wallClockMs + verifyCommands * spec.limits.commandTimeoutMs + 10 * 60_000,
       provider,
       image,
       source,
@@ -384,12 +422,34 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
       },
       exec: async (cmd, o) => {
         step();
-        const r = await sh("PATCHING", cmd, { actor: "agent", timeoutMs: Math.max(1000, Math.min(o?.timeoutMs ?? spec.limits.commandTimeoutMs, deadline - Date.now())) });
+        let r: ExecResult;
+        try {
+          r = await sh("PATCHING", cmd, { actor: "agent", timeoutMs: Math.max(1000, Math.min(o?.timeoutMs ?? spec.limits.commandTimeoutMs, deadline - Date.now())) });
+        } catch (error) {
+          if (error instanceof SandboxGoneError) steps--; // the harness's failure, not an agent step
+          throw error;
+        }
         if (r.timedOut && Date.now() >= deadline - 500) throw new BudgetExhausted(`wall-clock ${spec.limits.wallClockMs}ms`);
         return r;
       },
-      writeFile: async (p, content) => (step(), provider.writeFile(handle!, p, content)),
-      readFile: async (p) => (step(), provider.readFile(handle!, p)),
+      writeFile: async (p, content) => {
+        step();
+        try {
+          return await guarded(`writeFile ${p}`, () => provider.writeFile(handle!, p, content));
+        } catch (error) {
+          if (error instanceof SandboxGoneError) steps--;
+          throw error;
+        }
+      },
+      readFile: async (p) => {
+        step();
+        try {
+          return await guarded(`readFile ${p}`, () => provider.readFile(handle!, p));
+        } catch (error) {
+          if (error instanceof SandboxGoneError) steps--;
+          throw error;
+        }
+      },
       step: () => step(),
       stepsUsed: () => steps,
       ...(opts.llm && {
@@ -432,7 +492,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     try {
       await agent.run(ctx);
     } catch (error) {
-      if (error instanceof RunCancelled || error instanceof RunFailed) throw error; // an infrastructure fault (e.g. a harness probe), not the agent's
+      if (error instanceof RunCancelled || error instanceof RunFailed || error instanceof SandboxGoneError) throw error; // an infrastructure fault, not the agent's
       if (error instanceof BudgetExhausted) record.agentRun.budgetExhausted = error.message;
       else if (error instanceof AgentStopped) record.agentRun.stopped = error.message;
       else record.agentRun.error = (error as Error).message;
@@ -468,12 +528,18 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
       );
   } catch (error) {
     if (error instanceof RunCancelled) finish("CANCELLED", error.message);
+    else if (error instanceof SandboxGoneError) finish("FAILED", sandboxGoneReason(handle));
     else if (error instanceof RunFailed) finish("FAILED", error.message);
     else finish("FAILED", `harness error: ${(error as Error).message}`);
   } finally {
     if (handle) {
+      const endedAt = Date.now();
       await provider.destroy(handle).catch((e: Error) => (record.reason += `; destroy failed: ${e.message}`));
-      record.sandbox.destroyed = true;
+      const removedByHarness = provider.removedByHarness?.(handle) ?? true;
+      record.sandbox.removedBy = removedByHarness ? "harness" : lifetimeExpired(handle, endedAt) ? "lifetime" : "unknown";
+      const status = await provider.status?.(handle);
+      record.sandbox.destroyed = status === undefined || status === "gone";
+      if (handle.lifetimeMs !== undefined) record.sandbox.lifetimeMs = handle.lifetimeMs;
       record.sandbox.destroyedAt = now();
       record.sandbox.createToDestroyMs = Date.parse(record.sandbox.destroyedAt) - Date.parse(record.sandbox.createStartedAt!);
     }
