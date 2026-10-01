@@ -1,6 +1,7 @@
 // tracehound repair --task <task.json> --agent oracle|noop|nemotron [--patch <file>] [--graph on|off]
 //                   [--reasoning on|off] [--decider lexical|nemotron] --provider docker [--runs-dir runs]
 // Exit code: 0 RESOLVED · 1 UNRESOLVED · 2 FAILED/CANCELLED · 3 bad arguments / Docker unavailable.
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -9,7 +10,7 @@ import { loadSnapshot } from "../agent/query.ts";
 import { NoopAgent, OracleAgent, type Agent } from "./agents.ts";
 import { RepairLoopAgent, type LoopOptions } from "./loop.ts";
 import { DockerUnavailableError, LocalDockerProvider, SANDBOX_IMAGE } from "./docker.ts";
-import { runRepair, type RunRecord } from "./run.ts";
+import { runRepair, type GraphSnapshotRef, type RunRecord } from "./run.ts";
 import { loadTask } from "./task.ts";
 
 const WORKSPACE_ROOT = path.resolve(import.meta.dirname, "../../../..");
@@ -39,7 +40,7 @@ export async function main(argv: string[]): Promise<number> {
   });
   const fail = (msg: string) => (console.error(`✖ ${msg}`), 3);
   if (!values.task || !values.agent) return fail(USAGE);
-  if (values.provider !== "docker") return fail(`unknown provider "${values.provider}" (only docker; Contree comes after the Sandboxes spike)\n${USAGE}`);
+  if (values.provider !== "docker") return fail(`unknown provider "${values.provider}" (only docker: local Docker is the sandbox of record, decision 036)\n${USAGE}`);
   let agent: Agent | undefined;
   if (values.agent === "oracle") {
     if (!values.patch) return fail(`--agent oracle needs --patch <file>\n${USAGE}`);
@@ -52,13 +53,21 @@ export async function main(argv: string[]): Promise<number> {
 
   const task = loadTask(values.task);
   let llm: ReturnType<typeof createTokenFactoryClient>["client"] | undefined;
+  let snapshotRef: GraphSnapshotRef | undefined;
   if (values.agent === "nemotron") {
     let graph: LoopOptions["graph"];
     if (values.graph === "on") {
       if (!task.spec.snapshot) return fail(`--graph on needs a "snapshot" in ${values.task}`);
-      const { snapshot } = loadSnapshot(path.resolve(task.dir, task.spec.snapshot));
+      const file = path.resolve(task.dir, task.spec.snapshot);
+      const { snapshot } = loadSnapshot(file);
       if (snapshot.repo.commitSha !== task.spec.baseSha) return fail(`snapshot is for ${snapshot.repo.commitSha}, task baseSha is ${task.spec.baseSha}`);
       graph = { snapshot, decider: values.decider as "lexical" | "nemotron" };
+      snapshotRef = {
+        path: path.relative(WORKSPACE_ROOT, file),
+        analyzerVersion: snapshot.analyzerVersion,
+        commitSha: snapshot.repo.commitSha,
+        sha256: createHash("sha256").update(readFileSync(file)).digest("hex"),
+      };
     }
     agent = new RepairLoopAgent({ reasoning: values.reasoning as "on" | "off", graph });
     // every model call: budget caps (TRACEHOUND_BUDGET_*) → request → ledger; cache reads off so each run is a real run
@@ -84,10 +93,14 @@ export async function main(argv: string[]): Promise<number> {
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
 
-  const record = await runRepair({ task, agent: agent!, provider, image, llm, signal: abort.signal, onState: (s, note) => console.error(`[repair] ${s}${note ? `: ${note}` : ""}`) });
+  const record = await runRepair({ task, agent: agent!, provider, image, llm, ...(snapshotRef && { snapshot: snapshotRef }), signal: abort.signal, onState: (s, note) => console.error(`[repair] ${s}${note ? `: ${note}` : ""}`) });
   const file = writeRun(record, path.resolve(values["runs-dir"]!));
   console.log(
     `${record.finalState} · ${record.taskId} · agent ${record.agent} · ${record.agentRun?.steps ?? 0} steps · ${record.usage.tokens} tokens · $${record.usage.costUSD.toFixed(5)} · ${record.sandbox.createToDestroyMs ?? "?"}ms create→destroy · ${record.reason}`,
+  );
+  const env = record.sandboxEnv;
+  console.log(
+    `sandbox: ${env ? `${env.providerVersion} · ${env.engineVersion ?? "engine ?"} · ${env.image} ${env.imageId ?? "(image id unknown)"}` : "(not described)"} · snapshot: ${record.snapshot === "none" ? "none" : `${record.snapshot.path} (${record.snapshot.analyzerVersion}, sha256 ${record.snapshot.sha256.slice(0, 12)}…)`}`,
   );
   console.log(`→ ${path.relative(process.cwd(), file)}`);
   return record.finalState === "RESOLVED" ? 0 : record.finalState === "UNRESOLVED" ? 1 : 2;

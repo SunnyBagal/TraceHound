@@ -14,10 +14,25 @@ export interface ExecResult {
   timedOut: boolean;
 }
 
+/** What a run record says about the sandbox it ran in (decision 036: reproducibility). */
+export interface SandboxDescription {
+  provider: string;
+  providerVersion: string;
+  engineVersion?: string; // e.g. the Docker server version
+  image: string;
+  imageId?: string; // content-addressed id of the image actually used
+}
+
 export interface SandboxProvider {
   readonly name: string;
-  /** Start a sandbox (network ON, for clone and setup) with the repo at /work. Cleans up after itself if it fails. */
-  create(opts: { image: string; source: SandboxSource }): Promise<SandboxHandle>;
+  /**
+   * Start a sandbox (network ON, for clone and setup) with the repo at /work. Cleans up after
+   * itself if it fails. `maxLifetimeMs`: the sandbox removes itself after this long even if the
+   * harness dies without calling destroy.
+   */
+  create(opts: { image: string; source: SandboxSource; maxLifetimeMs?: number }): Promise<SandboxHandle>;
+  /** Versions and the image id, for the run record. */
+  describe?(image: string): Promise<SandboxDescription>;
   /** Cut the sandbox off from every network; the harness then proves it with outbound requests. */
   disableNetwork(handle: SandboxHandle): Promise<void>;
   /** Run a shell command in /work. Never throws for a non-zero exit or a timeout. */

@@ -1,18 +1,26 @@
-// LocalDockerProvider (decision 026). Security rules:
+// LocalDockerProvider (decisions 026, 036: Docker is the sandbox of record). Security rules:
 // - nothing from the host is mounted; the repo goes in as a `git bundle` of committed history
 //   (untracked files such as .env can't be in it), copied with `docker cp`
 // - no -e/--env-file: the container sees only the image's own environment
 // - network only while preparing (clone + setup); the harness then disconnects it and proves it's
 //   off before REPRODUCING; no capabilities; memory/cpu/pid limits
+// - the container runs as the unprivileged image user (uid 1000), never root
+// - `--rm` plus a bounded `sleep` as PID 1: a container whose harness died without destroy()
+//   stops by itself at its deadline and Docker removes it (and any anonymous volumes)
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { cleanGitEnv } from "../git-env.ts";
-import type { ExecResult, SandboxHandle, SandboxProvider, SandboxSource } from "./provider.ts";
+import type { ExecResult, SandboxDescription, SandboxHandle, SandboxProvider, SandboxSource } from "./provider.ts";
 
-export const SANDBOX_IMAGE = "tracehound-sandbox:bun1.4.2-ts5.9.3-1";
+export const SANDBOX_IMAGE = "tracehound-sandbox:bun1.4.2-ts5.9.3-2";
+/** Bumped when the provider's isolation or record behavior changes. */
+export const DOCKER_PROVIDER_VERSION = "docker-provider@2";
+export const SANDBOX_UID = "1000:1000";
+/** Default self-removal deadline for a sandbox nobody destroys (overridden by the run's own limit). */
+const DEFAULT_MAX_LIFETIME_MS = 2 * 60 * 60_000;
 export const SANDBOX_DOCKERFILE = path.resolve(import.meta.dirname, "../../../../harness/sandbox.Dockerfile");
 const WORKDIR = "/work";
 const MAX_OUTPUT = 1_000_000; // bytes kept per stream
@@ -74,7 +82,7 @@ export class LocalDockerProvider implements SandboxProvider {
     if (r.exitCode !== 0) throw new Error(`docker build ${image} failed: ${r.stderr.slice(-2000)}`);
   }
 
-  async create(opts: { image: string; source: SandboxSource }): Promise<SandboxHandle> {
+  async create(opts: { image: string; source: SandboxSource; maxLifetimeMs?: number }): Promise<SandboxHandle> {
     const name = `th-${randomUUID().slice(0, 12)}`;
     const handle: SandboxHandle = { id: name, provider: this.name };
     const scratch = mkdtempSync(path.join(tmpdir(), "tracehound-src-"));
@@ -87,15 +95,19 @@ export class LocalDockerProvider implements SandboxProvider {
         "--network", "bridge",
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
         "--memory", "2g", "--cpus", "2", "--pids-limit", "512",
-        "--workdir", WORKDIR, opts.image, "sleep", "infinity",
+        "--user", SANDBOX_UID, "--rm",
+        "--workdir", WORKDIR, opts.image, "sleep", String(Math.ceil((opts.maxLifetimeMs ?? DEFAULT_MAX_LIFETIME_MS) / 1000)),
       ]);
       if (created.exitCode !== 0) throw new Error(`docker create failed: ${created.stderr.trim()}`);
       const started = await run("docker", ["start", name]);
       if (started.exitCode !== 0) throw new Error(`docker start failed: ${started.stderr.trim()}`);
       const cp = await run("docker", ["cp", bundle, `${name}:/tmp/src.bundle`]);
       if (cp.exitCode !== 0) throw new Error(`docker cp failed: ${cp.stderr.trim()}`);
-      const clone = await this.exec(handle, "git clone -q /tmp/src.bundle . && rm /tmp/src.bundle", { timeoutMs: 120_000 });
+      const clone = await this.exec(handle, "git clone -q /tmp/src.bundle .", { timeoutMs: 120_000 });
       if (clone.exitCode !== 0) throw new Error(`git clone in sandbox failed: ${clone.stderr.trim()}`);
+      // docker cp leaves the bundle owned by root in sticky /tmp: only root may delete it
+      const rmBundle = await run("docker", ["exec", "-u", "0", name, "rm", "-f", "/tmp/src.bundle"], { timeoutMs: 30_000 });
+      if (rmBundle.exitCode !== 0) throw new Error(`removing the clone bundle failed: ${rmBundle.stderr.trim()}`);
       return handle;
     } catch (error) {
       await this.destroy(handle);
@@ -120,6 +132,18 @@ export class LocalDockerProvider implements SandboxProvider {
     }
     const b = await run("git", ["-C", repo, "bundle", "create", bundle, "--all"], { timeoutMs: 10 * 60_000 });
     if (b.exitCode !== 0) throw new Error(`git bundle failed: ${b.stderr.trim()}`);
+  }
+
+  async describe(image: string): Promise<SandboxDescription> {
+    const engine = await run("docker", ["version", "--format", "{{.Server.Version}}"], { timeoutMs: 15_000 });
+    const id = await run("docker", ["image", "inspect", "--format", "{{.Id}}", image], { timeoutMs: 15_000 });
+    return {
+      provider: this.name,
+      providerVersion: DOCKER_PROVIDER_VERSION,
+      ...(engine.exitCode === 0 && { engineVersion: `docker ${engine.stdout.trim()}` }),
+      image,
+      ...(id.exitCode === 0 && { imageId: id.stdout.trim() }),
+    };
   }
 
   async exec(handle: SandboxHandle, cmd: string, opts: { timeoutMs: number }): Promise<ExecResult> {

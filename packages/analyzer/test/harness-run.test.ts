@@ -149,7 +149,7 @@ describe("runRepair state machine (fake provider)", () => {
     const r = await runRepair({ task: task({ setup: ["needs-network"] }), agent: new NoopAgent(), provider, image: "img" });
     expect(r.finalState).toBe("UNRESOLVED"); // noop: repro still fails
     const phases = r.commands.map((c) => `${c.phase}:${c.cmd.split(" ")[0]}:${c.exitCode}`);
-    expect(phases.slice(0, 6)).toEqual(["PREPARING_SANDBOX:git:0", "PREPARING_SANDBOX:needs-network:0", "PREPARING_SANDBOX:set:0", "PREPARING_SANDBOX:rm:0", "NETWORK_OFF:curl:6", "NETWORK_OFF:curl:6"]);
+    expect(phases.slice(0, 6)).toEqual(["PREPARING_SANDBOX:git:0", "PREPARING_SANDBOX:needs-network:0", "PREPARING_SANDBOX:set:0", "PREPARING_SANDBOX:mkdir:0", "NETWORK_OFF:curl:6", "NETWORK_OFF:curl:6"]);
     expect(r.commands[2]!.cmd).toBe(SQUASH_HISTORY);
     expect(r.commands[3]!.cmd).toBe(PREPARE_SCRATCH);
     expect(r.baseCommit).toBe("b".repeat(40));
@@ -240,6 +240,20 @@ describe("token accounting (0g): the harness counts, from API usage, through the
   it("scripted agents have no model client and use 0 tokens", async () => {
     const r = await runRepair({ task: task(), agent: new NoopAgent(), provider: new FakeProvider(), image: "img" });
     expect(r.usage).toEqual({ llmCalls: 0, inputTokens: 0, outputTokens: 0, tokens: 0, costUSD: 0 });
+  });
+});
+
+describe("run record: sandbox description and graph snapshot (decision 036)", () => {
+  it("records the provider's description, and the graph snapshot (or \"none\")", async () => {
+    const provider = new FakeProvider();
+    Object.assign(provider, { describe: async (image: string) => ({ provider: "fake", providerVersion: "fake@1", engineVersion: "fake 1.0", image, imageId: "sha256:" + "c".repeat(64) }) });
+    const off = await runRepair({ task: task(), agent: writer("fixed"), provider, image: "img" });
+    expect(off).toMatchObject({ snapshot: "none", sandboxEnv: { provider: "fake", providerVersion: "fake@1", engineVersion: "fake 1.0", image: "img", imageId: "sha256:" + "c".repeat(64) } });
+    const ref = { path: "snapshots/x/0.7.0.json", analyzerVersion: "0.7.0", commitSha: "a".repeat(40), sha256: "d".repeat(64) };
+    const on = await runRepair({ task: task(), agent: writer("fixed"), provider, image: "img", snapshot: ref });
+    expect(on.snapshot).toEqual(ref);
+    // a provider without describe() still runs; the record just lacks sandboxEnv
+    expect((await runRepair({ task: task(), agent: writer("fixed"), provider: new FakeProvider(), image: "img" })).sandboxEnv).toBeUndefined();
   });
 });
 

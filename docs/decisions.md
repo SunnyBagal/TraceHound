@@ -259,7 +259,8 @@ Nano), prose not verified". Naming is closed: no more prompt tweaks or model com
 Auth is `Authorization: Bearer <NEBIUS_API_KEY>` plus a `Project: <project id>` header. The
 repair harness will call this with `fetch` from TypeScript, the same way `TokenFactoryClient`
 does, and can generate types from the spec later if the surface grows.
-`scripts/sandbox-spike.ts` is the first client.
+`scripts/sandbox-spike.ts` is the first client. *(Parked by decision 036: the script now lives in
+`scripts/parked/`; Sandboxes aren't available on this account, and Docker is the sandbox of record.)*
 **Rejected:** A thin Python bridge around `contree-sdk` / `contree-client`. The SDK adds only
 convenience (image objects, branching helpers) over the same REST calls. The docs say
 `contree_sdk` "performs no auth, transport, or configuration of its own". A bridge would add a
@@ -432,7 +433,7 @@ TF-IDF: needs corpus statistics that a 9-component repo can't provide in any mea
     host-side kill as a backstop.
   - Docker tests run where `docker version` works (CI). Elsewhere they're skipped with a message.
 - **Contree:** there is no Contree provider yet. It comes after the Sandboxes spike, once beta
-  access is granted. The interface is shaped so it can be added without changing the harness.
+  access is granted. *(Superseded by decision 036: Docker is the sandbox of record.)* The interface is shaped so it can be added without changing the harness.
 - **Task spec** (`eval/tasks/<id>/task.json`): source + `baseSha`, setup commands, issue text,
   repro `{ testFile, dest, command }`, regression commands, optional typecheck packages, and
   limits (`steps`, `wallClockMs`, `tokens`, `commandTimeoutMs`). The repro test lives in the task
@@ -980,3 +981,47 @@ the Redis connection node: every queue on one connection would pair with every o
 (d) Treating every `.add(…)` as a producer: `Set.add` and friends would become queue edges. The
 receiver must resolve to a `new Queue` from bullmq. (e) Pairing names that aren't static by
 guesswork (env var names, the handler's job names): that would be an edge nobody can point to.
+
+## 036 · Docker is the sandbox of record
+**Why:** Nebius support (case **AISTUDIOSUP-1966**) replied that Token Factory Sandboxes are not
+yet ready to be used on this account. Since 2026-09-30 the beta request had left `/whoami` with
+every permission `false` and list/spawn returning 403 (FEEDBACK.md). There is no date to plan
+around, so the local Docker provider becomes the sandbox for development, evaluation, and for
+judges reproducing runs.
+**What changes:**
+- `scripts/sandbox-spike.ts` moves to `scripts/parked/` with a header pointing here; history is
+  kept. `NEBIUS_AI_PROJECT` is gone from `.env.example`: only `NEBIUS_API_KEY` is needed (for
+  Nemotron). The repair CLI's "Contree comes after the Sandboxes spike" message now cites this
+  decision. Decisions 022 and 026 keep their text, each with a pointer here.
+- **Isolation audit and fixes** (image `tracehound-sandbox:bun1.4.2-ts5.9.3-2`,
+  `docker-provider@2`). Each row is backed by a test in `harness-docker.test.ts` (runs where
+  Docker is available, including CI):
+
+  | Property | Status | Evidence |
+  |---|---|---|
+  | Network off after setup | **yes** | `docker network disconnect` before REPRODUCING (`run.ts` `prepareSandbox`), proven by two probes that must fail. From inside **PATCHING**: `curl https://registry.npmjs.org/` exit 6 (could not resolve host), `curl http://1.1.1.1/` exit 7 (couldn't connect), `getent hosts registry.npmjs.org` exit 2 |
+  | Runs as non-root | **yes (fixed)** | was uid 0. Now the image's `USER sandbox` (uid/gid 1000) plus `--user 1000:1000`. `id -u` → 1000; `touch /etc/x` → Permission denied; only `/work` and `/scratch` are writable |
+  | CPU, memory, pids limits | **yes** | `--memory 2g --cpus 2 --pids-limit 512` (`docker.ts`). Inspect: Memory 2147483648, NanoCpus 2000000000, PidsLimit 512 |
+  | Capabilities | **yes** | `--cap-drop ALL`, `--security-opt no-new-privileges`, not privileged |
+  | Host mounts / Docker socket | **none** | the repo goes in as a `git bundle` via `docker cp`. Inspect: Mounts `[]`, Binds `[]`; `/var/run/docker.sock` doesn't exist inside |
+  | Host environment | **none passed** | no `-e`; the env is the image's (`BUN_INSTALL HOME HOSTNAME PATH PWD`) |
+  | Removed after the run | **yes, incl. crash (fixed)** | `destroy()` (`docker rm -f`) in the harness's `finally` and the CLI's SIGINT/SIGTERM handler. New: `--rm` plus a bounded `sleep <lifetime>` instead of `sleep infinity`, so a sandbox whose harness died (SIGKILL) stops at its deadline and Docker removes it and its anonymous volumes. Test: created with a 4 s lifetime, never destroyed → gone. The lifetime is the task's wall clock + every verification command at its timeout + 10 min |
+  | Base image pinned | **yes** | both `FROM` lines carry `@sha256:` multi-arch index digests (test). Not pinned by digest: the `typescript@5.9.3` npm package (pinned by version) and the built image itself (built locally; its content id is recorded per run) |
+
+- **Not guaranteed by Docker here (gaps left):** containers share the host kernel (no VM
+  boundary; a kernel exploit escapes); no seccomp/AppArmor profile beyond Docker's default; the
+  root filesystem is writable by the sandbox user in its own dirs (not `--read-only`); no disk
+  quota on `/work` or `/tmp`; network isolation depends on Docker's bridge disconnect (proven per
+  run, not enforced by a firewall); on macOS everything runs inside Docker Desktop's VM, so the
+  numbers above are the VM's.
+- **Reproducibility in every run record:** `sandboxEnv { provider, providerVersion,
+  engineVersion, image, imageId }` (the image's content id from `docker image inspect`) and
+  `snapshot`: for graph-on runs `{ path, analyzerVersion, commitSha, sha256 }` of the snapshot
+  file the agent's graph tools read; for graph-off runs `"none"`.
+**What doesn't change:** the `SandboxProvider` interface (it gains an optional `describe()`
+and an optional `maxLifetimeMs` on `create`); harness-owned verification; network off after
+setup; the agent loop on the host. A Token Factory Sandboxes provider can be added later behind
+the same interface, once access exists, with the parked spike as its starting point.
+**Rejected:** (a) Waiting for Sandboxes: no date, and the evaluation needs a sandbox now.
+(b) gVisor/Firecracker for a stronger boundary: not available on the macOS dev machine or by
+default on GitHub runners, and more setup for judges to reproduce.

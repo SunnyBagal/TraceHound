@@ -6,7 +6,7 @@ import { BudgetExceededError } from "../llm/budget.ts";
 import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import { AgentStopped, type Agent, type AgentContext } from "./agents.ts";
 import { SCRATCH } from "./tools.ts";
-import type { ExecResult, SandboxHandle, SandboxProvider, SandboxSource } from "./provider.ts";
+import type { ExecResult, SandboxDescription, SandboxHandle, SandboxProvider, SandboxSource } from "./provider.ts";
 import { BUN_TEST_FILE_PATTERN, type LoadedTask, type TaskSpec } from "./task.ts";
 
 export type RunState = "PREPARING_SANDBOX" | "REPRODUCING" | "PATCHING" | "VERIFYING" | "RESOLVED" | "UNRESOLVED" | "FAILED" | "CANCELLED";
@@ -34,6 +34,10 @@ export interface RunRecord {
   provider: string;
   agent: string;
   image: string;
+  /** Decision 036: provider version, engine version and the image id actually used. */
+  sandboxEnv?: SandboxDescription;
+  /** The graph snapshot a graph-on run read (with the file's sha256); "none" for graph off. */
+  snapshot: GraphSnapshotRef | "none";
   baseSha: string;
   /** The sandbox's single squashed commit of baseSha's tree (after setup); diffs are taken against it. */
   baseCommit?: string;
@@ -63,6 +67,13 @@ export interface RunRecord {
     costUSD: number;
     calls?: { purpose: string; inputTokens: number; outputTokens: number; costUSD: number; latencyMs: number; cached: boolean }[];
   };
+}
+
+export interface GraphSnapshotRef {
+  path: string; // as given to the run (repo-relative where possible)
+  analyzerVersion: string;
+  commitSha: string;
+  sha256: string; // of the snapshot file's bytes
 }
 
 /** External stop only: Ctrl-C, SIGTERM, an explicit abort. */
@@ -157,7 +168,7 @@ export const repoStateCommand = (base: string) =>
   ].join("; ");
 
 /** agent-v4: an empty, writable /scratch outside the repo (never in the diff, never verified). */
-export const PREPARE_SCRATCH = `rm -rf ${SCRATCH} && mkdir -p ${SCRATCH}`;
+export const PREPARE_SCRATCH = `mkdir -p ${SCRATCH} && find ${SCRATCH} -mindepth 1 -delete`; // non-root: empty it, don't recreate it
 
 /** `git diff --name-status -z` output → paths by kind. */
 export function splitChanges(nameStatusZ: string): { modifiedBase: string[]; deletedBase: string[]; addedInRepo: string[] } {
@@ -188,12 +199,14 @@ export async function prepareSandbox(args: {
   signal?: AbortSignal;
   onHandle: (h: SandboxHandle) => void;
   timings?: Record<string, number>;
+  /** The sandbox removes itself after this long even if nobody destroys it. */
+  maxLifetimeMs?: number;
 }): Promise<{ handle: SandboxHandle; baseCommit: string }> {
   const t = (label: string, start: number) => args.timings && (args.timings[label] = Math.round(performance.now() - start));
   let handle: SandboxHandle | undefined;
   const sh = makeSh(args.provider, () => handle!, args.log, args.commandTimeoutMs, args.signal);
   let start = performance.now();
-  handle = await args.provider.create({ image: args.image, source: args.source });
+  handle = await args.provider.create({ image: args.image, source: args.source, ...(args.maxLifetimeMs && { maxLifetimeMs: args.maxLifetimeMs }) });
   args.onHandle(handle);
   t("create (clone + container)", start);
   start = performance.now();
@@ -262,6 +275,8 @@ export interface RunOptions {
   /** Shared LLM client (TokenFactoryClient: cache → budget → request → ledger); usage is counted from its results. */
   llm?: { chat(request: ChatRequest, meta: { purpose: string; componentId?: string }): Promise<ChatResult> };
   graph?: AgentContext["graph"];
+  /** The snapshot the agent's graph tools read (graph-on runs); recorded, never used to verify. */
+  snapshot?: GraphSnapshotRef;
   /** Abort the run (Ctrl-C, SIGTERM, explicit cancel): it ends CANCELLED after cleanup. */
   signal?: AbortSignal;
   onState?: (state: RunState, note?: string) => void;
@@ -278,6 +293,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     provider: provider.name,
     agent: agent.name,
     image,
+    snapshot: opts.snapshot ?? "none",
     baseSha: spec.baseSha,
     startedAt: new Date(started).toISOString(),
     states: [],
@@ -307,7 +323,11 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     enter("PREPARING_SANDBOX");
     const source: SandboxSource = "gitUrl" in spec.source ? { gitUrl: spec.source.gitUrl, sha: spec.baseSha } : { localPath: task.localPath! };
     record.sandbox.createStartedAt = now();
+    record.sandboxEnv = await provider.describe?.(image).catch(() => undefined);
+    // the run's own budget plus every verification command at its timeout, and margin
+    const verifyCommands = spec.regression.length + (spec.typecheck?.packages.length ?? 0) + spec.setup.length + 6;
     const prepared = await prepareSandbox({
+      maxLifetimeMs: spec.limits.wallClockMs + verifyCommands * spec.limits.commandTimeoutMs + 10 * 60_000,
       provider,
       image,
       source,

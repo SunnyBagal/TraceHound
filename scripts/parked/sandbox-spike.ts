@@ -1,3 +1,7 @@
+// PARKED (decision 036, 2026-10-01): Token Factory Sandboxes are not available on this account
+// (Nebius support case AISTUDIOSUP-1966), so local Docker is the sandbox of record. Kept for
+// history and for a future Sandboxes provider behind the same SandboxProvider interface; it is
+// not part of setup, CI or any run. Moved from scripts/sandbox-spike.ts.
 // Nebius Token Factory Sandboxes (Contree) spike: one disposable run, driven from TypeScript over REST.
 // Usage: node --env-file=.env scripts/sandbox-spike.ts   (needs NEBIUS_API_KEY and NEBIUS_AI_PROJECT)
 // API: https://eu-north.nebius.computer/static/api.yaml — base https://api.tokenfactory.nebius.com/sandboxes/v1,

@@ -6,7 +6,7 @@ import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildToyRepo, TOY_BASE_SHA } from "../../../eval/fixtures/build-toy-repo.ts";
 import { NoopAgent, OracleAgent, type Agent } from "../src/harness/agents.ts";
-import { dockerAvailable, LocalDockerProvider, SANDBOX_IMAGE } from "../src/harness/docker.ts";
+import { dockerAvailable, LocalDockerProvider, SANDBOX_DOCKERFILE, SANDBOX_IMAGE } from "../src/harness/docker.ts";
 import { NETWORK_PROBES, runRepair, type RunRecord } from "../src/harness/run.ts";
 import { loadTask } from "../src/harness/task.ts";
 
@@ -40,8 +40,19 @@ if (!docker.ok) {
         await provider.disableNetwork(h);
         const inspect = JSON.parse(spawnSync("docker", ["inspect", h.id], { encoding: "utf8" }).stdout)[0];
         expect(inspect.Mounts).toEqual([]);
+        expect(inspect.HostConfig.Binds ?? []).toEqual([]); // no host paths, no docker.sock
         expect(inspect.NetworkSettings.Networks).toEqual({});
         expect(inspect.HostConfig.CapDrop).toEqual(["ALL"]);
+        expect(inspect.HostConfig.SecurityOpt).toEqual(["no-new-privileges"]);
+        expect(inspect.HostConfig.Privileged).toBe(false);
+        // decision 036: resource limits, non-root, self-removal
+        expect({ memory: inspect.HostConfig.Memory, nanoCpus: inspect.HostConfig.NanoCpus, pids: inspect.HostConfig.PidsLimit }).toEqual({ memory: 2 * 1024 ** 3, nanoCpus: 2e9, pids: 512 });
+        expect(inspect.Config.User).toBe("1000:1000");
+        expect(inspect.HostConfig.AutoRemove).toBe(true);
+        expect(inspect.Config.Cmd[0]).toBe("sleep");
+        expect(Number(inspect.Config.Cmd[1])).toBeGreaterThan(0); // bounded, never "infinity"
+        const who = await provider.exec(h, "id -u; id -g; ls /var/run/docker.sock 2>&1; touch /etc/x 2>&1; touch /work/ok /scratch/ok && rm /work/ok /scratch/ok && echo writable", { timeoutMs: 10_000 });
+        expect(who.stdout.trim().split("\n")).toEqual(["1000", "1000", "ls: cannot access '/var/run/docker.sock': No such file or directory", "touch: cannot touch '/etc/x': Permission denied", "writable"]);
         for (const probe of NETWORK_PROBES) expect((await provider.exec(h, probe, { timeoutMs: 20_000 })).exitCode).not.toBe(0);
         const env = await provider.exec(h, "env | cut -d= -f1 | sort", { timeoutMs: 10_000 });
         expect(env.stdout.trim().split("\n")).toEqual(["BUN_INSTALL", "HOME", "HOSTNAME", "PATH", "PWD"]);
@@ -111,6 +122,41 @@ if (!docker.ok) {
       expect(again.baseCommit).toBe(r.baseCommit);
     }, 240_000);
 
+    it("network is off during PATCHING: requests from inside the container fail (DNS name and raw IP)", async () => {
+      const seen: { cmd: string; exitCode: number; out: string }[] = [];
+      const probe: Agent = {
+        name: "network-probe",
+        async run(ctx) {
+          for (const cmd of [...NETWORK_PROBES, "getent hosts registry.npmjs.org"]) {
+            const r = await ctx.exec(cmd, { timeoutMs: 20_000 });
+            seen.push({ cmd, exitCode: r.exitCode, out: (r.stdout + r.stderr).trim() });
+          }
+        },
+      };
+      const task = loadTask(path.join(TASKS, "toy-discount", "task.json"));
+      const r = await runRepair({ task, agent: probe, provider: new LocalDockerProvider(), image: SANDBOX_IMAGE });
+      console.log(`network probes during PATCHING:\n${seen.map((s) => `$ ${s.cmd}\n  exit ${s.exitCode}: ${s.out || "(no output)"}`).join("\n")}`);
+      expect(seen).toHaveLength(3);
+      for (const s of seen) expect(s.exitCode).not.toBe(0);
+      expect(r.commands.filter((c) => c.phase === "PATCHING" && c.actor === "agent")).toHaveLength(3);
+    }, 120_000);
+
+    it("a sandbox nobody destroys removes itself at its deadline (--rm + bounded sleep), e.g. after a harness crash", async () => {
+      const provider = new LocalDockerProvider();
+      const h = await provider.create({ image: SANDBOX_IMAGE, source: { localPath: path.resolve(TASKS, "../fixtures/.build/toy-cart") }, maxLifetimeMs: 4000 });
+      expect(containerExists(h.id)).toBe(true);
+      // no destroy(): simulate the harness dying
+      const deadline = Date.now() + 30_000;
+      while (containerExists(h.id) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 500));
+      expect(containerExists(h.id)).toBe(false);
+    }, 60_000);
+
+    it("the image's base layers are pinned by digest", () => {
+      const froms = readFileSync(SANDBOX_DOCKERFILE, "utf8").split("\n").filter((l) => l.startsWith("FROM "));
+      expect(froms).toHaveLength(2);
+      for (const from of froms) expect(from).toMatch(/^FROM \S+@sha256:[0-9a-f]{64}( AS \w+)?$/);
+    });
+
     it("1. oracle + correct patch → RESOLVED", async () => {
       const r = await run("toy-discount", "oracle", "fix.patch");
       expect(r).toMatchObject({ finalState: "RESOLVED", repro: { atBase: { exitCode: 1 }, afterPatch: { exitCode: 0 } } });
@@ -118,6 +164,11 @@ if (!docker.ok) {
       expect(r.commands.findIndex((c) => c.phase === "NETWORK_OFF")).toBeLessThan(r.commands.findIndex((c) => c.phase === "REPRODUCING"));
       expect(r.diff).toContain("+  return total * (1 - percent / 100);");
       expect(r.diff).not.toContain("repro"); // the repro test is never part of the agent's diff
+      // decision 036: what the run ran in, recorded
+      const imageId = spawnSync("docker", ["image", "inspect", "--format", "{{.Id}}", SANDBOX_IMAGE], { encoding: "utf8" }).stdout.trim();
+      expect(r.sandboxEnv).toEqual({ provider: "docker", providerVersion: "docker-provider@2", engineVersion: expect.stringMatching(/^docker \d+\.\d+/), image: SANDBOX_IMAGE, imageId });
+      expect(imageId).toMatch(/^sha256:[0-9a-f]{64}$/);
+      expect(r.snapshot).toBe("none");
     }, 120_000);
 
     it("2. noop → UNRESOLVED (repro still fails)", async () => {
