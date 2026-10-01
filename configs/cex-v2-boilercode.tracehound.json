@@ -9,6 +9,8 @@
       "name": "Pending-Response Registry",
       "kind": "service",
       "files": ["backend/src/store/pending-responses.ts"]
-    }
+    },
+    "redis:redis-url": { "summary": false },
+    "backend:auth-api": { "summary": false }
   }
 }

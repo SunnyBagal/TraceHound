@@ -6,7 +6,7 @@
     "url": "https://github.com/SunnyBagal/cex-v2-boilercode.git",
     "commitSha": "da0e3d640a9c02f815fcca48f8328c94558cc058"
   },
-  "generatedAt": "2026-10-01T09:47:31.166Z",
+  "generatedAt": "2026-10-01T10:15:05.235Z",
   "components": [
     {
       "id": "redis-rpc-bridge",
@@ -111,11 +111,11 @@
       "name": "Redis Queue",
       "kind": "queue",
       "subtitle": "Redis lists · backend-to-engine-broker, response-queue-*, <dynamic>",
-      "summary": "Redis queue stores and retrieves tasks for Engine Worker and Redis RPC Bridge using dynamic keys.",
       "naming": {
         "source": "llm",
         "heuristicName": "Redis",
-        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+        "summaryDropped": true
       },
       "files": [],
       "entryPoints": [],
@@ -244,11 +244,11 @@
       "name": "Authentication Service",
       "kind": "api",
       "subtitle": "POST /signup, POST /signin",
-      "summary": "Handles user registration and login requests, validates credentials, and interacts with Postgres and shared utilities.",
       "naming": {
         "source": "llm",
         "heuristicName": "Auth API",
-        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+        "summaryDropped": true
       },
       "package": "backend",
       "files": [
@@ -5286,7 +5286,7 @@
       "purpose": "component-naming",
       "componentId": "redis:redis-url",
       "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-      "latencyMs": 0,
+      "latencyMs": 1,
       "promptTokens": 306,
       "completionTokens": 34,
       "totalTokens": 340,

@@ -1,7 +1,8 @@
 // Real containers (decision 026). Runs wherever `docker version` works (CI: GitHub runners);
 // elsewhere the whole suite is skipped with a visible message.
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildToyRepo, TOY_BASE_SHA } from "../../../eval/fixtures/build-toy-repo.ts";
@@ -150,6 +151,24 @@ if (!docker.ok) {
       while (containerExists(h.id) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 500));
       expect(containerExists(h.id)).toBe(false);
     }, 60_000);
+
+    it("untracked files on the host (e.g. .env) never enter the sandbox: only committed history goes in", async () => {
+      const copy = mkdtempSync(path.join(tmpdir(), "tracehound-untracked-"));
+      cpSync(path.resolve(TASKS, "../fixtures/.build/toy-cart"), copy, { recursive: true });
+      writeFileSync(path.join(copy, ".env"), "SECRET=do-not-copy\n");
+      writeFileSync(path.join(copy, "src", "untracked.ts"), "export const x = 1;\n");
+      const provider = new LocalDockerProvider();
+      const h = await provider.create({ image: SANDBOX_IMAGE, source: { localPath: copy } });
+      try {
+        const r = await provider.exec(h, "ls -A /work /work/src; grep -rl do-not-copy / --exclude-dir=proc --exclude-dir=sys 2>/dev/null || true", { timeoutMs: 60_000 });
+        expect(r.stdout).not.toContain(".env");
+        expect(r.stdout).not.toContain("untracked.ts");
+        expect(r.stdout).not.toContain("do-not-copy");
+      } finally {
+        await provider.destroy(h);
+        rmSync(copy, { recursive: true, force: true });
+      }
+    }, 120_000);
 
     it("the image's base layers are pinned by digest", () => {
       const froms = readFileSync(SANDBOX_DOCKERFILE, "utf8").split("\n").filter((l) => l.startsWith("FROM "));

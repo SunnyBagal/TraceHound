@@ -1005,6 +1005,7 @@ judges reproducing runs.
   | Capabilities | **yes** | `--cap-drop ALL`, `--security-opt no-new-privileges`, not privileged |
   | Host mounts / Docker socket | **none** | the repo goes in as a `git bundle` via `docker cp`. Inspect: Mounts `[]`, Binds `[]`; `/var/run/docker.sock` doesn't exist inside |
   | Host environment | **none passed** | no `-e`; the env is the image's (`BUN_INSTALL HOME HOSTNAME PATH PWD`) |
+  | Untracked host files | **never enter** | the repo goes in as `git bundle --all` (committed history only). Test: a host copy with an untracked `.env` (and `src/untracked.ts`) → neither exists in the sandbox, and their content is found nowhere in it |
   | Removed after the run | **yes, incl. crash (fixed)** | `destroy()` (`docker rm -f`) in the harness's `finally` and the CLI's SIGINT/SIGTERM handler. New: `--rm` plus a bounded `sleep <lifetime>` instead of `sleep infinity`, so a sandbox whose harness died (SIGKILL) stops at its deadline and Docker removes it and its anonymous volumes. Test: created with a 4 s lifetime, never destroyed → gone. The lifetime is the task's wall clock + every verification command at its timeout + 10 min |
   | Base image pinned | **yes** | both `FROM` lines carry `@sha256:` multi-arch index digests (test). Not pinned by digest: the `typescript@5.9.3` npm package (pinned by version) and the built image itself (built locally; its content id is recorded per run) |
 
@@ -1022,6 +1023,19 @@ judges reproducing runs.
 and an optional `maxLifetimeMs` on `create`); harness-owned verification; network off after
 setup; the agent loop on the host. A Token Factory Sandboxes provider can be added later behind
 the same interface, once access exists, with the parked spike as its starting point.
+- **Fresh-clone check (2026-10-01):** a clone of `main` at `e4023ac` into a temp dir,
+  following only the README. Clone 2 s, `pnpm install` 3 s, `pnpm demo` 3 s and `pnpm test`
+  36 s, all with a warm pnpm store and base images already pulled. `tracehound repair` could
+  start about 1 minute after cloning. The README had no prerequisites, said nothing about the
+  repair harness, never mentioned that the toy repo must be built first (without it the run
+  ends FAILED, "localPath … is not a git repository"), and its quick start ran `pnpm demo`
+  before `pnpm test`: without a key that overwrites the committed snapshot with heuristic names
+  and 5 viewer tests fail. The README now has Prerequisites, a Quick start using `pnpm fixture`,
+  a Repair harness section and a Sandbox section. The time a truly cold machine needs to pull
+  the base images was not measured.
+- **Proof run** in that clone: toy-discount, graph off, agent-v4, Nano with reasoning on →
+  RESOLVED in 23 steps, 74,285 tokens, $0.00558, 54 s. The record carries `sandboxEnv` (image
+  `sha256:857f16d2…`, docker 29.8.0, `docker-provider@2`) and `snapshot: "none"`.
 **Rejected:** (a) Waiting for Sandboxes: no date, and the evaluation needs a sandbox now.
 (b) gVisor/Firecracker for a stronger boundary: not available on the macOS dev machine or by
 default on GitHub runners, and more setup for judges to reproduce.

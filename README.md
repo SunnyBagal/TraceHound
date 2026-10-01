@@ -13,19 +13,77 @@ confidently the value was resolved (`proven` · `resolved-default` · `dynamic`)
 - **Viewer** (`viewer/`) — static Next.js + React Flow + ELK canvas with node and edge
   inspectors, evidence snippets, GitHub permalinks and a warnings panel.
 
+## Prerequisites
+- Node.js ≥ 24 (the TypeScript runs on Node's native type stripping) and pnpm 11
+  (`corepack enable` picks up the version pinned in `package.json`)
+- git
+- Docker (Docker Desktop on macOS), running, for the repair harness and its tests. Without it
+  those tests are skipped with a message; everything else works.
+
 ## Quick start
 
 ```bash
 pnpm install
-pnpm demo                               # clone the pinned demo repo, analyze → snapshots/
+pnpm fixture                            # clone the pinned demo repo into fixtures/demo-repo (tests use it)
 pnpm test                               # analyzer + viewer tests (never call a model)
-pnpm --filter @tracehound/viewer dev    # http://localhost:3000
+pnpm --filter @tracehound/viewer dev    # http://localhost:3000, serving the committed snapshots/
 ```
+
+`pnpm demo` (= `pnpm fixture` + analyze) re-analyzes the demo repo and **overwrites the
+committed snapshot in `snapshots/`**. Without `NEBIUS_API_KEY` it writes heuristic names there,
+and the viewer tests, which expect the committed model-written names, then fail;
+`git checkout snapshots/` restores them.
 
 The optional Nemotron naming pass: put `NEBIUS_API_KEY=...` in `.env` (see `.env.example`).
 Spend is capped by `TRACEHOUND_BUDGET_RUN_USD` (default $1) and `TRACEHOUND_BUDGET_TOTAL_USD`
 (default $45). `pnpm spend` prints the ledger. Re-runs on an unchanged commit hit the response
 cache and cost $0.
+
+## Repair harness (toy task)
+
+```bash
+node eval/fixtures/build-toy-repo.ts    # build the toy repo the toy tasks point at (once)
+pnpm tracehound repair --task eval/tasks/toy-discount/task.json --agent noop --provider docker
+pnpm tracehound repair --task eval/tasks/toy-discount/task.json --agent nemotron --graph off --provider docker
+```
+
+- Docker must be running. The first run builds the sandbox image
+  `tracehound-sandbox:bun1.4.2-ts5.9.3-2` from `harness/sandbox.Dockerfile`, which needs
+  network once.
+- `--agent noop` makes no model calls and ends UNRESOLVED (the bug isn't fixed). It checks the
+  setup.
+- `--agent nemotron` needs `NEBIUS_API_KEY`; `pnpm tracehound` loads the workspace `.env` itself.
+  It runs agent-v4 on Nemotron Nano with reasoning on (`--reasoning off` to disable); `--graph on`
+  adds the architecture-graph tools.
+- Each run writes `runs/<runId>.json` with the state, the diff, every command, tokens and cost,
+  and the sandbox it ran in (image id, Docker version, provider version, graph snapshot or
+  `none`).
+
+## Sandbox
+
+- **What runs where:** Nemotron runs on Nebius Token Factory; the agent loop runs on your
+  machine and calls it over the API. The agent's tools (file reads and edits, shell commands)
+  and all verification (repro test, regression tests, typecheck) run in a local Docker
+  container, one per run.
+- **Why not Token Factory Sandboxes:** Nebius support (case AISTUDIOSUP-1966) replied that
+  Sandboxes are not yet ready to be used on this account, so local Docker is the sandbox of
+  record (decision 036). A Sandboxes provider can be added later behind the same interface.
+- **Isolation, as tested** (`packages/analyzer/test/harness-docker.test.ts`, run in CI):
+  - the network is disconnected after setup and proven off before the agent starts; requests
+    from inside the agent phase fail (DNS name and raw IP)
+  - the container runs as uid 1000, not root, with all capabilities dropped and
+    `no-new-privileges`; only `/work` and `/scratch` are writable
+  - limits: 2 GB memory, 2 CPUs, 512 processes
+  - nothing from the host is mounted (no host paths, no Docker socket); the repo goes in as a
+    git bundle of committed history, so untracked files like `.env` never enter; no host
+    environment variables are passed
+  - the container is removed after every run, and removes itself at a deadline if the harness
+    dies without cleaning up
+  - the base images are pinned by digest; each run records the built image's id
+- **What Docker does not guarantee here:** containers share the host kernel (no VM boundary of
+  their own; on macOS they run inside Docker Desktop's VM); there's no custom seccomp/AppArmor
+  profile beyond Docker's defaults, no read-only root filesystem and no disk quota; network
+  isolation is Docker's bridge disconnect, checked on every run, not a firewall.
 
 ## Deploy the viewer (Vercel, static export)
 

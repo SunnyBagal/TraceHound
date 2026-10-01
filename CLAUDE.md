@@ -30,12 +30,19 @@ on a canvas. Later: a graph-guided repair agent.
   writes a report the viewer serves at `?impact=<name>` (changed/affected styling, dynamic
   edges flagged, chain panel). The viewer build fails if an impact cites an id missing from its
   base snapshot. Precomputed: `seed-queue-consumer`, `seed-rpc-bridge`, `seed-pending-registry`.
-- **Repair harness (feature 6, decision 026):** `pnpm tracehound repair --task
+- **Repair harness (feature 6, decisions 026, 036):** `pnpm tracehound repair --task
   eval/tasks/<id>/task.json --agent oracle|noop|nemotron [--patch f] [--graph on|off]
-  [--reasoning on|off] --provider docker` → `runs/<id>.json`. LocalDockerProvider only (Contree
-  after the Sandboxes spike). Sandbox image `tracehound-sandbox:bun1.4.2-ts5.9.3-1` from
-  `harness/sandbox.Dockerfile`. The sandbox's history is squashed to one fixed `base` commit
-  after setup (no `git log -p` leak). Toy fixture: `node eval/fixtures/build-toy-repo.ts`, tasks
+  [--reasoning on|off] --provider docker` → `runs/<id>.json`. **Local Docker is the sandbox of
+  record** (decision 036; Token Factory Sandboxes are not available on this account, Nebius case
+  AISTUDIOSUP-1966; the spike is parked in `scripts/parked/`). Image
+  `tracehound-sandbox:bun1.4.2-ts5.9.3-2` (`harness/sandbox.Dockerfile`, digest-pinned bases),
+  `docker-provider@2`: uid 1000 (not root), caps dropped, 2 GB / 2 CPUs / 512 pids, no mounts or
+  socket, network disconnected after setup and proven off, `--rm` plus a bounded lifetime so a
+  crashed harness can't leak a container. Each test-backed property and the gaps are listed in
+  decision 036 and the README's Sandbox section. Run records carry `sandboxEnv` (image id, Docker
+  and provider versions) and `snapshot` (path, analyzerVersion, commit, sha256, or `"none"`).
+  The sandbox's history is squashed to one fixed `base` commit after setup (no `git log -p`
+  leak). Toy fixture: `node eval/fixtures/build-toy-repo.ts`, tasks
   `eval/tasks/toy-*`. **Dev tasks pending:** the user writes the CEX tasks (`eval/tasks/dev-01`,
   `dev-02`), not on main yet; validation and the 12 dev runs (Prompt I steps 4–5) wait for them.
   `--graph on` reads the snapshot named in task.json, on the host (toy-discount:
@@ -68,20 +75,22 @@ on a canvas. Later: a graph-guided repair agent.
 - **Naming:** Nano with reasoning off (`chat_template_kwargs.enable_thinking=false`, decision
   020) plus deterministic checks (021). Nano beat Super on cost and tied on checks, so Nano
   stays the default. Naming spend was about $0.043; all-time spend is in `pnpm spend`
-  ($0.315 on 2026-10-01, mostly repair-agent runs). A wrong name is fixed with a
+  ($0.321 on 2026-10-01, mostly repair-agent runs). A wrong name is fixed with a
   `tracehound.json` name override (never labelled model-written); a wrong summary is dropped with
-  `summary: false`, never replaced by hand.
+  `summary: false`, never replaced by hand. Audited by hand on 2026-10-01: Recall 5 of 7
+  summaries wrong (3 names), CEX 2 of 7 summaries wrong (0 names); fixes are in
+  `configs/*.tracehound.json` (FEEDBACK.md). decider-v1 reads no names or summaries; the lexical
+  ranking reads heuristic names and override names, never model names or summaries
+  (`src/agent/rank.ts:54-55`).
 - **Prices:** `config/prices.json` has Nano/Super rates from third-party trackers, not yet
   verified in the Nebius console.
 
 ### Open blockers
 1. ~~**CEX has no license.**~~ Closed 2026-09-30: the demo repo is the fork
    `SunnyBagal/cex-v2-boilercode`, with the original author's agreement.
-2. **Sandbox: waiting on Sandboxes beta access** (requested in the console; free during beta,
-   runs don't consume credits). Until then `/whoami` reports every permission `false` and
-   list/spawn return 403 (FEEDBACK.md, 2026-09-30). Don't call the Sandboxes API or edit the
-   spike script until access is confirmed, then rerun
-   `node --env-file=.env scripts/sandbox-spike.ts`. Decision 022 (TypeScript over REST) stands.
+2. ~~**Sandbox: waiting on Sandboxes beta access.**~~ Closed 2026-10-01: Nebius support (case
+   AISTUDIOSUP-1966) said Sandboxes are not yet ready to be used on this account. Docker is the
+   sandbox of record (decision 036); the spike is parked in `scripts/parked/`.
 3. ~~**Naming check bug (slash identifiers).**~~ Closed 2026-09-30: joined tokens are split
    and checked case-sensitively (decision 021 update). Prose is still unchecked, so the viewer
    labels model-written names/summaries "prose not verified". Naming work is closed.

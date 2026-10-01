@@ -237,3 +237,44 @@ Observations from building TraceHound. Facts only; newest entries at the bottom.
 - **Message keys** in every response: `content, refusal, role, annotations, audio,
   function_call, tool_calls, reasoning` (`reasoning` null when off).
   `usage.completion_tokens_details` was absent/null, so reasoning tokens aren't broken out.
+
+---
+
+## 2026-10-01 · Sandboxes: support says not yet available on this account (AISTUDIOSUP-1966)
+
+- **Asked:** how to get Sandboxes permissions after the separate beta-access request. Since
+  2026-09-30, `GET /whoami` has returned every permission `false`, and list and spawn return 403
+  (entries above).
+- **Answer:** Nebius support (case AISTUDIOSUP-1966) replied that Token Factory Sandboxes are
+  "not yet ready to be used" on this account. No date was given.
+- **Impact on the project:** local Docker is now the sandbox of record for development,
+  evaluation and reproduction (decision 036). The Sandboxes spike script is parked in
+  `scripts/parked/`, `NEBIUS_AI_PROJECT` is no longer part of setup, and the provider interface
+  stays so a Sandboxes provider can be added if access arrives. Model calls (Nemotron Nano)
+  still go to Token Factory.
+
+---
+
+## 2026-10-01 · Nano component summaries checked against the code
+
+Component names and one-sentence summaries come from Nemotron Nano (reasoning off), working from
+extracted facts only (decisions 012, 020). Each was checked by hand against the code:
+
+- **Recall** (`SunnyBagal/Recall` @ `5d2165a`): 7 model-named components. **5 of 7 summaries**
+  made a claim the code contradicts, and 3 of 7 names were misleading.
+- **CEX** (`SunnyBagal/cex-v2-boilercode` @ `da0e3d6`): 7 model-named components (2 more are
+  named by config). **2 of 7 summaries** made a claim the code contradicts; 0 of 7 names were
+  wrong.
+- **Examples:**
+  - Recall's Redis node was named "Redis Cache" and summarized as "Stores and retrieves cached
+    data…". The code only passes the Redis client to BullMQ as its connection
+    (`config/queue.ts:6,11`, `worker.ts:115`); there are no cache reads or writes.
+  - Recall's worker summary said it "sends results to Brainly Shared"; it writes them to the
+    Postgres `contents` table (`worker.ts:94-104`).
+  - CEX's auth summary said it "validates credentials"; `signin` is an empty `//TODO` stub
+    (`backend/src/controllers/auth-controller.ts:36-38`).
+- **Checks:** identifiers in names and summaries are checked deterministically (decision 021);
+  prose claims are not, which is why the viewer labels them "Model-written … prose not
+  verified". None of the errors above were caught by the identifier checks.
+- **What we do:** wrong names are replaced with config overrides, and wrong summaries are
+  dropped (`"summary": false`), never rewritten by hand (decision 035).
