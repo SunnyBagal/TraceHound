@@ -1,5 +1,12 @@
 {
   "ignore": ["recall-backend/bench/**", "recall-backend/scripts/**"],
   "entryPoints": ["recall-frontend/src/main.tsx"],
-  "components": { "recall-backend:worker": ["recall-backend/worker.ts"] }
+  "components": {
+    "recall-backend:worker": { "files": ["recall-backend/worker.ts"], "summary": false },
+    "redis:redis-url": { "name": "Redis (BullMQ broker)" },
+    "recall-backend:queue": { "name": "Queue Config" },
+    "recall-frontend:brainly-frontend-app": { "name": "Recall Web App" },
+    "bullmq:content-processing": { "summary": false },
+    "recall-backend:brainly-server": { "summary": false }
+  }
 }

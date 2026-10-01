@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { aggregateEdges } from "./aggregate/edges.ts";
-import { loadConfig, normalizeOverrides } from "./config.ts";
+import { componentLabels, loadConfig, normalizeOverrides } from "./config.ts";
 import { isTestFile, testLinks } from "./aggregate/tests.ts";
 import { orphanWarnings, queueWarnings } from "./aggregate/warnings.ts";
 import { EvidenceStore, type ExtractContext } from "./extract/evidence.ts";
@@ -116,6 +116,15 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
   // Test files keep their facts but belong to no component; they link in via `tests` instead.
   const sourceFiles = files.filter((f) => !isTestFile(f.path));
   const grouping = groupComponents(sourceFiles, ws.packages, { overrides: normalizeOverrides(config) });
+  // names (without files) and dropped summaries, by component id; an id that doesn't exist is a warning
+  const labels = componentLabels(config);
+  const unmatchedLabels = labels.filter((l) => !grouping.components.some((c) => c.id === l.id)).map((l) => l.id);
+  for (const label of labels) {
+    const c = grouping.components.find((x) => x.id === label.id);
+    if (!c) continue;
+    if (label.name) Object.assign(c, { name: label.name, naming: { ...c.naming, source: "override" as const } });
+    if (label.dropSummary) Object.assign(c, { summary: undefined, naming: { ...c.naming, summaryDropped: true } });
+  }
   const allEvidence = evidence.all();
   const edges = aggregateEdges(files, grouping, new Map(allEvidence.map((e) => [e.id, e])));
 
@@ -139,11 +148,11 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
           severity: "warning" as const,
           message: `glob "${g}" in ${path.basename(configSource ?? "tracehound.json")} matched no files`,
         })),
-      ...grouping.unmatchedOverrides.map((id) => ({
+      ...[...grouping.unmatchedOverrides, ...unmatchedLabels].map((id) => ({
         id: `override-unmatched:${id}`,
         kind: "override-unmatched" as const,
         severity: "warning" as const,
-        message: `override "${id}" in ${path.basename(configSource ?? "tracehound.json")} matched no files`,
+        message: `override "${id}" in ${path.basename(configSource ?? "tracehound.json")} ${unmatchedLabels.includes(id) ? "names no component in this snapshot" : "matched no files"}`,
       })),
     ],
     tests: testLinks(files, grouping.fileToComponent),

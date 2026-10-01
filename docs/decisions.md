@@ -952,6 +952,26 @@ still needed to say anything about how the detector generalizes.
 - **CEX regression** (`da0e3d6`, `--cache-only` names): components, edges, warnings, files,
   evidence and tests are byte-identical to the 0.6.0 snapshot. Only `analyzerVersion`,
   `generatedAt` and one cached naming call's `latencyMs` (1 → 0) differ.
+- **Addendum (2026-10-01): names and summaries for Recall.** Nano's names were checked against
+  the code, and wrong ones are fixed through the config, not by hand-editing snapshots:
+  - Component overrides gain an optional form **without `files`**: `{ "name": "…" }` renames the
+    component with that id (heuristic or resource), with `naming.source: "override"` and no model
+    call, so it never carries the model-written label. Overrides with `files` and a `name`
+    already existed.
+  - `"summary": false` (with or without files) drops a model-written summary that is wrong. It
+    is never replaced by a hand-written one. A model name that is right is kept and stays
+    labelled model-written; `naming.summaryDropped: true` records the drop.
+  - An override id that names no component is an `override-unmatched` warning.
+  - `kind` still requires `files`, and an override must do something (files, a name, or
+    `summary: false`).
+  - Recall: "Redis Cache" → **Redis (BullMQ broker)**, "Ask AI Panel" → **Recall Web App**,
+    "Queue Service" → **Queue Config**; summaries dropped for the worker, the queue and the API
+    (each made a claim the code contradicts). The config is 12 lines, over the 10-line target,
+    because each fix is one line.
+- **CEX 0.7.0 in `snapshots/`** (2026-10-01): regenerated with `--cache-only`; it is the
+  manifest's `latest`, and the 0.6.0 file is kept. Impact's missing-snapshot error now prints
+  the real regenerate command (repo path, matching `configs/` file, `--cache-only` when the older
+  snapshot had model names); the version check itself is unchanged.
 **Rejected:** (a) A new edge kind (`enqueues`/`processes`): produces/consumes through a broker
 already says it, and impact would need new direction rules for no new information. (b) A direct
 producer → consumer edge: it hides the queue, and the "one hop to cross a broker" rule

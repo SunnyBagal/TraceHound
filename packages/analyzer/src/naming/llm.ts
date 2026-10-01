@@ -136,7 +136,8 @@ export async function nameComponentsWithLlm(snapshot: Snapshot, config: LlmNamin
       return c; // fallback: keep the heuristic (or override) name
     }
     taken.add(reply.name.toLowerCase());
-    return { ...c, name: reply.name, summary: reply.summary, naming: { ...c.naming, source: "llm", model: cfg.model } };
+    // tracehound.json `summary: false`: the model's name is kept (and labelled), its summary is not
+    return { ...c, name: reply.name, ...(!c.naming.summaryDropped && { summary: reply.summary }), naming: { ...c.naming, source: "llm", model: cfg.model } };
   });
 
   const calls = targets.map((c) => results.get(c.id)!.call);

@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { isTestFile } from "../src/aggregate/tests.ts";
 import { analyzeRepo } from "../src/analyze.ts";
 import { formatImpact } from "../src/impact/format.ts";
-import { ImpactError, runImpact } from "../src/impact/cli.ts";
+import { ImpactError, regenerateHint, runImpact } from "../src/impact/cli.ts";
 import { computeImpact, parseNameStatus, type ImpactReport } from "../src/impact/impact.ts";
 import { upsertManifest, writeManifest } from "../src/manifest.ts";
 import { ImpactReport as ImpactReportSchema, impactReferenceErrors, type Snapshot } from "../src/schema.ts";
@@ -176,6 +176,14 @@ describe("tracehound impact on the fixture repo", () => {
     const run = () => runImpact(["--repo", repo, "--diff", `orphan-base..${base}`, "--snapshots", snapshotsDir]);
     expect(run).toThrow(ImpactError);
     expect(run).toThrow(/no analyzer \S+ snapshot for base [0-9a-f]{40}[\s\S]*create one by analyzing the base commit[\s\S]*--naming heuristic/);
+  });
+
+  it("the hint for a missing base snapshot is the real regenerate command: repo, matching configs/ file, --cache-only when the older snapshot had model names", () => {
+    const older = { ...snapshot, repo: { ...snapshot.repo, name: "SunnyBagal/cex-v2-boilercode" }, llmCalls: [{ purpose: "component-naming", componentId: "x", model: "m", latencyMs: 0, cached: true, estCostUSD: 0, ok: true }] } as Snapshot;
+    const hint = regenerateHint({ snapshotsDir: "/snaps", sha: "a".repeat(40), repo: "/somewhere/not-a-repo", older }).join("\n");
+    expect(hint).toMatch(/git -C \S+ worktree add \/tmp\/base a{40}/); // HEAD isn't the base (not even a repo)
+    expect(hint).toMatch(/cli\.ts --repo \/tmp\/base --config \S*configs\/cex-v2-boilercode\.tracehound\.json --out \S+ --cache-only/);
+    expect(regenerateHint({ snapshotsDir: "/snaps", sha: "a".repeat(40) }).join("\n")).toMatch(/--repo \/tmp\/base --out \S+ --naming heuristic[\s\S]*add --config/);
   });
 
   it("--out writes a schema-valid report whose ids all exist in the base snapshot; tampering is caught", () => {

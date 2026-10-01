@@ -10,7 +10,18 @@ const ComponentId = z.string().regex(/^[a-z0-9][a-z0-9._:-]*$/, "component ids a
 
 const OverrideSpec = z.union([
   z.array(z.string()).min(1),
-  z.object({ name: z.string().min(1).optional(), kind: ComponentKind.optional(), files: z.array(z.string()).min(1) }).strict(),
+  z
+    .object({
+      name: z.string().min(1).optional(),
+      kind: ComponentKind.optional(),
+      /** pinned files; without them the entry only renames (or drops the summary of) the component with this id */
+      files: z.array(z.string()).min(1).optional(),
+      /** false: drop the model-written summary (a wrong one is dropped, never replaced by hand) */
+      summary: z.literal(false).optional(),
+    })
+    .strict()
+    .refine((o) => o.files || o.name || o.summary === false, "an override needs files, a name, or summary: false")
+    .refine((o) => !o.kind || o.files, "kind can only be set together with files"),
 ]);
 
 export const TraceHoundConfig = z
@@ -33,9 +44,22 @@ export interface ComponentOverride {
   globs: string[];
 }
 
+/** Overrides that pin files (grouping input). Entries without files are labels; see componentLabels. */
 export function normalizeOverrides(config: TraceHoundConfig): ComponentOverride[] {
-  return Object.entries(config.components).map(([id, spec]) =>
-    Array.isArray(spec) ? { id, globs: spec } : { id, name: spec.name, kind: spec.kind, globs: spec.files },
+  return Object.entries(config.components).flatMap(([id, spec]) =>
+    Array.isArray(spec) ? [{ id, globs: spec }] : spec.files ? [{ id, name: spec.name, kind: spec.kind, globs: spec.files }] : [],
+  );
+}
+
+/** Applied after grouping by component id: a name (entries without files) and/or `summary: false`. */
+export interface ComponentLabel {
+  id: string;
+  name?: string;
+  dropSummary: boolean;
+}
+export function componentLabels(config: TraceHoundConfig): ComponentLabel[] {
+  return Object.entries(config.components).flatMap(([id, spec]) =>
+    !Array.isArray(spec) && (!spec.files || spec.summary === false) ? [{ id, name: spec.files ? undefined : spec.name, dropSummary: spec.summary === false }] : [],
   );
 }
 

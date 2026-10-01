@@ -6,18 +6,18 @@
     "url": "https://github.com/SunnyBagal/Recall",
     "commitSha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b"
   },
-  "generatedAt": "2026-09-30T21:47:35.677Z",
+  "generatedAt": "2026-10-01T09:52:01.853Z",
   "components": [
     {
       "id": "recall-backend:worker",
       "name": "Recall Backend Worker",
       "kind": "worker",
       "subtitle": "Consumes content-processing",
-      "summary": "Processes content from queue, extracts text, and sends results to Brainly Shared.",
       "naming": {
         "source": "llm",
         "heuristicName": "Recall Backend Worker",
-        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+        "summaryDropped": true
       },
       "package": "recall-backend",
       "files": [
@@ -60,14 +60,12 @@
     },
     {
       "id": "redis:redis-url",
-      "name": "Redis Cache",
+      "name": "Redis (BullMQ broker)",
       "kind": "cache",
       "subtitle": "Redis key-value",
-      "summary": "Stores and retrieves cached data for fast access by application services.",
       "naming": {
-        "source": "llm",
-        "heuristicName": "Redis",
-        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+        "source": "override",
+        "heuristicName": "Redis"
       },
       "files": [],
       "entryPoints": [],
@@ -90,11 +88,11 @@
       "name": "Content Processing Queue",
       "kind": "queue",
       "subtitle": "BullMQ queue · content-processing · jobs: process-content",
-      "summary": "Handles asynchronous processing of content items for the Brainly Server.",
       "naming": {
         "source": "llm",
         "heuristicName": "content-processing queue",
-        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+        "summaryDropped": true
       },
       "files": [],
       "entryPoints": [],
@@ -116,14 +114,12 @@
     },
     {
       "id": "recall-backend:queue",
-      "name": "Queue Service",
+      "name": "Queue Config",
       "kind": "service",
       "subtitle": "1 modules",
-      "summary": "Manages Redis-backed message queue for recall operations across Brainly Server and Recall Backend Worker.",
       "naming": {
-        "source": "llm",
-        "heuristicName": "Queue",
-        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+        "source": "override",
+        "heuristicName": "Queue"
       },
       "package": "recall-backend",
       "files": [
@@ -151,11 +147,11 @@
       "name": "Recall API",
       "kind": "api",
       "subtitle": "HTTP server entry · POST /api/v1/signup, POST /api/v1/signin",
-      "summary": "Handles user authentication, content management, and search operations for Brainly's backend services.",
       "naming": {
         "source": "llm",
         "heuristicName": "Brainly Server",
-        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+        "summaryDropped": true
       },
       "package": "recall-backend",
       "files": [
@@ -366,14 +362,12 @@
     },
     {
       "id": "recall-frontend:brainly-frontend-app",
-      "name": "Ask AI Panel",
+      "name": "Recall Web App",
       "kind": "service",
       "subtitle": "Exports App, AskAIPanel…",
-      "summary": "Enables users to ask AI questions within the Brainly frontend interface.",
       "naming": {
-        "source": "llm",
-        "heuristicName": "Brainly Frontend App",
-        "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+        "source": "override",
+        "heuristicName": "Brainly Frontend App"
       },
       "package": "recall-frontend",
       "files": [
@@ -9686,91 +9680,52 @@
       "purpose": "component-naming",
       "componentId": "recall-backend:worker",
       "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-      "latencyMs": 1052,
+      "latencyMs": 1,
       "promptTokens": 327,
       "completionTokens": 36,
       "totalTokens": 363,
-      "cached": false,
+      "cached": true,
       "accepted": true,
-      "estCostUSD": 0.00002826,
-      "ok": true
-    },
-    {
-      "purpose": "component-naming",
-      "componentId": "redis:redis-url",
-      "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-      "latencyMs": 1563,
-      "promptTokens": 180,
-      "completionTokens": 30,
-      "totalTokens": 210,
-      "cached": false,
-      "accepted": true,
-      "estCostUSD": 0.000018,
+      "estCostUSD": 0,
       "ok": true
     },
     {
       "purpose": "component-naming",
       "componentId": "bullmq:content-processing",
       "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-      "latencyMs": 1558,
+      "latencyMs": 1,
       "promptTokens": 229,
       "completionTokens": 30,
       "totalTokens": 259,
-      "cached": false,
+      "cached": true,
       "accepted": true,
-      "estCostUSD": 0.00002094,
-      "ok": true
-    },
-    {
-      "purpose": "component-naming",
-      "componentId": "recall-backend:queue",
-      "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-      "latencyMs": 1570,
-      "promptTokens": 237,
-      "completionTokens": 35,
-      "totalTokens": 272,
-      "cached": false,
-      "accepted": true,
-      "estCostUSD": 0.000022619999999999997,
+      "estCostUSD": 0,
       "ok": true
     },
     {
       "purpose": "component-naming",
       "componentId": "recall-backend:brainly-server",
       "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-      "latencyMs": 995,
+      "latencyMs": 1,
       "promptTokens": 415,
       "completionTokens": 35,
       "totalTokens": 450,
-      "cached": false,
+      "cached": true,
       "accepted": true,
-      "estCostUSD": 0.000033299999999999996,
+      "estCostUSD": 0,
       "ok": true
     },
     {
       "purpose": "component-naming",
       "componentId": "recall-backend:shared",
       "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-      "latencyMs": 1010,
+      "latencyMs": 1,
       "promptTokens": 353,
       "completionTokens": 36,
       "totalTokens": 389,
-      "cached": false,
+      "cached": true,
       "accepted": true,
-      "estCostUSD": 0.00002982,
-      "ok": true
-    },
-    {
-      "purpose": "component-naming",
-      "componentId": "recall-frontend:brainly-frontend-app",
-      "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-      "latencyMs": 1003,
-      "promptTokens": 639,
-      "completionTokens": 31,
-      "totalTokens": 670,
-      "cached": false,
-      "accepted": true,
-      "estCostUSD": 0.00004577999999999999,
+      "estCostUSD": 0,
       "ok": true
     }
   ],

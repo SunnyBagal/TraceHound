@@ -121,6 +121,28 @@ describe("bullmq-queues@0.1: queue definitions, producers and consumers → prod
   });
 });
 
+describe("tracehound.json name-only overrides and summary: false (0.7.0)", () => {
+  it("renames by component id without pinning files (no model naming for it), drops summaries, and warns on unknown ids", () => {
+    const s = analyze({
+      "tracehound.json": JSON.stringify({ components: { "bullmq:emails": { name: "Email Queue" }, "app:app-app": { summary: false }, "no:such": { name: "Ghost" } } }),
+      "src/api.ts": 'import { Queue } from "bullmq";\nconst q = new Queue("emails");\nawait q.add("welcome", {});\n',
+      "src/worker.ts": WORKER,
+    });
+    const queue = s.components.find((c) => c.id === "bullmq:emails")!;
+    expect(queue).toMatchObject({ name: "Email Queue", naming: { source: "override", heuristicName: "emails queue" } });
+    expect(queue.files).toEqual([]);
+    expect(s.components.find((c) => c.id === "app:app-app")!.naming).toMatchObject({ source: "heuristic", summaryDropped: true });
+    expect(s.warnings.filter((w) => w.kind === "override-unmatched").map((w) => w.message)).toEqual(['override "no:such" in tracehound.json names no component in this snapshot']);
+  });
+
+  it("the schema refuses an override with nothing to do, and kind without files", async () => {
+    const { TraceHoundConfig } = await import("../src/config.ts");
+    expect(TraceHoundConfig.safeParse({ components: { a: {} } }).success).toBe(false);
+    expect(TraceHoundConfig.safeParse({ components: { a: { kind: "worker" } } }).success).toBe(false);
+    expect(TraceHoundConfig.safeParse({ components: { a: { summary: false } } }).success).toBe(true);
+  });
+});
+
 describe("tracehound.json ignore and entryPoints (0.7.0)", () => {
   it("ignored files are left out and listed; entryPoints globs mark entry files; a glob matching nothing is a warning", () => {
     const s = analyze({

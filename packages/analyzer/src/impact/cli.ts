@@ -26,21 +26,45 @@ function git(repo: string, ...args: string[]): string {
   }
 }
 
+/**
+ * The regenerate command for a missing base snapshot, filled in as far as we know it: the repo
+ * path, a worktree only when HEAD isn't the base, `configs/<repo>.tracehound.json` when one
+ * matches the repo name, and `--cache-only` when an older snapshot of this commit had model names
+ * (it reuses cached names with zero calls and aborts on any miss).
+ */
+export function regenerateHint(args: { snapshotsDir: string; sha: string; repo?: string; older?: Snapshot }): string[] {
+  const rel = (p: string) => path.relative(process.cwd(), p) || ".";
+  const repo = args.repo ? rel(args.repo) : "<repo>";
+  const atBase = args.repo !== undefined && (() => { try { return git(args.repo!, "rev-parse", "HEAD").trim() === args.sha; } catch { return false; } })();
+  const target = atBase ? repo : "/tmp/base";
+  const name = args.older?.repo.name.split("/").pop()?.toLowerCase();
+  const config = name ? path.join(WORKSPACE_ROOT, "configs", `${name}.tracehound.json`) : undefined;
+  const configFlag = config && existsSync(config) ? ` --config ${rel(config)}` : "";
+  const cached = (args.older?.llmCalls.length ?? 0) > 0;
+  const base = `node ${rel(path.join(WORKSPACE_ROOT, "packages/analyzer/src/cli.ts"))} --repo ${target}${configFlag} --out ${rel(args.snapshotsDir)}`;
+  return [
+    "create one by analyzing the base commit:",
+    ...(atBase ? [] : [`  git -C ${repo} worktree add /tmp/base ${args.sha}`]),
+    ...(cached
+      ? [`  ${base} --cache-only`, "(--cache-only reuses the cached model names of the older snapshot: zero calls, aborts on any cache miss; use --naming heuristic instead for deterministic names)"]
+      : [`  ${base} --naming heuristic`, "(--naming heuristic: deterministic names, no model call)"]),
+    ...(configFlag ? [] : ["(add --config <tracehound.json> if the repo has one outside the repo root)"]),
+  ];
+}
+
 /** The base snapshot must be this analyzer version: older ones lack test links and may group differently. */
-export function findBaseSnapshot(snapshotsDir: string, sha: string): { snapshot: Snapshot; path: string } {
+export function findBaseSnapshot(snapshotsDir: string, sha: string, repo?: string): { snapshot: Snapshot; path: string } {
   const manifest = readManifest(snapshotsDir);
   const entries = manifest?.snapshots.filter((e) => e.sha === sha) ?? [];
   const entry = entries.find((e) => e.analyzerVersion === ANALYZER_VERSION);
   if (!entry) {
     const others = entries.map((e) => e.analyzerVersion).join(", ");
+    const olderFile = entries[0] && path.join(snapshotsDir, entries[0].path);
+    const older = olderFile && existsSync(olderFile) ? Snapshot.safeParse(JSON.parse(readFileSync(olderFile, "utf8"))).data : undefined;
     throw new ImpactError(
       [
-        `no analyzer ${ANALYZER_VERSION} snapshot for base ${sha} in ${path.join(snapshotsDir, "index.json")}` +
-          (others ? ` (only older versions: ${others})` : ""),
-        "create one by analyzing the base commit, e.g.:",
-        `  git -C <repo> worktree add /tmp/base ${sha}`,
-        `  node packages/analyzer/src/cli.ts --repo /tmp/base --out ${path.relative(process.cwd(), snapshotsDir) || "."} --naming heuristic`,
-        "(--naming heuristic: deterministic names, no model call; add --config <tracehound.json> if the repo has one)",
+        `no analyzer ${ANALYZER_VERSION} snapshot for base ${sha} in ${path.join(snapshotsDir, "index.json")}` + (others ? ` (only older versions: ${others})` : ""),
+        ...regenerateHint({ snapshotsDir, sha, repo, older }),
       ].join("\n"),
     );
   }
@@ -69,7 +93,7 @@ export function runImpact(argv: string[]): { text: string; exitCode: number } {
   const repo = path.resolve(values.repo);
   const base = git(repo, "rev-parse", "--verify", `${range[1]}^{commit}`).trim();
   const head = git(repo, "rev-parse", "--verify", `${range[2]}^{commit}`).trim();
-  const { snapshot, path: snapshotPath } = findBaseSnapshot(path.resolve(values.snapshots!), base);
+  const { snapshot, path: snapshotPath } = findBaseSnapshot(path.resolve(values.snapshots!), base, repo);
   const changes = parseNameStatus(git(repo, "diff", "--name-status", "-M", base, head));
   const report = computeImpact({ snapshot, changes, base, head, depth, snapshotPath });
   if (values.out) {

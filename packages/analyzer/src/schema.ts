@@ -178,6 +178,8 @@ export const Component = z.object({
     source: z.enum(["heuristic", "override", "llm"]),
     heuristicName: z.string(), // always kept: the deterministic fallback
     model: z.string().optional(),
+    /** 0.7.0+: tracehound.json `summary: false` - the model-written summary was wrong and is not kept */
+    summaryDropped: z.boolean().optional(),
   }),
   package: z.string().optional(), // absent for infrastructure resources
   files: z.array(z.string()),

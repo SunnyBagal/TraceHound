@@ -7,13 +7,26 @@ on a canvas. Later: a graph-guided repair agent.
 - **Live:** https://tracehound-tau.vercel.app (Vercel, Root Directory `viewer`, auto-deploys
   from `main`; leave Output Directory unset). CI (`.github/workflows/ci.yml`) runs tests,
   typecheck, and the viewer build, and checks that `out/snapshots/index.json` exists.
-- **Built:** analyzer 0.6.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
-  anchor-reach grouping; `tracehound.json` overrides; orphan warnings; `proven` /
-  `resolved-default` / `dynamic` labels; TESTS links from test files; per-file `chars`; error-message literals) → static snapshots + manifest → viewer (React Flow +
-  ELK, node/edge inspectors, GitHub permalinks, warnings panel, phone bottom sheet).
+- **Built:** analyzer 0.7.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
+  BullMQ queues; anchor-reach grouping; `tracehound.json` overrides, `ignore` and `entryPoints`;
+  orphan and queue warnings; `proven` / `resolved-default` / `dynamic` labels; TESTS links from
+  test files; per-file `chars`; error-message literals) → static snapshots + manifest → viewer
+  (React Flow + ELK, node/edge inspectors, GitHub permalinks, warnings panel, phone bottom sheet).
+  The viewer serves CEX @ `da0e3d6`, analyzer 0.7.0 (`snapshots/`; the 0.6.0 file is kept).
+- **BullMQ (decision 035, detector `bullmq-queues@0.1`):** `new Queue` / `<queue>.add` (queue
+  resolved through symbols) / `new Worker` → producer `-produces->` one broker node per queue
+  name `-consumes->` worker; a file that constructs a Worker is a process entry point. Unpaired,
+  unresolved and unsupported constructs are warnings. Not frozen yet; an unseen third repo checks
+  it after it freezes (backlog).
+- **Second repo, Recall** (`SunnyBagal/Recall` @ `5d2165a`, public): config
+  `configs/recall.tracehound.json`; snapshot in `docs/recall/snapshots/` (its own manifest, not
+  served by the viewer) → 7 components, 6 edges (API -produces-> `content-processing` queue
+  -consumes-> worker, both proven), 2 orphan warnings. Impact pass `--snapshots
+  docs/recall/snapshots`.
 - **Impact (feature 4, CLI only):** `pnpm tracehound impact --repo <path> --diff <base>..<head>
   [--depth 2] [--json]` → changed/affected components with evidence chains (decision 023).
-  Needs a current-version snapshot of `<base>` in `snapshots/`. `--out impacts/<name>.json`
+  Needs a current-version snapshot of `<base>` in `snapshots/` (the error prints the regenerate
+  command, `--cache-only` when the older snapshot had model names). `--out impacts/<name>.json`
   writes a report the viewer serves at `?impact=<name>` (changed/affected styling, dynamic
   edges flagged, chain panel). The viewer build fails if an impact cites an id missing from its
   base snapshot. Precomputed: `seed-queue-consumer`, `seed-rpc-bridge`, `seed-pending-registry`.
@@ -23,7 +36,10 @@ on a canvas. Later: a graph-guided repair agent.
   after the Sandboxes spike). Sandbox image `tracehound-sandbox:bun1.4.2-ts5.9.3-1` from
   `harness/sandbox.Dockerfile`. The sandbox's history is squashed to one fixed `base` commit
   after setup (no `git log -p` leak). Toy fixture: `node eval/fixtures/build-toy-repo.ts`, tasks
-  `eval/tasks/toy-*`. The user writes the CEX tasks (`eval/tasks/dev-*`, none on main yet).
+  `eval/tasks/toy-*`. **Dev tasks pending:** the user writes the CEX tasks (`eval/tasks/dev-01`,
+  `dev-02`), not on main yet; validation and the 12 dev runs (Prompt I steps 4–5) wait for them.
+  `--graph on` reads the snapshot named in task.json, on the host (toy-discount:
+  `eval/snapshots/3582f35…/0.6.0.json`).
 - **Repair agent (decisions 029, 030):** host-side loop with native tool calls, Nano by default.
   agent-v2 (environment facts, repeat guard, whitespace-tolerant edit_file, confirm-on-empty
   finish) **failed the toy gate: graph off resolved 2/5, needed 4/5**
@@ -52,7 +68,9 @@ on a canvas. Later: a graph-guided repair agent.
 - **Naming:** Nano with reasoning off (`chat_template_kwargs.enable_thinking=false`, decision
   020) plus deterministic checks (021). Nano beat Super on cost and tied on checks, so Nano
   stays the default. Naming spend was about $0.043; all-time spend is in `pnpm spend`
-  ($0.246 on 2026-10-01, mostly repair-agent runs).
+  ($0.315 on 2026-10-01, mostly repair-agent runs). A wrong name is fixed with a
+  `tracehound.json` name override (never labelled model-written); a wrong summary is dropped with
+  `summary: false`, never replaced by hand.
 - **Prices:** `config/prices.json` has Nano/Super rates from third-party trackers, not yet
   verified in the Nebius console.
 
