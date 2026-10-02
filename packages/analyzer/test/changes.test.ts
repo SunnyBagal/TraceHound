@@ -216,3 +216,24 @@ describe("change sets: types (decision 039)", () => {
     expect(c.warnings.filter((w) => w.kind === "queue-payload-type-changed")).toEqual([]);
   });
 });
+
+describe("change sets: formatting (decision 039)", () => {
+  it("whitespace- or comment-only edits are 'formatting' and don't count as modified; whitespace inside a string is a real change", () => {
+    const c = changes(
+      {
+        "src/app.ts":
+          "export function a(x: number) {\n  return x + 1;\n}\n/** doc */\nexport function b(x: number) {\n  return x;\n}\nexport function c(x: number) {\n  return `${x} items`;\n}\nexport function d(x: number) {\n  return x * 2;\n}\n",
+      },
+      {
+        "src/app.ts":
+          "export function a( x: number ) {\n    return x+1; // reindented, spaced, commented\n}\n/** changed doc */\nexport function b(x: number) {\n  return x;\n}\nexport function c(x: number) {\n  return `${x}  items`;\n}\nexport function d(x: number) {\n  return x * 3;\n}\n",
+      },
+    );
+    expect(decl(c, "src/app.ts#a")).toMatchObject({ status: "modified", modifications: ["formatting"] });
+    expect(decl(c, "src/app.ts#b")).toBeUndefined(); // a JSDoc change is trivia outside the declaration's parts
+    expect(decl(c, "src/app.ts#c")).toMatchObject({ status: "modified", modifications: ["body"] }); // template text is content
+    expect(decl(c, "src/app.ts#d")).toMatchObject({ status: "modified", modifications: ["body"] });
+    expect(c.stats.declarations).toMatchObject({ modified: 2, formatting: 1 });
+    expect(c.components[0]!.declarations).toMatchObject({ modified: 2, formatting: 1 });
+  });
+});

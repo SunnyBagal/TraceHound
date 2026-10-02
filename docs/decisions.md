@@ -1300,3 +1300,13 @@ version 2.
   builds the backend's own `EngineRequest` (`backend/src/types/engine.ts`, unchanged). The two
   sides use different declarations of the same contract, so tsc can't connect them; this rule
   can.
+**Step 3 · Formatting-insensitive comparison.** Every part of a declaration is now built from
+AST pieces, and both an exact text and a normalized form are derived from them. The normalized
+form is the leaf tokens joined by single spaces: whitespace, comments and JSDoc are trivia and
+drop out, JSX text has its whitespace collapsed, and string, template and regex tokens are kept
+exactly. A part whose exact text differs but whose tokens don't is `formatting`; a declaration
+with only that is modification `["formatting"]`. It is listed, but counted under `formatting`,
+not `modified`, in the component rollup and the stats. Regex re-scanning on raw text was
+rejected: whitespace inside regexes and template literals would have looked like formatting.
+Test: a reindented, respaced, commented function → `formatting`; a JSDoc-only edit → unchanged
+(trivia outside the parts); whitespace added inside a template literal → `body`.

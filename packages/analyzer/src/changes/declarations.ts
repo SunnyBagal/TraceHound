@@ -1,7 +1,7 @@
 // Declarations and call sites of one tree (decision 038). Deterministic: ts-morph symbols only.
 // Every call expression lands in exactly one bucket - resolved (to a declaration in the analyzed
 // files), external (a package or the TS lib), or dynamic (not resolvable statically) - none is dropped.
-import { Node, SyntaxKind, type SourceFile } from "ts-morph";
+import { Node, SyntaxKind, ts, type SourceFile } from "ts-morph";
 import type { CallCounts, DeclarationKind } from "../schema.ts";
 import { importOrigin } from "../extract/provenance.ts";
 
@@ -16,6 +16,8 @@ export interface Decl {
   start: number; // character positions of the declaration's node
   end: number;
   parts: { signature: string; returnType?: string; body?: string; typeAnnotation?: string; shape?: string };
+  /** the same parts with whitespace and comments normalized away (formatting-insensitive) */
+  norm: { signature: string; returnType?: string; body?: string; typeAnnotation?: string; shape?: string };
   topLevel: boolean; // a direct child of the module (classes, functions, variables, inline route handlers at module scope)
 }
 
@@ -56,15 +58,67 @@ const modifiersText = (n: Node) => (Node.isModifierable(n) ? n.getModifiers().ma
 
 const bodyOf = (fn: Node): Node | undefined => ("getBody" in fn && typeof fn.getBody === "function" ? (fn.getBody() as Node | undefined) : undefined);
 
-function fnParts(prefix: string, fn: Node): Decl["parts"] {
+// ── parts: each part is a list of pieces, from which the exact text and a formatting-insensitive
+// form are both derived (0.9.0). The normalized form is the node's leaf tokens joined by single
+// spaces: whitespace, comments and JSDoc are trivia and drop out, JSX text has its whitespace
+// collapsed, and every other token (strings, templates, regexes) is kept exactly.
+type Marked = { node: Node; markers: { node: Node; marker: string }[] };
+type Piece = string | Node | Marked;
+type PartPieces = { signature: Piece[]; returnType?: Piece[]; body?: Piece[]; typeAnnotation?: Piece[]; shape?: Piece[] };
+
+function tokens(node: Node, markers: Marked["markers"] = []): string {
+  const sf = node.getSourceFile().compilerNode;
+  const replace = new Map(markers.map((m) => [m.node.compilerNode, m.marker]));
+  const out: string[] = [];
+  const walk = (c: ts.Node) => {
+    const marker = replace.get(c);
+    if (marker !== undefined) return void out.push(marker);
+    if (c.kind === ts.SyntaxKind.JSDoc) return;
+    if (c.kind === ts.SyntaxKind.JsxText) {
+      const t = c.getText(sf).replace(/\s+/g, " ").trim();
+      if (t) out.push(t);
+      return;
+    }
+    const kids = c.getChildren(sf);
+    if (!kids.length) {
+      const t = c.getText(sf);
+      if (t) out.push(t);
+      return;
+    }
+    kids.forEach(walk);
+  };
+  walk(node.compilerNode);
+  return out.join(" ");
+}
+function exactText(m: Marked): string {
+  let text = m.node.getText();
+  const base = m.node.getStart();
+  for (const { node, marker } of [...m.markers].sort((a, b) => b.node.getStart() - a.node.getStart())) text = text.slice(0, node.getStart() - base) + marker + text.slice(node.getEnd() - base);
+  return text;
+}
+const pieceExact = (p: Piece) => (typeof p === "string" ? p : "markers" in p ? exactText(p) : p.getText());
+const pieceNorm = (p: Piece) => (typeof p === "string" ? p.replace(/\s+/g, " ").trim() : "markers" in p ? tokens(p.node, p.markers) : tokens(p));
+function render(pp: PartPieces): { parts: Decl["parts"]; norm: Decl["parts"] } {
+  const parts: Record<string, string> = {};
+  const norm: Record<string, string> = {};
+  for (const [k, pieces] of Object.entries(pp) as [string, Piece[] | undefined][]) {
+    if (!pieces) continue;
+    parts[k] = pieces.map(pieceExact).join("\u0001");
+    norm[k] = pieces.map(pieceNorm).join("\u0001");
+  }
+  return { parts: parts as Decl["parts"], norm: norm as Decl["parts"] };
+}
+
+function fnParts(prefix: Piece[], fn: Node): PartPieces {
   if (!(Node.isFunctionLikeDeclaration(fn) || Node.isArrowFunction(fn) || Node.isFunctionExpression(fn))) return { signature: prefix };
-  const typeParams = Node.isTypeParametered(fn) ? fn.getTypeParameters().map((t) => t.getText()).join(", ") : "";
-  const params = fn.getParameters().map((p) => p.getText()).join(", ");
-  const asyncKw = Node.isAsyncable(fn) && fn.isAsync() ? "async " : "";
+  const typeParams = Node.isTypeParametered(fn) ? fn.getTypeParameters() : [];
+  const asyncKw = Node.isAsyncable(fn) && fn.isAsync() ? "async" : "";
+  const ret = fn.getReturnTypeNode();
+  const body = bodyOf(fn);
   return {
-    signature: `${asyncKw}${prefix}${typeParams ? `<${typeParams}>` : ""}(${params})`,
-    ...(fn.getReturnTypeNode() && { returnType: fn.getReturnTypeNode()!.getText() }),
-    ...(bodyOf(fn) && { body: bodyOf(fn)!.getText() }),
+    signature: [asyncKw, ...prefix, "<", ...typeParams, ">(", ...fn.getParameters(), ")"],
+    ...(ret && { returnType: [ret] }),
+    ...(body && { body: [body] }),
   };
 }
 
@@ -73,10 +127,11 @@ export function indexTree(sourceFiles: SourceFile[], rel: (abs: string) => strin
   const byFile = new Map<string, Decl[]>();
   const byPos = new Map<string, string>(); // "<file>:<start>" of a declaration node → id
   const files = new Set(sourceFiles.map((sf) => rel(sf.getFilePath())));
-  const add = (d: Omit<Decl, "id"> & { id?: string }, node: Node) => {
+  const add = (d: Omit<Decl, "id" | "parts" | "norm"> & { id?: string; pieces: PartPieces }, node: Node) => {
     let id = d.id ?? `${d.file}#${d.name}`;
     for (let n = 2; decls.has(id); n++) id = `${d.file}#${d.name} (${n})`;
-    const decl: Decl = { ...d, id };
+    const { pieces, ...rest } = d;
+    const decl: Decl = { ...rest, id, ...render(pieces) };
     decls.set(id, decl);
     byFile.set(d.file, [...(byFile.get(d.file) ?? []), decl]);
     if (d.kind !== "module") byPos.set(`${d.file}:${node.getStart()}`, id); // the module starts at 0, like the first declaration
@@ -95,44 +150,34 @@ export function indexTree(sourceFiles: SourceFile[], rel: (abs: string) => strin
         const name = stmt.getName()!;
         const impl = stmt.getImplementation() ?? stmt;
         if (stmt !== impl && stmt.getBody() === undefined) continue; // an overload: folded into the implementation below
-        const overloads = impl.getOverloads().map((o) => o.getText()).join("\n");
-        const parts = fnParts(`${modifiersText(impl)} function ${name}`.trim(), impl);
-        add({ name, file, kind: fnKind(name, impl), exported: impl.isExported(), ...span(impl), parts: { ...parts, signature: overloads ? `${overloads}\n${parts.signature}` : parts.signature }, topLevel: true }, impl);
+        const parts = fnParts([modifiersText(impl), "function", name], impl);
+        add({ name, file, kind: fnKind(name, impl), exported: impl.isExported(), ...span(impl), pieces: { ...parts, signature: [...impl.getOverloads(), ...parts.signature] }, topLevel: true }, impl);
         topNodes.push(impl, ...impl.getOverloads());
       } else if (Node.isClassDeclaration(stmt)) {
         const name = stmt.getName() ?? "default";
-        const header = [
-          stmt.getDecorators().map((d) => d.getText()).join(" "),
-          modifiersText(stmt),
-          `class ${name}`,
-          stmt.getTypeParameters().map((t) => t.getText()).join(", "),
-          stmt.getHeritageClauses().map((h) => h.getText()).join(" "),
-        ].filter(Boolean).join(" ");
-        let body = stmt.getText();
-        const members: { id: string; node: Node }[] = [];
+        const header: Piece[] = [...stmt.getDecorators(), modifiersText(stmt), "class", name, "<", ...stmt.getTypeParameters(), ">", ...stmt.getHeritageClauses()];
+        const members: { node: Node; marker: string }[] = [];
         for (const m of stmt.getMembers()) {
           const memberName = Node.isConstructorDeclaration(m) ? "constructor" : Node.isGetAccessorDeclaration(m) ? `get ${m.getName()}` : Node.isSetAccessorDeclaration(m) ? `set ${m.getName()}` : "getName" in m ? String((m as { getName(): string }).getName()) : undefined;
           if (!memberName) continue;
           if (Node.isPropertyDeclaration(m)) {
             const init = m.getInitializer();
             if (init && isFnLike(init)) {
-              const d = add({ name: `${name}.${memberName}`, file, kind: "method", exported: false, ...span(m), parts: fnParts(`${modifiersText(m)} ${memberName}`.trim(), init), topLevel: false }, m);
-              members.push({ id: d.id, node: m });
+              const d = add({ name: `${name}.${memberName}`, file, kind: "method", exported: false, ...span(m), pieces: fnParts([modifiersText(m), memberName], init), topLevel: false }, m);
+              members.push({ node: m, marker: `⟨${d.id}⟩` });
             } else {
-              const d = add({ name: `${name}.${memberName}`, file, kind: "property", exported: false, ...span(m), parts: { signature: `${modifiersText(m)} ${memberName}${m.hasQuestionToken() ? "?" : ""}`.trim(), ...(m.getTypeNode() && { typeAnnotation: m.getTypeNode()!.getText() }), ...(init && { body: init.getText() }) }, topLevel: false }, m);
-              members.push({ id: d.id, node: m });
+              const typeNode = m.getTypeNode();
+              const d = add({ name: `${name}.${memberName}`, file, kind: "property", exported: false, ...span(m), pieces: { signature: [modifiersText(m), memberName, m.hasQuestionToken() ? "?" : ""], ...(typeNode && { typeAnnotation: [typeNode] }), ...(init && { body: [init] }) }, topLevel: false }, m);
+              members.push({ node: m, marker: `⟨${d.id}⟩` });
             }
           } else if (Node.isMethodDeclaration(m) || Node.isConstructorDeclaration(m) || Node.isGetAccessorDeclaration(m) || Node.isSetAccessorDeclaration(m)) {
-            if (Node.isMethodDeclaration(m) && !m.getBody()) continue; // overload / abstract signature: part of the class header text below
-            const d = add({ name: `${name}.${memberName}`, file, kind: "method", exported: false, ...span(m), parts: fnParts(`${modifiersText(m)} ${memberName}`.trim(), m), topLevel: false }, m);
-            members.push({ id: d.id, node: m });
+            if (Node.isMethodDeclaration(m) && !m.getBody()) continue; // overload / abstract signature: part of the class's own text below
+            const d = add({ name: `${name}.${memberName}`, file, kind: "method", exported: false, ...span(m), pieces: fnParts([modifiersText(m), memberName], m), topLevel: false }, m);
+            members.push({ node: m, marker: `⟨${d.id}⟩` });
           }
         }
         // the class's own body: its text with each member replaced by a marker (members are compared on their own)
-        for (const { id, node } of [...members].sort((a, b) => b.node.getStart() - a.node.getStart())) {
-          body = body.slice(0, node.getStart() - stmt.getStart()) + `⟨${id}⟩` + body.slice(node.getEnd() - stmt.getStart());
-        }
-        add({ name, file, kind: "class", exported: stmt.isExported(), ...span(stmt), parts: { signature: header, body }, topLevel: true }, stmt);
+        add({ name, file, kind: "class", exported: stmt.isExported(), ...span(stmt), pieces: { signature: header, body: [{ node: stmt, markers: members }] }, topLevel: true }, stmt);
         topNodes.push(stmt);
       } else if (Node.isVariableStatement(stmt)) {
         for (const v of stmt.getDeclarations()) {
@@ -140,12 +185,14 @@ export function indexTree(sourceFiles: SourceFile[], rel: (abs: string) => strin
           let init: Node | undefined = v.getInitializer();
           // `memo(() => …)` / `forwardRef(function …)`: the wrapped function is the declaration's body
           if (init && Node.isCallExpression(init) && isFnLike(init.getArguments()[0])) init = init.getArguments()[0];
-          const prefix = `${stmt.isExported() ? "export " : ""}${stmt.getDeclarationKind()} ${name}${v.getTypeNode() ? `: ${v.getTypeNode()!.getText()}` : ""} =`;
+          const typeNode = v.getTypeNode();
+          const prefix: Piece[] = [stmt.isExported() ? "export" : "", stmt.getDeclarationKind(), name, ...(typeNode ? [":", typeNode] : []), "="];
           if (init && isFnLike(init)) {
-            add({ name, file, kind: fnKind(name, init), exported: stmt.isExported(), ...span(v), parts: fnParts(prefix, init), topLevel: true }, v);
+            add({ name, file, kind: fnKind(name, init), exported: stmt.isExported(), ...span(v), pieces: fnParts(prefix, init), topLevel: true }, v);
             topNodes.push(v);
           } else if (stmt.isExported()) {
-            add({ name, file, kind: "variable", exported: true, ...span(v), parts: { signature: `${stmt.getDeclarationKind()} ${name}`, ...(v.getTypeNode() && { typeAnnotation: v.getTypeNode()!.getText() }), ...(v.getInitializer() && { body: v.getInitializer()!.getText() }) }, topLevel: true }, v);
+            const value = v.getInitializer();
+            add({ name, file, kind: "variable", exported: true, ...span(v), pieces: { signature: [stmt.getDeclarationKind(), name], ...(typeNode && { typeAnnotation: [typeNode] }), ...(value && { body: [value] }) }, topLevel: true }, v);
             topNodes.push(v);
           }
         }
@@ -153,18 +200,14 @@ export function indexTree(sourceFiles: SourceFile[], rel: (abs: string) => strin
         // types are declarations of their own (0.9.0): the definition is their "shape"
         const name = stmt.getName();
         const keyword = Node.isInterfaceDeclaration(stmt) ? "interface" : Node.isTypeAliasDeclaration(stmt) ? "type" : stmt.isConstEnum() ? "const enum" : "enum";
-        const typeParams = Node.isEnumDeclaration(stmt) ? "" : stmt.getTypeParameters().map((t) => t.getText()).join(", ");
-        const shape = Node.isInterfaceDeclaration(stmt)
-          ? [stmt.getHeritageClauses().map((h) => h.getText()).join(" "), ...stmt.getMembers().map((m) => m.getText())].join("\n")
-          : Node.isTypeAliasDeclaration(stmt)
-            ? stmt.getTypeNodeOrThrow().getText()
-            : stmt.getMembers().map((m) => m.getText()).join("\n");
-        add({ name, file, kind: "type", exported: stmt.isExported(), ...span(stmt), parts: { signature: `${modifiersText(stmt)} ${keyword} ${name}${typeParams ? `<${typeParams}>` : ""}`.trim(), shape }, topLevel: true }, stmt);
+        const typeParams = Node.isEnumDeclaration(stmt) ? [] : stmt.getTypeParameters();
+        const shape: Piece[] = Node.isInterfaceDeclaration(stmt) ? [...stmt.getHeritageClauses(), "{", ...stmt.getMembers(), "}"] : Node.isTypeAliasDeclaration(stmt) ? [stmt.getTypeNodeOrThrow()] : ["{", ...stmt.getMembers(), "}"];
+        add({ name, file, kind: "type", exported: stmt.isExported(), ...span(stmt), pieces: { signature: [modifiersText(stmt), keyword, name, "<", ...typeParams, ">"], shape }, topLevel: true }, stmt);
         topNodes.push(stmt);
       } else if (Node.isExportAssignment(stmt) && !stmt.isExportEquals()) {
         const expr = stmt.getExpression();
-        if (isFnLike(expr)) add({ name: "default", file, kind: fnKind("Default", expr), exported: true, ...span(stmt), parts: fnParts("export default", expr), topLevel: true }, stmt);
-        else add({ name: "default", file, kind: "variable", exported: true, ...span(stmt), parts: { signature: "export default", body: expr.getText() }, topLevel: true }, stmt);
+        if (isFnLike(expr)) add({ name: "default", file, kind: fnKind("Default", expr), exported: true, ...span(stmt), pieces: fnParts(["export default"], expr), topLevel: true }, stmt);
+        else add({ name: "default", file, kind: "variable", exported: true, ...span(stmt), pieces: { signature: ["export default"], body: [expr] }, topLevel: true }, stmt);
         topNodes.push(stmt);
       }
     }
@@ -174,28 +217,27 @@ export function indexTree(sourceFiles: SourceFile[], rel: (abs: string) => strin
       const call = sf.getDescendantsOfKind(SyntaxKind.CallExpression).find((c) => c.getStartLineNumber() === r.startLine && Node.isPropertyAccessExpression(c.getExpression()));
       const handler = call?.getArguments().at(-1);
       if (call && handler && isFnLike(handler)) {
-        add({ name: `route:${r.label}`, file, kind: "route-handler", exported: false, ...span(handler), parts: fnParts(`route:${r.label}`, handler), topLevel: !handler.getFirstAncestor((a) => topNodes.includes(a)) }, handler);
+        add({ name: `route:${r.label}`, file, kind: "route-handler", exported: false, ...span(handler), pieces: fnParts([`route:${r.label}`], handler), topLevel: !handler.getFirstAncestor((a) => topNodes.includes(a)) }, handler);
       }
     }
 
-    // the module: its own top-level statements (imports, top-level code, types and interfaces,
-    // non-exported values), joined; declarations are left out entirely, except an inline route
-    // handler, which keeps a marker inside its registration call. Adding or removing a function is
-    // therefore not a change to the module.
+    // the module: its own top-level statements (imports, top-level code, non-exported values),
+    // joined; declarations are left out entirely, except an inline route handler, which keeps a
+    // marker inside its registration call. Adding or removing a function doesn't change the module.
     const own = [...(byFile.get(file) ?? [])].filter((d) => d.topLevel);
-    const handlers = own.filter((d) => d.kind === "route-handler");
-    const body = sf
+    const handlerDecls = own.filter((d) => d.kind === "route-handler");
+    const statements: Piece[] = sf
       .getStatements()
       .filter((st) => !own.some((d) => d.kind !== "route-handler" && st.getStart() <= d.start && d.end <= st.getEnd() && (st.getStart() === d.start || Node.isVariableStatement(st))))
       .map((st) => {
-        let text = st.getText();
-        for (const h of handlers.filter((h) => h.start >= st.getStart() && h.end <= st.getEnd()).sort((a, b) => b.start - a.start)) {
-          text = text.slice(0, h.start - st.getStart()) + `⟨${h.id}⟩` + text.slice(h.end - st.getStart());
-        }
-        return text;
-      })
-      .join("\n");
-    add({ id: `${file}#${MODULE}`, name: MODULE, file, kind: "module", exported: false, startLine: 1, endLine: sf.getEndLineNumber(), start: 0, end: sf.getEnd(), parts: { signature: "", body }, topLevel: false }, sf);
+        const inside = handlerDecls.filter((h) => h.start >= st.getStart() && h.end <= st.getEnd());
+        const markers = inside.flatMap((h) => {
+          const node = st.getDescendants().find((n) => n.getStart() === h.start && n.getEnd() === h.end && (Node.isArrowFunction(n) || Node.isFunctionExpression(n)));
+          return node ? [{ node, marker: `⟨${h.id}⟩` }] : [];
+        });
+        return { node: st, markers };
+      });
+    add({ id: `${file}#${MODULE}`, name: MODULE, file, kind: "module", exported: false, startLine: 1, endLine: sf.getEndLineNumber(), start: 0, end: sf.getEnd(), pieces: { signature: [], body: statements }, topLevel: false }, sf);
   }
 
   const enclosing = (file: string, pos: number): string => {

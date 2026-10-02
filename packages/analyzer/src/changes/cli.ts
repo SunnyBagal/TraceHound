@@ -56,7 +56,7 @@ export function formatChangeSet(c: ChangeSet): string {
   const s = c.stats;
   const out = [
     `tracehound changes · ${c.repo.name} · ${c.base.sha.slice(0, 7)}..${head} · analyzer ${c.analyzerVersion} · ${s.runtimeMs} ms`,
-    `files: +${s.files.added} −${s.files.removed} ~${s.files.modified} · declarations: +${s.declarations.added} −${s.declarations.removed} ~${s.declarations.modified} (${s.declarations.unchanged} unchanged) · edges: +${s.edges.added} −${s.edges.removed}`,
+    `files: +${s.files.added} −${s.files.removed} ~${s.files.modified} · declarations: +${s.declarations.added} −${s.declarations.removed} ~${s.declarations.modified} (${s.declarations.formatting} formatting only, ${s.declarations.unchanged} unchanged) · edges: +${s.edges.added} −${s.edges.removed}`,
     `calls (head): ${s.calls.head.resolved} resolved, ${s.calls.head.external} external, ${s.calls.head.dynamic} dynamic`,
     "",
     "Components",

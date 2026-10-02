@@ -395,7 +395,8 @@ const Span = z.object({ file: z.string(), startLine: z.number().int().positive()
 export const DeclarationKind = z.enum(["function", "class", "method", "property", "react-component", "variable", "route-handler", "module", "type"]);
 export type DeclarationKind = z.infer<typeof DeclarationKind>;
 export const ChangeStatus = z.enum(["added", "removed", "modified", "unchanged"]);
-export const ModificationKind = z.enum(["signature", "returnType", "body", "typeAnnotation", "shape"]);
+// "formatting": only whitespace or comments changed (0.9.0); such declarations don't count as modified in rollups
+export const ModificationKind = z.enum(["signature", "returnType", "body", "typeAnnotation", "shape", "formatting"]);
 export type ModificationKind = z.infer<typeof ModificationKind>;
 
 export const DeclarationChange = z.object({
@@ -443,7 +444,7 @@ export type FileChange = z.infer<typeof FileChange>;
 export const ComponentChange = z.object({
   id: z.string(),
   name: z.string(),
-  declarations: z.object({ added: z.number().int(), modified: z.number().int(), removed: z.number().int() }),
+  declarations: z.object({ added: z.number().int(), modified: z.number().int(), removed: z.number().int(), formatting: z.number().int() }),
   edges: z.object({ crossComponentAdded: z.number().int(), crossComponentRemoved: z.number().int(), crossProcessAdded: z.number().int(), crossProcessRemoved: z.number().int() }),
   componentEdges: z.object({ added: z.array(z.string()), removed: z.array(z.string()) }),
 });
@@ -475,7 +476,7 @@ export const ChangeSet = z.object({
   edges: z.array(EdgeChange),
   warnings: z.array(ChangeWarning),
   stats: z.object({
-    declarations: z.object({ added: z.number().int(), removed: z.number().int(), modified: z.number().int(), unchanged: z.number().int() }),
+    declarations: z.object({ added: z.number().int(), removed: z.number().int(), modified: z.number().int(), formatting: z.number().int(), unchanged: z.number().int() }),
     edges: z.object({ added: z.number().int(), removed: z.number().int(), unchanged: z.number().int() }),
     files: z.object({ added: z.number().int(), removed: z.number().int(), modified: z.number().int() }),
     calls: z.object({ base: CallCounts, head: CallCounts }),

@@ -28,7 +28,7 @@ export { ChangesError } from "./git.ts";
 export const LIMITATIONS = [
   "Renames are not detected: a renamed or moved declaration appears as removed + added (ids are file path + qualified name), and file renames are diffed with --no-renames.",
   "Return types are compared only where annotated; inferred return types are not compared.",
-  "Bodies are compared as exact text: a formatting-only edit counts as a body change.",
+  "Bodies, signatures and types are compared as token streams: an edit that only touches whitespace or comments is modification \"formatting\" and doesn't count as modified in the rollups. JSX text is compared with its whitespace collapsed.",
   "Interfaces, type aliases and enums are declarations (kind type, modification shape); non-exported module-level values and namespaces are not: their edits show as the module's body.",
   "Call resolution is static (ts-morph symbols). Calls through parameters, locals, element access or untyped values are counted as dynamic per file; calls into packages or the TS lib are counted as external. Neither produces an edge.",
   "Without a package's or the runtime's types installed, a call is counted external when its receiver chain starts at something imported, typed or constructed from a package, or at an undeclared runtime global from a fixed list (console, crypto, setTimeout, fetch, …); any other free identifier is dynamic.",
@@ -210,15 +210,19 @@ export function resolveConfig(repo: string, explicit: string | undefined, worksp
   return candidate && existsSync(candidate) ? candidate : undefined;
 }
 
-const sameParts = (a: Decl["parts"], b: Decl["parts"]): ModificationKind[] => {
+const PART_KINDS: [keyof Decl["parts"], ModificationKind][] = [["signature", "signature"], ["returnType", "returnType"], ["body", "body"], ["typeAnnotation", "typeAnnotation"], ["shape", "shape"]];
+/** Which parts changed. A part whose exact text differs but whose tokens don't is formatting only. */
+const sameParts = (a: Decl, b: Decl): ModificationKind[] => {
   const kinds: ModificationKind[] = [];
-  if (a.signature !== b.signature) kinds.push("signature");
-  if (a.returnType !== b.returnType) kinds.push("returnType");
-  if (a.body !== b.body) kinds.push("body");
-  if (a.typeAnnotation !== b.typeAnnotation) kinds.push("typeAnnotation");
-  if (a.shape !== b.shape) kinds.push("shape");
-  return kinds;
+  let formatting = false;
+  for (const [part, kind] of PART_KINDS) {
+    if (a.parts[part] === b.parts[part]) continue;
+    if (a.norm[part] === b.norm[part]) formatting = true;
+    else kinds.push(kind);
+  }
+  return kinds.length ? kinds : formatting ? ["formatting"] : [];
 };
+const formattingOnly = (d: DeclarationChange) => d.status === "modified" && d.modifications.length === 1 && d.modifications[0] === "formatting";
 
 /** Changed lines inside a declaration's span; a module counts only lines outside its top-level declarations. */
 function linesIn(d: Decl, changed: Set<number> | undefined, index: TreeIndex): number {
@@ -294,7 +298,7 @@ function build(base: TreeSide, head: TreeSide, hunks: Map<string, FileHunks>): O
     const b = base.index.decls.get(id);
     const h = head.index.decls.get(id);
     const d = (h ?? b)!;
-    const mods = b && h ? sameParts(b.parts, h.parts) : [];
+    const mods = b && h ? sameParts(b, h) : [];
     if (b && h && b.kind !== h.kind && !mods.includes("signature")) mods.unshift("signature");
     const status: DeclarationChange["status"] = !b ? "added" : !h ? "removed" : mods.length ? "modified" : "unchanged";
     const comp = h ? head.componentOf(h.file) : base.componentOf(b!.file);
@@ -376,7 +380,12 @@ function build(base: TreeSide, head: TreeSide, hunks: Map<string, FileHunks>): O
     return {
       id,
       name: name(id),
-      declarations: { added: decls.filter((d) => d.status === "added").length, modified: decls.filter((d) => d.status === "modified").length, removed: decls.filter((d) => d.status === "removed").length },
+      declarations: {
+        added: decls.filter((d) => d.status === "added").length,
+        modified: decls.filter((d) => d.status === "modified" && !formattingOnly(d)).length,
+        removed: decls.filter((d) => d.status === "removed").length,
+        formatting: decls.filter(formattingOnly).length,
+      },
       edges: {
         crossComponentAdded: count("added", (e) => e.crossComponent),
         crossComponentRemoved: count("removed", (e) => e.crossComponent),
@@ -397,7 +406,13 @@ function build(base: TreeSide, head: TreeSide, hunks: Map<string, FileHunks>): O
     edges,
     warnings,
     stats: {
-      declarations: { added: statusCount("added"), removed: statusCount("removed"), modified: statusCount("modified"), unchanged: statusCount("unchanged") },
+      declarations: {
+        added: statusCount("added"),
+        removed: statusCount("removed"),
+        modified: [...all.values()].filter((d) => d.status === "modified" && !formattingOnly(d)).length,
+        formatting: [...all.values()].filter(formattingOnly).length,
+        unchanged: statusCount("unchanged"),
+      },
       edges: { added: allEdgeStatuses.filter((s) => s === "added").length, removed: allEdgeStatuses.filter((s) => s === "removed").length, unchanged: allEdgeStatuses.filter((s) => s === "unchanged").length },
       files: { added: files.filter((f) => f.status === "added").length, removed: files.filter((f) => f.status === "removed").length, modified: files.filter((f) => f.status === "modified").length },
       calls: { base: sum(base.index.callCounts), head: sum(head.index.callCounts) },
