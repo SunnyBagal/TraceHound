@@ -27,11 +27,11 @@ on a canvas. Later: a graph-guided repair agent.
   name `-consumes->` worker; a file that constructs a Worker is a process entry point. Unpaired,
   unresolved and unsupported constructs are warnings. Not frozen yet; an unseen third repo checks
   it after it freezes (backlog).
-- **Second repo, Recall** (`SunnyBagal/Recall` @ `5d2165a`, public): config
-  `configs/recall.tracehound.json`; snapshot in `docs/recall/snapshots/` (its own manifest, not
-  served by the viewer) → 7 components, 6 edges (API -produces-> `content-processing` queue
-  -consumes-> worker, both proven), 2 orphan warnings. Impact pass `--snapshots
-  docs/recall/snapshots`.
+- **Second repo, Recall** (`SunnyBagal/Recall` @ `5d2165a`, public, MIT since `9113ced`, which
+  only adds LICENSE): config `configs/recall.tracehound.json`; snapshot in `snapshots/` as repo
+  `recall` of the multi-repo index (decision 039; `defaultRepo` and top-level `latest` stay on
+  CEX, so the viewer still shows CEX) → 7 components, 6 edges (API -produces->
+  `content-processing` queue -consumes-> worker, both proven), 2 orphan warnings.
 - **Impact (feature 4, CLI only):** `pnpm tracehound impact --repo <path> --diff <base>..<head>
   [--depth 2] [--json]` → changed/affected components with evidence chains (decision 023).
   Needs a current-version snapshot of `<base>` in `snapshots/` (the error prints the regenerate

@@ -1346,3 +1346,11 @@ Test: a reindented, respaced, commented function → `formatting`; a JSDoc-only 
 - **Recall is not in the published index.** `SunnyBagal/Recall` main has no LICENSE (GitHub
   license API: 404; no LICENSE* file at the root, rechecked 2026-10-02). Its snapshot stays under
   `docs/recall/snapshots/` with its own index.
+- **Update (2026-10-02): Recall is licensed, and published.** The owner added an MIT LICENSE.
+  `main` is now `9113ced`, two commits ahead of `5d2165a`; the GitHub compare shows the only file
+  changed is `LICENSE` (added). The snapshot therefore stays pinned at `5d2165a`: the analyzed
+  code is identical. The 0.7.0 file was moved unchanged (`git mv`) from `docs/recall/snapshots/`
+  to `snapshots/` and indexed through `upsertManifest`; `docs/recall/snapshots/index.json` is
+  gone. After that, `defaultRepo` = `cex-v2-boilercode` and the top-level `latest` is still CEX
+  `da0e3d6`. Back compat checked with `origin/main`'s schema, i.e. the deployed viewer's: it
+  parses the new index, strips `repos`, and gets the same `latest`.

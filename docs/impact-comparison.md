@@ -194,7 +194,8 @@ files and prints an empty result. The reported set is `modules[].source`, exclud
   (`scoping/process-content-change`, not pushed): one added line at the top of
   `processContent` in `recall-backend/worker.ts`.
 - **TraceHound:** `tracehound impact`, analyzer 0.7.0, `--depth 2`, base snapshot
-  `docs/recall/snapshots/5d2165aa9654f17a148f6663bc478a3fd9f7fc6b/0.7.0.json`.
+  `docs/recall/snapshots/5d2165aa9654f17a148f6663bc478a3fd9f7fc6b/0.7.0.json` (moved, unchanged,
+  to `snapshots/` when Recall got a LICENSE; decision 039).
 - **dependency-cruiser:** 18.4.0 with `typescript@5.9.3` through `npx`,
   `--reaches "^recall-backend/worker\.ts$"` over `recall-backend recall-frontend`, both with the
   default and with `--ts-pre-compilation-deps`.

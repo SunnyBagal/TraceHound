@@ -23,4 +23,5 @@ built.
   only after `bullmq-queues` freezes (Recall shaped the detector, so it doesn't count).
 
 ## Viewer
-- A repo switcher so the viewer can show Recall (`docs/recall/snapshots/`) next to CEX.
+- A repo switcher so the viewer can show Recall next to CEX: both are in `snapshots/index.json`
+  `repos` since decision 039; the viewer still reads only the top-level `latest` (CEX).
