@@ -1,0 +1,14 @@
+diff --git a/recall-backend/services/linkDetector.ts b/recall-backend/services/linkDetector.ts
+index e403e5c..6726938 100644
+--- a/recall-backend/services/linkDetector.ts
++++ b/recall-backend/services/linkDetector.ts
+@@ -89,7 +89,8 @@ function detectGitHub(url: URL) : LinkDetectionResult | null {
+   const [owner, repo] = parts;
+   if (!owner || !repo) return null;
+ 
+-  const nonRepoPaths = ["settings", "notifications", "explore", "topics", "marketplace"];
++  const nonRepoPaths = ["settings", "notifications", "explore", "topics", "trending", "marketplace"];
++  const nonRepoCount: number = "six";
+   if (nonRepoPaths.includes(owner)) return null;
+ 
+   return {

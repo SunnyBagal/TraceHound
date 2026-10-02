@@ -48,7 +48,7 @@ if (!enabled) {
         let t = performance.now();
         const baseline = await collectChecks(sh, "BASELINE", {
           regression: ["cd backend && bun test", "cd engine && bun test"],
-          typecheck: { packages: ["backend", "engine"], command: "tsc --noEmit" },
+          typecheck: ["backend", "engine"].map((pkg) => ({ package: pkg, command: "tsc --noEmit" })),
         });
         timings["baseline: bun test x2 + tsc x2"] = Math.round(performance.now() - t);
         const tsc = Object.fromEntries(baseline.typecheck.map((x) => [x.package, x.errors]));

@@ -1,0 +1,7 @@
+{
+  "id": "recall",
+  "workdir": "recall-backend",
+  "install": "bun install --frozen-lockfile",
+  "test": "bun test",
+  "typecheck": "$TSC --noEmit"
+}
