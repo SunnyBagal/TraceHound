@@ -1387,3 +1387,32 @@ consumer) that still has call sites at head; a side deleted outright is the orph
 job. The message also says "removed" rather than "changed" when every hit was removed. Tests:
 deleting the consumer → orphaned only (fails without the fix: the payload warning is back); a
 type removed from a consumer that still exists → the warning, worded "removed".
+**Step 7 · Real diffs rerun (0.9.0; dev, nothing tuned to them).** The same diffs and clones as
+decision 038; one row added (median diff on the clone with `node_modules`). Decl +/−/~ counts
+exclude formatting-only declarations, which have their own column. Types are type, interface or
+enum declarations with any status other than unchanged. Comp. edges and regrouped edges are
+unique ids. Calls are head-side resolved/external/dynamic.
+
+| Diff | Components | Files +/−/~ | Decl +/−/~ | Types changed | Formatting-only | Edges +/− | Comp. edges +/− | Regrouped edges | Warnings | Calls (head) | Runtime |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| CEX `da0e3d6..seed/impact-queue-consumer` | 1 | 0/0/1 | 0/0/2 | 1 (`EngineRequest` modified) | 0 | 0/0 | 0/0 | 0 | queue-payload-type-changed | 34/148/7 | 0.6 s |
+| Recall `42ba6f5` (2 TS lines) | 1 | 0/0/1 | 0/0/1 | 0 | 0 | 0/0 | 0/0 | 0 | none | 104/458/192 | 1.4 s |
+| Recall `5d2165a` (148) | 1 | 1/0/1 | 0/0/1 | 0 | 0 | 0/0 | 0/0 | 0 | none | 104/458/192 | 1.4 s |
+| Recall `5d2165a`, clone with node_modules | 1 | 1/0/1 | 0/0/1 | 0 | 0 | 0/0 | 0/0 | 0 | none | 104/616/34 | 4.9 s |
+| Recall `7943212` (1,773) | 2 | 11/0/4 | 3/0/5 | 1 (`HybridSearchTimings` added) | 5 | 1/0 | 0/0 | 0 | none | 101/445/181 | 1.2 s |
+| toy-discount run (`--run`) | 1 | 0/0/1 | 0/0/1 | 0 | 0 | 0/0 | 0/0 | 0 | none | 4/8/0 | 0.5 s |
+| Recall, `worker.ts` deleted (scratch) | 5 | 0/1/0 | 0/3/0 | 1 (`ContentJobData` removed) | 0 | 0/5 | 0/2 | 3 | queue-orphaned-by-diff | 100/408/192 | 1.5 s |
+
+- **Against decision 038:**
+  - CEX: modified 1 → 2. `EngineRequest` is now its own declaration, and the payload warning
+    fires with evidence on both sides.
+  - Recall `7943212`: modified 10 → 5, plus 5 formatting-only. All five are route handlers in
+    `recall-backend/index.ts`; checked against `git diff -w`, which shows only a reflowed
+    `db.insert(…).values(…).returning()` chain, removed blank lines and trailing whitespace.
+    Added 2 → 3: the new `HybridSearchTimings` interface.
+  - Deleted worker: removed 2 → 3 (the worker's `ContentJobData`). Component edges went from
+    1 added / 4 removed to 0 / 2: the two real removals (`content-processing → worker` consumes,
+    `worker → queue` imports). The three regrouping artefacts (`brainly-server ↔ shared`,
+    `worker → shared`) are now `regrouped`.
+- The clone without `node_modules` keeps 192 dynamic calls; with them, 34 (Step 1).
+- Spend: none. The ledger stayed at 959 lines through all of decision 039.

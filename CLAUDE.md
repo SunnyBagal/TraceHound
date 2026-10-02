@@ -3,25 +3,34 @@
 Analyzes a TypeScript repo and renders it as an interactive, evidence-backed component graph
 on a canvas. Later: a graph-guided repair agent.
 
-## Current state (2026-10-01)
+## Current state (2026-10-02)
 - **Live:** https://tracehound-tau.vercel.app (Vercel, Root Directory `viewer`, auto-deploys
-  from `main`; leave Output Directory unset). CI (`.github/workflows/ci.yml`) runs tests,
-  typecheck, and the viewer build, and checks that `out/snapshots/index.json` exists.
-- **Built:** analyzer 0.8.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
+  from `main`; leave Output Directory unset). CI (`.github/workflows/ci.yml`) runs the snapshot
+  version guard, tests, typecheck, and the viewer build, and checks that `out/snapshots/index.json`
+  exists.
+- **Built:** analyzer 0.9.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
   BullMQ queues; anchor-reach grouping; `tracehound.json` overrides, `ignore` and `entryPoints`;
   orphan and queue warnings; `proven` / `resolved-default` / `dynamic` labels; TESTS links from
   test files; per-file `chars`; error-message literals) → static snapshots + manifest → viewer
   (React Flow + ELK, node/edge inspectors, GitHub permalinks, warnings panel, phone bottom sheet).
-  The viewer serves CEX @ `da0e3d6`, analyzer 0.7.0 (`snapshots/`; the 0.6.0 file is kept).
-- **Change sets (decision 038, analyzer 0.8.0, CLI only):** `pnpm tracehound changes --repo <path>
+  The viewer serves CEX @ `da0e3d6`, analyzer 0.9.0 (`snapshots/`; older files are kept).
+- **Snapshot index (decision 039):** `snapshots/index.json` has `repos[]` ({id, name, repoUrl,
+  defaultRef, latest, versions}) and `defaultRepo` (`cex-v2-boilercode`) next to the original
+  `latest` / `snapshots`, which the deployed viewer reads and which stay on the default repo.
+  `context` / `query` take `--repo-id`; every MCP tool takes an optional `repo`. Version guard:
+  `node packages/analyzer/src/version-guard.ts snapshots` fails if any repo's latest snapshot isn't
+  the current `ANALYZER_VERSION` and prints the cache-only regenerate command (temp clone).
+- **Change sets (decisions 038, 039; schemaVersion 2; CLI only):** `pnpm tracehound changes --repo <path>
   --diff <base>..<head> [--config f] [--out f] [--json]` or `--run <run record>` → a
   declaration-level diff (functions, classes, methods, properties, React components, exported
-  variables, inline route handlers, module code), modification kinds, +/- lines, added/removed
-  `calls` / `route` / `produces` / `consumes` edges with evidence, a component rollup, and three
-  warnings (queue orphaned by the diff, cross-component signature change, removed declaration
-  still referenced). Every call is resolved, external or dynamic (counted, never dropped). No
-  model. The CEX and Recall snapshots are still 0.7.0: regenerate them at 0.8.0 (`--cache-only`)
-  before running `impact` on them.
+  variables, types/interfaces/enums, inline route handlers, module code), modification kinds
+  (`formatting` = whitespace/comments only, not counted as modified), +/- lines, added/removed
+  `calls` / `route` / `produces` / `consumes` edges with evidence, a component rollup (files keep
+  their base component at head; edges that only moved by regrouping are `regrouped`), and four
+  warnings (queue orphaned by the diff, queue payload type changed, cross-component signature
+  change, removed declaration still referenced). Worktrees get read-only symlinks to the source
+  checkout's node_modules. Every call is resolved, external or dynamic (counted, never dropped).
+  No model.
 - **BullMQ (decision 035, detector `bullmq-queues@0.1`):** `new Queue` / `<queue>.add` (queue
   resolved through symbols) / `new Worker` → producer `-produces->` one broker node per queue
   name `-consumes->` worker; a file that constructs a Worker is a process entry point. Unpaired,
