@@ -1,13 +1,14 @@
 // Repair run: PREPARING_SANDBOX → REPRODUCING → PATCHING → VERIFYING → RESOLVED | UNRESOLVED | FAILED | CANCELLED
 // (decision 026). The harness decides the outcome from what it runs itself; it never reads or
 // trusts anything the agent says, including how many tokens it used.
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { BudgetExceededError } from "../llm/budget.ts";
 import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import { AgentStopped, type Agent, type AgentContext } from "./agents.ts";
 import { SCRATCH } from "./tools.ts";
 import { SandboxGoneError, type ExecResult, type SandboxDescription, type SandboxHandle, type SandboxProvider, type SandboxSource } from "./provider.ts";
-import { BUN_TEST_FILE_PATTERN, type LoadedTask, type TaskSpec } from "./task.ts";
+import { checkPlan, TSC_PLACEHOLDER, type CheckPlan } from "./profile.ts";
+import { BUN_TEST_FILE_PATTERN, type LoadedTask } from "./task.ts";
 
 export type RunState = "PREPARING_SANDBOX" | "REPRODUCING" | "PATCHING" | "VERIFYING" | "RESOLVED" | "UNRESOLVED" | "FAILED" | "CANCELLED";
 export type Phase = "PREPARING_SANDBOX" | "NETWORK_OFF" | "REPRODUCING" | "BASELINE" | "PATCHING" | "VERIFYING";
@@ -23,9 +24,22 @@ export interface CommandRecord {
   stderrTail: string;
 }
 
+/** One tsc error, without its position: what the baseline comparison matches on (decision 041). */
+export interface TscError {
+  file: string; // as tsc printed it, relative to the package; "" for an error without a location
+  code: string; // "TS2322"
+  message: string; // the first line
+}
+
+/** Which tsc a typecheck ran: the repo's own (node_modules) or the image's global one. */
+export interface TscChoice {
+  source: "repo" | "image";
+  version: string;
+}
+
 export interface CheckResults {
   regression: { cmd: string; exitCode: number; timedOut: boolean }[];
-  typecheck: { package: string; exitCode: number; errors: number }[];
+  typecheck: { package: string; command: string; exitCode: number; errors: number; diagnostics: TscError[]; tsc?: TscChoice }[];
 }
 
 export interface RunRecord {
@@ -34,6 +48,13 @@ export interface RunRecord {
   provider: string;
   agent: string;
   image: string;
+  /** "smoke" runs check the harness; they are never evaluation results (decision 041). */
+  taskKind?: "smoke" | "evaluation";
+  /** The repo profile the checks came from, and the commands as run from /work. */
+  profile?: { id: string; workdir: string };
+  plan?: CheckPlan;
+  /** A seeded bug applied before the base commit was made (sha256 of the patch file). */
+  seed?: { patchSha256: string };
   /** Decision 036: provider version, engine version and the image id actually used. */
   sandboxEnv?: SandboxDescription;
   /** The graph snapshot a graph-on run read (with the file's sha256); "none" for graph off. */
@@ -103,7 +124,19 @@ export class BudgetExhausted extends Error {
 
 const tail = (s: string, n = 2000) => (s.length > n ? `…${s.slice(-n)}` : s);
 const now = () => new Date().toISOString();
-const TS_ERROR = /error TS\d+:/g;
+const TS_ERROR = /^(?:(.+?)\(\d+,\d+\): )?error (TS\d+): (.*)$/;
+/** The repo's own TypeScript, run with the image's bun (its .bin/tsc shim needs node, which the image lacks). */
+export const REPO_TSC = "node_modules/typescript/bin/tsc";
+
+/** tsc's non-pretty output → one entry per error line; continuation lines (indented) are skipped. */
+export function parseTscErrors(output: string): TscError[] {
+  const out: TscError[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    const m = TS_ERROR.exec(line);
+    if (m) out.push({ file: m[1] ?? "", code: m[2]!, message: m[3]!.trim() });
+  }
+  return out;
+}
 
 /** Outbound requests that must FAIL once the network is off: a DNS name and a raw IP. */
 export const NETWORK_PROBES = ["curl -sS -o /dev/null --max-time 5 https://registry.npmjs.org/", "curl -sS -o /dev/null --max-time 5 http://1.1.1.1/"];
@@ -153,6 +186,7 @@ const BASE_COMMIT_ENV = [
   "GIT_COMMITTER_DATE=2000-01-01T00:00:00Z",
 ].join(" ");
 export const BASE_BRANCH = "work";
+const SEED_PATCH_FILE = "/tmp/.th-seed.patch";
 
 /**
  * Replace the checkout's history with one commit of the current tree (decision 026, history
@@ -175,9 +209,8 @@ export const SQUASH_HISTORY = [
 ].join("\n");
 
 /** The task's check commands as the agent should run them from /work (regression + typecheck). */
-export function taskTestCommands(spec: Pick<TaskSpec, "regression" | "typecheck">): string[] {
-  const tsc = (spec.typecheck?.packages ?? []).map((pkg) => (pkg === "." ? spec.typecheck!.command : `cd ${JSON.stringify(pkg)} && ${spec.typecheck!.command}`));
-  return [...spec.regression, ...tsc];
+export function taskTestCommands(plan: Pick<CheckPlan, "regression" | "typecheck">): string[] {
+  return [...plan.regression, ...plan.typecheck.map((t) => (t.package === "." ? t.command : `cd ${JSON.stringify(t.package)} && ${t.command}`))];
 }
 
 /**
@@ -221,6 +254,8 @@ export async function prepareSandbox(args: {
   source: SandboxSource;
   baseSha: string;
   setup: string[];
+  /** A seed patch, applied right after checkout so it becomes part of the base commit. */
+  seedPatch?: string;
   commandTimeoutMs: number;
   log: CommandRecord[];
   signal?: AbortSignal;
@@ -239,6 +274,14 @@ export async function prepareSandbox(args: {
   start = performance.now();
   await mustPass(sh, "PREPARING_SANDBOX", `git checkout -q --detach ${args.baseSha} && test "$(git rev-parse HEAD)" = ${args.baseSha}`, "checking out baseSha");
   t("checkout", start);
+  if (args.seedPatch !== undefined) {
+    start = performance.now();
+    await args.provider.writeFile(handle, SEED_PATCH_FILE, args.seedPatch); // outside /work
+    await mustPass(sh, "PREPARING_SANDBOX", `git apply --whitespace=nowarn ${SEED_PATCH_FILE} && rm -f ${SEED_PATCH_FILE}`, "applying the seed patch");
+    const changed = await mustPass(sh, "PREPARING_SANDBOX", "git status --porcelain", "listing what the seed patch changed");
+    if (!changed.stdout.trim()) throw new RunFailed("the seed patch changed nothing");
+    t("seed patch", start);
+  }
   for (const cmd of args.setup) {
     start = performance.now();
     await mustPass(sh, "PREPARING_SANDBOX", cmd, "setup command", args.commandTimeoutMs);
@@ -260,22 +303,67 @@ export async function prepareSandbox(args: {
   return { handle, baseCommit };
 }
 
-/** Regression exit codes and `tsc` error counts per package (baseline and final). */
-export async function collectChecks(sh: Sh, phase: Phase, spec: Pick<TaskSpec, "regression" | "typecheck">): Promise<CheckResults> {
+export type ResolvedPlan = CheckPlan & { tsc: Record<string, TscChoice> };
+
+/**
+ * Replace `$TSC` in each typecheck command: the repo's own tsc when that package has one in
+ * node_modules, else the image's global `tsc`. Decided once, at the base commit; the same
+ * command runs after the patch. Which one ran, and its version, go into the record.
+ */
+export async function resolvePlan(sh: Sh, phase: Phase, plan: CheckPlan): Promise<ResolvedPlan> {
+  const tsc: Record<string, TscChoice> = {};
+  const typecheck = [];
+  for (const t of plan.typecheck) {
+    if (!t.command.includes(TSC_PLACEHOLDER)) {
+      typecheck.push(t);
+      continue;
+    }
+    const probe = `cd ${JSON.stringify(t.package)} && if [ -f ${REPO_TSC} ]; then echo repo; bun ${REPO_TSC} --version; else echo image; tsc --version; fi`;
+    const r = await mustPass(sh, phase, probe, `choosing a tsc for ${t.package}`);
+    const [source, version = ""] = r.stdout.trim().split("\n").map((x) => x.trim());
+    if (source !== "repo" && source !== "image") throw new RunFailed(`choosing a tsc for ${t.package} printed ${JSON.stringify(r.stdout.slice(0, 120))}`);
+    tsc[t.package] = { source, version: version.replace(/^Version /, "") };
+    typecheck.push({ package: t.package, command: t.command.replaceAll(TSC_PLACEHOLDER, source === "repo" ? `bun ${REPO_TSC}` : "tsc") });
+  }
+  return { ...plan, typecheck, tsc };
+}
+
+/** Regression exit codes and the `tsc` errors per package (baseline and final). */
+export async function collectChecks(sh: Sh, phase: Phase, plan: Pick<CheckPlan, "regression" | "typecheck"> & { tsc?: Record<string, TscChoice> }): Promise<CheckResults> {
   const regression = [];
-  for (const cmd of spec.regression) {
+  for (const cmd of plan.regression) {
     const r = await sh(phase, cmd);
     regression.push({ cmd, exitCode: r.exitCode, timedOut: r.timedOut });
   }
   const typecheck = [];
-  for (const pkg of spec.typecheck?.packages ?? []) {
-    const r = await sh(phase, `cd ${JSON.stringify(pkg)} && ${spec.typecheck!.command}`);
-    typecheck.push({ package: pkg, exitCode: r.exitCode, errors: (r.stdout + r.stderr).match(TS_ERROR)?.length ?? 0 });
+  for (const t of plan.typecheck) {
+    const r = await sh(phase, `cd ${JSON.stringify(t.package)} && ${t.command}`);
+    const diagnostics = parseTscErrors(`${r.stdout}\n${r.stderr}`);
+    const tsc = plan.tsc?.[t.package];
+    typecheck.push({ package: t.package, command: t.command, exitCode: r.exitCode, errors: diagnostics.length, diagnostics, ...(tsc && { tsc }) });
   }
   return { regression, typecheck };
 }
 
-/** A new failure = failed now but passed at baseline, or more TS errors than at baseline. */
+const tscKey = (d: TscError) => `${d.file}\0${d.code}\0${d.message}`;
+const short = (s: string, n = 160) => (s.length > n ? `${s.slice(0, n)}…` : s);
+
+/**
+ * TS errors after the patch that the baseline doesn't have, matched by file + TS code + message
+ * and counted (two identical baseline errors cover two, not three). Line and column are ignored,
+ * so an error that only moved is still the baseline's.
+ */
+export function newTscErrors(baseline: TscError[], final: TscError[]): TscError[] {
+  const left = new Map<string, number>();
+  for (const d of baseline) left.set(tscKey(d), (left.get(tscKey(d)) ?? 0) + 1);
+  return final.filter((d) => {
+    const n = left.get(tscKey(d)) ?? 0;
+    if (n > 0) left.set(tscKey(d), n - 1);
+    return n === 0;
+  });
+}
+
+/** A new failure = failed now but passed at baseline, or a TS error the baseline doesn't have. */
 export function compareChecks(baseline: CheckResults, final: CheckResults): { newFailures: string[]; preExistingFailures: string[] } {
   const newFailures: string[] = [];
   const preExistingFailures: string[] = [];
@@ -287,8 +375,12 @@ export function compareChecks(baseline: CheckResults, final: CheckResults): { ne
   });
   final.typecheck.forEach((f, i) => {
     const b = baseline.typecheck[i]!;
-    if (f.errors > b.errors) newFailures.push(`typecheck ${f.package}: ${f.errors} errors (baseline ${b.errors})`);
+    const added = newTscErrors(b.diagnostics, f.diagnostics);
+    if (added.length)
+      newFailures.push(`typecheck ${f.package}: ${added.length} error(s) not in the baseline: ${added.map((d) => `${d.file ? `${d.file} ` : ""}${d.code}: ${short(d.message)}`).join("; ")}`);
     else if (f.exitCode !== 0 && f.errors === 0 && b.exitCode === 0) newFailures.push(`typecheck ${f.package} failed (exit ${f.exitCode}) without TS errors; passed at baseline`);
+    // tsc stopped reporting at all (e.g. it can no longer start): not "the baseline's errors are gone"
+    else if (f.exitCode !== 0 && f.errors === 0 && b.errors > 0) newFailures.push(`typecheck ${f.package} failed (exit ${f.exitCode}) without TS errors; the baseline reported ${b.errors}`);
     else if (b.errors > 0) preExistingFailures.push(`typecheck ${f.package}: ${b.errors} error(s) at baseline, ${f.errors} now`);
   });
   return { newFailures, preExistingFailures };
@@ -324,6 +416,9 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     image,
     snapshot: opts.snapshot ?? "none",
     baseSha: spec.baseSha,
+    ...(spec.kind && { taskKind: spec.kind }),
+    ...(task.profile && { profile: { id: task.profile.id, workdir: task.profile.workdir } }),
+    ...(task.seedPatch !== undefined && { seed: { patchSha256: createHash("sha256").update(task.seedPatch).digest("hex") } }),
     startedAt: new Date(started).toISOString(),
     states: [],
     sandbox: { destroyed: false },
@@ -335,6 +430,8 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     record.states.push({ state, at: now(), ...(note && { note }) });
     opts.onState?.(state, note);
   };
+  // the profile's commands and the task's own, as run from /work; `$TSC` is resolved at BASELINE
+  const rawPlan = checkPlan(spec, task.profile);
   let handle: SandboxHandle | undefined;
   const sh = makeSh(provider, () => handle!, record.commands, spec.limits.commandTimeoutMs, opts.signal);
   /** A provider file operation; a failure in a dead sandbox becomes SandboxGoneError. */
@@ -363,14 +460,15 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     record.sandbox.createStartedAt = now();
     record.sandboxEnv = await provider.describe?.(image).catch(() => undefined);
     // the run's own budget plus every verification command at its timeout, and margin
-    const verifyCommands = spec.regression.length + (spec.typecheck?.packages.length ?? 0) + spec.setup.length + 6;
+    const verifyCommands = rawPlan.regression.length + rawPlan.typecheck.length + rawPlan.setup.length + 6;
     const prepared = await prepareSandbox({
       maxLifetimeMs: opts.sandboxLifetimeMs ?? spec.limits.wallClockMs + verifyCommands * spec.limits.commandTimeoutMs + 10 * 60_000,
       provider,
       image,
       source,
       baseSha: spec.baseSha,
-      setup: spec.setup,
+      setup: rawPlan.setup,
+      ...(task.seedPatch !== undefined && { seedPatch: task.seedPatch }),
       commandTimeoutMs: spec.limits.commandTimeoutMs,
       log: record.commands,
       signal: opts.signal,
@@ -394,7 +492,9 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     if (record.repro.atBase.exitCode === 0) throw new RunFailed("repro does not reproduce: the repro test passes at baseSha");
     await mustPass(sh, "REPRODUCING", `test -z "$(git status --porcelain)"`, "checking the tree is clean before the agent starts");
     if ((await treeState("REPRODUCING")) !== beforeRepro) throw new RunFailed("the repro run left files behind (git status --porcelain --ignored changed)");
-    record.baseline = await collectChecks(sh, "BASELINE", spec);
+    const plan = await resolvePlan(sh, "BASELINE", rawPlan);
+    record.plan = { setup: plan.setup, regression: plan.regression, typecheck: plan.typecheck };
+    record.baseline = await collectChecks(sh, "BASELINE", plan);
     if (Date.now() >= deadline) throw new RunFailed(`wall-clock limit ${spec.limits.wallClockMs}ms reached before the agent started`);
 
     // ── PATCHING: the agent's budget is wall-clock, steps and harness-counted tokens ────────
@@ -411,7 +511,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     const ctx: AgentContext = {
       issue: spec.issue,
       limits: spec.limits,
-      testCommands: taskTestCommands(spec),
+      testCommands: taskTestCommands(plan),
       baseFiles,
       repoState: async () => {
         budget();
@@ -514,7 +614,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     if (record.removedBeforeVerify.length)
       await mustPass(sh, "VERIFYING", `git rm -q -f -- ${record.removedBeforeVerify.map((f) => `'${f.replace(/'/g, `'\\''`)}'`).join(" ")}`, "removing agent-added test files");
     record.repro.afterPatch = await runRepro("VERIFYING");
-    record.final = await collectChecks(sh, "VERIFYING", spec);
+    record.final = await collectChecks(sh, "VERIFYING", plan);
     record.comparison = compareChecks(record.baseline, record.final);
 
     const reproPasses = record.repro.afterPatch.exitCode === 0 && !record.repro.afterPatch.timedOut;
