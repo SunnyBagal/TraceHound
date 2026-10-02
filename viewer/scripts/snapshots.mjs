@@ -20,7 +20,12 @@ export const CHANGESET_EXPORT = path.join(VIEWER, "out/changesets");
 
 class SnapshotDataError extends Error {}
 
-/** Throws unless dir/index.json parses, has a `latest`, and every referenced file exists and parses. */
+/**
+ * Throws unless dir/index.json parses, has a `latest`, and every referenced file exists and parses.
+ * Every repo of `repos` (decision 039) is checked, not only the top-level `latest` (which the
+ * deployed viewer reads and which follows `defaultRepo` on the next manifest write): each repo's
+ * latest snapshot must exist, validate as a Snapshot, and be of that repo and commit.
+ */
 export function verifySnapshots(dir, label = dir) {
   const indexFile = path.join(dir, "index.json");
   if (!existsSync(indexFile)) throw new SnapshotDataError(`${label}/index.json is missing`);
@@ -31,15 +36,33 @@ export function verifySnapshots(dir, label = dir) {
     throw new SnapshotDataError(`${label}/index.json is not valid JSON: ${error.message}`);
   }
   if (!manifest.latest?.path) throw new SnapshotDataError(`${label}/index.json has no "latest" snapshot`);
-  const referenced = [...new Set([manifest.latest.path, ...(manifest.snapshots ?? []).map((s) => s.path)])];
+  const repos = manifest.repos ?? [];
+  if (manifest.defaultRepo && !repos.some((r) => r.id === manifest.defaultRepo)) throw new SnapshotDataError(`${label}/index.json: defaultRepo "${manifest.defaultRepo}" is not in repos`);
+  const role = new Map([[manifest.latest.path, "as latest"]]);
+  for (const r of repos) {
+    if (!r.latest?.path) throw new SnapshotDataError(`${label}/index.json: repo "${r.id}" has no latest snapshot`);
+    role.set(r.latest.path, `as repo ${r.id}'s latest`);
+  }
+  const referenced = [
+    ...new Set([manifest.latest.path, ...(manifest.snapshots ?? []).map((s) => s.path), ...repos.flatMap((r) => [r.latest.path, ...(r.versions ?? []).map((v) => v.path)])]),
+  ];
+  const parsed = new Map();
   for (const rel of referenced) {
     if (rel.includes("..") || path.isAbsolute(rel)) throw new SnapshotDataError(`${label}/index.json references an unsafe path: ${rel}`);
     const file = path.join(dir, rel);
-    if (!existsSync(file)) throw new SnapshotDataError(`${label}/${rel} is missing (referenced by index.json${rel === manifest.latest.path ? " as latest" : ""})`);
+    if (!existsSync(file)) throw new SnapshotDataError(`${label}/${rel} is missing (referenced by index.json${role.has(rel) ? ` ${role.get(rel)}` : ""})`);
     try {
-      JSON.parse(readFileSync(file, "utf8"));
+      parsed.set(rel, JSON.parse(readFileSync(file, "utf8")));
     } catch (error) {
       throw new SnapshotDataError(`${label}/${rel} is not valid JSON: ${error.message}`);
+    }
+  }
+  // older versions stay JSON-checked only (their schema may predate today's); every repo's latest must validate
+  for (const r of repos) {
+    const result = Snapshot.safeParse(parsed.get(r.latest.path));
+    if (!result.success) throw new SnapshotDataError(`${label}/${r.latest.path} (repo ${r.id}'s latest) is not a valid snapshot: ${result.error.issues[0]?.message}`);
+    if (result.data.repo.name !== r.name || result.data.repo.commitSha !== r.latest.sha) {
+      throw new SnapshotDataError(`${label}/${r.latest.path} is ${result.data.repo.name}@${result.data.repo.commitSha}, but index.json lists it as repo ${r.id}'s latest (${r.name}@${r.latest.sha})`);
     }
   }
   return { manifest, referenced };
@@ -184,9 +207,10 @@ if (import.meta.url === `file://${process.argv[1]}` && command) {
       console.log(`[snapshots] copied index.json + ${files.length} snapshot file(s) → public/snapshots; ${impacts.length} impact report(s) → public/impacts; ${changesets.length} change-set file(s) → public/changesets`);
     } else if (command === "verify-export") {
       const { manifest } = verifySnapshots(EXPORT, "out/snapshots");
+      const repos = (manifest.repos ?? []).map((r) => `${r.id} → ${r.latest.path}`);
       const impacts = verifyImpacts(IMPACT_EXPORT, EXPORT, "out/impacts");
       const changesets = verifyChangesets(CHANGESET_EXPORT, "out/changesets");
-      console.log(`[snapshots] export OK: out/snapshots/index.json → latest ${manifest.latest.path}; ${impacts.length} impact report(s), ${changesets.length} change-set file(s) verified`);
+      console.log(`[snapshots] export OK: out/snapshots/index.json → latest ${manifest.latest.path}; repos: ${repos.join(", ") || "(none)"}; ${impacts.length} impact report(s), ${changesets.length} change-set file(s) verified`);
     } else {
       throw new Error(`unknown command ${command}`);
     }

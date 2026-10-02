@@ -1,7 +1,7 @@
 export declare const SOURCE: string;
 export declare const PUBLIC: string;
 export declare const EXPORT: string;
-export declare function verifySnapshots(dir: string, label?: string): { manifest: { latest: { path: string } }; referenced: string[] };
+export declare function verifySnapshots(dir: string, label?: string): { manifest: { latest: { path: string }; defaultRepo?: string; repos?: { id: string; name: string; latest: { path: string; sha: string } }[] }; referenced: string[] };
 export declare function copySnapshots(): string[];
 export declare const IMPACT_SOURCE: string;
 export declare const IMPACT_PUBLIC: string;
