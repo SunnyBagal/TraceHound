@@ -387,3 +387,98 @@ export function impactReferenceErrors(report: ImpactReport, snapshot: Snapshot):
   }
   return [...new Set(errors)];
 }
+
+// ── Change sets (0.8.0, decision 038): a declaration-level diff with an architectural rollup ──
+
+export const CHANGESET_SCHEMA_VERSION = 1;
+const Span = z.object({ file: z.string(), startLine: z.number().int().positive(), endLine: z.number().int().positive() });
+export const DeclarationKind = z.enum(["function", "class", "method", "property", "react-component", "variable", "route-handler", "module"]);
+export type DeclarationKind = z.infer<typeof DeclarationKind>;
+export const ChangeStatus = z.enum(["added", "removed", "modified", "unchanged"]);
+export const ModificationKind = z.enum(["signature", "returnType", "body", "typeAnnotation"]);
+export type ModificationKind = z.infer<typeof ModificationKind>;
+
+export const DeclarationChange = z.object({
+  id: z.string(), // "<file>#<qualified name>"
+  name: z.string(),
+  file: z.string(),
+  kind: DeclarationKind,
+  exported: z.boolean(),
+  status: ChangeStatus,
+  componentId: z.string().optional(), // head's component (base's for removed); none for test files
+  baseComponentId: z.string().optional(), // only when it differs from componentId
+  modifications: z.array(ModificationKind),
+  lines: z.object({ added: z.number().int().nonnegative(), removed: z.number().int().nonnegative() }),
+  base: Span.optional(),
+  head: Span.optional(),
+});
+export type DeclarationChange = z.infer<typeof DeclarationChange>;
+
+export const ChangeEvidence = z.object({ side: z.enum(["base", "head"]), file: z.string(), line: z.number().int().positive(), extractor: z.string() });
+export const EdgeChange = z.object({
+  id: z.string(),
+  from: z.string(),
+  to: z.string(),
+  kind: z.enum(["calls", "route", "produces", "consumes"]),
+  status: z.enum(["added", "removed", "unchanged"]),
+  crossComponent: z.boolean(),
+  crossProcess: z.boolean(),
+  evidence: z.array(ChangeEvidence).min(1),
+});
+export type EdgeChange = z.infer<typeof EdgeChange>;
+
+export const CallCounts = z.object({ resolved: z.number().int().nonnegative(), external: z.number().int().nonnegative(), dynamic: z.number().int().nonnegative() });
+export type CallCounts = z.infer<typeof CallCounts>;
+
+export const FileChange = z.object({
+  path: z.string(),
+  status: z.enum(["added", "removed", "modified"]),
+  linesAdded: z.number().int().nonnegative(),
+  linesRemoved: z.number().int().nonnegative(),
+  componentId: z.string().optional(),
+  calls: z.object({ base: CallCounts.optional(), head: CallCounts.optional() }),
+});
+export type FileChange = z.infer<typeof FileChange>;
+
+export const ComponentChange = z.object({
+  id: z.string(),
+  name: z.string(),
+  declarations: z.object({ added: z.number().int(), modified: z.number().int(), removed: z.number().int() }),
+  edges: z.object({ crossComponentAdded: z.number().int(), crossComponentRemoved: z.number().int(), crossProcessAdded: z.number().int(), crossProcessRemoved: z.number().int() }),
+  componentEdges: z.object({ added: z.array(z.string()), removed: z.array(z.string()) }),
+});
+export type ComponentChange = z.infer<typeof ComponentChange>;
+
+export const ChangeWarning = z.object({
+  id: z.string(),
+  kind: z.enum(["queue-orphaned-by-diff", "cross-component-signature-change", "removed-declaration-still-referenced"]),
+  rule: z.string(), // the rule, in words
+  message: z.string(),
+  declarationId: z.string().optional(),
+  evidence: z.array(z.object({ side: z.enum(["base", "head"]), file: z.string(), line: z.number().int().positive(), detail: z.string() })).min(1),
+  alsoCaughtByTypecheck: z.boolean().optional(),
+});
+export type ChangeWarning = z.infer<typeof ChangeWarning>;
+
+export const ChangeSet = z.object({
+  schemaVersion: z.literal(CHANGESET_SCHEMA_VERSION),
+  analyzerVersion: z.string(),
+  repo: z.object({ name: z.string(), path: z.string() }),
+  base: z.object({ ref: z.string(), sha: z.string() }),
+  head: z.union([z.object({ ref: z.string(), sha: z.string() }), z.object({ run: z.object({ runId: z.string(), taskId: z.string(), patchSha256: z.string() }) })]),
+  config: z.string().optional(),
+  components: z.array(ComponentChange),
+  files: z.array(FileChange),
+  declarations: z.array(DeclarationChange),
+  edges: z.array(EdgeChange),
+  warnings: z.array(ChangeWarning),
+  stats: z.object({
+    declarations: z.object({ added: z.number().int(), removed: z.number().int(), modified: z.number().int(), unchanged: z.number().int() }),
+    edges: z.object({ added: z.number().int(), removed: z.number().int(), unchanged: z.number().int() }),
+    files: z.object({ added: z.number().int(), removed: z.number().int(), modified: z.number().int() }),
+    calls: z.object({ base: CallCounts, head: CallCounts }),
+    runtimeMs: z.number().int().nonnegative(),
+  }),
+  limitations: z.array(z.string()),
+});
+export type ChangeSet = z.infer<typeof ChangeSet>;

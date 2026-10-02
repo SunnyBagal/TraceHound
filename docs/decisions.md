@@ -1090,3 +1090,152 @@ tests (reproduced by the test below with the fix reverted).
 infrastructure problem the record should show. (b) Detecting by stderr text alone: an agent
 command can print "No such container". (c) Extending the lifetime instead: it only moves the
 edge; the outcome has to be right when it's hit.
+
+## 038 · Change sets: a declaration-level diff with an architectural rollup (analyzer 0.8.0)
+**Goal:** for any diff (two commits, or a repair run's patch), one machine-readable answer to:
+which components changed, which declarations changed and how, which call, route and queue
+relationships were added or removed, and what could break. Deterministic, from ts-morph and
+git only: no model is involved, and nothing is silently dropped.
+**Schema** (`ChangeSet` in `src/schema.ts`, zod; written before the code):
+```
+ChangeSet {
+  schemaVersion: 1
+  analyzerVersion                     // "0.8.0"
+  repo: { name, path }
+  base: { ref, sha }
+  head: { ref, sha } | { run: { runId, taskId, patchSha256 } }   // --run: the run's patch on its base
+  config?: string                     // tracehound.json used for components, if any
+  components: ComponentChange[]
+  files: FileChange[]
+  declarations: DeclarationChange[]   // every non-unchanged declaration, plus unchanged ones that
+                                      // a changed edge or a warning points at
+  edges: EdgeChange[]                 // every added or removed edge, plus unchanged ones touching a
+                                      // changed declaration
+  warnings: ChangeWarning[]
+  stats: { declarations: {added, removed, modified, unchanged},
+           edges: {added, removed, unchanged}, files: {added, removed, modified},
+           calls: { base: CallCounts, head: CallCounts }, runtimeMs }
+  limitations: string[]               // stated in every change set
+}
+Declaration ids: "<repo-relative file>#<qualified name>", e.g. "src/cart.ts#applyDiscount",
+  "src/store.ts#Store.add", "index.ts#route:POST /api/v1/content", "worker.ts#<module>".
+DeclarationChange {
+  id, name, file, kind, exported, status: "added" | "removed" | "modified" | "unchanged"
+  kind: "function" | "class" | "method" | "property" | "react-component" | "variable"
+        (exported module-level) | "route-handler" (an inline handler passed to a route
+        registration) | "module" (top-level code outside every other declaration)
+  componentId, baseComponentId?       // head's component (base's for removed); both when they differ
+  modifications: ("signature" | "returnType" | "body" | "typeAnnotation")[]   // modified only
+  lines: { added, removed }           // git -U0 hunk lines inside the span on each side
+  base?: { file, startLine, endLine } // absent for added
+  head?: { file, startLine, endLine } // absent for removed
+}
+EdgeChange {
+  id: "<from>-><to>:<kind>", from, to, status: "added" | "removed" | "unchanged"
+  kind: "calls" | "route" | "produces" | "consumes"
+  // calls: declaration → declaration; route: "route:<METHOD> <path>" → handler declaration;
+  // produces: declaration → "queue:<tech>:<name>"; consumes: "queue:<tech>:<name>" → declaration
+  crossComponent, crossProcess        // produces/consumes cross a broker (process boundary)
+  evidence: { side: "base" | "head", file, line, extractor }[]   // removed: base; else head
+}
+FileChange { path, status: "added" | "removed" | "modified", linesAdded, linesRemoved,
+             componentId, calls: { base?: CallCounts, head?: CallCounts } }
+CallCounts { resolved, external, dynamic }   // every call expression is in exactly one bucket
+ComponentChange { id, name, declarations: {added, modified, removed},
+                  edges: { crossComponentAdded, crossComponentRemoved,
+                           crossProcessAdded, crossProcessRemoved },
+                  componentEdges: { added: string[], removed: string[] } }  // snapshot-level edge ids
+ChangeWarning { id, rule, kind: "queue-orphaned-by-diff" | "cross-component-signature-change" |
+                "removed-declaration-still-referenced", message, declarationId?,
+                evidence: { side, file, line, detail }[] (min 1), alsoCaughtByTypecheck? }
+```
+**Implementation** (`src/changes/`; `tracehound changes`):
+- **Trees:** base and head are checked out as detached git worktrees in temp dirs (every git call
+  drops GIT_DIR & co., decision 032). For `--run <record>` the head worktree is the run's base
+  with the recorded patch applied; the task's repo comes from `eval/tasks/<taskId>/task.json` (a
+  `gitUrl` source is cloned to a temp dir). Each tree is loaded once and analyzed with the normal
+  pipeline (`analyzeRepo` now accepts the loaded workspace), so components, routes and queues are
+  exactly the snapshot's. The tracehound config is `--config`, else
+  `configs/<repo name>.tracehound.json` when it exists. Only files the snapshot analyzes take part
+  (config `ignore` applies).
+- **Declarations** (ts-morph): module-level functions (overloads folded into the implementation),
+  classes, their methods (constructors, accessors and function-valued properties included) and
+  properties, `react-component` (a PascalCase function in a .tsx file that contains JSX),
+  exported non-function variables, `export default`, `route-handler` (an inline function passed
+  last to a route registration the http-routes extractor found), and one `module` per file. The
+  module's text is its own top-level statements, with declarations left out, so adding a function
+  doesn't modify the module.
+- **Modifications:** signature (modifiers, export, type parameters, parameters; a class's header
+  and heritage), returnType (the annotation only; inferred return types aren't compared),
+  typeAnnotation (properties, variables), body (exact text; a class's body is its text with
+  members as markers, so a member change doesn't modify the class). A kind change counts as a
+  signature change.
+- **+/- lines:** `git diff -U0 --no-renames` hunk lines inside each span on each side; a module
+  counts only lines outside its top-level declarations.
+- **Calls:** every call/new expression is in exactly one bucket, per file and in total:
+  - resolved: the callee's symbol (through aliases and re-exports) is declared in an analyzed
+    file. That gives a `calls` edge from the innermost enclosing declaration; a member of a
+    module-level value resolves to the declaration that holds it.
+  - external: declared in node_modules or the TS lib; or, without types installed, a receiver
+    chain rooted at something imported, typed or constructed from a package, or at a runtime
+    global from a fixed list.
+  - dynamic: anything else (parameters, locals, element access, untyped values).
+  Only resolved calls make edges; external and dynamic are counted and labelled.
+- **Route / queue edges:** from the existing extractors at declaration level. `route:<METHOD>
+  <path>` → handler (an inline route-handler, or the first identifier in the handler argument
+  that resolves, e.g. `asyncHandler(createOrder)` → `createOrder`; when none resolves, the
+  registering declaration, labelled as such). Producer declaration → `queue:<bullmq|redis>:<name>`
+  → consumer declaration, attributed to the innermost declaration around the evidence line.
+- **Edge status:** added / removed / unchanged by id. The change set lists every added and
+  removed edge, and unchanged edges that touch a changed declaration.
+- **Rollup:** per touched component, declaration counts, cross-component and cross-process
+  (produces/consumes, which cross a broker) edges added/removed, and the snapshot-level component
+  edges added/removed between the base and head snapshots.
+**Warnings** (each states its rule and carries evidence):
+- `queue-orphaned-by-diff`: a queue with producer and consumer at base has only one side at head.
+  Evidence: the remaining side at head, the vanished side at base.
+- `cross-component-signature-change`: a modified declaration whose signature or return type
+  changed has callers at head in other components. Evidence: every such call site.
+- `removed-declaration-still-referenced`: a removed declaration still imported, used by name in
+  its file, or accessed as a member of its class at head. Kept, and labelled "also caught by
+  typecheck" when tsc reports a diagnostic at every reference.
+**Tests** (`test/changes.test.ts`, 12): each status with line counts; a method change inside a
+class; signature vs body vs return type; a rename (removed + added); an added call; a removed
+call; a dynamic call (counted, no edge); an inline route; a queue orphaned by deleting the
+consumer; a cross-component signature change; a removed declaration still referenced; `--run` on
+toy-discount with its fix.patch. With its rule disabled (a temporary source patch, then
+restored), each of the first 11 fails.
+**Real diffs** (dev; numbers reported, nothing tuned to them; head-side call buckets
+resolved/external/dynamic):
+
+| Diff | Components | Files +/−/~ | Decl +/−/~ | Edges +/− | Comp. edges +/− | Warnings | Calls (head) | Runtime |
+|---|---|---|---|---|---|---|---|---|
+| CEX `da0e3d6..seed/impact-queue-consumer` | 1 | 0/0/1 | 0/0/1 (module body) | 0/0 | 0/0 | none | 34/148/7 | ~0.5 s |
+| Recall `42ba6f5` (2 TS lines) | 1 | 0/0/1 | 0/0/1 | 0/0 | 0/0 | none | 104/458/192 | ~1.4 s |
+| Recall `5d2165a` (148) | 1 | 1/0/1 | 0/0/1 | 0/0 | 0/0 | none | 104/458/192 | ~1.4 s |
+| Recall `7943212` (1,773) | 2 | 11/0/4 | 2/0/10 | 1/0 | 0/0 | none | 101/445/181 | ~1.2 s |
+| toy-discount run (`--run`) | 1 | 0/0/1 | 0/0/1 | 0/0 | 0/0 | none | 4/8/0 | ~0.5 s |
+| Recall, `worker.ts` deleted (scratch) | 5 | 0/1/0 | 0/2/0 | 0/5 | 1/4 | queue-orphaned-by-diff | 100/408/192 | ~1.3 s |
+
+- Of Recall's 754 calls at `5d2165a`, 192 are dynamic. Change sets analyze worktrees without
+  `node_modules`, so package-typed values without an annotation stay dynamic. An identical run on
+  a clone with `node_modules` installed gave the same counts, because the worktrees still lack
+  them.
+- In the deleted-worker diff, one component edge is "added": `shared → brainly-server` replaces
+  `brainly-server → shared`. With the worker gone, the grouping heuristics reassign files between
+  those two components. The code relationship didn't change; the grouping did.
+**Limitations:** stated in every change set (`limitations`): no rename detection (removed +
+added; files diffed with --no-renames); inferred return types aren't compared; bodies compare as
+exact text; types, interfaces and non-exported module-level values are part of their module;
+top-level code is one module declaration per file; call resolution is static (dynamic and
+external counted, never edges); worktrees carry no node_modules; route and queue edges are only
+as good as the existing extractors.
+**Version:** analyzer 0.8.0. Extractor and grouping output is unchanged, so snapshots differ
+from 0.7.0 only in `analyzerVersion`. `impact` requires a snapshot of the current version: CEX
+(`snapshots/`) and Recall (`docs/recall/snapshots/`) need regenerating at 0.8.0 with
+`--cache-only` before `impact` runs on them again (not done here: `snapshots/` was out of scope).
+**Rejected:** (a) A text diff mapped to files only: it can't say which function changed or which
+calls appeared. (b) Rename detection by body similarity: a heuristic that can be wrong silently;
+removed + added is honest. (c) Resolving `dynamic` calls by name matching: it would draw edges
+nobody can point to (product rule). (d) Symlinking node_modules into the worktrees: wrong when
+the diff changes dependencies.

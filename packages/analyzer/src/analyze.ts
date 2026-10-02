@@ -16,7 +16,7 @@ import { extractStartupCalls } from "./extract/startup.ts";
 import { extractSymbols } from "./extract/symbols.ts";
 import { cleanGitEnv } from "./git-env.ts";
 import { groupComponents } from "./group/grouping.ts";
-import { loadWorkspace, relPath } from "./load/workspace.ts";
+import { loadWorkspace, relPath, type Workspace } from "./load/workspace.ts";
 import { SCHEMA_VERSION, Snapshot, type FileFacts } from "./schema.ts";
 import { ANALYZER_VERSION } from "./version.ts";
 
@@ -38,10 +38,12 @@ export interface AnalyzeOptions {
   now?: () => Date;
   /** tracehound.json path; defaults to <repo>/tracehound.json when present. */
   configPath?: string;
+  /** An already loaded workspace of repoPath (change sets reuse it for their own pass). */
+  workspace?: Workspace;
 }
 
 export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Snapshot {
-  const ws = loadWorkspace(repoPath);
+  const ws = options.workspace ?? loadWorkspace(repoPath);
   const { config, source: configSource } = loadConfig(ws.repoRoot, options.configPath);
   const commitSha = git(ws.repoRoot, "rev-parse", "HEAD");
   if (!commitSha) throw new Error(`${ws.repoRoot} is not a git checkout; snapshots are keyed by commit SHA`);

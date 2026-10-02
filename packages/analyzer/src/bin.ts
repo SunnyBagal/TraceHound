@@ -6,9 +6,13 @@
 //   query    search_components | get_neighbors | get_edge_evidence | get_related_tests
 //   mcp      the query tools as a stdio MCP server
 //   repair   run a repair task in a sandbox with a (scripted) agent and verify the result
+//   changes  declaration-level change set of a diff or a run's patch (decision 038)
 const [command, ...rest] = process.argv.slice(2);
 
-if (command === "impact") {
+if (command === "changes") {
+  const { main } = await import("./changes/cli.ts");
+  main(rest);
+} else if (command === "impact") {
   const { main } = await import("./impact/cli.ts");
   main(rest);
 } else if (command === "context") {
@@ -36,7 +40,7 @@ if (command === "impact") {
   await import("./cli.ts");
 } else {
   console.error(
-    "usage: tracehound <analyze|impact|context|query|mcp|repair> [...args]\n" +
+    "usage: tracehound <analyze|impact|changes|context|query|mcp|repair> [...args]\n" +
       "  tracehound impact --repo <path> --diff <base>..<head> [--depth 2] [--json] [--out <file>]\n" +
       '  tracehound context --issue "<text>" [--decider lexical|nemotron] [--k 3] [--snapshot <path>] [--budget <tokens>] [--json]\n' +
       "  tracehound query <search_components|get_neighbors|get_edge_evidence|get_related_tests> ... [--json]\n" +

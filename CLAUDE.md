@@ -7,12 +7,21 @@ on a canvas. Later: a graph-guided repair agent.
 - **Live:** https://tracehound-tau.vercel.app (Vercel, Root Directory `viewer`, auto-deploys
   from `main`; leave Output Directory unset). CI (`.github/workflows/ci.yml`) runs tests,
   typecheck, and the viewer build, and checks that `out/snapshots/index.json` exists.
-- **Built:** analyzer 0.7.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
+- **Built:** analyzer 0.8.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
   BullMQ queues; anchor-reach grouping; `tracehound.json` overrides, `ignore` and `entryPoints`;
   orphan and queue warnings; `proven` / `resolved-default` / `dynamic` labels; TESTS links from
   test files; per-file `chars`; error-message literals) → static snapshots + manifest → viewer
   (React Flow + ELK, node/edge inspectors, GitHub permalinks, warnings panel, phone bottom sheet).
   The viewer serves CEX @ `da0e3d6`, analyzer 0.7.0 (`snapshots/`; the 0.6.0 file is kept).
+- **Change sets (decision 038, analyzer 0.8.0, CLI only):** `pnpm tracehound changes --repo <path>
+  --diff <base>..<head> [--config f] [--out f] [--json]` or `--run <run record>` → a
+  declaration-level diff (functions, classes, methods, properties, React components, exported
+  variables, inline route handlers, module code), modification kinds, +/- lines, added/removed
+  `calls` / `route` / `produces` / `consumes` edges with evidence, a component rollup, and three
+  warnings (queue orphaned by the diff, cross-component signature change, removed declaration
+  still referenced). Every call is resolved, external or dynamic (counted, never dropped). No
+  model. The CEX and Recall snapshots are still 0.7.0: regenerate them at 0.8.0 (`--cache-only`)
+  before running `impact` on them.
 - **BullMQ (decision 035, detector `bullmq-queues@0.1`):** `new Queue` / `<queue>.add` (queue
   resolved through symbols) / `new Worker` → producer `-produces->` one broker node per queue
   name `-consumes->` worker; a file that constructs a Worker is a process entry point. Unpaired,
