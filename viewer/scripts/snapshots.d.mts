@@ -8,3 +8,8 @@ export declare const IMPACT_PUBLIC: string;
 export declare const IMPACT_EXPORT: string;
 export declare function verifyImpacts(dir: string, snapshotsDir: string, label?: string): string[];
 export declare function copyImpacts(): string[];
+export declare const CHANGESET_SOURCE: string;
+export declare const CHANGESET_PUBLIC: string;
+export declare const CHANGESET_EXPORT: string;
+export declare function verifyChangesets(dir: string, label?: string): string[];
+export declare function copyChangesets(): string[];

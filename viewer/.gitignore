@@ -4,3 +4,4 @@ next-env.d.ts
 # copied from ../snapshots at dev/build time
 public/snapshots/
 public/impacts/
+public/changesets/
