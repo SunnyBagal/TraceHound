@@ -1,0 +1,27 @@
+{
+  "id": "recall-smoke-trending",
+  "kind": "smoke",
+  "source": {
+    "gitUrl": "https://github.com/SunnyBagal/Recall.git"
+  },
+  "baseSha": "57d920e4c93b9185c8dbe7350d98633c4732c78e",
+  "profile": "../../../configs/recall.profile.json",
+  "seed": {
+    "patch": "seed.patch"
+  },
+  "setup": [],
+  "issue": "Saving a link to a GitHub trending page, for example https://github.com/trending/typescript, is detected as a GitHub repository with owner \"trending\" and repo \"typescript\". It should be a plain link, like the other GitHub pages that aren't repositories.",
+  "repro": {
+    "testFile": "repro.test.ts",
+    "dest": "recall-backend/test/trending.repro.test.ts",
+    "command": "cd recall-backend && bun test ./test/trending.repro.test.ts"
+  },
+  "regression": [],
+  "limits": {
+    "steps": 40,
+    "wallClockMs": 900000,
+    "tokens": 300000,
+    "commandTimeoutMs": 300000,
+    "costUSD": 0.1
+  }
+}

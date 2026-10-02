@@ -22,6 +22,25 @@ built.
 - An unseen-repo check for the BullMQ detector: a third public Express + BullMQ repo, analyzed
   only after `bullmq-queues` freezes (Recall shaped the detector, so it doesn't count).
 
+- **BullMQ producer through dependency injection** (decision 041). Recall @ `57d920e` passes its
+  queue into `createApp({ queue })` and calls `.add` on a parameter typed as a hand-written
+  interface (`recall-backend/index.ts:162`), so the `produces` edge that was proven at `5d2165a`
+  is gone and only a `queue-unpaired` warning remains. Needs a detector change (follow the
+  argument at the call site back to `new Queue`, or at least warn at the unresolved `.add`), a
+  version bump and a decision. Until then Recall repair runs are graph off and no snapshot of
+  `57d920e` is published.
+
+## Repair harness
+- A snapshot of Recall @ `57d920e` for `--graph on` (under `eval/snapshots/`, like the toy's),
+  once the produces edge above is back.
+- Per-test regression comparison: the gate compares one exit code per command, so with a single
+  `bun test` a baseline that already has a failing test hides any newly broken one (decision 041).
+- After a sandbox is killed, the run record can say `destroyed: false` while Docker is still
+  removing the `--rm` container (`Dead`); recheck for a few seconds before recording.
+- The README's Repair harness section doesn't mention repo profiles, seed patches or the Recall
+  smoke task (README was out of scope for decision 041).
+- Recall evaluation tasks: none exist yet; `recall-smoke-trending` is a smoke task only.
+
 ## Viewer
 - Change view: the canvas fit view on a 1440px screen with the warnings panel open lands near the
   minimum zoom, so node chips are small; a "fit changed components" button would help.

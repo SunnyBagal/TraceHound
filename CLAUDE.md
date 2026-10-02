@@ -41,6 +41,19 @@ on a canvas. Later: a graph-guided repair agent.
   `recall` of the multi-repo index (decision 039; `defaultRepo` and top-level `latest` stay on
   CEX, so the viewer still shows CEX) → 7 components, 6 edges (API -produces->
   `content-processing` queue -consumes-> worker, both proven), 2 orphan warnings.
+- **Recall on the repair harness (decision 041, checked 2026-10-02):** branch `testable-baseline`
+  @ `57d920e` (backend `recall-backend/`, frontend `recall-frontend/`; `main` is `9113ced`). In
+  the sandbox image: `bun install --frozen-lockfile` 210 packages, `bun test` 62 pass with the
+  network off, `tsc --noEmit` 5 pre-existing errors. Repo profile `configs/recall.profile.json`
+  (workdir, install, test, typecheck; a task names it with `"profile"`); a task can seed a bug
+  with `"seed": { "patch" }` (applied before the base commit; FAILED if it changes nothing). The
+  typecheck gate fails only on tsc errors not in the baseline (file + TS code + message, line and
+  column ignored) and records whether the repo's own tsc or the image's ran. Smoke task
+  `eval/tasks/recall-smoke-trending` (`kind: smoke`, never an evaluation task): five scripted
+  outcomes in `test/harness-recall.test.ts` (Docker + `TRACEHOUND_NETWORK_TESTS=1`). **At
+  `57d920e` the API -produces-> queue edge is missing** (the queue is injected through
+  `createApp`; only a `queue-unpaired` warning remains), so Recall runs are graph off and no
+  snapshot of `57d920e` is published; detector fix is in the backlog.
 - **Impact (feature 4, CLI only):** `pnpm tracehound impact --repo <path> --diff <base>..<head>
   [--depth 2] [--json]` → changed/affected components with evidence chains (decision 023).
   Needs a current-version snapshot of `<base>` in `snapshots/` (the error prints the regenerate

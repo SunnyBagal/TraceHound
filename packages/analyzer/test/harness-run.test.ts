@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 import { NoopAgent, OracleAgent, type Agent } from "../src/harness/agents.ts";
 import type { ExecResult, SandboxHandle, SandboxProvider } from "../src/harness/provider.ts";
 import { fakeClient } from "./helpers.ts";
-import { PREPARE_SCRATCH, runRepair, splitChanges, SQUASH_HISTORY } from "../src/harness/run.ts";
+import { checkPlan, RepoProfile } from "../src/harness/profile.ts";
+import { compareChecks, newTscErrors, parseTscErrors, PREPARE_SCRATCH, REPO_TSC, runRepair, splitChanges, SQUASH_HISTORY, type CheckResults } from "../src/harness/run.ts";
 import { loadTask, type LoadedTask, type TaskSpec } from "../src/harness/task.ts";
 
 const SHA = "a".repeat(40);
@@ -103,7 +104,7 @@ describe("runRepair state machine (fake provider)", () => {
     provider.onExec = (cmd) => (cmd.includes("tsc") && provider.files.get("state") === "fixed" ? { ...fail(2), stdout: "a.ts(1,1): error TS1: x" } : undefined);
     const r = await runRepair({ task: task(), agent: writer("fixed"), provider, image: "img" });
     expect(r.finalState).toBe("UNRESOLVED");
-    expect(r.reason).toBe("typecheck .: 1 errors (baseline 0)");
+    expect(r.reason).toBe("typecheck .: 1 error(s) not in the baseline: a.ts TS1: x");
   });
 
   it('FAILED "repro does not reproduce" when the repro passes at baseSha', async () => {
@@ -293,7 +294,153 @@ describe("agent-v4 verification: the diff by kind, and agent-added tests removed
   });
 });
 
+describe("typecheck gate: errors are compared with the baseline, not counted (decision 041)", () => {
+  const BASE = [
+    "index.ts(69,17): error TS18048: 'user' is possibly 'undefined'.",
+    "index.ts(164,22): error TS18048: 'content' is possibly 'undefined'.",
+    "index.ts(174,20): error TS18048: 'content' is possibly 'undefined'.",
+    "worker.ts(145,7): error TS2322: Type 'Redis' is not assignable to type 'ConnectionOptions'.",
+    "  Type 'Redis' is not assignable to type 'ClusterOptions | Redis'.",
+    "    Type 'import(\"/work/a\").default' is not assignable to type 'import(\"/work/b\").default'.",
+  ].join("\n");
+  const checks = (output: string, exitCode = output ? 2 : 0): CheckResults => {
+    const diagnostics = parseTscErrors(output);
+    return { regression: [], typecheck: [{ package: "pkg", command: "tsc --noEmit", exitCode, errors: diagnostics.length, diagnostics }] };
+  };
+  const shift = (output: string, by: number) => output.replace(/\((\d+),(\d+)\)/g, (_m, l: string, c: string) => `(${Number(l) + by},${Number(c) + 3})`);
+
+  it("parses file, code and the first line of the message; continuation lines and errors without a location", () => {
+    expect(parseTscErrors(BASE)).toEqual([
+      { file: "index.ts", code: "TS18048", message: "'user' is possibly 'undefined'." },
+      { file: "index.ts", code: "TS18048", message: "'content' is possibly 'undefined'." },
+      { file: "index.ts", code: "TS18048", message: "'content' is possibly 'undefined'." },
+      { file: "worker.ts", code: "TS2322", message: "Type 'Redis' is not assignable to type 'ConnectionOptions'." },
+    ]);
+    expect(parseTscErrors("error TS5083: Cannot read file '/work/tsconfig.json'.")).toEqual([{ file: "", code: "TS5083", message: "Cannot read file '/work/tsconfig.json'." }]);
+    expect(parseTscErrors("")).toEqual([]);
+  });
+
+  it("shifted lines pass: the same errors at other lines and columns are the baseline's", () => {
+    expect(compareChecks(checks(BASE), checks(shift(BASE, 12)))).toEqual({ newFailures: [], preExistingFailures: ["typecheck pkg: 4 error(s) at baseline, 4 now"] });
+  });
+
+  it("a new error fails, and is named; an equal count doesn't hide it", () => {
+    const added = `${shift(BASE, 1)}\nservices/linkDetector.ts(93,9): error TS2322: Type 'string' is not assignable to type 'number'.`;
+    expect(compareChecks(checks(BASE), checks(added)).newFailures).toEqual(["typecheck pkg: 1 error(s) not in the baseline: services/linkDetector.ts TS2322: Type 'string' is not assignable to type 'number'."]);
+    // one baseline error fixed and a different one introduced: the count is unchanged (4), the gate still fails
+    const swapped = BASE.replace("index.ts(69,17): error TS18048: 'user' is possibly 'undefined'.", "index.ts(69,17): error TS2304: Cannot find name 'usr'.");
+    expect(parseTscErrors(swapped)).toHaveLength(4);
+    expect(compareChecks(checks(BASE), checks(swapped)).newFailures).toEqual(["typecheck pkg: 1 error(s) not in the baseline: index.ts TS2304: Cannot find name 'usr'."]);
+    // a third copy of an error the baseline has twice is new
+    const third = `${BASE}\nindex.ts(300,1): error TS18048: 'content' is possibly 'undefined'.`;
+    expect(newTscErrors(parseTscErrors(BASE), parseTscErrors(third))).toEqual([{ file: "index.ts", code: "TS18048", message: "'content' is possibly 'undefined'." }]);
+  });
+
+  it("a removed baseline error passes", () => {
+    const fewer = BASE.split("\n").slice(1).join("\n");
+    expect(compareChecks(checks(BASE), checks(fewer))).toEqual({ newFailures: [], preExistingFailures: ["typecheck pkg: 4 error(s) at baseline, 3 now"] });
+    expect(compareChecks(checks(BASE), checks("", 0)).newFailures).toEqual([]); // all fixed, tsc exits 0
+  });
+
+  it("a tsc that fails without reporting anything is a failure, not a clean result", () => {
+    expect(compareChecks(checks(BASE), checks("", 127)).newFailures).toEqual(["typecheck pkg failed (exit 127) without TS errors; the baseline reported 4"]);
+    expect(compareChecks(checks("", 0), checks("", 1)).newFailures).toEqual(["typecheck pkg failed (exit 1) without TS errors; passed at baseline"]);
+  });
+});
+
+describe("repo profile and seed patch (decision 041; fake provider)", () => {
+  const profile = RepoProfile.parse({ id: "sub", workdir: "pkg-a", install: "needs-network install", test: "run-regression", typecheck: "$TSC --noEmit" });
+  const profiled = (extra: Partial<LoadedTask> = {}, spec: Partial<TaskSpec> = {}): LoadedTask => ({ ...task({ regression: [], typecheck: undefined, kind: "smoke", ...spec }), profile, ...extra });
+
+  it("checkPlan: the profile's commands run in its workdir, before the task's own; no profile leaves the task as it was", () => {
+    expect(checkPlan({ setup: ["extra"], regression: ["more"], typecheck: { packages: ["."], command: "tsc --noEmit" } }, profile)).toEqual({
+      setup: ['cd "pkg-a" && needs-network install', "extra"],
+      regression: ['cd "pkg-a" && run-regression', "more"],
+      typecheck: [{ package: "pkg-a", command: "$TSC --noEmit" }, { package: ".", command: "tsc --noEmit" }],
+    });
+    expect(checkPlan({ setup: ["s"], regression: ["r"] })).toEqual({ setup: ["s"], regression: ["r"], typecheck: [] });
+    expect(checkPlan({ setup: [], regression: [] }, RepoProfile.parse({ id: "root", test: "bun test" })).regression).toEqual(["bun test"]);
+    expect(() => RepoProfile.parse({ id: "x", workdir: "../out" })).toThrow(/inside the repo/);
+    expect(() => RepoProfile.parse({ id: "x", workdir: "/abs" })).toThrow(/inside the repo/);
+  });
+
+  it("install runs in the workdir with the network on; the network is off and proven off before the first check", async () => {
+    const provider = new FakeProvider();
+    provider.onExec = (cmd) => (cmd.includes(`[ -f ${REPO_TSC} ]`) ? ok("repo\nVersion 5.9.3\n") : cmd === 'cd "pkg-a" && needs-network install' ? (provider.network ? ok() : fail(6)) : undefined);
+    const r = await runRepair({ task: profiled(), agent: writer("fixed"), provider, image: "img" });
+    expect(r.finalState).toBe("RESOLVED");
+    const cmds = r.commands.map((c) => `${c.phase}:${c.cmd}`);
+    const install = cmds.indexOf('PREPARING_SANDBOX:cd "pkg-a" && needs-network install');
+    const off = cmds.findIndex((c) => c.startsWith("NETWORK_OFF:"));
+    expect(install).toBeGreaterThan(0);
+    expect(install).toBeLessThan(off);
+    expect(r.commands.filter((c) => c.phase === "NETWORK_OFF").map((c) => c.exitCode)).toEqual([6, 6]);
+    expect(off).toBeLessThan(cmds.findIndex((c) => c.startsWith("REPRODUCING:")));
+    // the repo's own tsc was found, so that is what ran, at baseline and after the patch
+    expect(cmds.filter((c) => c.endsWith(`cd "pkg-a" && bun ${REPO_TSC} --noEmit`)).map((c) => c.split(":")[0])).toEqual(["BASELINE", "VERIFYING"]);
+    expect(cmds.filter((c) => c.endsWith('cd "pkg-a" && run-regression')).map((c) => c.split(":")[0])).toEqual(["BASELINE", "VERIFYING"]);
+    expect(r.baseline!.typecheck[0]).toMatchObject({ package: "pkg-a", command: `bun ${REPO_TSC} --noEmit`, tsc: { source: "repo", version: "5.9.3" } });
+    expect(r).toMatchObject({ taskKind: "smoke", profile: { id: "sub", workdir: "pkg-a" }, plan: { regression: ['cd "pkg-a" && run-regression'] } });
+  });
+
+  it("without a tsc in the repo's node_modules the image's global one runs, and the record says so; the agent is told the real commands", async () => {
+    const provider = new FakeProvider();
+    provider.onExec = (cmd) => (cmd.includes(`[ -f ${REPO_TSC} ]`) ? ok("image\nVersion 5.9.3\n") : undefined);
+    let told: string[] = [];
+    const r = await runRepair({ task: profiled(), agent: { name: "listens", run: async (ctx) => void ((told = ctx.testCommands), await ctx.writeFile("state", "fixed")) }, provider, image: "img" });
+    expect(r.final!.typecheck[0]).toMatchObject({ command: "tsc --noEmit", tsc: { source: "image", version: "5.9.3" } });
+    expect(told).toEqual(['cd "pkg-a" && run-regression', 'cd "pkg-a" && tsc --noEmit']);
+  });
+
+  it("a seed patch is applied after checkout and before install and the squash, and is in the record by hash", async () => {
+    const provider = new FakeProvider();
+    provider.onExec = (cmd) => (cmd.includes(`[ -f ${REPO_TSC} ]`) ? ok("repo\nVersion 5.9.3\n") : cmd === "git status --porcelain" ? ok(" M pkg-a/src/x.ts\n") : undefined);
+    const r = await runRepair({ task: profiled({ seedPatch: "diff --git a/x b/x\n" }), agent: writer("fixed"), provider, image: "img" });
+    expect(r.finalState).toBe("RESOLVED");
+    const cmds = r.commands.map((c) => c.cmd);
+    const apply = cmds.findIndex((c) => c.startsWith("git apply --whitespace=nowarn /tmp/.th-seed.patch"));
+    expect(apply).toBe(1); // right after the checkout
+    expect(cmds[apply]).toMatch(/&& rm -f \/tmp\/\.th-seed\.patch$/); // the patch file doesn't stay in the sandbox
+    expect(apply).toBeLessThan(cmds.indexOf('cd "pkg-a" && needs-network install'));
+    expect(apply).toBeLessThan(cmds.indexOf(SQUASH_HISTORY));
+    expect(provider.files.get("/tmp/.th-seed.patch")).toBe("diff --git a/x b/x\n");
+    expect(r.seed!.patchSha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("a seed patch that changes nothing, or doesn't apply, ends the run FAILED before anything else runs", async () => {
+    const nothing = new FakeProvider(); // `git status --porcelain` prints nothing
+    const r = await runRepair({ task: profiled({ seedPatch: "" }), agent: writer("fixed"), provider: nothing, image: "img" });
+    expect(r).toMatchObject({ finalState: "FAILED", reason: "the seed patch changed nothing" });
+    expect(r.commands.some((c) => c.cmd.includes("needs-network install"))).toBe(false);
+    expect(nothing.destroyed).toEqual(["fake-1"]);
+    const rejects = new FakeProvider();
+    rejects.onExec = (cmd) => (cmd.startsWith("git apply") ? fail(1) : undefined);
+    const r2 = await runRepair({ task: profiled({ seedPatch: "garbage" }), agent: writer("fixed"), provider: rejects, image: "img" });
+    expect(r2.finalState).toBe("FAILED");
+    expect(r2.reason).toMatch(/^applying the seed patch failed \(exit 1\)/);
+    expect(r2.states.map((s) => s.state)).not.toContain("REPRODUCING");
+  });
+});
+
 describe("task.json", () => {
+  it("loads the profile and the seed patch named in task.json, relative to the task dir", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "tracehound-task-"));
+    writeFileSync(path.join(dir, "repro.test.ts"), "test()");
+    writeFileSync(path.join(dir, "seed.patch"), "PATCH");
+    writeFileSync(path.join(dir, "p.json"), JSON.stringify({ id: "p", workdir: "backend", test: "bun test" }));
+    const spec = { id: "t", kind: "smoke", profile: "p.json", seed: { patch: "seed.patch" }, source: { gitUrl: "https://example.invalid/r.git" }, baseSha: SHA, issue: "x", repro: { testFile: "repro.test.ts", dest: "r/x.test.ts", command: "bun test" }, limits: { steps: 1, wallClockMs: 1, tokens: 0 } };
+    writeFileSync(path.join(dir, "task.json"), JSON.stringify(spec));
+    const t = loadTask(path.join(dir, "task.json"));
+    expect(t.profile).toEqual({ id: "p", workdir: "backend", test: "bun test" });
+    expect(t.seedPatch).toBe("PATCH");
+    expect(t.spec.kind).toBe("smoke");
+    writeFileSync(path.join(dir, "task.json"), JSON.stringify({ ...spec, seed: { patch: "missing.patch" } }));
+    expect(() => loadTask(path.join(dir, "task.json"))).toThrow(/seed patch .* does not exist/);
+    writeFileSync(path.join(dir, "task.json"), JSON.stringify({ ...spec, profile: "missing.json" }));
+    expect(() => loadTask(path.join(dir, "task.json"))).toThrow(/repo profile .* does not exist/);
+  });
+
+
   it("resolves paths against the task dir and rejects a repro dest outside the repo", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "tracehound-task-"));
     writeFileSync(path.join(dir, "repro.test.ts"), "test()");

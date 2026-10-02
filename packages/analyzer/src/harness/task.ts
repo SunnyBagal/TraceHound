@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { loadProfile, type RepoProfile } from "./profile.ts";
 
 const Sha = z.string().regex(/^[0-9a-f]{40}$/, "full 40-char commit SHA");
 
@@ -11,6 +12,15 @@ export const TaskSpec = z.object({
   /** gitUrl: cloned on the host, then copied in. localPath: a git repo on disk (test fixtures only). */
   source: z.union([z.object({ gitUrl: z.string().min(1) }).strict(), z.object({ localPath: z.string().min(1) }).strict()]),
   baseSha: Sha, // the buggy commit
+  /** "smoke": checks the harness on a repo; never an evaluation task, never counted in results. */
+  kind: z.enum(["smoke", "evaluation"]).optional(),
+  /** Repo profile (install / test / typecheck and their directory), relative to the task dir (decision 041). */
+  profile: z.string().optional(),
+  /**
+   * A seeded bug: a patch (relative to the task dir) applied with `git apply` right after checkout,
+   * so it is part of the squashed base commit. The run FAILS if it doesn't apply or changes nothing.
+   */
+  seed: z.object({ patch: z.string() }).strict().optional(),
   image: z.string().optional(), // default: the pinned sandbox image
   setup: z.array(z.string()).default([]), // run in /work after checkout; each must exit 0
   issue: z.string().min(1),
@@ -46,6 +56,8 @@ export interface LoadedTask {
   dir: string;
   reproContent: string;
   localPath?: string; // resolved
+  profile?: RepoProfile;
+  seedPatch?: string; // the seed patch's content
 }
 
 export function loadTask(file: string): LoadedTask {
@@ -57,5 +69,12 @@ export function loadTask(file: string): LoadedTask {
   if (!existsSync(reproFile)) throw new Error(`repro test ${reproFile} does not exist`);
   if (path.isAbsolute(spec.repro.dest) || spec.repro.dest.split("/").includes("..")) throw new Error(`repro.dest must be a path inside the repo: ${spec.repro.dest}`);
   const localPath = "localPath" in spec.source ? path.resolve(dir, spec.source.localPath) : undefined;
-  return { spec, dir, reproContent: readFileSync(reproFile, "utf8"), localPath };
+  const profile = spec.profile ? loadProfile(path.resolve(dir, spec.profile)) : undefined;
+  let seedPatch: string | undefined;
+  if (spec.seed) {
+    const seedFile = path.resolve(dir, spec.seed.patch);
+    if (!existsSync(seedFile)) throw new Error(`seed patch ${seedFile} does not exist`);
+    seedPatch = readFileSync(seedFile, "utf8");
+  }
+  return { spec, dir, reproContent: readFileSync(reproFile, "utf8"), localPath, ...(profile && { profile }), ...(seedPatch !== undefined && { seedPatch }) };
 }
