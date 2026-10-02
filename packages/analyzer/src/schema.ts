@@ -467,6 +467,8 @@ export const ChangeSet = z.object({
   base: z.object({ ref: z.string(), sha: z.string() }),
   head: z.union([z.object({ ref: z.string(), sha: z.string() }), z.object({ run: z.object({ runId: z.string(), taskId: z.string(), patchSha256: z.string() }) })]),
   config: z.string().optional(),
+  /** 0.9.0+: node_modules directories of the source checkout symlinked into both worktrees */
+  nodeModules: z.array(z.string()).default([]),
   components: z.array(ComponentChange),
   files: z.array(FileChange),
   declarations: z.array(DeclarationChange),

@@ -21,7 +21,7 @@ import {
   type Snapshot,
 } from "../schema.ts";
 import { indexTree, type Decl, type RouteSpan, type TreeIndex } from "./declarations.ts";
-import { addWorktree, ChangesError, git, parseZeroContextDiff, type FileHunks } from "./git.ts";
+import { addWorktree, ChangesError, git, linkNodeModules, parseZeroContextDiff, type FileHunks } from "./git.ts";
 
 export { ChangesError } from "./git.ts";
 
@@ -32,7 +32,7 @@ export const LIMITATIONS = [
   "Types, interfaces and non-exported module-level values are not declarations of their own: their edits show as the module's body.",
   "Call resolution is static (ts-morph symbols). Calls through parameters, locals, element access or untyped values are counted as dynamic per file; calls into packages or the TS lib are counted as external. Neither produces an edge.",
   "Without a package's or the runtime's types installed, a call is counted external when its receiver chain starts at something imported, typed or constructed from a package, or at an undeclared runtime global from a fixed list (console, crypto, setTimeout, fetch, …); any other free identifier is dynamic.",
-  "Both trees are analyzed in fresh git worktrees, which carry no node_modules: installed package types are never used, so calls on values typed only by a package are dynamic unless the receiver rule above applies.",
+  "Both trees are analyzed in git worktrees with the source checkout's node_modules symlinked in (listed in nodeModules): base and head see the checkout's installed dependency versions, which may differ from what either side's lockfile declares. A checkout without node_modules gets no package or runtime types, and calls on values typed only by them are dynamic.",
   "Top-level code is one declaration per file (kind module): a change to statements outside any function shows as the module's body, not a finer declaration.",
   "Route and queue edges come from the existing extractors (http-routes, bullmq-queues, redis) and are attributed to the innermost declaration around their evidence line.",
 ];
@@ -162,6 +162,8 @@ export function computeChangeSet(input: ChangeSetInput): ChangeSet {
       diffText = git(repo, ["diff", "-U0", "--no-renames", baseSha, headSha!]);
     }
     const hunks = parseZeroContextDiff(diffText);
+    // after any staging (run mode stages the patch), so the links never enter a diff
+    const linked = [...new Set([...linkNodeModules(repo, baseTree.dir), ...linkNodeModules(repo, headTree.dir)])].sort();
     const configPath = input.configPath;
     const base = analyzeTree(baseTree.dir, "base", configPath);
     const head = analyzeTree(headTree.dir, "head", configPath);
@@ -175,6 +177,7 @@ export function computeChangeSet(input: ChangeSetInput): ChangeSet {
         ? { run: { runId: input.run.runId, taskId: input.run.taskId, patchSha256: createHash("sha256").update(input.run.patch).digest("hex") } }
         : { ref: input.head!, sha: headSha! },
       ...(configPath && { config: configPath }),
+      nodeModules: linked,
       ...result,
       stats: { ...result.stats, runtimeMs: Math.round(performance.now() - started) },
       limitations: LIMITATIONS,
@@ -186,7 +189,7 @@ export function computeChangeSet(input: ChangeSetInput): ChangeSet {
   }
 }
 
-function build(base: TreeSide, head: TreeSide, hunks: Map<string, FileHunks>): Omit<ChangeSet, "schemaVersion" | "analyzerVersion" | "repo" | "base" | "head" | "config" | "limitations" | "stats"> & { stats: Omit<ChangeSet["stats"], "runtimeMs"> } {
+function build(base: TreeSide, head: TreeSide, hunks: Map<string, FileHunks>): Omit<ChangeSet, "schemaVersion" | "analyzerVersion" | "repo" | "base" | "head" | "config" | "nodeModules" | "limitations" | "stats"> & { stats: Omit<ChangeSet["stats"], "runtimeMs"> } {
   // ── declarations ────────────────────────────────────────────────────────────────────────
   const ids = new Set([...base.index.decls.keys(), ...head.index.decls.keys()]);
   const all = new Map<string, DeclarationChange>();

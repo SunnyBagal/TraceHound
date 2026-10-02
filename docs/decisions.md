@@ -1239,3 +1239,41 @@ calls appeared. (b) Rename detection by body similarity: a heuristic that can be
 removed + added is honest. (c) Resolving `dynamic` calls by name matching: it would draw edges
 nobody can point to (product rule). (d) Symlinking node_modules into the worktrees: wrong when
 the diff changes dependencies.
+
+## 039 · Change sets v2, a multi-repo snapshot index, and a version guard (analyzer 0.9.0)
+**Step 1 · Why so many calls were "dynamic" (cause proven before any change).** Recall @
+`5d2165a`, all 61 files, counted with the 0.8.0 rules: 270 resolved, 844 external, **358
+dynamic**. A diagnostic that records why each call was dynamic:
+- 138 had no symbol on the property, and the receiver was an unannotated local whose type is
+  `any`; 96 the same with an unannotated parameter; 30 with a destructured binding.
+- 54 resolved to a parameter or local (genuinely dynamic).
+- 9 had receivers that are expressions; 3 were `import()`.
+- Typical examples: `a = process.argv.slice(2); a.find((x) => x.startsWith(…))`. `process`
+  comes from `@types/bun` (`"types": ["bun"]` in `recall-backend/tsconfig.json`), so without
+  `node_modules` it is `any`, and so is everything derived from it. Likewise `new
+  URL(url).hostname.replace(…)` (the runtime's `URL`), and `t.embedding.op(…)` (a drizzle
+  callback parameter typed by `drizzle-orm`).
+- **The repo's tsconfig is loaded** (backend: `moduleResolution` bundler, `types: ["bun"]`,
+  `jsx`, `strict`). The frontend's root `tsconfig.json` is references-only (`files: []`), so its
+  project gets default options. Loading `tsconfig.app.json` instead changed `jsx` but not one
+  count (74/125/53 vs 74/125/53; 74/160/18 vs 74/160/18 with `node_modules`). **Not a cause; left
+  as is.**
+- **Package types are the cause.** On a clone with `node_modules` installed, the same counts
+  are 270 / 1,126 / **76**. The 0.8.0 rerun "with node_modules" gave identical numbers because
+  change sets analyze fresh **git worktrees**, which never contain the source checkout's
+  untracked `node_modules`.
+- **Fix:** the source checkout's `node_modules` (repo root and each top-level package dir) is
+  symlinked into both worktrees after any staging, so the links never enter a diff. Nothing is
+  installed or written. The change set lists the linked dirs in `nodeModules`.
+  **Limitation:** base and head both see the checkout's installed versions, which may differ
+  from either side's lockfile.
+- **Counts** (head side, change-set files):
+
+  | | Before (0.8.0) | After |
+  |---|---|---|
+  | Recall `5d2165a^..5d2165a`, checkout with node_modules | 104 / 458 / 192 | **104 / 616 / 34** |
+  | Recall, checkout without node_modules | 104 / 458 / 192 | 104 / 458 / 192 (nothing to link) |
+  | CEX seed (`fixtures/demo-repo`, never installed) | 34 / 148 / 7 | 34 / 148 / 7 |
+
+  Test: a typed package in `node_modules` → `items.forEach((i) => i.go())` is 0 dynamic when
+  linked, and `i.go` is dynamic without it.

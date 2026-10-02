@@ -1,7 +1,7 @@
 // Git plumbing for change sets: temporary worktrees and zero-context hunks. Every git call drops
 // GIT_DIR & co. (decision 032), so a hook or `rebase --exec` can't point it at another repo.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readdirSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { cleanGitEnv } from "../git-env.ts";
@@ -64,4 +64,25 @@ export function parseZeroContextDiff(diff: string): Map<string, FileHunks> {
     }
   }
   return files;
+}
+
+/**
+ * Link every node_modules of the source checkout (repo root and each direct subdirectory, i.e.
+ * workspace packages) into a worktree, so package and runtime types resolve as they do in the
+ * checkout. Symlinks to the checkout's own directories: nothing is installed or written. Both sides
+ * of a diff see the checkout's dependencies, which may differ from what base or head declare.
+ * Returns the repo-relative paths linked.
+ */
+export function linkNodeModules(repo: string, worktree: string): string[] {
+  const linked: string[] = [];
+  const dirs = [".", ...readdirSync(repo, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && d.name !== "node_modules").map((d) => d.name)];
+  for (const dir of dirs) {
+    const source = path.join(repo, dir, "node_modules");
+    const target = path.join(worktree, dir, "node_modules");
+    if (!existsSync(source) || !existsSync(path.join(worktree, dir)) || existsSync(target)) continue;
+    if (!lstatSync(source).isDirectory() && !lstatSync(source).isSymbolicLink()) continue;
+    symlinkSync(source, target, "dir");
+    linked.push(path.posix.join(dir, "node_modules").replace(/^\.\//, ""));
+  }
+  return linked;
 }

@@ -165,3 +165,18 @@ describe("tracehound changes --run", () => {
     expect(c.files).toEqual([expect.objectContaining({ path: "src/cart.ts", status: "modified", linesAdded: 1, linesRemoved: 1 })]);
   }, 120_000);
 });
+
+describe("change sets: package types (decision 039)", () => {
+  it("the source checkout's node_modules is linked into both worktrees, so calls typed by a package resolve as external instead of dynamic", () => {
+    const app = (n: number) => `import { items } from "pkg";\nexport function run() {\n  items.forEach((i) => i.go(${n}));\n}\n`;
+    const files = { ".gitignore": "node_modules\n", "src/app.ts": app(1) };
+    const withTypes = { "node_modules/pkg/package.json": JSON.stringify({ name: "pkg", types: "index.d.ts" }), "node_modules/pkg/index.d.ts": "export interface Item { go(n: number): void }\nexport declare const items: Item[];\n" };
+    const linked = changes({ ...files, ...withTypes }, { "src/app.ts": app(2) });
+    expect(linked.nodeModules).toEqual(["node_modules"]);
+    expect(linked.files.find((f) => f.path === "src/app.ts")!.calls.head).toEqual({ resolved: 0, external: 2, dynamic: 0 });
+    expect(linked.files.map((f) => f.path)).toEqual(["src/app.ts"]); // the links never enter the diff
+    const bare = changes(files, { "src/app.ts": app(2) });
+    expect(bare.nodeModules).toEqual([]);
+    expect(bare.files.find((f) => f.path === "src/app.ts")!.calls.head).toEqual({ resolved: 0, external: 1, dynamic: 1 }); // i.go: i is untyped without the package's types
+  });
+});
