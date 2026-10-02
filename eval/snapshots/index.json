@@ -9,11 +9,64 @@
   },
   "snapshots": [
     {
+      "repo": "SunnyBagal/Recall",
+      "sha": "57d920e4c93b9185c8dbe7350d98633c4732c78e",
+      "analyzerVersion": "0.10.0",
+      "path": "57d920e4c93b9185c8dbe7350d98633c4732c78e/0.10.0.json",
+      "createdAt": "2026-10-02T19:51:40.067Z"
+    },
+    {
       "repo": "toy-cart",
       "sha": "3582f355e884dc4512ee157ee59848796893ec27",
       "analyzerVersion": "0.6.0",
       "path": "3582f355e884dc4512ee157ee59848796893ec27/0.6.0.json",
       "createdAt": "2026-09-30T14:48:09.852Z"
+    }
+  ],
+  "defaultRepo": "toy-cart",
+  "repos": [
+    {
+      "id": "recall",
+      "name": "SunnyBagal/Recall",
+      "repoUrl": "https://github.com/SunnyBagal/Recall.git",
+      "defaultRef": "57d920e4c93b9185c8dbe7350d98633c4732c78e",
+      "latest": {
+        "repo": "SunnyBagal/Recall",
+        "sha": "57d920e4c93b9185c8dbe7350d98633c4732c78e",
+        "analyzerVersion": "0.10.0",
+        "path": "57d920e4c93b9185c8dbe7350d98633c4732c78e/0.10.0.json",
+        "createdAt": "2026-10-02T19:51:40.067Z"
+      },
+      "versions": [
+        {
+          "repo": "SunnyBagal/Recall",
+          "sha": "57d920e4c93b9185c8dbe7350d98633c4732c78e",
+          "analyzerVersion": "0.10.0",
+          "path": "57d920e4c93b9185c8dbe7350d98633c4732c78e/0.10.0.json",
+          "createdAt": "2026-10-02T19:51:40.067Z"
+        }
+      ]
+    },
+    {
+      "id": "toy-cart",
+      "name": "toy-cart",
+      "defaultRef": "3582f355e884dc4512ee157ee59848796893ec27",
+      "latest": {
+        "repo": "toy-cart",
+        "sha": "3582f355e884dc4512ee157ee59848796893ec27",
+        "analyzerVersion": "0.6.0",
+        "path": "3582f355e884dc4512ee157ee59848796893ec27/0.6.0.json",
+        "createdAt": "2026-09-30T14:48:09.852Z"
+      },
+      "versions": [
+        {
+          "repo": "toy-cart",
+          "sha": "3582f355e884dc4512ee157ee59848796893ec27",
+          "analyzerVersion": "0.6.0",
+          "path": "3582f355e884dc4512ee157ee59848796893ec27/0.6.0.json",
+          "createdAt": "2026-09-30T14:48:09.852Z"
+        }
+      ]
     }
   ]
 }

@@ -22,17 +22,21 @@ built.
 - An unseen-repo check for the BullMQ detector: a third public Express + BullMQ repo, analyzed
   only after `bullmq-queues` freezes (Recall shaped the detector, so it doesn't count).
 
-- **BullMQ producer through dependency injection** (decision 041). Recall @ `57d920e` passes its
-  queue into `createApp({ queue })` and calls `.add` on a parameter typed as a hand-written
-  interface (`recall-backend/index.ts:162`), so the `produces` edge that was proven at `5d2165a`
-  is gone and only a `queue-unpaired` warning remains. Needs a detector change (follow the
-  argument at the call site back to `new Queue`, or at least warn at the unresolved `.add`), a
-  version bump and a decision. Until then Recall repair runs are graph off and no snapshot of
-  `57d920e` is published.
+- BullMQ through dependency injection, beyond decision 042: more than one parameter hop, methods
+  and callbacks (no call sites are followed for them), an argument that isn't an object literal at
+  the call site, and a non-Queue call site outside test files (today named in the evidence, no
+  warning).
+- An unseen-repo check for the parameter-hop resolution (decision 042): Recall's seams prompted
+  it, so Recall doesn't count; same held-out repo as the detector's check above.
+- Test helpers that aren't `*.test.*` (Recall's `test/helpers/*.ts`, `test/setup.ts`) are grouped
+  as source: they land in `shared`, draw `shared → brainly-server` and `shared → queue` import
+  edges, and two get orphan warnings (decision 042, step 4). Needs a rule for test-support files.
 
 ## Repair harness
-- A snapshot of Recall @ `57d920e` for `--graph on` (under `eval/snapshots/`, like the toy's),
-  once the produces edge above is back.
+- The Recall `57d920e` snapshot in `eval/snapshots/` has heuristic names (the naming cache has no
+  entry for that commit's facts); model names would need a naming run.
+- In the one graph-on smoke run (decision 042) the agent made no graph tool calls; whether the
+  graph helps on Recall is untested.
 - Per-test regression comparison: the gate compares one exit code per command, so with a single
   `bun test` a baseline that already has a failing test hides any newly broken one (decision 041).
 - After a sandbox is killed, the run record can say `destroyed: false` while Docker is still

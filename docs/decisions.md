@@ -1541,7 +1541,7 @@ carry no component ids; unmapped files carry no reason (ignored vs not TypeScrip
 on a base ref for demo diffs without a local commit.
 
 ## 041 · Repo profiles, a baseline-matched typecheck gate, and the repair harness on Recall
-(Number 040 is the change view on `ui/change-view`, not merged yet; the gap closes when it is.)
+(Number 040 is the change view, merged from `ui/change-view` after this decision was written.)
 **Context:** Recall is the new evaluation repo: `SunnyBagal/Recall`, branch `testable-baseline`
 @ `57d920e`, backend in `recall-backend/`, frontend in `recall-frontend/`. The harness assumed
 the repo root, compared tsc error *counts*, and had no way to seed a bug without a commit in the
@@ -1652,3 +1652,129 @@ agent could find it. (c) Per-repo branches in the harness (`if recall`): the pro
 (d) Keeping the error count with a tolerance: 5 → 5 hides a swapped error. (e) Matching errors
 with line numbers: any edit above an old error would fail the run. (f) Always using the image's
 tsc: a repo pinned to another TypeScript would be checked by the wrong compiler.
+
+## 042 · BullMQ queues through dependency injection (detector bullmq-queues@0.2; analyzer 0.10.0)
+**Context:** decision 041 found that at Recall `57d920e` the API → queue `produces` edge is gone:
+the producer calls `.add` on a value destructured from a function parameter typed as a
+hand-written interface, and the real `Queue` is built in a factory and passed in at the
+function's call site. `bullmq-queues@0.1` resolved a receiver only when it was a variable
+initialized with `new Queue(…)`.
+**This resolution was built after Recall's seams broke the edge, to bring that edge back. Recall
+is therefore not an unseen-repo result for it**, exactly as for the detector itself (decision
+035). The fixtures are generic code, not copied from Recall, but their shapes were chosen knowing
+Recall's. A held-out repo is still needed to say anything about how this generalizes (backlog).
+**Choice** (`src/extract/bullmq.ts`; no repo-specific names):
+- **Without crossing a parameter** a receiver now resolves through variables, imports and
+  re-exports (as before), and through a **factory's return value**: `const q = make()` or
+  `const { q } = make()`, where every `return` of `make` leads to the same `new Queue(…)`
+  (directly, or as a property of a returned object literal). Returns that disagree → not
+  resolved. The label is the queue name's own (a literal → `proven`): one function with one
+  possible result is as fixed as a variable.
+- **One parameter hop.** A receiver that is a parameter, one property of a parameter
+  (`deps.q`, `{ q }`, `const { q } = deps`, `const q = deps.q`) of a named function is resolved
+  through **that function's call sites** (ts-morph references across the project). At each site
+  the argument, or that property of an object-literal argument, is resolved as above.
+  - exactly one real Queue among the sites → one `produce` fact for it;
+  - several different real Queues → one fact per queue;
+  - a site that passes anything else (a test's fake, an object the detector can't resolve)
+    creates no node, edge or warning; it is counted and named in the add site's evidence;
+  - no site resolves → no fact, unless the value is known to be a queue: the parameter is typed
+    as bullmq's `Queue`, or a Queue is reachable through more parameter hops (probed to 3). Then
+    it is a `produce` fact without a queue → a `queue-unresolved` warning naming the add site.
+    An `.add` on a parameter that nothing ties to BullMQ (`Set.add`) stays what it was: nothing.
+  - **One hop only.** A second hop is never an edge (fixture d). Methods and anonymous functions
+    have no call sites to follow.
+- **Evidence is three sites, never empty.** The fact's own evidence is the add call; it carries
+  `wiredAt` and `supportEvidenceIds`: one evidence item at each wiring call site and one at the
+  `new Queue(…)`. The edge cites all three (`aggregate/edges.ts`), each with the edge's label, so
+  the construction's own `proven` name can't lift the edge.
+- **Label proposed for a and b: `resolved-default` (0.7), capped at the queue name's own label.**
+  - Not `proven`: at the add site the queue isn't named; it is whatever callers pass. `proven`
+    elsewhere means the code at the evidence line pins the value (a literal, or a binding the
+    compiler resolves to one declaration). Here it is data flow through a call, and the function
+    can be called with something else: fixture b's test does exactly that, and callers outside
+    the analyzed files can't be ruled out.
+  - Not `dynamic`: every call site in the repo that passes a Queue passes the same one, and each
+    step is pointed to. That matches the scheme's 0.7 tier, "value resolved via indirection".
+  - b gets the same label as a: a fake creates nothing, so the real wiring is still the only one.
+  - **c is `dynamic` (0.5):** each queue is really wired, but which one a given `add` reaches is
+    decided at runtime, which is the scheme's "real op, operand not fixed".
+- **Worker label:** an inline processor whose body is a single call of one named function is
+  labelled with that function (`Worker processContent`), and its evidence says it is wrapped.
+  Job-name filtering is also looked for in that function when the wrapper passes its job on.
+**Fixtures** (`test/bullmq.test.ts`, each a small repo analyzed for real; all pass):
+
+| | Case | Result |
+|---|---|---|
+| a | one parameter (object property, destructured), one call site | `produces`, `resolved-default`; evidence at the wiring site, the add site, the construction |
+| b | a + a test file passing a fake | the same edge and label; no extra node, edge or warning; the fake's site is named in the evidence |
+| c | two call sites, two real queues | two edges, both `dynamic`, each with its own wiring site and construction |
+| d | two parameter hops | no edge; `queue-unresolved` naming the add site; a plain `Set.add` on a parameter is still not a fact |
+| e | Queue returned from a factory, destructured | `produces`, `proven`; a factory whose returns disagree is not resolved |
+| f | Worker with an arrow wrapping one named function | label `Worker sendEmail`; two statements stay `<inline function>` |
+| a+e | factory-built queue through one parameter | `produces`, `resolved-default`, three evidence sites |
+
+**Recall `57d920e`** (analyzed into a temp dir with `--naming heuristic`; nothing written to
+`snapshots/`):
+
+| | Before (`bullmq-queues@0.1`) | After (`@0.2`) |
+|---|---|---|
+| `recall-backend:brainly-server -produces-> bullmq:content-processing` | missing | `resolved-default` (0.7), label `add process-content`, evidence `recall-backend/index.ts#L162-170` (add), `recall-backend/index.ts#L504-504` (wiring), `recall-backend/config/queue.ts#L19-30` (construction) |
+| `bullmq:content-processing -consumes-> recall-backend:worker` | `proven`, label `Worker <inline function>` | `proven`, label `Worker processContent` |
+| `queue-unpaired` warning | present | gone |
+
+The add site's evidence also names the test helper's call (`recall-backend/test/helpers/app.ts:119`)
+as passing something that is not a Queue. Components are unchanged; edges 7 → 8; warnings 5 → 4.
+At the published `5d2165a` this edge was `proven`; at `57d920e` it is `resolved-default`, which
+is what the code now supports.
+**Step 4, reported, not fixed** (Recall `57d920e`):
+- `recall-backend/test/*.test.ts` (8 files) are in no component; they are `tests` links.
+  `test/helpers/app.ts`, `helpers/db.ts`, `helpers/network.ts` and `test/setup.ts` don't match
+  the test-file pattern (`*.test|spec.*`, `__tests__/`), so they are source files and land in
+  `recall-backend:shared` ("not imported by any entry point; no single owner").
+- `shared` 7 → 12: those four files, plus `services/aiProcessor.ts`, which `index.ts` now also
+  imports, so it is "used by Brainly Server, Recall Backend Worker".
+- `worker` 3 → 2: the same `aiProcessor.ts` left it ("only reachable from the worker" no longer
+  holds).
+- Side effects of the helpers being source: `shared → brainly-server` and `shared → queue`
+  import edges whose only evidence is `test/helpers/app.ts`, and orphan warnings for
+  `helpers/app.ts` and `setup.ts`.
+**Regeneration at 0.10.0** (the version guard's own commands, temp clones, `--cache-only`; CEX
+7/7 and Recall 4/4 names cached, no spend). Leaf-by-leaf against 0.9.0:
+
+| File | Differences beyond `analyzerVersion`, timestamps, temp paths |
+|---|---|
+| `snapshots/da0e3d6…/0.10.0.json` (CEX) | none. No edge or warning changed (CEX has no BullMQ) |
+| `snapshots/5d2165a…/0.10.0.json` (Recall) | three evidence `detail` strings end in `(bullmq-queues@0.2)` instead of `@0.1`. No edge or warning changed; **the produces edge is still `proven`** (`recall-backend/index.ts#L153-161`, a directly imported queue variable) and the consumes edge still `proven`, `Worker processContent` |
+| `changesets/cex-seed-queue-consumer.json` | `config` path only (it records the checkout's absolute path; the previous one was generated in another worktree) |
+| `changesets/toy-discount-run.json` | none |
+| `changesets/recall-5d2165a.json`, `recall-7943212.json`, `recall-worker-deleted.json` | `config` path only |
+
+In every change set the edges with their status, the warnings and the component rollups are
+identical. `impacts/*.json` stay on their 0.7.0 base, as before.
+- **Index:** `snapshots/index.json` gains the two 0.10.0 entries. Its top-level `latest` moved
+  from CEX `da0e3d6` to Recall `5d2165a`: `upsertManifest` keeps `latest` on the default repo,
+  and `defaultRepo` has been `recall` since decision 040.
+- **Tests touched by the regeneration:** `packages/analyzer/test/manifest.test.ts` needed no
+  change (it reads whatever `latest` points at). Two viewer tests hardcoded the `0.9.0` file name
+  (`viewer/test/repos.test.tsx`, `viewer/test/snapshot-data.test.ts`); they now match any
+  version. No viewer source changed.
+**Recall `57d920e` for graph-on runs:** `eval/snapshots/57d920e…/0.10.0.json` (not published; 7
+components, 8 edges, 4 warnings). `--cache-only` has no cached names for this commit's facts, so
+it uses heuristic names plus the config's overrides; no naming spend. The smoke task's
+`task.json` gained a `snapshot` line pointing at it (needed for `--graph on`; ignored otherwise).
+**One graph-on smoke run** (`recall-smoke-trending`, a smoke task, never an evaluation result;
+nothing tuned): `--agent nemotron --graph on`, agent-v4, Nano, reasoning on → **RESOLVED**, 22
+steps, 22 calls, 144,815 tokens (133,783 in / 11,032 out), $0.01067, 111 s. **The agent made no
+graph tool calls** (`graphCalls: []`), so this run says nothing about the graph; it shows that a
+graph-on run on Recall starts and reaches a verdict. Ledger: $0.33144 → $0.34212.
+**Limitations:** one hop; named functions only (no methods, no callbacks); the argument must be
+resolvable at the call site (an object literal for a property); call sites in ignored files
+count; a non-Queue site outside test files is treated like a fake (named in evidence, no
+warning).
+**Rejected:** (a) Following any number of hops: each hop multiplies the call sites that can
+disagree, and the edge gets harder to point to. (b) Trusting the parameter's type: a hand-written
+interface says nothing about which queue. (c) Matching by variable or property name
+(`contentQueue`, `queue`): an edge nobody can point to. (d) `proven` for a single wiring: see the
+label reasoning. (e) Ignoring test call sites by path: a fake is recognised by not resolving to a
+Queue, wherever it lives.
