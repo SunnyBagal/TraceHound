@@ -3,11 +3,25 @@
   "latest": {
     "repo": "SunnyBagal/cex-v2-boilercode",
     "sha": "da0e3d640a9c02f815fcca48f8328c94558cc058",
-    "analyzerVersion": "0.7.0",
-    "path": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.7.0.json",
-    "createdAt": "2026-10-01T10:15:05.235Z"
+    "analyzerVersion": "0.9.0",
+    "path": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.9.0.json",
+    "createdAt": "2026-10-02T14:41:06.159Z"
   },
   "snapshots": [
+    {
+      "repo": "SunnyBagal/Recall",
+      "sha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b",
+      "analyzerVersion": "0.9.0",
+      "path": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b/0.9.0.json",
+      "createdAt": "2026-10-02T14:41:12.564Z"
+    },
+    {
+      "repo": "SunnyBagal/cex-v2-boilercode",
+      "sha": "da0e3d640a9c02f815fcca48f8328c94558cc058",
+      "analyzerVersion": "0.9.0",
+      "path": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.9.0.json",
+      "createdAt": "2026-10-02T14:41:06.159Z"
+    },
     {
       "repo": "SunnyBagal/cex-v2-boilercode",
       "sha": "da0e3d640a9c02f815fcca48f8328c94558cc058",
@@ -63,15 +77,23 @@
     {
       "id": "cex-v2-boilercode",
       "name": "SunnyBagal/cex-v2-boilercode",
+      "repoUrl": "https://github.com/SunnyBagal/cex-v2-boilercode.git",
       "defaultRef": "da0e3d640a9c02f815fcca48f8328c94558cc058",
       "latest": {
         "repo": "SunnyBagal/cex-v2-boilercode",
         "sha": "da0e3d640a9c02f815fcca48f8328c94558cc058",
-        "analyzerVersion": "0.7.0",
-        "path": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.7.0.json",
-        "createdAt": "2026-10-01T10:15:05.235Z"
+        "analyzerVersion": "0.9.0",
+        "path": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.9.0.json",
+        "createdAt": "2026-10-02T14:41:06.159Z"
       },
       "versions": [
+        {
+          "repo": "SunnyBagal/cex-v2-boilercode",
+          "sha": "da0e3d640a9c02f815fcca48f8328c94558cc058",
+          "analyzerVersion": "0.9.0",
+          "path": "da0e3d640a9c02f815fcca48f8328c94558cc058/0.9.0.json",
+          "createdAt": "2026-10-02T14:41:06.159Z"
+        },
         {
           "repo": "SunnyBagal/cex-v2-boilercode",
           "sha": "da0e3d640a9c02f815fcca48f8328c94558cc058",
@@ -124,11 +146,18 @@
       "latest": {
         "repo": "SunnyBagal/Recall",
         "sha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b",
-        "analyzerVersion": "0.7.0",
-        "path": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b/0.7.0.json",
-        "createdAt": "2026-10-01T09:52:01.853Z"
+        "analyzerVersion": "0.9.0",
+        "path": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b/0.9.0.json",
+        "createdAt": "2026-10-02T14:41:12.564Z"
       },
       "versions": [
+        {
+          "repo": "SunnyBagal/Recall",
+          "sha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b",
+          "analyzerVersion": "0.9.0",
+          "path": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b/0.9.0.json",
+          "createdAt": "2026-10-02T14:41:12.564Z"
+        },
         {
           "repo": "SunnyBagal/Recall",
           "sha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b",

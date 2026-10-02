@@ -24,6 +24,9 @@ jobs:
       - name: Fetch pinned demo repo (public, for the integration test)
         run: pnpm fixture
 
+      - name: Snapshot version guard (every repo's latest snapshot is the current analyzer version)
+        run: node packages/analyzer/src/version-guard.ts snapshots
+
       - name: Tests (analyzer + viewer)
         run: pnpm test
         env:

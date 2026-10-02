@@ -1354,3 +1354,28 @@ Test: a reindented, respaced, commented function → `formatting`; a JSDoc-only 
   gone. After that, `defaultRepo` = `cex-v2-boilercode` and the top-level `latest` is still CEX
   `da0e3d6`. Back compat checked with `origin/main`'s schema, i.e. the deployed viewer's: it
   parses the new index, strips `repos`, and gets the same `latest`.
+**Step 6 · Version guard and regeneration (analyzer 0.9.0).**
+- `packages/analyzer/src/version-guard.ts` reads an index. For each repo whose latest snapshot
+  isn't `ANALYZER_VERSION`, it prints the repo, commit and version, plus a regenerate command,
+  and exits 1. CI runs it on `snapshots/` before the tests.
+- The regenerate command clones the repo into `mktemp -d`, checks out the snapshot's commit, and
+  runs the analyzer with the repo's config and `--cache-only`. The CLI now says which repo's
+  latest it wrote, and whether that is the default repo.
+- Rejected: a test that compares versions. A failing test doesn't say how to fix it; the guard
+  prints the command.
+- **Failing on a stale snapshot:** with the analyzer at 0.8.0, and again after the bump to 0.9.0,
+  both CEX `da0e3d6` and Recall `5d2165a` were flagged at 0.7.0, with exit 1 and a command each.
+  After regenerating, it reports "snapshot versions OK", exit 0.
+- **Regeneration:** both ran with the guard's own commands, in temp clones (none under
+  `~/Projects`). CEX: 7/7 names cached; Recall: 4/4 cached. No cache miss, $0, and the spend
+  ledger stayed at 959 lines.
+- **Identity:** there was no 0.8.0 snapshot (0.8.0 changed only change sets), so the comparison
+  is against 0.7.0, leaf by leaf. CEX differs only in `analyzerVersion` and `generatedAt`. Recall
+  also differs in three cached naming calls' `latencyMs` (1 → 0): how long the cache read took,
+  not what the snapshot says. Nothing in 0.8.0 or 0.9.0 touches extractors, grouping or edges;
+  types as declarations, formatting and stable components live only in change sets.
+- **Impact:** CEX's three seeds against the 0.9.0 base have the same files, changed and affected
+  components (with chains), unmapped files and linked tests as the committed `impacts/*.json`.
+  Those reports stay on the 0.7.0 base, which is still in the index. Recall (`5d2165a` →
+  `worker.ts` deleted) resolves `snapshots/5d2165a…/0.9.0.json` without a flag: worker changed;
+  `content-processing` and `brainly-server` affected at depth 1 over proven edges.

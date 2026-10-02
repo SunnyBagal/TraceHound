@@ -8,7 +8,7 @@ import { CacheMissError, TokenFactoryClient } from "./llm/client.ts";
 import { SpendLedger } from "./llm/ledger.ts";
 import { closestModel } from "./llm/models.ts";
 import { loadPriceTable, priceFor } from "./llm/prices.ts";
-import { readManifest, upsertManifest, writeManifest } from "./manifest.ts";
+import { readManifest, repoIdOf, upsertManifest, writeManifest } from "./manifest.ts";
 import { DEFAULT_MODEL, formatCall, nameComponentsWithLlm, NO_REASONING } from "./naming/llm.ts";
 import { Snapshot } from "./schema.ts";
 
@@ -107,16 +107,14 @@ const relFile = `${snapshot.repo.commitSha}/${snapshot.analyzerVersion}.json`;
 const file = path.join(outDir, relFile);
 mkdirSync(path.dirname(file), { recursive: true });
 writeFileSync(file, JSON.stringify(snapshot, null, 2) + "\n");
-const manifestFile = writeManifest(
-  outDir,
-  upsertManifest(readManifest(outDir), {
+const manifest = upsertManifest(readManifest(outDir), {
     repo: snapshot.repo.name,
     sha: snapshot.repo.commitSha,
     analyzerVersion: snapshot.analyzerVersion,
     path: relFile,
     createdAt: snapshot.generatedAt,
-  }, { repoUrl: snapshot.repo.url }),
-);
+  }, { repoUrl: snapshot.repo.url });
+const manifestFile = writeManifest(outDir, manifest);
 
 const ms = Math.round(performance.now() - started);
 console.log(`${snapshot.repo.name}@${snapshot.repo.commitSha.slice(0, 7)} · analyzer ${snapshot.analyzerVersion} · ${ms}ms`);
@@ -129,4 +127,5 @@ if (snapshot.llmCalls.length) {
   console.log(`naming: ${named}/${snapshot.llmCalls.length} named by ${snapshot.llmCalls[0]!.model} · ${tokens} tokens · ${cached} cached · ~$${cost.toFixed(5)}`);
 }
 console.log(`→ ${path.relative(process.cwd(), file)}`);
-console.log(`→ ${path.relative(process.cwd(), manifestFile)} (latest)`);
+const repoId = repoIdOf(snapshot.repo.name);
+console.log(`→ ${path.relative(process.cwd(), manifestFile)} (latest of repo ${repoId}${manifest.defaultRepo === repoId ? ", the default repo" : `; the default repo stays ${manifest.defaultRepo}`})`);
