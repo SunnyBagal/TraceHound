@@ -34,7 +34,7 @@ describe("build-time snapshot verification covers every repo, not only `latest`"
     const dir = copy();
     const recall = JSON.parse(readFileSync(path.join(dir, "index.json"), "utf8")).repos.find((r: { id: string }) => r.id === "recall");
     rmSync(path.join(dir, recall.latest.path));
-    expect(() => verifySnapshots(dir, "snap")).toThrow(/snap\/5d2165a.*0\.9\.0\.json is missing \(referenced by index\.json as repo recall's latest\)/);
+    expect(() => verifySnapshots(dir, "snap")).toThrow(/snap\/5d2165a.*\/\d+\.\d+\.\d+\.json is missing \(referenced by index\.json as repo recall's latest\)/);
   });
 
   it("fails when a repo's latest is another repo's snapshot", () => {

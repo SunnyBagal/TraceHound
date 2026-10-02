@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "analyzerVersion": "0.9.0",
+  "analyzerVersion": "0.10.0",
   "repo": {
-    "name": "tracehound-changes-c5W9fR",
-    "path": "/Users/sunny/Projects/tracehound-ui/eval/fixtures/.build/toy-cart"
+    "name": "tracehound-changes-VuUlSZ",
+    "path": "/Users/sunny/Projects/TraceHound/eval/fixtures/.build/toy-cart"
   },
   "base": {
     "ref": "3582f355e884dc4512ee157ee59848796893ec27",
@@ -163,7 +163,7 @@
         "dynamic": 0
       }
     },
-    "runtimeMs": 541
+    "runtimeMs": 498
   },
   "limitations": [
     "Renames are not detected: a renamed or moved declaration appears as removed + added (ids are file path + qualified name), and file renames are diffed with --no-renames.",

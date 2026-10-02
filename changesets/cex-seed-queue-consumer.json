@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "analyzerVersion": "0.9.0",
+  "analyzerVersion": "0.10.0",
   "repo": {
     "name": "SunnyBagal/cex-v2-boilercode",
-    "path": "/var/folders/5y/x6df6srs1x185pb1vqytnkn80000gn/T/tmp.E34chSfJlM"
+    "path": "/var/folders/5y/x6df6srs1x185pb1vqytnkn80000gn/T/tmp.fsm5RXSQWD"
   },
   "base": {
     "ref": "da0e3d6",
@@ -13,7 +13,7 @@
     "ref": "origin/seed/impact-queue-consumer",
     "sha": "c389d3df0cfa45579061ad5c79bd0d852901d664"
   },
-  "config": "/Users/sunny/Projects/tracehound-ui/configs/cex-v2-boilercode.tracehound.json",
+  "config": "/Users/sunny/Projects/TraceHound/configs/cex-v2-boilercode.tracehound.json",
   "nodeModules": [],
   "components": [
     {
@@ -279,7 +279,7 @@
         "dynamic": 7
       }
     },
-    "runtimeMs": 528
+    "runtimeMs": 547
   },
   "limitations": [
     "Renames are not detected: a renamed or moved declaration appears as removed + added (ids are file path + qualified name), and file renames are diffed with --no-renames.",

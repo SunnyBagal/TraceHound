@@ -22,7 +22,7 @@ describe("repo resolution (?repo=, defaultRepo)", () => {
   });
 
   it("?repo=<id> picks that repo; an unknown id falls back to the default", () => {
-    expect(resolveRepo("?repo=cex-v2-boilercode", manifest)?.latest.path).toBe("da0e3d640a9c02f815fcca48f8328c94558cc058/0.9.0.json");
+    expect(resolveRepo("?repo=cex-v2-boilercode", manifest)?.latest.path).toMatch(/^da0e3d640a9c02f815fcca48f8328c94558cc058\/\d+\.\d+\.\d+\.json$/);
     expect(resolveRepo("?repo=nope", manifest)?.id).toBe("recall");
   });
 
