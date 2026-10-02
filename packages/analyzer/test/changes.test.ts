@@ -215,6 +215,24 @@ describe("change sets: types (decision 039)", () => {
     expect(decl(c, "src/app.ts#Other")!.modifications).toEqual(["shape"]);
     expect(c.warnings.filter((w) => w.kind === "queue-payload-type-changed")).toEqual([]);
   });
+
+  it("deleting the consumer is queue-orphaned only: the job type it took with it isn't a payload change", () => {
+    const api = 'import { Queue } from "bullmq";\nconst q = new Queue("emails");\nexport async function signup(to: string) {\n  await q.add("welcome", { to });\n}\n';
+    const worker = 'import { Worker } from "bullmq";\ninterface EmailJob {\n  to: string;\n}\nasync function send(job: { data: EmailJob }) {\n  console.log(job.data.to);\n}\nnew Worker("emails", send);\n';
+    const c = changes({ "src/app.ts": api, "src/worker.ts": worker }, { "src/worker.ts": null });
+    expect(decl(c, "src/worker.ts#EmailJob")!.status).toBe("removed");
+    expect(c.warnings.map((w) => w.kind)).toContain("queue-orphaned-by-diff");
+    expect(c.warnings.filter((w) => w.kind === "queue-payload-type-changed")).toEqual([]);
+  });
+
+  it("a removed type on a side that still exists is a payload warning, worded 'removed'", () => {
+    const api = 'import { Queue } from "bullmq";\nconst q = new Queue("emails");\nexport async function signup(to: string) {\n  await q.add("welcome", { to });\n}\n';
+    const worker = (typed: boolean) => `import { Worker } from "bullmq";\n${typed ? "interface EmailJob {\n  to: string;\n}\nasync function send(job: { data: EmailJob }) {" : "async function send(job: { data: { to: string } }) {"}\n  console.log(job.data.to);\n}\nnew Worker("emails", send);\n`;
+    const c = changes({ "src/app.ts": api, "src/worker.ts": worker(true) }, { "src/worker.ts": worker(false) });
+    const w = c.warnings.find((x) => x.kind === "queue-payload-type-changed")!;
+    expect(w.message).toMatch(/src\/worker\.ts#EmailJob removed and used by its consumer side/);
+    expect(w.evidence).toContainEqual(expect.objectContaining({ side: "base", file: "src/worker.ts", detail: "consumer uses src/worker.ts#EmailJob" }));
+  });
 });
 
 describe("change sets: formatting (decision 039)", () => {

@@ -512,9 +512,11 @@ function queuePayloadTypeChanged(all: Map<string, DeclarationChange>, base: Tree
   for (const queue of [...new Set([...base.queueTypes.keys(), ...head.queueTypes.keys()])].sort()) {
     const h = head.queueTypes.get(queue) ?? { producers: [], consumers: [] };
     const b = base.queueTypes.get(queue) ?? { producers: [], consumers: [] };
-    // modified types are judged where they are used now; removed ones where they were used
+    // modified types are judged where they are used now; removed ones where they were used, but
+    // only on a side that still exists at head: a side deleted outright (its call sites all gone)
+    // is queue-orphaned-by-diff, and the types it took with it aren't a payload contract change
     const sites = [...h.producers.map((s) => ({ ...s, role: "producer", side: "head" as const })), ...h.consumers.map((s) => ({ ...s, role: "consumer", side: "head" as const }))];
-    const removedUse = [...b.producers.map((s) => ({ ...s, role: "producer", side: "base" as const })), ...b.consumers.map((s) => ({ ...s, role: "consumer", side: "base" as const }))].filter((s) => s.types.some((t) => all.get(t)?.status === "removed"));
+    const removedUse = [...(h.producers.length ? b.producers.map((s) => ({ ...s, role: "producer", side: "base" as const })) : []), ...(h.consumers.length ? b.consumers.map((s) => ({ ...s, role: "consumer", side: "base" as const })) : [])].filter((s) => s.types.some((t) => all.get(t)?.status === "removed"));
     const hits = [...new Set([...sites, ...removedUse].flatMap((s) => s.types.filter(changed)))].sort();
     if (!hits.length) continue;
     const producerTypes = [...new Set(h.producers.flatMap((s) => s.types))];
@@ -525,7 +527,7 @@ function queuePayloadTypeChanged(all: Map<string, DeclarationChange>, base: Tree
       kind: "queue-payload-type-changed",
       rule: RULE_PAYLOAD,
       declarationId: hits[0],
-      message: `${queue.replace(/^queue:/, "")}: ${hits.join(", ")} changed and is used by its ${[...new Set([...sites, ...removedUse].filter((s) => s.types.some(changed)).map((s) => s.role))].join(" and ")} side${disjoint ? `; the producer side uses ${producerTypes.join(", ")} and the consumer side ${consumerTypes.join(", ")} (different declarations)` : ""}`,
+      message: `${queue.replace(/^queue:/, "")}: ${hits.join(", ")} ${hits.every((id) => all.get(id)!.status === "removed") ? "removed" : "changed"} and used by its ${[...new Set([...sites, ...removedUse].filter((s) => s.types.some(changed)).map((s) => s.role))].join(" and ")} side${disjoint ? `; the producer side uses ${producerTypes.join(", ")} and the consumer side ${consumerTypes.join(", ")} (different declarations)` : ""}`,
       evidence: [
         ...[...sites, ...removedUse].map((s) => ({ side: s.side, file: s.file, line: s.line, detail: `${s.role}${s.types.length ? ` uses ${s.types.join(", ")}` : " (no repo type found)"}` })),
         ...hits.map((id) => {

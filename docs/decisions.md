@@ -1379,3 +1379,11 @@ Test: a reindented, respaced, commented function → `formatting`; a JSDoc-only 
   Those reports stay on the 0.7.0 base, which is still in the index. Recall (`5d2165a` →
   `worker.ts` deleted) resolves `snapshots/5d2165a…/0.9.0.json` without a flag: worker changed;
   `content-processing` and `brainly-server` affected at depth 1 over proven edges.
+**Step 7 finding · payload warning on a deleted side (fixed).** The first rerun of the
+deleted-worker diff gave `queue-payload-type-changed` next to `queue-orphaned-by-diff`:
+`ContentJobData` (declared in `worker.ts`) was "removed and used by the consumer", but only
+because the whole consumer was deleted. Now a removed type counts only on a side (producer or
+consumer) that still has call sites at head; a side deleted outright is the orphan warning's
+job. The message also says "removed" rather than "changed" when every hit was removed. Tests:
+deleting the consumer → orphaned only (fails without the fix: the payload warning is back); a
+type removed from a consumer that still exists → the warning, worded "removed".
