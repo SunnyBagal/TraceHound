@@ -23,5 +23,12 @@ built.
   only after `bullmq-queues` freezes (Recall shaped the detector, so it doesn't count).
 
 ## Viewer
-- A repo switcher so the viewer can show Recall next to CEX: both are in `snapshots/index.json`
-  `repos` since decision 039; the viewer still reads only the top-level `latest` (CEX).
+- Change view: the canvas fit view on a 1440px screen with the warnings panel open lands near the
+  minimum zoom, so node chips are small; a "fit changed components" button would help.
+- Change view: edge labels can sit on top of adjacent nodes (pre-existing; more visible when the
+  queue and worker nodes are close).
+- Change view, CLI side (decision 040, "CLI gaps"): portable `repo.path`, a stable repo name for
+  `--run`, evidence or declaration edges behind `componentEdges`, per-file unchanged counts,
+  component ids on warnings and edge endpoints, a reason on unmapped files, `--patch` on a base ref.
+- Change view: the top-level `latest` in `snapshots/index.json` still points at CEX while
+  `defaultRepo` is Recall; decide whether the next manifest write moves it.

@@ -1416,3 +1416,125 @@ unique ids. Calls are head-side resolved/external/dynamic.
     `worker → shared`) are now `regrouped`.
 - The clone without `node_modules` keeps 192 dynamic calls; with them, 34 (Step 1).
 - Spend: none. The ledger stayed at 959 lines through all of decision 039.
+
+## 040 · Change view and repo gallery (viewer; change sets from the existing CLI)
+**Goal:** a reviewer understands what a diff did to the system without reading its lines:
+component level first, then files and declarations, with "what could break" (the change set's
+warnings) first. Viewer only: change sets come from `tracehound changes` unmodified; no model.
+**Data (`changesets/`).** `changesets/index.json` is an array of `{ id, repo, title, kind:
+"commit" | "run" | "demo", base, head, file }` plus `regenerate` (the command that rewrites
+`file`, run from the repo root, cloning into `mktemp -d`), `patch` (demo) and `runRecord` (run).
+Five entries, all computed by the CLI on temp clones outside `~/Projects`:
+- `recall-7943212` (largest real commit, `d9caa4c..7943212`), `recall-5d2165a` (median,
+  `42ba6f5..5d2165a`): Recall commits.
+- `recall-worker-deleted`: a demo diff. `changesets/sources/recall-worker-deleted.patch` deletes
+  `recall-backend/worker.ts` at `5d2165a`; `git am --committer-date-is-author-date` with a fixed
+  committer identity makes the same head every time (`bcfaa67`), and `--diff 5d2165a..bcfaa67`
+  computes it.
+- `cex-seed-queue-consumer`: `da0e3d6..seed/impact-queue-consumer` (the payload-type warning).
+- `toy-discount-run`: `--run` on a recorded, resolved Nemotron run. The run record is gitignored,
+  so `changesets/sources/toy-discount-run.json` keeps only the fields `--run` reads (`runId`,
+  `taskId`, `baseSha`, `diff`) plus `finalState`.
+Every regenerate command was run once and reproduced its file except `stats.runtimeMs`,
+`repo.path` (the temp clone) and, for the run, `repo.name` (the CLI names it after its temp copy).
+The viewer build copies the index and the files it lists into `public/changesets` and fails
+unless each file parses as `ChangeSet` schemaVersion 2 with the entry's base
+(`viewer/scripts/snapshots.mjs verifyChangesets`, also run on the export); a viewer test checks
+the same.
+**Repo gallery.** The repo name in the header is a switcher fed by `snapshots/index.json`
+`repos`: every repo (commit, analyzer version) and, under each, its change sets; change sets of a
+repo with no published snapshot (the toy) are listed last. `?repo=<id>` picks the repo; unknown
+ids and a missing parameter fall back to `defaultRepo`, which is now **`recall`**, so the site
+opens on Recall. Switching repo drops `?component=`, `?edge=`, `?impact=` and `?changes=` (their
+ids belong to the other repo) and keeps anything else; `?component=` / `?edge=` deep links work
+within the repo on screen. The top-level `latest` is untouched (CEX), so the deployed viewer that
+reads it keeps working until this one replaces it; the new viewer reads `repos` /
+`defaultRepo`, and an index without `repos` still yields its `latest`. **Consequence:** `latest`
+no longer points at the default repo's latest as decision 039 states, and MCP/`context`/`query`,
+which default to `defaultRepo`, now default to Recall unless given `--repo-id` / `repo`.
+**Change view (`?changes=<id>`).**
+- **Graph.** The repo's latest published snapshot (component ids are stable across commits; the
+  Limits panel says which commit the graph is drawn from when it differs from the base, e.g.
+  `5d2165a` for `7943212`'s base `d9caa4c`). A component the snapshot lacks is drawn from the
+  change set alone, labelled "change set only" instead of a kind (the toy repo).
+- **Component level (default).** Components the change touches carry a chip on their top edge:
+  `⚠ n` warnings, `+a −r ~m` declarations (formatting-only not counted as modified), `n type(s)`
+  changed, `n fmt`; a component involved only by a warning says INVOLVED, one touched only by an
+  edge EDGES CHANGED. Untouched components stay visible at 35 % opacity. Component edges use the
+  rollup's `componentEdges`: added solid green, removed dashed red, regrouped dotted grey, each
+  also a word on the label ("− removed ·"); unchanged edges are dimmed, except where declaration
+  edges between the two components were added or removed (label "+a −r decl. edges"). An added
+  component edge the snapshot lacks is drawn from its id, labelled "no snapshot evidence", and
+  clicking it opens its source component's changes, never an evidence-less edge inspector.
+- **Warnings panel** (left, open by default when a rule fired; a collapsed rail saying "No
+  warnings" otherwise, which lists the four rules verbatim when opened): per warning, a plain
+  title, `Rule:` with the CLI's rule text, the message, then each evidence item with its side and
+  a GitHub permalink at that side's SHA. A demo's head is a local commit: head lines are shown
+  without a link and say why. A run shows patch line numbers (`patchLine` maps a base or head line
+  to its line in the run's diff; outside every hunk it says so). Warnings are ordered queue
+  orphaned → payload type → removed still referenced → signature. Clicking one highlights the
+  components it involves (its evidence files, its declaration, the queue its id names) and the
+  snapshot edges between them, and fits them into view; click again or Esc to drop it.
+- **Drill-down.** Clicking a component opens the inspector on a new **Changes** tab: the rollup in
+  words, the warnings involving it, its files (each with +/- lines and a permalink at base or
+  head), and per file the declarations: kind icon, name, status pill (added, removed, modified,
+  formatting only), modification reasons in words ("return type changed", "shape changed"),
+  +/- lines, and a permalink to the span. Changed declarations come first (warned ones on top);
+  formatting-only ones are grouped behind "N formatting only"; unchanged ones (the change set
+  lists only those a changed edge or a warning points at) behind "Show N unchanged". Below the
+  files, every call, route and queue edge added or removed with an end in the component,
+  including ends in neighbouring components (named, clickable, hover-highlighted on the canvas).
+  The edge inspector gains an "In this change" section.
+- **Summary bar:** title, `base..head`, N components touched, N declarations (+/−/~, plus N
+  formatting only), N cross-process edges changed, N warnings, "Computed without AI", and a
+  Limits popover: how it was computed, which snapshot the graph comes from, demo/run caveats,
+  changed files outside every component, the change set's own `limitations`, and the regenerate
+  command. Model-written component names keep their label (badge on nodes, `*` with a tooltip in
+  lists).
+- **Phones** (< 768 px): a list instead of the canvas: warnings first, then touched components
+  (warned first, then most changed) as expandable rows with the same drill-down, untouched ones
+  behind "Show N unchanged components".
+**Layout persistence (bug).** Dragged positions were saved under `<commitSha>:<analyzerVersion>`,
+so every regenerated snapshot (0.6 → 0.7 → 0.9 this week) and the impact view (0.7.0 base) started
+from a fresh ELK layout: "my layout resets when I reopen". Reproduced on a production build:
+within one snapshot a drag survived a reload, so the key was the cause. Positions are now saved per
+repo name (merged, so components another view doesn't show keep theirs); the first load after
+this change picks up the newest pre-040 save for the same commit; Reset layout stores an empty
+record so that fallback can't bring old positions back. Checked in a browser: a drag survives a
+reload and shows in a change view of the same repo, and a 0.7.0-keyed save is used at 0.9.0.
+Not fixable here: every Vercel preview URL is its own origin with its own storage.
+**Header:** the "TraceHound" wordmark is gone (the rail and the phone header keep the logo); the
+repo switcher, a GitHub link and the commit chip remain.
+**Tests** (viewer, 45 new: `changes.test.ts`, `repos.test.tsx`, `positions.test.ts`, `change-view.test.tsx`): the
+index check; status mapping; reasons; rollup badges; warnings-first ordering of warnings and of
+components; collapsed unchanged and grouped formatting-only declarations; evidence links per kind
+(commit SHA, demo head, run patch lines); the summary bar; dimming and badges on the canvas; a
+warning click lighting its components; the Changes tab; the phone list; repo resolution, the
+switcher's links, deep links within a repo; positions. With the logic reverted (temporary edits,
+then restored), each group fails: formatting-only as modified (3 tests), no warning order (1),
+no component order (2), unchanged not collapsed (3), zero counts kept (3), `?repo=` ignored (1),
+`defaultRepo` back to CEX (2), switching repo keeping `?component=` (2), positions keyed by
+commit:version (3).
+**Analyzer test left failing:** `packages/analyzer/test/agent.test.ts` "context and query take
+--repo-id against the committed index" asserts that the default repo's search equals
+`--repo-id cex-v2-boilercode`; with `defaultRepo` = `recall` it fails (it passes with the old
+value). Analyzer code was out of scope for this lane, so it is not edited; the fix is to compare
+against `--repo-id recall` or pass `--repo-id` explicitly.
+**Performance:** largest change set (`recall-7943212`, 26 KB) on a local production build
+(`next build` export served statically, headless Chromium 1440×900, 6 warm runs): navigation to
+the first component node with the summary bar rendered, median **285 ms** (269–288), against
+257 ms for the plain Recall view.
+**Rejected:** (a) Redrawing component edges from declaration edges in the viewer: it would draw
+edges the CLI didn't (product rule); the rollup's `componentEdges` are used as they are. (b)
+Hiding untouched components: the reviewer loses where the change sits; they are dimmed. (c)
+Snapshots of each change set's base/head: generating snapshots is analyzer work, out of scope;
+the latest snapshot plus "change set only" components is stated in Limits instead. (d) Pushing
+the demo commit to the Recall fork so head lines get permalinks: an outward change to someone
+else's repo for a demo.
+**CLI gaps (for the main lane):** `repo.path` is the machine's temp clone path; `--run` names the
+repo after its temp copy; `componentEdges` are bare ids with no evidence or the declaration edges
+behind them; no per-file count of unchanged declarations (only referenced ones are listed); no
+component metadata (kind, naming source) or snapshot reference for base/head; warnings don't name
+the components they involve (the viewer parses the queue out of the warning id); edge endpoints
+carry no component ids; unmapped files carry no reason (ignored vs not TypeScript); no `--patch`
+on a base ref for demo diffs without a local commit.
