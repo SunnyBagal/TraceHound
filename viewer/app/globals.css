@@ -31,6 +31,11 @@
   --highlight: #c4b5fd;
   --impact-changed: var(--accent);
   --impact-affected: #7cc4ff;
+  /* change view (decision 040): standard diff convention, always paired with a word or +/- sign */
+  --diff-added: #4ade80;
+  --diff-removed: #f87171;
+  --diff-regrouped: #8a96b0;
+  --diff-modified: var(--warn);
   --scrim: rgba(5, 8, 16, 0.72);
 
   /* aliases used by the utility classes */
@@ -60,6 +65,10 @@
   --color-highlight: var(--highlight);
   --color-impact-changed: var(--impact-changed);
   --color-impact-affected: var(--impact-affected);
+  --color-diff-added: var(--diff-added);
+  --color-diff-removed: var(--diff-removed);
+  --color-diff-regrouped: var(--diff-regrouped);
+  --color-diff-modified: var(--diff-modified);
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }

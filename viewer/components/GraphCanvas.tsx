@@ -11,7 +11,8 @@ import {
 } from "@xyflow/react";
 import { Maximize, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildGraph, neighbours, NODE_HEIGHT, NODE_WIDTH, type ComponentNode as ComponentNodeType } from "@/lib/graph";
+import type { ChangeModel } from "@/lib/changes";
+import { buildGraph, neighbours, NODE_HEIGHT, NODE_WIDTH, type ComponentNode as ComponentNodeType, type EvidenceEdge as EvidenceEdgeType } from "@/lib/graph";
 import { impactEdges, impactRoles, type ImpactReport } from "@/lib/impact";
 import type { Highlight } from "@/lib/highlight";
 import { elkLayout, type Positions } from "@/lib/layout";
@@ -30,11 +31,13 @@ export interface GraphCanvasProps {
   snapshot: Snapshot;
   selection: Selection;
   onSelect: (selection: Selection) => void;
-  /** component to pulse and pan to (e.g. from the warnings panel) */
-  focusId?: string | null;
+  /** components to pulse and bring into view (warnings panels); one is centred, several are fitted */
+  focusIds?: string[];
   focusNonce?: number;
   /** ?impact=<name>: style changed/affected components and the edges on their chains */
   impact?: ImpactReport;
+  /** ?changes=<id>: badge changed components, colour changed edges, dim what the change didn't touch */
+  changes?: ChangeModel;
   /** px of the canvas's right edge covered by the inspector overlay (0 when closed or on phones) */
   occludeRight?: number;
   /** transient hover/focus highlight from an inspector row (styled apart from the selection) */
@@ -55,10 +58,10 @@ function useMinZoom(): number {
 }
 const MARGIN = 32; // px kept clear around a selection brought into view
 
-export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce, impact, occludeRight = 0, highlight = null }: GraphCanvasProps) {
+export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focusNonce, impact, changes, occludeRight = 0, highlight = null }: GraphCanvasProps) {
   const roles = useMemo(() => (impact ? impactRoles(impact) : null), [impact]);
   const chainEdges = useMemo(() => (impact ? impactEdges(impact) : null), [impact]);
-  const base = useMemo(() => buildGraph(snapshot), [snapshot]);
+  const base = useMemo(() => buildGraph(snapshot, changes?.extraEdges), [snapshot, changes]);
   // positions are per repo (lib/positions.ts); the commit is only used to pick up pre-040 saves
   const storageKey = snapshot.repo.name;
   const legacySha = snapshot.repo.commitSha;
@@ -93,19 +96,25 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
   }, [base, storageKey, legacySha, setNodes, fitView, layoutRun]);
 
   // Warnings panel focus: pan to and pulse the component, centred in the part of the canvas the
-  // inspector doesn't cover.
+  // inspector doesn't cover; several components (a change warning) are fitted into view together.
   const lastFocus = useRef<number | undefined>(undefined);
   const justFocused = useRef<string | null>(null);
+  const focusKey = focusIds.join("|");
   useEffect(() => {
-    if (!focusId || lastFocus.current === focusNonce) return;
-    const node = nodes.find((n) => n.id === focusId);
-    if (!node) return;
+    if (!focusIds.length || lastFocus.current === focusNonce) return;
+    const targets = nodes.filter((n) => focusIds.includes(n.id));
+    if (!targets.length) return;
     lastFocus.current = focusNonce;
-    justFocused.current = `node:${focusId}`;
-    const zoom = clampZoom(1.05, minZoom);
-    setCenter(node.position.x + NODE_WIDTH / 2 + occludeRight / 2 / zoom, node.position.y + NODE_HEIGHT / 2, { zoom, duration: 500 });
+    if (targets.length === 1) {
+      const node = targets[0]!;
+      justFocused.current = `node:${node.id}`;
+      const zoom = clampZoom(1.05, minZoom);
+      setCenter(node.position.x + NODE_WIDTH / 2 + occludeRight / 2 / zoom, node.position.y + NODE_HEIGHT / 2, { zoom, duration: 500 });
+    } else {
+      void fitView({ ...fit, nodes: targets.map((n) => ({ id: n.id })), maxZoom: 1.05, ...(occludeRight ? { padding: { top: 0.15, bottom: 0.15, left: 0.1, right: `${occludeRight + MARGIN}px` } } : {}) });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run per focus request, not per drag
-  }, [focusId, focusNonce, nodes.length > 0]);
+  }, [focusKey, focusNonce, nodes.length > 0]);
 
   // Keep the selected node (or both ends of the selected edge) visible while the inspector is
   // open: if the overlay would cover it, pan (same zoom, within the limits) so it sits in the
@@ -155,33 +164,42 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
             ...n.data,
             // a panel-hovered node is never dimmed; then hover/selection focus; then impact mode
             // dims everything outside the impact
-            dimmed: panelHover ? false : focusSet ? !focusSet.has(n.id) : roles ? !roles.has(n.id) : false,
-            highlighted: focusId === n.id,
+            // change view: components the change didn't touch stay visible, dimmed
+            dimmed: panelHover ? false : focusSet ? !focusSet.has(n.id) : roles ? !roles.has(n.id) : changes ? !changes.diffs.has(n.id) : false,
+            highlighted: focusIds.includes(n.id),
             panelHover,
             impact: roles ? (roles.get(n.id) ?? null) : undefined,
+            change: changes ? (changes.diffs.get(n.id) ?? null) : undefined,
+            changeSetOnly: changes?.synthetic.has(n.id),
           },
         };
       }),
-    [nodes, selection, focusSet, focusId, roles, highlight],
+    [nodes, selection, focusSet, focusKey, roles, highlight, changes],
   );
   const displayEdges = useMemo(
     () =>
-      base.edges.map((e) => {
+      base.edges.map((e): EvidenceEdgeType => {
         const panelHover = Boolean(highlight?.edgeIds.includes(e.id));
+        const diff = changes ? (changes.edgeStatus.get(e.id) ?? "unchanged") : undefined;
+        const pair = changes?.pairEdges.get(`${e.source}->${e.target}`);
+        // change view: an unchanged component edge stays lit when declaration edges under it changed
+        const changed = diff !== undefined && (diff !== "unchanged" || Boolean(pair?.length));
         return {
           ...e,
           selected: selection?.type === "edge" && selection.id === e.id,
           data: {
             ...e.data!,
             active: activeEdgeIds.has(e.id) || (!focusSet && Boolean(chainEdges?.has(e.id))),
-            dimmed: panelHover ? false : focusSet ? !activeEdgeIds.has(e.id) : chainEdges ? !chainEdges.has(e.id) : false,
+            dimmed: panelHover ? false : focusSet ? !activeEdgeIds.has(e.id) : chainEdges ? !chainEdges.has(e.id) : changes ? !changed : false,
             panelHover,
             onImpactChain: chainEdges?.has(e.id),
             impactMode: Boolean(chainEdges),
+            diff,
+            declEdges: pair ? { added: pair.filter((x) => x.status === "added").length, removed: pair.filter((x) => x.status === "removed").length } : undefined,
           },
         };
       }),
-    [base.edges, selection, activeEdgeIds, focusSet, chainEdges, highlight],
+    [base.edges, selection, activeEdgeIds, focusSet, chainEdges, highlight, changes],
   );
 
   const persist = useCallback(() => {
@@ -201,7 +219,9 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
         onNodesChange={onNodesChange}
         onNodeDragStop={persist}
         onNodeClick={onNodeClick}
-        onEdgeClick={(_, edge) => onSelect({ type: "edge", id: edge.id })}
+        // an added component edge the published snapshot lacks has no snapshot evidence to inspect:
+        // open its source component, whose Changes tab lists the declaration edges behind it
+        onEdgeClick={(_, edge) => onSelect(edge.data?.extra ? { type: "node", id: edge.source } : { type: "edge", id: edge.id })}
         onPaneClick={() => onSelect(null)}
         onNodeMouseEnter={(_, n) => setHoverId(n.id)}
         onNodeMouseLeave={() => setHoverId(null)}

@@ -1,13 +1,18 @@
 "use client";
 
-import { Check, Copy, GitCommitHorizontal } from "lucide-react";
+import { Check, Copy, ExternalLink, GitCommitHorizontal, X } from "lucide-react";
 import { useState } from "react";
+import type { ChangeModel, ChangeSetEntry } from "@/lib/changes";
 import { EDGE_STYLES } from "@/lib/graph";
 import { githubSlug } from "@/lib/github";
+import type { RepoInfo } from "@/lib/repos";
 import type { Resolution, Snapshot } from "@/lib/types";
 import { LogoLink } from "./Logo";
+import { RepoSwitcher } from "./RepoSwitcher";
 
-export function TopBar({ snapshot }: { snapshot: Snapshot }) {
+const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+export function TopBar({ snapshot, repos = [], repoId, changeSets = [], changes }: { snapshot: Snapshot; repos?: RepoInfo[]; repoId?: string; changeSets?: ChangeSetEntry[]; changes?: ChangeModel }) {
   const [copied, setCopied] = useState(false);
   const slug = githubSlug(snapshot.repo);
   const copy = async () => {
@@ -23,14 +28,11 @@ export function TopBar({ snapshot }: { snapshot: Snapshot }) {
     <header className="flex h-12 min-w-0 shrink-0 items-center gap-2 border-b border-line bg-panel px-3 sm:gap-3 md:px-4">
       {/* the mark lives in the rail; below 640px the rail is hidden and it comes back here */}
       <LogoLink className="-ml-1 size-8 sm:hidden" />
-      <span className="hidden shrink-0 text-sm font-semibold tracking-tight sm:inline">TraceHound</span>
-      <span className="shrink-0 text-line-strong">/</span>
-      {slug ? (
-        <a href={`https://github.com/${slug}/tree/${snapshot.repo.commitSha}`} target="_blank" rel="noreferrer" className="min-w-0 truncate text-sm text-text hover:text-accent">
-          {snapshot.repo.name}
+      <RepoSwitcher repos={repos} repoId={repoId} label={snapshot.repo.name} changeSets={changeSets} changesId={changes?.entry.id} />
+      {slug && (
+        <a href={`https://github.com/${slug}/tree/${snapshot.repo.commitSha}`} target="_blank" rel="noreferrer" className="hidden shrink-0 text-faint hover:text-accent sm:inline" title={`${snapshot.repo.name} on GitHub at ${snapshot.repo.commitSha.slice(0, 7)}`} aria-label="Open on GitHub">
+          <ExternalLink className="size-3.5" />
         </a>
-      ) : (
-        <span className="min-w-0 truncate text-sm">{snapshot.repo.name}</span>
       )}
       <button
         type="button"
@@ -44,7 +46,17 @@ export function TopBar({ snapshot }: { snapshot: Snapshot }) {
         {snapshot.repo.commitSha.slice(0, 7)}
         {copied ? <Check className="size-3 text-accent" aria-label="copied" /> : <Copy className="size-3" aria-hidden />}
       </button>
-      <div className="ml-auto hidden items-center gap-3 lg:flex" aria-label="Edge legend">
+      {changes && (
+        <a
+          href={repoId ? `${base}/?repo=${repoId}` : `${base}/`}
+          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-accent/50 bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent hover:border-accent"
+          title="Leave the change view"
+          data-testid="exit-changes"
+        >
+          change set <X className="size-3" aria-hidden />
+        </a>
+      )}
+      <div className={`ml-auto hidden items-center gap-3 ${changes ? "" : "lg:flex"}`} aria-label="Edge legend">
         {(Object.keys(EDGE_STYLES) as Resolution[]).map((label) => (
           <span key={label} className="inline-flex items-center gap-1.5 text-[11px] text-muted" title={EDGE_STYLES[label].meaning}>
             <svg width="24" height="6" aria-hidden>

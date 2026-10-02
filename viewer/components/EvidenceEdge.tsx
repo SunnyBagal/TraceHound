@@ -2,7 +2,24 @@
 
 import { BaseEdge, EdgeLabelRenderer, useInternalNode, type EdgeProps, type InternalNode } from "@xyflow/react";
 import { memo } from "react";
+import type { EdgeDiffStatus } from "@/lib/changes";
 import { EDGE_STYLES, NODE_HEIGHT, NODE_WIDTH, type EvidenceEdge as EvidenceEdgeType } from "@/lib/graph";
+
+/**
+ * Change view (decision 040), standard diff convention: added solid green, removed dashed red,
+ * regrouped dotted grey. The status is always also a word on the label, never colour alone.
+ */
+export const DIFF_EDGE: Record<Exclude<EdgeDiffStatus, "unchanged">, { stroke: string; dash?: string; marker: string; word: string; meaning: string }> = {
+  added: { stroke: "var(--diff-added)", marker: "th-arrow-added", word: "+ added", meaning: "this component edge exists at head, not at base" },
+  removed: { stroke: "var(--diff-removed)", dash: "7 5", marker: "th-arrow-removed", word: "− removed", meaning: "this component edge existed at base and is gone at head" },
+  regrouped: {
+    stroke: "var(--diff-regrouped)",
+    dash: "0.5 5",
+    marker: "th-arrow-regrouped",
+    word: "regrouped",
+    meaning: "the raw snapshots disagree only because files were regrouped; with files kept in their base components the code relationship is unchanged",
+  },
+};
 
 const FAN = 30; // px between parallel edges along a node side
 
@@ -57,7 +74,10 @@ function EvidenceEdgeView({ id, source, target, data, selected }: EdgeProps<Evid
   const flagDynamic = data.impactMode && edge.confidenceLabel === "dynamic"; // impact mode: dynamic edges are called out
   const { path, labelX, labelY } = route(box(sourceNode), box(targetNode), parallelIndex, parallelCount);
   const hover = Boolean(data.panelHover); // inspector-row hover, styled apart from the selection
-  const stroke = hover ? "var(--highlight)" : active ? "var(--edge-active)" : "var(--edge)";
+  const diff = data.diff && data.diff !== "unchanged" ? DIFF_EDGE[data.diff] : undefined;
+  const stroke = hover ? "var(--highlight)" : diff ? diff.stroke : active ? "var(--edge-active)" : "var(--edge)";
+  const dash = data.diff ? diff?.dash : style.dash; // change view: the dash pattern is the diff status
+  const decl = data.declEdges && data.declEdges.added + data.declEdges.removed > 0 ? data.declEdges : undefined;
 
   return (
     <>
@@ -67,16 +87,16 @@ function EvidenceEdgeView({ id, source, target, data, selected }: EdgeProps<Evid
         interactionWidth={18}
         style={{
           stroke,
-          strokeWidth: hover ? 2.8 : active ? 2.2 : 1.6,
-          strokeDasharray: style.dash,
-          strokeLinecap: edge.confidenceLabel === "dynamic" ? "round" : "butt",
+          strokeWidth: hover ? 2.8 : active || diff ? 2.2 : 1.6,
+          strokeDasharray: dash,
+          strokeLinecap: (data.diff ? data.diff === "regrouped" : edge.confidenceLabel === "dynamic") ? "round" : "butt",
           opacity: data.dimmed ? (flagDynamic ? 0.5 : 0.14) : 1,
           transition: "opacity 200ms, stroke 200ms",
         }}
-        markerEnd={`url(#th-arrow${hover ? "-highlight" : active ? "-active" : ""})`}
+        markerEnd={`url(#${hover ? "th-arrow-highlight" : diff ? diff.marker : active ? "th-arrow-active" : "th-arrow"})`}
       />
       {/* test/inspection hook: the path's dash pattern is the confidence style */}
-      <path data-testid="edge-path" data-edge-id={edge.id} data-panel-hover={hover || undefined} data-confidence={edge.confidenceLabel} d={path} fill="none" stroke="none" strokeDasharray={style.dash ?? "none"} />
+      <path data-testid="edge-path" data-edge-id={edge.id} data-panel-hover={hover || undefined} data-confidence={edge.confidenceLabel} data-diff={data.diff} d={path} fill="none" stroke="none" strokeDasharray={dash ?? "none"} />
       <EdgeLabelRenderer>
         <div
           data-testid="edge-label"
@@ -85,15 +105,40 @@ function EvidenceEdgeView({ id, source, target, data, selected }: EdgeProps<Evid
             hover ? "border-highlight bg-panel text-text" : active ? "border-accent/60 bg-panel text-text" : "border-line bg-bg/90 text-muted",
           ].join(" ")}
           style={{ left: labelX, top: labelY, opacity: data.dimmed ? (flagDynamic ? 0.6 : 0.15) : 1 }}
-          title={`${edge.label} (${edge.weight} evidence)`}
+          title={
+            data.extra
+              ? `${diff?.meaning}. Not in the published snapshot, so it has no snapshot evidence: click for the declaration edges behind it.`
+              : `${diff ? `${diff.meaning}. ` : ""}${decl ? `Declaration edges under it: +${decl.added} −${decl.removed}. ` : ""}${edge.label} (${edge.weight} evidence)`
+          }
         >
+          {diff && (
+            <span data-testid="diff-flag" className="mr-1 font-semibold" style={{ color: diff.stroke }}>
+              {diff.word} ·
+            </span>
+          )}
           {flagDynamic && (
             <span data-testid="dynamic-flag" className="mr-1 rounded bg-warn px-1 font-semibold text-bg">
               ⚠ DYNAMIC
             </span>
           )}
-          {edge.kind} · <span className={active ? "text-accent" : "text-text/80"}>{style.text}</span>
-          {edge.weight > 1 && <span className="text-faint"> ×{edge.weight}</span>}
+          {edge.kind}
+          {data.extra ? (
+            <span className="text-faint"> · no snapshot evidence</span>
+          ) : (
+            <>
+              {" · "}
+              <span className={active ? "text-accent" : "text-text/80"}>{style.text}</span>
+              {edge.weight > 1 && <span className="text-faint"> ×{edge.weight}</span>}
+            </>
+          )}
+          {decl && (
+            <span className="ml-1" data-testid="decl-edge-delta">
+              {decl.added > 0 && <span className="text-diff-added">+{decl.added}</span>}
+              {decl.added > 0 && decl.removed > 0 && " "}
+              {decl.removed > 0 && <span className="text-diff-removed">−{decl.removed}</span>}
+              <span className="text-faint"> decl. edges</span>
+            </span>
+          )}
         </div>
       </EdgeLabelRenderer>
     </>
@@ -111,6 +156,9 @@ export function EdgeMarkers() {
           ["th-arrow", "var(--edge)"],
           ["th-arrow-active", "var(--edge-active)"],
           ["th-arrow-highlight", "var(--highlight)"],
+          ["th-arrow-added", "var(--diff-added)"],
+          ["th-arrow-removed", "var(--diff-removed)"],
+          ["th-arrow-regrouped", "var(--diff-regrouped)"],
         ].map(([id, color]) => (
           <marker key={id} id={id} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill={color} />
