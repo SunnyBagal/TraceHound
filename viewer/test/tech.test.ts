@@ -1,12 +1,9 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { Snapshot, SnapshotManifest } from "@tracehound/analyzer/schema";
+import type { Snapshot } from "@tracehound/analyzer/schema";
 import { describe, expect, it } from "vitest";
 import { headerFact, techFacts, techTitle } from "@/lib/tech";
+import { repoSnapshot } from "./repo-snapshot";
 
-const root = path.resolve(import.meta.dirname, "../../snapshots");
-const manifest = SnapshotManifest.parse(JSON.parse(readFileSync(path.join(root, "index.json"), "utf8")));
-const snapshot = Snapshot.parse(JSON.parse(readFileSync(path.join(root, manifest.latest!.path), "utf8")));
+const snapshot = repoSnapshot("cex-v2-boilercode");
 
 const titles = (id: string, s = snapshot) => techFacts(s, s.components.find((c) => c.id === id)!).map(techTitle);
 

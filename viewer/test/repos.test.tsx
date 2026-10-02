@@ -27,7 +27,8 @@ describe("repo resolution (?repo=, defaultRepo)", () => {
   });
 
   it("an index without repos (pre-0.9.0) still yields its latest", () => {
-    const old = { ...manifest, repos: undefined, defaultRepo: undefined };
+    // built from the CEX entry, not the committed top-level `latest` (which follows defaultRepo)
+    const old = { ...manifest, latest: manifest.repos!.find((r) => r.id === "cex-v2-boilercode")!.latest, repos: undefined, defaultRepo: undefined };
     expect(repoList(old).map((r) => r.id)).toEqual(["cex-v2-boilercode"]);
     expect(resolveRepo("?repo=recall", old)?.id).toBe("cex-v2-boilercode");
   });
