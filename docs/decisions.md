@@ -1277,3 +1277,26 @@ dynamic**. A diagnostic that records why each call was dynamic:
 
   Test: a typed package in `node_modules` → `items.forEach((i) => i.go())` is 0 dynamic when
   linked, and `i.go` is dynamic without it.
+**Step 2 · Types are declarations; payload types are checked.** The change-set schema is now
+version 2.
+- Interfaces, type aliases and enums, exported or not, are declarations of kind `type`. Their
+  definition (an interface's heritage and members, an alias's type, an enum's members) is
+  compared as `shape`; modifiers, keyword and type parameters as `signature`. They are no longer
+  part of the module's body.
+- **`queue-payload-type-changed`:** for each queue node, the repo types each side uses are
+  collected through symbols:
+  - producer: the payload arguments, i.e. BullMQ `add`'s 2nd argument, or Redis
+    `lPush`/`publish`'s arguments after the key. That includes type references in them and the
+    annotated types of the variables they read.
+  - consumer: a BullMQ Worker's handler parameters; for a Redis consumer, the function around the
+    consume call, or else the top-level statement around it (CEX's `for (;;)` loop).
+  The warning fires when a type used by either side was modified in its shape or signature, or
+  removed. Evidence covers every producer and consumer site with the types it uses, plus the
+  type itself. When producer and consumer use different type declarations, the message says so.
+- **CEX seed (`da0e3d6..seed/impact-queue-consumer`):** `engine/src/index.ts#EngineRequest` is now
+  a modified `type` (`shape`, +1/−1), alongside the module body (+2/−2). **The warning fires.**
+  The consumer loop (`engine/src/index.ts:96`) parses messages as the engine's `EngineRequest`,
+  whose field `responseQueue` became `replyQueue`. The producer (`engine-client.ts:43`) still
+  builds the backend's own `EngineRequest` (`backend/src/types/engine.ts`, unchanged). The two
+  sides use different declarations of the same contract, so tsc can't connect them; this rule
+  can.

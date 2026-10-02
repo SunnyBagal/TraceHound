@@ -390,12 +390,12 @@ export function impactReferenceErrors(report: ImpactReport, snapshot: Snapshot):
 
 // ── Change sets (0.8.0, decision 038): a declaration-level diff with an architectural rollup ──
 
-export const CHANGESET_SCHEMA_VERSION = 1;
+export const CHANGESET_SCHEMA_VERSION = 2; // 2 (0.9.0): kind "type", modification "shape", payload-type warning, nodeModules
 const Span = z.object({ file: z.string(), startLine: z.number().int().positive(), endLine: z.number().int().positive() });
-export const DeclarationKind = z.enum(["function", "class", "method", "property", "react-component", "variable", "route-handler", "module"]);
+export const DeclarationKind = z.enum(["function", "class", "method", "property", "react-component", "variable", "route-handler", "module", "type"]);
 export type DeclarationKind = z.infer<typeof DeclarationKind>;
 export const ChangeStatus = z.enum(["added", "removed", "modified", "unchanged"]);
-export const ModificationKind = z.enum(["signature", "returnType", "body", "typeAnnotation"]);
+export const ModificationKind = z.enum(["signature", "returnType", "body", "typeAnnotation", "shape"]);
 export type ModificationKind = z.infer<typeof ModificationKind>;
 
 export const DeclarationChange = z.object({
@@ -451,7 +451,7 @@ export type ComponentChange = z.infer<typeof ComponentChange>;
 
 export const ChangeWarning = z.object({
   id: z.string(),
-  kind: z.enum(["queue-orphaned-by-diff", "cross-component-signature-change", "removed-declaration-still-referenced"]),
+  kind: z.enum(["queue-orphaned-by-diff", "cross-component-signature-change", "removed-declaration-still-referenced", "queue-payload-type-changed"]),
   rule: z.string(), // the rule, in words
   message: z.string(),
   declarationId: z.string().optional(),

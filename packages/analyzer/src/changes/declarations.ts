@@ -15,7 +15,7 @@ export interface Decl {
   endLine: number;
   start: number; // character positions of the declaration's node
   end: number;
-  parts: { signature: string; returnType?: string; body?: string; typeAnnotation?: string };
+  parts: { signature: string; returnType?: string; body?: string; typeAnnotation?: string; shape?: string };
   topLevel: boolean; // a direct child of the module (classes, functions, variables, inline route handlers at module scope)
 }
 
@@ -41,6 +41,8 @@ export interface TreeIndex {
   callCounts: Map<string, CallCounts>;
   /** route node id → handler declaration id (or the registering declaration when the handler isn't resolvable) */
   routes: { route: string; handler: string; file: string; line: number; resolved: boolean }[];
+  /** the declaration whose node starts at this position, if any */
+  idAt(file: string, start: number): string | undefined;
   /** innermost declaration containing a position (falls back to the file's module declaration) */
   enclosing(file: string, pos: number): string;
   enclosingLine(file: string, line: number): string;
@@ -147,6 +149,18 @@ export function indexTree(sourceFiles: SourceFile[], rel: (abs: string) => strin
             topNodes.push(v);
           }
         }
+      } else if (Node.isInterfaceDeclaration(stmt) || Node.isTypeAliasDeclaration(stmt) || Node.isEnumDeclaration(stmt)) {
+        // types are declarations of their own (0.9.0): the definition is their "shape"
+        const name = stmt.getName();
+        const keyword = Node.isInterfaceDeclaration(stmt) ? "interface" : Node.isTypeAliasDeclaration(stmt) ? "type" : stmt.isConstEnum() ? "const enum" : "enum";
+        const typeParams = Node.isEnumDeclaration(stmt) ? "" : stmt.getTypeParameters().map((t) => t.getText()).join(", ");
+        const shape = Node.isInterfaceDeclaration(stmt)
+          ? [stmt.getHeritageClauses().map((h) => h.getText()).join(" "), ...stmt.getMembers().map((m) => m.getText())].join("\n")
+          : Node.isTypeAliasDeclaration(stmt)
+            ? stmt.getTypeNodeOrThrow().getText()
+            : stmt.getMembers().map((m) => m.getText()).join("\n");
+        add({ name, file, kind: "type", exported: stmt.isExported(), ...span(stmt), parts: { signature: `${modifiersText(stmt)} ${keyword} ${name}${typeParams ? `<${typeParams}>` : ""}`.trim(), shape }, topLevel: true }, stmt);
+        topNodes.push(stmt);
       } else if (Node.isExportAssignment(stmt) && !stmt.isExportEquals()) {
         const expr = stmt.getExpression();
         if (isFnLike(expr)) add({ name: "default", file, kind: fnKind("Default", expr), exported: true, ...span(stmt), parts: fnParts("export default", expr), topLevel: true }, stmt);
@@ -249,7 +263,7 @@ export function indexTree(sourceFiles: SourceFile[], rel: (abs: string) => strin
     routes.push({ route: `route:${r.label}`, handler: to ?? enclosing(r.file, call.getStart()), file: r.file, line: r.startLine, resolved: to !== undefined });
   }
 
-  return { decls, byFile, calls, callCounts, routes, enclosing, enclosingLine };
+  return { decls, byFile, calls, callCounts, routes, idAt: (file, start) => byPos.get(`${file}:${start}`), enclosing, enclosingLine };
 }
 
 /** Resolve what a call's callee refers to. */

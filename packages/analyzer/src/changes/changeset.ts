@@ -29,7 +29,7 @@ export const LIMITATIONS = [
   "Renames are not detected: a renamed or moved declaration appears as removed + added (ids are file path + qualified name), and file renames are diffed with --no-renames.",
   "Return types are compared only where annotated; inferred return types are not compared.",
   "Bodies are compared as exact text: a formatting-only edit counts as a body change.",
-  "Types, interfaces and non-exported module-level values are not declarations of their own: their edits show as the module's body.",
+  "Interfaces, type aliases and enums are declarations (kind type, modification shape); non-exported module-level values and namespaces are not: their edits show as the module's body.",
   "Call resolution is static (ts-morph symbols). Calls through parameters, locals, element access or untyped values are counted as dynamic per file; calls into packages or the TS lib are counted as external. Neither produces an edge.",
   "Without a package's or the runtime's types installed, a call is counted external when its receiver chain starts at something imported, typed or constructed from a package, or at an undeclared runtime global from a fixed list (console, crypto, setTimeout, fetch, …); any other free identifier is dynamic.",
   "Both trees are analyzed in git worktrees with the source checkout's node_modules symlinked in (listed in nodeModules): base and head see the checkout's installed dependency versions, which may differ from what either side's lockfile declares. A checkout without node_modules gets no package or runtime types, and calls on values typed only by them are dynamic.",
@@ -46,6 +46,73 @@ interface TreeSide {
   sourceFiles: Map<string, SourceFile>;
   componentOf: (file: string) => string | undefined;
   edges: Map<string, { from: string; to: string; kind: EdgeChange["kind"]; evidence: EdgeChange["evidence"] }>;
+  /** per queue node: the repo types each producer's payload and each consumer's handler use */
+  queueTypes: Map<string, { producers: TypedSite[]; consumers: TypedSite[] }>;
+}
+interface TypedSite {
+  file: string;
+  line: number;
+  types: string[];
+}
+
+/**
+ * Repo type declarations (interfaces, aliases, enums) a region uses, through symbols: type
+ * references inside it (annotations, `as T`, `satisfies T`, type arguments), and the annotated
+ * types of the variables and parameters it reads.
+ */
+function typesUsed(nodes: Node[], index: TreeIndex, rel: (abs: string) => string): string[] {
+  const out = new Set<string>();
+  const visit = (root: Node) => {
+    for (const tr of [root, ...root.getDescendants()].filter(Node.isTypeReference)) {
+      const name = tr.getTypeName();
+      let symbol = (Node.isQualifiedName(name) ? name.getRight() : name).getSymbol();
+      if (symbol?.isAlias()) symbol = symbol.getAliasedSymbol() ?? symbol;
+      for (const d of symbol?.getDeclarations() ?? []) {
+        if (!(Node.isInterfaceDeclaration(d) || Node.isTypeAliasDeclaration(d) || Node.isEnumDeclaration(d))) continue;
+        const id = index.idAt(rel(d.getSourceFile().getFilePath()), d.getStart());
+        if (id) out.add(id);
+      }
+    }
+  };
+  for (const n of nodes) {
+    visit(n);
+    for (const ident of [n, ...n.getDescendants()].filter(Node.isIdentifier)) {
+      let symbol = ident.getSymbol();
+      if (symbol?.isAlias()) symbol = symbol.getAliasedSymbol() ?? symbol;
+      const d = symbol?.getDeclarations()[0];
+      const typeNode = d && (Node.isVariableDeclaration(d) || Node.isParameterDeclaration(d)) ? d.getTypeNode() : undefined;
+      if (typeNode) visit(typeNode);
+    }
+  }
+  return [...out].sort();
+}
+
+/** The call/new expression a queue fact's evidence line points at. */
+function queueCall(sf: SourceFile, line: number, match: (n: Node) => boolean): Node | undefined {
+  return sf.getDescendants().find((n) => (Node.isCallExpression(n) || Node.isNewExpression(n)) && n.getStartLineNumber() === line && match(n));
+}
+const calleeName = (n: Node) => {
+  const e = (n as unknown as { getExpression(): Node }).getExpression();
+  return Node.isPropertyAccessExpression(e) ? e.getName() : e.getText();
+};
+/** What a consumer's code is: the enclosing function, else the top-level statement around the call. */
+function consumerRegion(call: Node): Node {
+  const fn = call.getFirstAncestor((a) => Node.isFunctionDeclaration(a) || Node.isArrowFunction(a) || Node.isFunctionExpression(a) || Node.isMethodDeclaration(a));
+  if (fn) return fn;
+  let top: Node = call;
+  while (top.getParent() && !Node.isSourceFile(top.getParent()!)) top = top.getParent()!;
+  return top;
+}
+function handlerParameters(arg: Node | undefined): Node[] {
+  if (!arg) return [];
+  if (Node.isArrowFunction(arg) || Node.isFunctionExpression(arg)) return arg.getParameters();
+  if (!Node.isIdentifier(arg)) return [];
+  let symbol = arg.getSymbol();
+  if (symbol?.isAlias()) symbol = symbol.getAliasedSymbol() ?? symbol;
+  const d = symbol?.getDeclarations()[0];
+  if (d && Node.isFunctionDeclaration(d)) return d.getParameters();
+  const init = d && Node.isVariableDeclaration(d) ? d.getInitializer() : undefined;
+  return init && (Node.isArrowFunction(init) || Node.isFunctionExpression(init)) ? init.getParameters() : [];
 }
 
 export interface ChangeSetInput {
@@ -99,7 +166,36 @@ function analyzeTree(root: string, side: Side, configPath: string | undefined): 
       else addEdge(queue, decl, "consumes", e);
     }
   }
-  return { side, root, snapshot, index, sourceFiles: new Map(files.map((sf) => [rel(sf.getFilePath()), sf])), componentOf: (f) => fileToComponent.get(f), edges };
+  // queue payload / handler types (0.9.0)
+  const byRel = new Map(files.map((sf) => [rel(sf.getFilePath()), sf]));
+  const queueTypes: TreeSide["queueTypes"] = new Map();
+  const site = (queue: string, role: "producers" | "consumers", file: string, line: number, region: Node[]) => {
+    const q = queueTypes.get(queue) ?? { producers: [], consumers: [] };
+    q[role].push({ file, line, types: typesUsed(region, index, rel) });
+    queueTypes.set(queue, q);
+  };
+  for (const f of snapshot.files) {
+    const sf = byRel.get(f.path);
+    if (!sf) continue;
+    for (const op of f.queueOps ?? []) {
+      if (op.role !== "produce" && op.role !== "consume") continue;
+      const line = evidence.get(op.evidenceId)!.range.startLine;
+      const queue = `queue:bullmq:${op.queue?.value ?? "<dynamic>"}`;
+      const call = queueCall(sf, line, (n) => (op.role === "produce" ? Node.isCallExpression(n) && /^add(Bulk)?$/.test(calleeName(n)) : Node.isNewExpression(n)));
+      if (!call) continue;
+      const args = (call as unknown as { getArguments(): Node[] }).getArguments();
+      site(queue, op.role === "produce" ? "producers" : "consumers", f.path, line, op.role === "produce" ? args.slice(1) : handlerParameters(args[1]));
+    }
+    for (const op of f.redisOps) {
+      if (op.role !== "produce" && op.role !== "consume") continue;
+      const line = evidence.get(op.evidenceId)!.range.startLine;
+      const queue = `queue:redis:${op.key?.value ?? "<dynamic>"}`;
+      const call = queueCall(sf, line, (n) => Node.isCallExpression(n) && calleeName(n) === op.op);
+      if (!call) continue;
+      site(queue, op.role === "produce" ? "producers" : "consumers", f.path, line, op.role === "produce" ? (call as unknown as { getArguments(): Node[] }).getArguments().slice(1) : [consumerRegion(call)]);
+    }
+  }
+  return { side, root, snapshot, index, sourceFiles: byRel, componentOf: (f) => fileToComponent.get(f), edges, queueTypes };
 }
 
 /** A tracehound config for the repo: explicit, else configs/<repo name>.tracehound.json when it exists. */
@@ -120,6 +216,7 @@ const sameParts = (a: Decl["parts"], b: Decl["parts"]): ModificationKind[] => {
   if (a.returnType !== b.returnType) kinds.push("returnType");
   if (a.body !== b.body) kinds.push("body");
   if (a.typeAnnotation !== b.typeAnnotation) kinds.push("typeAnnotation");
+  if (a.shape !== b.shape) kinds.push("shape");
   return kinds;
 };
 
@@ -244,7 +341,7 @@ function build(base: TreeSide, head: TreeSide, hunks: Map<string, FileHunks>): O
   edges.sort((a, b) => a.status.localeCompare(b.status) || a.id.localeCompare(b.id));
 
   // ── warnings ─────────────────────────────────────────────────────────────────────────────
-  const warnings: ChangeWarning[] = [...queueOrphaned(base, head), ...crossComponentSignature(all, head), ...removedStillReferenced(all, base, head)];
+  const warnings: ChangeWarning[] = [...queueOrphaned(base, head), ...queuePayloadTypeChanged(all, base, head), ...crossComponentSignature(all, head), ...removedStillReferenced(all, base, head)];
 
   // ── declarations to list: every change, plus unchanged ones an edge or a warning points at ──
   const referenced = new Set([...edges.flatMap((e) => [e.from, e.to]), ...warnings.flatMap((w) => (w.declarationId ? [w.declarationId] : []))]);
@@ -341,6 +438,43 @@ function queueOrphaned(base: TreeSide, head: TreeSide): ChangeWarning[] {
       evidence: [
         ...remaining.map((e) => ({ side: "head" as const, file: e.file, line: e.line, detail: `remaining ${lost === "consumer" ? "producer" : "consumer"} (${e.extractor})` })),
         ...gone.map((e) => ({ side: "base" as const, file: e.file, line: e.line, detail: `${lost} at base, gone at head (${e.extractor})` })),
+      ],
+    });
+  }
+  return out;
+}
+
+const RULE_PAYLOAD = "A type that changed (shape or signature) or was removed is used by a queue producer's payload or a consumer's handler (resolved through symbols).";
+function queuePayloadTypeChanged(all: Map<string, DeclarationChange>, base: TreeSide, head: TreeSide): ChangeWarning[] {
+  const out: ChangeWarning[] = [];
+  const changed = (id: string) => {
+    const d = all.get(id);
+    return !!d && d.kind === "type" && (d.status === "removed" || (d.status === "modified" && d.modifications.some((m) => m === "shape" || m === "signature")));
+  };
+  for (const queue of [...new Set([...base.queueTypes.keys(), ...head.queueTypes.keys()])].sort()) {
+    const h = head.queueTypes.get(queue) ?? { producers: [], consumers: [] };
+    const b = base.queueTypes.get(queue) ?? { producers: [], consumers: [] };
+    // modified types are judged where they are used now; removed ones where they were used
+    const sites = [...h.producers.map((s) => ({ ...s, role: "producer", side: "head" as const })), ...h.consumers.map((s) => ({ ...s, role: "consumer", side: "head" as const }))];
+    const removedUse = [...b.producers.map((s) => ({ ...s, role: "producer", side: "base" as const })), ...b.consumers.map((s) => ({ ...s, role: "consumer", side: "base" as const }))].filter((s) => s.types.some((t) => all.get(t)?.status === "removed"));
+    const hits = [...new Set([...sites, ...removedUse].flatMap((s) => s.types.filter(changed)))].sort();
+    if (!hits.length) continue;
+    const producerTypes = [...new Set(h.producers.flatMap((s) => s.types))];
+    const consumerTypes = [...new Set(h.consumers.flatMap((s) => s.types))];
+    const disjoint = producerTypes.length > 0 && consumerTypes.length > 0 && !producerTypes.some((t) => consumerTypes.includes(t));
+    out.push({
+      id: `queue-payload-type-changed:${queue}`,
+      kind: "queue-payload-type-changed",
+      rule: RULE_PAYLOAD,
+      declarationId: hits[0],
+      message: `${queue.replace(/^queue:/, "")}: ${hits.join(", ")} changed and is used by its ${[...new Set([...sites, ...removedUse].filter((s) => s.types.some(changed)).map((s) => s.role))].join(" and ")} side${disjoint ? `; the producer side uses ${producerTypes.join(", ")} and the consumer side ${consumerTypes.join(", ")} (different declarations)` : ""}`,
+      evidence: [
+        ...[...sites, ...removedUse].map((s) => ({ side: s.side, file: s.file, line: s.line, detail: `${s.role}${s.types.length ? ` uses ${s.types.join(", ")}` : " (no repo type found)"}` })),
+        ...hits.map((id) => {
+          const d = all.get(id)!;
+          const at = d.head ?? d.base!;
+          return { side: (d.head ? "head" : "base") as "head" | "base", file: at.file, line: at.startLine, detail: `type ${id} ${d.status} [${d.modifications.join(", ")}]` };
+        }),
       ],
     });
   }

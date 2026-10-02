@@ -180,3 +180,39 @@ describe("change sets: package types (decision 039)", () => {
     expect(bare.files.find((f) => f.path === "src/app.ts")!.calls.head).toEqual({ resolved: 0, external: 1, dynamic: 1 }); // i.go: i is untyped without the package's types
   });
 });
+
+describe("change sets: types (decision 039)", () => {
+  it("interfaces, type aliases and enums are declarations of kind type; a definition change is 'shape'; the module isn't modified by it", () => {
+    const c = changes(
+      { "src/app.ts": "export interface Order {\n  id: string;\n}\ntype Price = number;\nexport enum Side {\n  Buy,\n  Sell,\n}\nexport const x = 1;\n" },
+      { "src/app.ts": "export interface Order {\n  id: string;\n  qty: number;\n}\ntype Price = number | string;\nexport enum Side {\n  Buy,\n  Sell,\n}\nexport const x = 1;\n" },
+    );
+    expect(decl(c, "src/app.ts#Order")).toMatchObject({ kind: "type", exported: true, status: "modified", modifications: ["shape"] });
+    expect(decl(c, "src/app.ts#Price")).toMatchObject({ kind: "type", exported: false, status: "modified", modifications: ["shape"] });
+    expect(decl(c, "src/app.ts#Side")).toBeUndefined(); // unchanged
+    expect(decl(c, "src/app.ts#<module>")).toBeUndefined();
+  });
+
+  it("queue-payload-type-changed: a changed type in a BullMQ producer's payload and the consumer's handler, with evidence on both sides and the type", () => {
+    const types = (extra: string) => `export interface EmailJob {\n  to: string;${extra}\n}\n`;
+    const api = 'import { Queue } from "bullmq";\nimport type { EmailJob } from "./types.ts";\nconst emails = new Queue("emails");\nexport async function signup(to: string) {\n  const job: EmailJob = { to };\n  await emails.add("welcome", job);\n}\n';
+    const worker = 'import { Worker } from "bullmq";\nimport type { EmailJob } from "./types.ts";\nasync function send(job: { data: EmailJob }) {\n  console.log(job.data.to);\n}\nnew Worker("emails", send);\n';
+    const c = changes({ "src/types.ts": types(""), "src/app.ts": api, "src/worker.ts": worker }, { "src/types.ts": types("\n  subject: string;") });
+    const w = c.warnings.find((x) => x.kind === "queue-payload-type-changed")!;
+    expect(w).toMatchObject({ id: "queue-payload-type-changed:queue:bullmq:emails", declarationId: "src/types.ts#EmailJob" });
+    expect(w.evidence).toEqual([
+      { side: "head", file: "src/app.ts", line: 6, detail: "producer uses src/types.ts#EmailJob" },
+      { side: "head", file: "src/worker.ts", line: 6, detail: "consumer uses src/types.ts#EmailJob" },
+      { side: "head", file: "src/types.ts", line: 1, detail: "type src/types.ts#EmailJob modified [shape]" },
+    ]);
+  });
+
+  it("no payload warning when the changed type isn't used by any queue side", () => {
+    const c = changes(
+      { "src/app.ts": 'import { Queue } from "bullmq";\nexport interface Other {\n  a: string;\n}\nconst q = new Queue("emails");\nawait q.add("x", { to: "a" });\n' },
+      { "src/app.ts": 'import { Queue } from "bullmq";\nexport interface Other {\n  a: number;\n}\nconst q = new Queue("emails");\nawait q.add("x", { to: "a" });\n' },
+    );
+    expect(decl(c, "src/app.ts#Other")!.modifications).toEqual(["shape"]);
+    expect(c.warnings.filter((w) => w.kind === "queue-payload-type-changed")).toEqual([]);
+  });
+});
