@@ -1416,3 +1416,116 @@ unique ids. Calls are head-side resolved/external/dynamic.
     `worker → shared`) are now `regrouped`.
 - The clone without `node_modules` keeps 192 dynamic calls; with them, 34 (Step 1).
 - Spend: none. The ledger stayed at 959 lines through all of decision 039.
+
+## 041 · Repo profiles, a baseline-matched typecheck gate, and the repair harness on Recall
+(Number 040 is the change view on `ui/change-view`, not merged yet; the gap closes when it is.)
+**Context:** Recall is the new evaluation repo: `SunnyBagal/Recall`, branch `testable-baseline`
+@ `57d920e`, backend in `recall-backend/`, frontend in `recall-frontend/`. The harness assumed
+the repo root, compared tsc error *counts*, and had no way to seed a bug without a commit in the
+target repo. Nothing is changed in or pushed to Recall.
+**Checked on the sandbox image before building** (`tracehound-sandbox:bun1.4.2-ts5.9.3-2`, uid
+1000, network cut after install and both probes failing): `bun install --frozen-lockfile` in
+`recall-backend/` → 210 packages; `bun test` → 62 pass, 0 fail, 8 files; `tsc --noEmit` → 5
+errors (TS18048 ×3, TS18046, TS2322), exit 2. Same as reported from the repo.
+**Graph check at `57d920e` (analyzer 0.9.0, `configs/recall.tracehound.json`, written to a
+scratch dir, not `snapshots/`): the API → queue edge is missing.** `--cache-only` aborted on a
+naming cache miss (`recall-backend:worker`), so the comparison ran with `--naming heuristic`; no
+spend. Ids, edges and evidence don't depend on naming.
+
+| Edge | Published `5d2165a` | `57d920e` |
+|---|---|---|
+| `recall-backend:brainly-server -produces-> bullmq:content-processing` | proven (0.9), label `add process-content`, evidence `recall-backend/index.ts#L153-161:bullmq-queues` | **missing** |
+| `bullmq:content-processing -consumes-> recall-backend:worker` | proven (0.9), label `Worker processContent`, evidence `recall-backend/worker.ts#L111-121:bullmq-queues` | proven (0.9), label `Worker <inline function>`, evidence `recall-backend/worker.ts#L141-151:bullmq-queues` |
+
+- In its place, a `queue-unpaired` warning: "BullMQ Worker at recall-backend/worker.ts:141
+  consumes queue "content-processing", but nothing in this repo adds to "content-processing"".
+- Cause: commit `1999c67` ("Add injection seams"). At `5d2165a`, `config/queue.ts` exported
+  `contentQueue = new Queue("content-processing", …)` and `index.ts:153` called `.add` on that
+  import. At `57d920e`, `new Queue` is inside `createQueue()`, and `index.ts:162` calls
+  `contentQueue.add(…)` on a value destructured from `deps`, typed as a hand-written
+  `ContentQueue` interface; the real queue is passed in at `index.ts:500-504`. The receiver no
+  longer resolves through symbols to a `new Queue`. No warning names `index.ts:162`.
+- Rest of the graph: the same 7 component ids (`worker` 3 → 2 files, `shared` 7 → 12); edges
+  6 → 7 (`shared → brainly-server` and `shared → queue` imports are new, the produces edge is
+  gone); warnings 2 → 5 (orphans `test/helpers/app.ts` and `test/setup.ts`, and the unpaired
+  queue).
+- **Detectors were not touched** (out of scope here; backlog). **Because of the missing edge,
+  everything below ran graph off**, and no snapshot of `57d920e` is committed.
+**Choice:**
+- **Repo profile** (`configs/<repo>.profile.json`, `src/harness/profile.ts`, zod, strict):
+  ```
+  RepoProfile {
+    id: string                 // "recall"
+    workdir: string = "."      // repo-relative; every profile command runs here; no "..", not absolute
+    install?: string           // run once with the network on; must exit 0
+    test?: string              // the repo's suite: a regression command
+    typecheck?: string         // "$TSC --noEmit"; $TSC is chosen by the harness (below)
+  }
+  ```
+  A task names it (`"profile": "<path relative to the task dir>"`). Profile and task are merged
+  into one `CheckPlan { setup, regression, typecheck[{package, command}] }`: the profile's
+  commands in its workdir first, then the task's own `setup` / `regression` / `typecheck`. A task
+  without a profile behaves as before (toy tasks are unchanged). The run reads only the plan;
+  there is no Recall-specific branch in harness code. The record carries `profile` and the `plan`
+  as run from `/work`, and the agent is given those same commands.
+- **`$TSC`:** at BASELINE, per typecheck package: `node_modules/typescript/bin/tsc` exists →
+  `bun node_modules/typescript/bin/tsc` (source `repo`), else the image's global `tsc` (source
+  `image`). The repo's `.bin/tsc` shim has a node shebang and the image has no node, so the
+  repo's tsc is run with bun. Chosen once at the base commit and reused after the patch;
+  `tsc: { source, version }` is recorded on every typecheck result. On Recall: `repo`, 5.9.3.
+- **Typecheck gate = baseline comparison.** tsc's errors are parsed at the base commit inside the
+  sandbox (`file(line,col): error TSnnnn: message`; continuation lines skipped; errors without a
+  location have file ""). After the patch, a run fails only on errors not in the baseline,
+  matched by file + TS code + message and counted (two identical baseline errors cover two, not
+  three); line and column are ignored. This **replaces** the count comparison, which let "fix one
+  error, add another" pass. A tsc that exits non-zero without reporting anything is a failure
+  when the baseline passed or reported errors. Unit tests: shifted lines pass; a new error fails
+  (also at an equal count, and as a third copy of a duplicated error); a removed baseline error
+  passes; a silent non-zero exit fails.
+- **Seed patch** (`"seed": { "patch": "seed.patch" }` in task.json): written to `/tmp`, applied
+  with `git apply` right after checkout, then removed. Install and the history squash come after,
+  so the seeded tree is the single `base` commit and the agent's diff never contains the seed.
+  A patch that doesn't apply ends the run FAILED "applying the seed patch failed"; one that
+  leaves `git status --porcelain` empty ends it FAILED "the seed patch changed nothing". The
+  record carries the patch's sha256. `baseSha` stays a real commit of the target repo.
+- **Task kind:** `"kind": "smoke" | "evaluation"`, copied to the record as `taskKind`.
+- **Network with a subdirectory profile:** unchanged mechanism (decision 036): seed → `cd
+  "recall-backend" && bun install --frozen-lockfile` with the network on → squash → `docker
+  network disconnect` → both probes must fail → REPRODUCING. In the recorded run: install exit 0
+  ("210 packages installed"), probes exit 6 and 7, then the repro and a baseline of 62 passing
+  tests with the network off.
+**Smoke task `eval/tasks/recall-smoke-trending` (`kind: smoke`; never an evaluation task).** The
+seed drops `"trending"` from `detectGitHub`'s list of non-repository first path segments
+(`recall-backend/services/linkDetector.ts`, one line); the 62 existing tests still pass at the
+seeded base, and `repro.test.ts` fails there. Scripted patches with the existing `oracle` and
+`noop` agents, no model, 2026-10-02, local Docker 29.8.0:
+
+| Run | State | Reason |
+|---|---|---|
+| `oracle` + `fix.patch` | RESOLVED | repro passes and nothing fails that passed at baseline (5 tsc errors at baseline, the same 5 after) |
+| `noop` (empty patch) | UNRESOLVED | repro still fails (exit 1) |
+| `oracle` + `fix-breaks-test.patch` | UNRESOLVED | regression `cd "recall-backend" && bun test` now fails (exit 1; passed at baseline) |
+| `oracle` + `fix-adds-tsc-error.patch` | UNRESOLVED | typecheck recall-backend: 1 error(s) not in the baseline: `services/linkDetector.ts TS2322: Type 'string' is not assignable to type 'number'.` |
+| `oracle` + `fix.patch`, container `docker kill`ed during BASELINE | FAILED | sandbox container disappeared |
+
+The same five are `test/harness-recall.test.ts` (Docker + `TRACEHOUND_NETWORK_TESTS=1`; there
+the kill happens as the patch is applied). About 35–45 s per scripted run.
+**One real agent run** (the only model call of this decision; nothing was tuned before or after
+it): `--agent nemotron --graph off`, agent-v4 defaults, Nano with reasoning on → **RESOLVED**,
+24 steps, 24 calls, 148,391 tokens (139,311 in / 9,080 out), $0.01054, 186 s. Its diff appends
+`"trending"` to the list. One run on a seeded one-line bug in a smoke task: it shows the loop
+runs on Recall, and says nothing about repair performance or about the graph. Ledger:
+$0.32091 → $0.33144.
+**Findings, not fixed here (backlog):**
+- In the killed run the record says `sandbox.destroyed: false`, `removedBy: "unknown"`: when the
+  harness checked, Docker still listed the killed `--rm` container as `Dead`. It was gone a few
+  seconds later. The record is truthful about that moment, but nothing rechecks.
+- The regression gate compares one exit code per command. With one `bun test` for the whole
+  suite, a task whose seed makes any existing test fail at baseline can't detect a patch that
+  breaks another test. The smoke seed was chosen so the suite passes at the seeded base.
+**Rejected:** (a) Seeding with `sed` in a setup command: no file to review, and a no-op
+substitution exits 0. (b) A seed commit on a Recall branch: Recall is not to be changed, and the
+agent could find it. (c) Per-repo branches in the harness (`if recall`): the profile is data.
+(d) Keeping the error count with a tolerance: 5 → 5 hides a swapped error. (e) Matching errors
+with line numbers: any edit above an old error would fail the run. (f) Always using the image's
+tsc: a repo pinned to another TypeScript would be checked by the wrong compiler.
