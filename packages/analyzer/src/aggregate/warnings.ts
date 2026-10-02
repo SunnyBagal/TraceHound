@@ -52,8 +52,9 @@ export function queueWarnings(files: FileFacts[], fileToComponent: Map<string, s
       continue;
     }
     if (name === undefined) {
-      const what = op.role === "produce" && !op.queue ? `${op.variable}.add(…) on a Queue whose definition isn't resolvable` : `queue name ${op.queue?.raw || "(missing)"}`;
-      out.push(warn("queue-unresolved", f, op.evidenceId, `BullMQ ${op.role} at ${at(op.evidenceId)}: ${what} is not static, so it can't be paired; no node, no edge`));
+      const what = op.role === "produce" && !op.queue ? (op.construct ?? `${op.variable}.add(…) on a Queue whose definition isn't resolvable`) : `queue name ${op.queue?.raw || "(missing)"}`;
+      const why = op.role === "produce" && !op.queue && op.construct ? "; its queue isn't known" : " is not static";
+      out.push(warn("queue-unresolved", f, op.evidenceId, `BullMQ ${op.role} at ${at(op.evidenceId)}: ${what}${why}, so it can't be paired; no node, no edge`));
       continue;
     }
     if (op.role === "produce" && byName("consume", name).length === 0)
