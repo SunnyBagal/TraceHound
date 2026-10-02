@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { loadSnapshot, QueryError } from "../src/agent/query.ts";
 import { reposOf, upsertManifest } from "../src/manifest.ts";
+import { staleSnapshots } from "../src/version-guard.ts";
 import { SCHEMA_VERSION, SnapshotManifest } from "../src/schema.ts";
 
 const sha = (c: string) => c.repeat(40);
@@ -86,5 +87,22 @@ describe("multi-repo index (decision 039)", () => {
     expect(loadSnapshot(undefined, "recall", index)).toMatchObject({ repoId: "recall", snapshot: { repo: { name: "me/Recall" } } });
     expect(() => loadSnapshot(undefined, "nope", index)).toThrow(/unknown repo id "nope".*recall, shop/);
     expect(() => loadSnapshot(path.join(dir, `${sha("a")}/0.9.0.json`), "shop", index)).toThrow(QueryError);
+  });
+});
+
+describe("snapshot version guard (decision 039)", () => {
+  it("flags each repo whose latest snapshot is from another analyzer version, with a regenerate command", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "tracehound-guard-"));
+    let m = upsertManifest(undefined, entry("a", "0.8.0", "2026-01-01T00:00:00Z"), { repoUrl: "https://github.com/acme/shop" });
+    m = upsertManifest(m, { ...entry("b", "0.9.0", "2026-01-02T00:00:00Z"), repo: "me/Recall" }, { repoUrl: "https://github.com/me/Recall" });
+    writeFileSync(path.join(dir, "index.json"), JSON.stringify(m));
+    const stale = staleSnapshots(dir, "0.9.0");
+    expect(stale.map((s) => [s.repoId, s.analyzerVersion])).toEqual([["shop", "0.8.0"]]);
+    expect(stale[0]!.regenerate).toContain(`git clone -q https://github.com/acme/shop "$R" && git -C "$R" checkout -q ${sha("a")}`);
+    expect(stale[0]!.regenerate).toMatch(/--cache-only$/);
+    expect(staleSnapshots(dir, "0.8.0").map((s) => s.repoId)).toEqual(["recall"]);
+    // an old index (no repos) is checked through its derived repos
+    writeFileSync(path.join(dir, "index.json"), JSON.stringify({ schemaVersion: SCHEMA_VERSION, latest: m.latest, snapshots: m.snapshots }));
+    expect(staleSnapshots(dir, "0.9.0").map((s) => s.repoId)).toEqual(["shop"]);
   });
 });
