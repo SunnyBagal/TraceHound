@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Node, SyntaxKind, type SourceFile } from "ts-morph";
 import { analyzeRepo } from "../analyze.ts";
+import { aggregateEdges } from "../aggregate/edges.ts";
+import type { GroupingResult } from "../group/grouping.ts";
 import { loadWorkspace, relPath } from "../load/workspace.ts";
 import { ANALYZER_VERSION } from "../version.ts";
 import {
@@ -268,6 +270,7 @@ export function computeChangeSet(input: ChangeSetInput): ChangeSet {
     const configPath = input.configPath;
     const base = analyzeTree(baseTree.dir, "base", configPath);
     const head = analyzeTree(headTree.dir, "head", configPath);
+    head.componentOf = stableComponentOf(base, head);
     const result = build(base, head, hunks);
     const changeSet: ChangeSet = {
       schemaVersion: CHANGESET_SCHEMA_VERSION,
@@ -362,16 +365,23 @@ function build(base: TreeSide, head: TreeSide, hunks: Map<string, FileHunks>): O
     .sort((a, b) => a.path.localeCompare(b.path));
 
   // ── component rollup ─────────────────────────────────────────────────────────────────────
+  // component edges: head's re-aggregated with files in their stable components; what the raw
+  // snapshots disagree on beyond that is regrouping, not a change in the code
   const bEdges = new Set(base.snapshot.edges.map((e) => e.id));
-  const hEdges = new Set(head.snapshot.edges.map((e) => e.id));
-  const compEdgeAdded = head.snapshot.edges.filter((e) => !bEdges.has(e.id));
-  const compEdgeRemoved = base.snapshot.edges.filter((e) => !hEdges.has(e.id));
+  const stableHead = stableComponentEdges(head);
+  const sEdges = new Set(stableHead.map((e) => e.id));
+  const compEdgeAdded = stableHead.filter((e) => !bEdges.has(e.id));
+  const compEdgeRemoved = base.snapshot.edges.filter((e) => !sEdges.has(e.id));
+  const rawHead = new Set(head.snapshot.edges.map((e) => e.id));
+  const rawChanged = [...head.snapshot.edges.filter((e) => !bEdges.has(e.id)), ...base.snapshot.edges.filter((e) => !rawHead.has(e.id))];
+  const real = new Set([...compEdgeAdded, ...compEdgeRemoved].map((e) => e.id));
+  const regrouped = rawChanged.filter((e) => !real.has(e.id));
   const name = (id: string) => head.snapshot.components.find((c) => c.id === id)?.name ?? base.snapshot.components.find((c) => c.id === id)?.name ?? id;
   const compOfDecl = (id: string) => all.get(id)?.componentId ?? (declFile(id) ? head.componentOf(declFile(id)!) ?? base.componentOf(declFile(id)!) : undefined);
   const touched = new Set<string>([
     ...declarations.filter((d) => d.status !== "unchanged").flatMap((d) => [d.componentId, d.baseComponentId].filter((x): x is string => !!x)),
     ...edges.filter((e) => e.status !== "unchanged").flatMap((e) => [compOfDecl(e.from), compOfDecl(e.to)].filter((x): x is string => !!x)),
-    ...[...compEdgeAdded, ...compEdgeRemoved].flatMap((e) => [e.source, e.target]),
+    ...[...compEdgeAdded, ...compEdgeRemoved, ...regrouped].flatMap((e) => [e.source, e.target]),
   ]);
   const components: ComponentChange[] = [...touched].sort().map((id) => {
     const decls = declarations.filter((d) => d.componentId === id || d.baseComponentId === id);
@@ -392,7 +402,11 @@ function build(base: TreeSide, head: TreeSide, hunks: Map<string, FileHunks>): O
         crossProcessAdded: count("added", (e) => e.crossProcess),
         crossProcessRemoved: count("removed", (e) => e.crossProcess),
       },
-      componentEdges: { added: compEdgeAdded.filter((e) => e.source === id || e.target === id).map((e) => e.id), removed: compEdgeRemoved.filter((e) => e.source === id || e.target === id).map((e) => e.id) },
+      componentEdges: {
+        added: compEdgeAdded.filter((e) => e.source === id || e.target === id).map((e) => e.id),
+        removed: compEdgeRemoved.filter((e) => e.source === id || e.target === id).map((e) => e.id),
+        regrouped: regrouped.filter((e) => e.source === id || e.target === id).map((e) => e.id),
+      },
     };
   });
 
@@ -418,6 +432,35 @@ function build(base: TreeSide, head: TreeSide, hunks: Map<string, FileHunks>): O
       calls: { base: sum(base.index.callCounts), head: sum(head.index.callCounts) },
     },
   };
+}
+
+// ── stable components (0.9.0) ──────────────────────────────────────────────────────────────
+
+/**
+ * A file present on both sides keeps its base component at head, unless head's config pins it
+ * elsewhere; only files new at head take head's heuristic component.
+ */
+function stableComponentOf(base: TreeSide, head: TreeSide): (file: string) => string | undefined {
+  const pinnedAtHead = new Map(head.snapshot.components.flatMap((c) => c.membership.filter((m) => m.reason.startsWith("pinned by tracehound.json")).map((m) => [m.file, c.id] as const)));
+  const headOf = head.componentOf;
+  return (file) => pinnedAtHead.get(file) ?? base.componentOf(file) ?? headOf(file);
+}
+
+/** Head's component edges, aggregated from head's facts with files in their stable components. */
+function stableComponentEdges(head: TreeSide) {
+  const components = head.snapshot.components;
+  const grouping: GroupingResult = {
+    components,
+    fileToComponent: new Map(head.snapshot.files.flatMap((f) => {
+      const c = head.componentOf(f.path);
+      return c ? [[f.path, c] as const] : [];
+    })),
+    redisResourceByConnection: new Map(components.filter((c) => c.resource?.tech === "redis").map((c) => [c.resource!.connection, c.id] as const)),
+    queueResourceByName: new Map(components.filter((c) => c.resource?.tech === "bullmq").map((c) => [c.resource!.keys![0]!, c.id] as const)),
+    prismaResourceByPackage: new Map(components.filter((c) => c.resource?.tech === "prisma" && c.package !== undefined).map((c) => [c.package!, c.id] as const)),
+    unmatchedOverrides: [],
+  };
+  return aggregateEdges(head.snapshot.files, grouping, new Map(head.snapshot.evidence.map((e) => [e.id, e])));
 }
 
 // ── warning rules ────────────────────────────────────────────────────────────────────────────

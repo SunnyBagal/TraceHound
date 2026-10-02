@@ -446,7 +446,9 @@ export const ComponentChange = z.object({
   name: z.string(),
   declarations: z.object({ added: z.number().int(), modified: z.number().int(), removed: z.number().int(), formatting: z.number().int() }),
   edges: z.object({ crossComponentAdded: z.number().int(), crossComponentRemoved: z.number().int(), crossProcessAdded: z.number().int(), crossProcessRemoved: z.number().int() }),
-  componentEdges: z.object({ added: z.array(z.string()), removed: z.array(z.string()) }),
+  // regrouped (0.9.0): a component edge that only appears added/removed because the heuristics
+  // regrouped files at head; with files kept in their base components it is unchanged
+  componentEdges: z.object({ added: z.array(z.string()), removed: z.array(z.string()), regrouped: z.array(z.string()) }),
 });
 export type ComponentChange = z.infer<typeof ComponentChange>;
 

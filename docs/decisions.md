@@ -1310,3 +1310,20 @@ not `modified`, in the component rollup and the stats. Regex re-scanning on raw 
 rejected: whitespace inside regexes and template literals would have looked like formatting.
 Test: a reindented, respaced, commented function → `formatting`; a JSDoc-only edit → unchanged
 (trivia outside the parts); whitespace added inside a template literal → `body`.
+**Step 4 · Stable components across base and head.**
+- A file that exists on both sides keeps its base component at head. The exception is a file
+  head's `tracehound.json` pins elsewhere (a membership reason "pinned by tracehound.json").
+  Only files new at head get head's heuristic component. Declarations, the cross-component flags
+  and the signature warning all use this mapping.
+- Component edges: head's edges are re-aggregated from head's facts with files in their stable
+  components (`aggregateEdges`, with the resource nodes taken from head's snapshot). Added and
+  removed are judged against that. A component edge on which the raw base and head snapshots
+  disagree, but the stable ones don't, is listed as `componentEdges.regrouped`.
+- **Deleted-worker rerun (Recall `5d2165a` → `worker.ts` deleted):** the phantom
+  `brainly-server ↔ shared` pair **now shows as `regrouped`** (both directions), not
+  added/removed. `worker → shared` is also regrouped: `aiProcessor.ts` and `textExtractor.ts`
+  still exist at head, keep the worker's component, and still import shared code. The real
+  removals stay removals: `content-processing → worker` (consumes) and `worker → queue`. The
+  queue-orphaned warning still fires. Test: a shared `util.ts` whose co-user is deleted keeps
+  its `shared` component, and the shared import edge is `regrouped`. With the stable mapping
+  reverted, the test fails ("app:app-app" instead).

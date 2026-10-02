@@ -237,3 +237,22 @@ describe("change sets: formatting (decision 039)", () => {
     expect(c.components[0]!.declarations).toMatchObject({ modified: 2, formatting: 1 });
   });
 });
+
+describe("change sets: stable components (decision 039)", () => {
+  it("files keep their base component at head; a component edge that only moved because of regrouping is 'regrouped'", () => {
+    const util = (n: number) => `export function fmt(x: number) {\n  return x.toFixed(${n});\n}\n`;
+    const api = 'import { Queue } from "bullmq";\nimport { fmt } from "./util.ts";\nconst q = new Queue("jobs");\nawait q.add("x", { v: fmt(1) });\n';
+    const worker = 'import { Worker } from "bullmq";\nimport { fmt } from "./util.ts";\nnew Worker("jobs", async () => fmt(2));\n';
+    const c = changes({ "package.json": JSON.stringify({ name: "app", private: true, scripts: { start: "bun run src/api.ts" } }), "src/api.ts": api, "src/worker.ts": worker, "src/util.ts": util(1) }, { "src/worker.ts": null, "src/util.ts": util(2) });
+    const fmt = decl(c, "src/util.ts#fmt")!;
+    expect(fmt.status).toBe("modified");
+    // at base util.ts is shared by api and worker; at head the heuristics would move it into api's component
+    expect(fmt.componentId).toMatch(/shared$/);
+    expect(fmt.baseComponentId).toBeUndefined(); // same component on both sides
+    const regrouped = c.components.flatMap((x) => x.componentEdges.regrouped);
+    expect(regrouped.some((id) => id.endsWith(":imports") && id.includes("shared"))).toBe(true);
+    const removed = c.components.flatMap((x) => x.componentEdges.removed);
+    expect(removed.some((id) => id.endsWith(":consumes"))).toBe(true); // the worker's consumes edge is a real removal
+    expect(removed.filter((id) => regrouped.includes(id))).toEqual([]);
+  });
+});
