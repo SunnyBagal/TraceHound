@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 2,
+  "analyzerVersion": "0.9.0",
+  "repo": {
+    "name": "tracehound-changes-c5W9fR",
+    "path": "/Users/sunny/Projects/tracehound-ui/eval/fixtures/.build/toy-cart"
+  },
+  "base": {
+    "ref": "3582f355e884dc4512ee157ee59848796893ec27",
+    "sha": "3582f355e884dc4512ee157ee59848796893ec27"
+  },
+  "head": {
+    "run": {
+      "runId": "toy-discount__nemotron__2026-09-30T20-46-41-586Z__62d49a",
+      "taskId": "toy-discount",
+      "patchSha256": "6ea3d4ff21505cc482abc0e941ff4341f6ba7c31af9936f72c59841dba5bc588"
+    }
+  },
+  "nodeModules": [],
+  "components": [
+    {
+      "id": "toy-cart:toy-cart",
+      "name": "Toy Cart",
+      "declarations": {
+        "added": 0,
+        "modified": 1,
+        "removed": 0,
+        "formatting": 0
+      },
+      "edges": {
+        "crossComponentAdded": 0,
+        "crossComponentRemoved": 0,
+        "crossProcessAdded": 0,
+        "crossProcessRemoved": 0
+      },
+      "componentEdges": {
+        "added": [],
+        "removed": [],
+        "regrouped": []
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "src/cart.ts",
+      "status": "modified",
+      "linesAdded": 1,
+      "linesRemoved": 1,
+      "componentId": "toy-cart:toy-cart",
+      "calls": {
+        "base": {
+          "resolved": 2,
+          "external": 2,
+          "dynamic": 0
+        },
+        "head": {
+          "resolved": 2,
+          "external": 2,
+          "dynamic": 0
+        }
+      }
+    }
+  ],
+  "declarations": [
+    {
+      "id": "src/cart.ts#applyDiscount",
+      "name": "applyDiscount",
+      "file": "src/cart.ts",
+      "kind": "function",
+      "exported": true,
+      "status": "modified",
+      "componentId": "toy-cart:toy-cart",
+      "modifications": [
+        "body"
+      ],
+      "lines": {
+        "added": 1,
+        "removed": 1
+      },
+      "base": {
+        "file": "src/cart.ts",
+        "startLine": 11,
+        "endLine": 13
+      },
+      "head": {
+        "file": "src/cart.ts",
+        "startLine": 11,
+        "endLine": 13
+      }
+    },
+    {
+      "id": "src/cart.ts#checkoutTotal",
+      "name": "checkoutTotal",
+      "file": "src/cart.ts",
+      "kind": "function",
+      "exported": true,
+      "status": "unchanged",
+      "componentId": "toy-cart:toy-cart",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 0
+      },
+      "base": {
+        "file": "src/cart.ts",
+        "startLine": 16,
+        "endLine": 18
+      },
+      "head": {
+        "file": "src/cart.ts",
+        "startLine": 16,
+        "endLine": 18
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "src/cart.ts#checkoutTotal->src/cart.ts#applyDiscount:calls",
+      "from": "src/cart.ts#checkoutTotal",
+      "to": "src/cart.ts#applyDiscount",
+      "kind": "calls",
+      "status": "unchanged",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "src/cart.ts",
+          "line": 17,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    }
+  ],
+  "warnings": [],
+  "stats": {
+    "declarations": {
+      "added": 0,
+      "removed": 0,
+      "modified": 1,
+      "formatting": 0,
+      "unchanged": 5
+    },
+    "edges": {
+      "added": 0,
+      "removed": 0,
+      "unchanged": 4
+    },
+    "files": {
+      "added": 0,
+      "removed": 0,
+      "modified": 1
+    },
+    "calls": {
+      "base": {
+        "resolved": 4,
+        "external": 8,
+        "dynamic": 0
+      },
+      "head": {
+        "resolved": 4,
+        "external": 8,
+        "dynamic": 0
+      }
+    },
+    "runtimeMs": 541
+  },
+  "limitations": [
+    "Renames are not detected: a renamed or moved declaration appears as removed + added (ids are file path + qualified name), and file renames are diffed with --no-renames.",
+    "Return types are compared only where annotated; inferred return types are not compared.",
+    "Bodies, signatures and types are compared as token streams: an edit that only touches whitespace or comments is modification \"formatting\" and doesn't count as modified in the rollups. JSX text is compared with its whitespace collapsed.",
+    "Interfaces, type aliases and enums are declarations (kind type, modification shape); non-exported module-level values and namespaces are not: their edits show as the module's body.",
+    "Call resolution is static (ts-morph symbols). Calls through parameters, locals, element access or untyped values are counted as dynamic per file; calls into packages or the TS lib are counted as external. Neither produces an edge.",
+    "Without a package's or the runtime's types installed, a call is counted external when its receiver chain starts at something imported, typed or constructed from a package, or at an undeclared runtime global from a fixed list (console, crypto, setTimeout, fetch, …); any other free identifier is dynamic.",
+    "Both trees are analyzed in git worktrees with the source checkout's node_modules symlinked in (listed in nodeModules): base and head see the checkout's installed dependency versions, which may differ from what either side's lockfile declares. A checkout without node_modules gets no package or runtime types, and calls on values typed only by them are dynamic.",
+    "Top-level code is one declaration per file (kind module): a change to statements outside any function shows as the module's body, not a finer declaration.",
+    "Route and queue edges come from the existing extractors (http-routes, bullmq-queues, redis) and are attributed to the innermost declaration around their evidence line."
+  ]
+}

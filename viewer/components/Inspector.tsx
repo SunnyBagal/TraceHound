@@ -2,6 +2,7 @@
 
 import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, ChevronRight, ExternalLink, Spline, TriangleAlert, X } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
+import { componentEdgeChanges, declStatus, endpointLabel, evidenceLink, type ChangeModel } from "@/lib/changes";
 import { EDGE_STYLES, redisKeys } from "@/lib/graph";
 import { permalink } from "@/lib/github";
 import { edgesWithEvidenceIn, noHighlight, type BindHighlight } from "@/lib/highlight";
@@ -9,10 +10,13 @@ import { KIND_META } from "@/lib/kinds";
 import { current, type Entry, type PanelNavigation, type Tab } from "@/lib/navigation";
 import { TECH_META, techFacts, type TechFact } from "@/lib/tech";
 import type { Component, ComponentEdge, Snapshot } from "@/lib/types";
+import { ComponentChanges, EvidenceRef, StatusPill } from "./ChangeParts";
 import { CodeSnippet } from "./CodeSnippet";
+import { DIFF_EDGE } from "./EvidenceEdge";
 import { ComponentIcon, TechLogo } from "./ComponentIcon";
 import { NameSourceBadge } from "./NameSourceBadge";
 
+const CHANGES_TAB: { id: Tab; label: string } = { id: "changes", label: "Changes" };
 const NODE_TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "files", label: "Files" },
@@ -341,6 +345,37 @@ function EdgeEvidence({ snapshot, edge }: { snapshot: Snapshot; edge: ComponentE
   );
 }
 
+/** Change view: the edge's status in the change set and the declaration edges under it. */
+function EdgeInChange({ model, edge }: { model: ChangeModel; edge: ComponentEdge }) {
+  const status = model.edgeStatus.get(edge.id);
+  const decls = model.pairEdges.get(`${edge.source}->${edge.target}`) ?? [];
+  return (
+    <Section title="In this change">
+      <p className="text-[14px] leading-normal text-muted" data-testid="edge-in-change">
+        {status ? (
+          <>
+            <StatusPill status={status === "regrouped" ? "regrouped" : status} /> <span className="ml-1">{DIFF_EDGE[status].meaning}.</span>
+          </>
+        ) : (
+          "The component edge itself is unchanged."
+        )}
+      </p>
+      {decls.length > 0 && (
+        <ul className="mt-2.5 space-y-1.5">
+          {decls.map((e) => (
+            <li key={e.id} className="text-[13px]">
+              <div className="flex flex-wrap items-center gap-1.5 font-mono text-text">
+                <StatusPill status={e.status === "added" ? "added" : "removed"} /> <span className="text-faint">{e.kind}</span> {endpointLabel(e.from)} <ArrowRight className="size-3.5 text-faint" aria-label="to" /> {endpointLabel(e.to)}
+              </div>
+              <EvidenceRef link={evidenceLink(model.link, e.evidence[0]!.side, e.evidence[0]!.file, e.evidence[0]!.line)} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
 /* ───────────── shell ───────────── */
 
 function crumbLabel(snapshot: Snapshot, entry: Entry, previous: Entry | undefined): string {
@@ -384,14 +419,15 @@ function Breadcrumbs({ snapshot, nav }: { snapshot: Snapshot; nav: PanelNavigati
  * Right overlay on desktop (Railway-style), full-screen sheet on phones. `bind` wires rows that
  * point at the canvas (connections, files, endpoints) to the transient hover highlight.
  */
-export function Inspector({ snapshot, nav, bind = noHighlight }: { snapshot: Snapshot; nav: PanelNavigation; bind?: BindHighlight }) {
+export function Inspector({ snapshot, nav, bind = noHighlight, changes }: { snapshot: Snapshot; nav: PanelNavigation; bind?: BindHighlight; changes?: ChangeModel }) {
   const entry = current(nav.stack);
   const component = entry?.type === "node" ? snapshot.components.find((c) => c.id === entry.id) : undefined;
   const edge = entry?.type === "edge" ? snapshot.edges.find((e) => e.id === entry.id) : undefined;
   const open = Boolean(component || edge);
   const facts = useMemo(() => (component ? techFacts(snapshot, component) : []), [snapshot, component]);
-  const tabs = edge ? EDGE_TABS : NODE_TABS;
-  const tab = tabs.some((t) => t.id === entry?.tab) ? entry!.tab! : "overview";
+  // change view: a component opens on its Changes tab (files → declarations)
+  const tabs = edge ? EDGE_TABS : changes ? [CHANGES_TAB, ...NODE_TABS] : NODE_TABS;
+  const tab = tabs.some((t) => t.id === entry?.tab) ? entry!.tab! : changes && component ? "changes" : "overview";
   const openNode = (id: string) => nav.push({ type: "node", id });
 
   let header: ReactNode = null;
@@ -400,13 +436,17 @@ export function Inspector({ snapshot, nav, bind = noHighlight }: { snapshot: Sna
   if (component) {
     const { label } = KIND_META[component.kind];
     counts = { files: component.files.length, connections: snapshot.edges.filter((e) => e.source === component.id || e.target === component.id).length };
+    if (changes) {
+      const changed = changes.set.declarations.filter((d) => (d.componentId === component.id || d.baseComponentId === component.id) && !["unchanged", "formatting"].includes(declStatus(d))).length;
+      counts.changes = changed + componentEdgeChanges(changes, component.id).length;
+    }
     header = (
       <div className="flex gap-3 px-5 pb-3 pt-2">
         <ComponentIcon kind={component.kind} tech={facts} size="lg" />
         <div className="min-w-0 flex-1">
           <h2 className="text-[18px] font-semibold leading-snug text-text">{component.name}</h2>
           <div className="mt-0.5 text-[13px] text-muted">
-            {label} · <span className="break-all font-mono text-[12.5px]">{component.id}</span>
+            {changes?.synthetic.has(component.id) ? "Change set only" : label} · <span className="break-all font-mono text-[12.5px]">{component.id}</span>
           </div>
           <div className="mt-2 flex">
             <NameSourceBadge naming={component.naming} />
@@ -415,7 +455,11 @@ export function Inspector({ snapshot, nav, bind = noHighlight }: { snapshot: Sna
       </div>
     );
     body =
-      tab === "files" ? (
+      tab === "changes" && changes ? (
+        <section className="px-5 py-4">
+          <ComponentChanges model={changes} componentId={component.id} onOpen={openNode} bind={bind} />
+        </section>
+      ) : tab === "files" ? (
         <ComponentFiles snapshot={snapshot} component={component} bind={bind} />
       ) : tab === "connections" ? (
         <ComponentConnections snapshot={snapshot} component={component} onOpen={(e) => nav.push({ type: "edge", id: e.id })} bind={bind} />
@@ -450,7 +494,10 @@ export function Inspector({ snapshot, nav, bind = noHighlight }: { snapshot: Sna
       tab === "evidence" ? (
         <EdgeEvidence snapshot={snapshot} edge={edge} />
       ) : (
-        <EdgeOverview snapshot={snapshot} edge={edge} onOpenNode={openNode} onEvidence={() => nav.setTab("evidence")} bind={bind} />
+        <>
+          {changes && <EdgeInChange model={changes} edge={edge} />}
+          <EdgeOverview snapshot={snapshot} edge={edge} onOpenNode={openNode} onEvidence={() => nav.setTab("evidence")} bind={bind} />
+        </>
       );
   }
 

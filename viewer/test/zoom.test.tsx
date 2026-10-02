@@ -1,15 +1,12 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { Snapshot, SnapshotManifest } from "@tracehound/analyzer/schema";
+import type { Snapshot } from "@tracehound/analyzer/schema";
 import { ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { GraphCanvas } from "@/components/GraphCanvas";
 import { clampZoom, keepInView, MAX_ZOOM, MIN_ZOOM, minZoomFor, PHONE_MIN_ZOOM } from "@/lib/zoom";
+import { repoSnapshot } from "./repo-snapshot";
 
-const root = path.resolve(import.meta.dirname, "../../snapshots");
-const manifest = SnapshotManifest.parse(JSON.parse(readFileSync(path.join(root, "index.json"), "utf8")));
-const snapshot = Snapshot.parse(JSON.parse(readFileSync(path.join(root, manifest.latest!.path), "utf8")));
+const snapshot = repoSnapshot("cex-v2-boilercode");
 
 // test/setup.ts's ResizeObserver never fires, so React Flow never measures nodes and fitView
 // waits forever. Here it reports each observed element at its offset size, so the canvas's own
@@ -155,14 +152,30 @@ describe("phone zoom (viewport narrower than 640px)", () => {
     expect(keepInView({ minX: 200, minY: 200, maxX: 210, maxY: 210 }, { x: 0, y: 0, zoom: 0.1 }, { width: 390, height: 796 }, 0, 32, PHONE_MIN_ZOOM)).toEqual({ x: 0, y: 0, zoom: 0.2 });
   });
 
-  it("fit view shows the whole demo graph on a 390px phone, and zoom stays within 0.2–1.5", async () => {
+  /**
+   * Waits for the condition itself, not a fixed delay: the ELK layout has run (zoom left its
+   * initial 1) and the 300ms fit animation has finished (the viewport hasn't moved for 300ms).
+   * The ceiling is generous because CI runners are slow under parallel jsdom workers.
+   */
+  async function settledViewport(ceilingMs = 15000) {
+    const end = Date.now() + ceilingMs;
+    let last = "";
+    let stableSince = Date.now();
+    for (;;) {
+      const v = flow!.getViewport();
+      const key = `${v.x}:${v.y}:${v.zoom}`;
+      if (key !== last) [last, stableSince] = [key, Date.now()];
+      if (v.zoom < 1 && Date.now() - stableSince >= 300) return v;
+      if (Date.now() > end) throw new Error(`fit view did not settle within ${ceilingMs}ms (viewport ${key})`);
+      await new Promise((r) => setTimeout(r, 25));
+    }
+  }
+
+  it("fit view shows the whole demo graph on a 390px phone, and zoom stays within 0.2–1.5", { timeout: 40000 }, async () => {
     phone();
     renderCanvas(snapshot);
-    await screen.findAllByTestId("component-node", {}, { timeout: 5000 });
-    const end = Date.now() + 3000;
-    while (!(flow!.getZoom() < 1) && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
-    await new Promise((r) => setTimeout(r, 400)); // let the 300ms fit animation land
-    const { x, y, zoom } = flow!.getViewport();
+    await screen.findAllByTestId("component-node", {}, { timeout: 15000 });
+    const { x, y, zoom } = await settledViewport();
     expect(zoom).toBeGreaterThanOrEqual(PHONE_MIN_ZOOM);
     expect(zoom).toBeLessThan(MIN_ZOOM); // fits below the desktop minimum
     for (const n of flow!.getNodes()) {

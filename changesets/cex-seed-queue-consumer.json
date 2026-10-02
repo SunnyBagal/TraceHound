@@ -1,0 +1,295 @@
+{
+  "schemaVersion": 2,
+  "analyzerVersion": "0.9.0",
+  "repo": {
+    "name": "SunnyBagal/cex-v2-boilercode",
+    "path": "/var/folders/5y/x6df6srs1x185pb1vqytnkn80000gn/T/tmp.E34chSfJlM"
+  },
+  "base": {
+    "ref": "da0e3d6",
+    "sha": "da0e3d640a9c02f815fcca48f8328c94558cc058"
+  },
+  "head": {
+    "ref": "origin/seed/impact-queue-consumer",
+    "sha": "c389d3df0cfa45579061ad5c79bd0d852901d664"
+  },
+  "config": "/Users/sunny/Projects/tracehound-ui/configs/cex-v2-boilercode.tracehound.json",
+  "nodeModules": [],
+  "components": [
+    {
+      "id": "engine:engine-worker",
+      "name": "Engine Worker",
+      "declarations": {
+        "added": 0,
+        "modified": 2,
+        "removed": 0,
+        "formatting": 0
+      },
+      "edges": {
+        "crossComponentAdded": 0,
+        "crossComponentRemoved": 0,
+        "crossProcessAdded": 0,
+        "crossProcessRemoved": 0
+      },
+      "componentEdges": {
+        "added": [],
+        "removed": [],
+        "regrouped": []
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "engine/src/index.ts",
+      "status": "modified",
+      "linesAdded": 3,
+      "linesRemoved": 3,
+      "componentId": "engine:engine-worker",
+      "calls": {
+        "base": {
+          "resolved": 3,
+          "external": 18,
+          "dynamic": 0
+        },
+        "head": {
+          "resolved": 3,
+          "external": 18,
+          "dynamic": 0
+        }
+      }
+    }
+  ],
+  "declarations": [
+    {
+      "id": "engine/src/index.ts#<module>",
+      "name": "<module>",
+      "file": "engine/src/index.ts",
+      "kind": "module",
+      "exported": false,
+      "status": "modified",
+      "componentId": "engine:engine-worker",
+      "modifications": [
+        "body"
+      ],
+      "lines": {
+        "added": 2,
+        "removed": 2
+      },
+      "base": {
+        "file": "engine/src/index.ts",
+        "startLine": 1,
+        "endLine": 122
+      },
+      "head": {
+        "file": "engine/src/index.ts",
+        "startLine": 1,
+        "endLine": 122
+      }
+    },
+    {
+      "id": "engine/src/index.ts#EngineRequest",
+      "name": "EngineRequest",
+      "file": "engine/src/index.ts",
+      "kind": "type",
+      "exported": true,
+      "status": "modified",
+      "componentId": "engine:engine-worker",
+      "modifications": [
+        "shape"
+      ],
+      "lines": {
+        "added": 1,
+        "removed": 1
+      },
+      "base": {
+        "file": "engine/src/index.ts",
+        "startLine": 12,
+        "endLine": 17
+      },
+      "head": {
+        "file": "engine/src/index.ts",
+        "startLine": 12,
+        "endLine": 17
+      }
+    },
+    {
+      "id": "engine/src/index.ts#handleEngineRequest",
+      "name": "handleEngineRequest",
+      "file": "engine/src/index.ts",
+      "kind": "function",
+      "exported": false,
+      "status": "unchanged",
+      "componentId": "engine:engine-worker",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 0
+      },
+      "base": {
+        "file": "engine/src/index.ts",
+        "startLine": 53,
+        "endLine": 91
+      },
+      "head": {
+        "file": "engine/src/index.ts",
+        "startLine": 53,
+        "endLine": 91
+      }
+    },
+    {
+      "id": "engine/src/index.ts#sendResponse",
+      "name": "sendResponse",
+      "file": "engine/src/index.ts",
+      "kind": "function",
+      "exported": false,
+      "status": "unchanged",
+      "componentId": "engine:engine-worker",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 0
+      },
+      "base": {
+        "file": "engine/src/index.ts",
+        "startLine": 49,
+        "endLine": 51
+      },
+      "head": {
+        "file": "engine/src/index.ts",
+        "startLine": 49,
+        "endLine": 51
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "engine/src/index.ts#<module>->engine/src/index.ts#handleEngineRequest:calls",
+      "from": "engine/src/index.ts#<module>",
+      "to": "engine/src/index.ts#handleEngineRequest",
+      "kind": "calls",
+      "status": "unchanged",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "engine/src/index.ts",
+          "line": 109,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    },
+    {
+      "id": "engine/src/index.ts#<module>->engine/src/index.ts#sendResponse:calls",
+      "from": "engine/src/index.ts#<module>",
+      "to": "engine/src/index.ts#sendResponse",
+      "kind": "calls",
+      "status": "unchanged",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "engine/src/index.ts",
+          "line": 110,
+          "extractor": "calls (ts-morph symbols)"
+        },
+        {
+          "side": "head",
+          "file": "engine/src/index.ts",
+          "line": 116,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    },
+    {
+      "id": "queue:redis:backend-to-engine-broker->engine/src/index.ts#<module>:consumes",
+      "from": "queue:redis:backend-to-engine-broker",
+      "to": "engine/src/index.ts#<module>",
+      "kind": "consumes",
+      "status": "unchanged",
+      "crossComponent": true,
+      "crossProcess": true,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "engine/src/index.ts",
+          "line": 96,
+          "extractor": "redis"
+        }
+      ]
+    }
+  ],
+  "warnings": [
+    {
+      "id": "queue-payload-type-changed:queue:redis:backend-to-engine-broker",
+      "kind": "queue-payload-type-changed",
+      "rule": "A type that changed (shape or signature) or was removed is used by a queue producer's payload or a consumer's handler (resolved through symbols).",
+      "message": "redis:backend-to-engine-broker: engine/src/index.ts#EngineRequest changed and used by its consumer side; the producer side uses backend/src/types/engine.ts#EngineRequest and the consumer side engine/src/index.ts#EngineRequest (different declarations)",
+      "declarationId": "engine/src/index.ts#EngineRequest",
+      "evidence": [
+        {
+          "side": "head",
+          "file": "backend/src/utils/engine-client.ts",
+          "line": 43,
+          "detail": "producer uses backend/src/types/engine.ts#EngineRequest"
+        },
+        {
+          "side": "head",
+          "file": "engine/src/index.ts",
+          "line": 96,
+          "detail": "consumer uses engine/src/index.ts#EngineRequest"
+        },
+        {
+          "side": "head",
+          "file": "engine/src/index.ts",
+          "line": 12,
+          "detail": "type engine/src/index.ts#EngineRequest modified [shape]"
+        }
+      ]
+    }
+  ],
+  "stats": {
+    "declarations": {
+      "added": 0,
+      "removed": 0,
+      "modified": 2,
+      "formatting": 0,
+      "unchanged": 76
+    },
+    "edges": {
+      "added": 0,
+      "removed": 0,
+      "unchanged": 39
+    },
+    "files": {
+      "added": 0,
+      "removed": 0,
+      "modified": 1
+    },
+    "calls": {
+      "base": {
+        "resolved": 34,
+        "external": 148,
+        "dynamic": 7
+      },
+      "head": {
+        "resolved": 34,
+        "external": 148,
+        "dynamic": 7
+      }
+    },
+    "runtimeMs": 528
+  },
+  "limitations": [
+    "Renames are not detected: a renamed or moved declaration appears as removed + added (ids are file path + qualified name), and file renames are diffed with --no-renames.",
+    "Return types are compared only where annotated; inferred return types are not compared.",
+    "Bodies, signatures and types are compared as token streams: an edit that only touches whitespace or comments is modification \"formatting\" and doesn't count as modified in the rollups. JSX text is compared with its whitespace collapsed.",
+    "Interfaces, type aliases and enums are declarations (kind type, modification shape); non-exported module-level values and namespaces are not: their edits show as the module's body.",
+    "Call resolution is static (ts-morph symbols). Calls through parameters, locals, element access or untyped values are counted as dynamic per file; calls into packages or the TS lib are counted as external. Neither produces an edge.",
+    "Without a package's or the runtime's types installed, a call is counted external when its receiver chain starts at something imported, typed or constructed from a package, or at an undeclared runtime global from a fixed list (console, crypto, setTimeout, fetch, …); any other free identifier is dynamic.",
+    "Both trees are analyzed in git worktrees with the source checkout's node_modules symlinked in (listed in nodeModules): base and head see the checkout's installed dependency versions, which may differ from what either side's lockfile declares. A checkout without node_modules gets no package or runtime types, and calls on values typed only by them are dynamic.",
+    "Top-level code is one declaration per file (kind module): a change to statements outside any function shows as the module's body, not a finer declaration.",
+    "Route and queue edges come from the existing extractors (http-routes, bullmq-queues, redis) and are attributed to the innermost declaration around their evidence line."
+  ]
+}

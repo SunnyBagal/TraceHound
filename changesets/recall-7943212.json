@@ -1,0 +1,935 @@
+{
+  "schemaVersion": 2,
+  "analyzerVersion": "0.9.0",
+  "repo": {
+    "name": "SunnyBagal/Recall",
+    "path": "/var/folders/5y/x6df6srs1x185pb1vqytnkn80000gn/T/tmp.BJglFcNqEf"
+  },
+  "base": {
+    "ref": "7943212^",
+    "sha": "d9caa4c31b12447718ef86241111631cf1f50f4f"
+  },
+  "head": {
+    "ref": "7943212",
+    "sha": "794321222da902471fe0f92d96dedcdf2a2f06c3"
+  },
+  "config": "/Users/sunny/Projects/tracehound-ui/configs/recall.tracehound.json",
+  "nodeModules": [],
+  "components": [
+    {
+      "id": "recall-backend:brainly-server",
+      "name": "Brainly Server",
+      "declarations": {
+        "added": 3,
+        "modified": 2,
+        "removed": 0,
+        "formatting": 5
+      },
+      "edges": {
+        "crossComponentAdded": 0,
+        "crossComponentRemoved": 0,
+        "crossProcessAdded": 0,
+        "crossProcessRemoved": 0
+      },
+      "componentEdges": {
+        "added": [],
+        "removed": [],
+        "regrouped": []
+      }
+    },
+    {
+      "id": "recall-backend:shared",
+      "name": "Brainly Shared",
+      "declarations": {
+        "added": 0,
+        "modified": 3,
+        "removed": 0,
+        "formatting": 0
+      },
+      "edges": {
+        "crossComponentAdded": 0,
+        "crossComponentRemoved": 0,
+        "crossProcessAdded": 0,
+        "crossProcessRemoved": 0
+      },
+      "componentEdges": {
+        "added": [],
+        "removed": [],
+        "regrouped": []
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "recall-backend/.gitignore",
+      "status": "modified",
+      "linesAdded": 3,
+      "linesRemoved": 0,
+      "calls": {}
+    },
+    {
+      "path": "recall-backend/bench/bench-search.ts",
+      "status": "added",
+      "linesAdded": 352,
+      "linesRemoved": 0,
+      "calls": {}
+    },
+    {
+      "path": "recall-backend/bench/quiet.ts",
+      "status": "added",
+      "linesAdded": 5,
+      "linesRemoved": 0,
+      "calls": {}
+    },
+    {
+      "path": "recall-backend/bench/README-search.md",
+      "status": "added",
+      "linesAdded": 237,
+      "linesRemoved": 0,
+      "calls": {}
+    },
+    {
+      "path": "recall-backend/bench/rigor/gen.ts",
+      "status": "added",
+      "linesAdded": 134,
+      "linesRemoved": 0,
+      "calls": {}
+    },
+    {
+      "path": "recall-backend/bench/rigor/report.ts",
+      "status": "added",
+      "linesAdded": 221,
+      "linesRemoved": 0,
+      "calls": {}
+    },
+    {
+      "path": "recall-backend/bench/rigor/run.ts",
+      "status": "added",
+      "linesAdded": 241,
+      "linesRemoved": 0,
+      "calls": {}
+    },
+    {
+      "path": "recall-backend/bench/rigor/seed.ts",
+      "status": "added",
+      "linesAdded": 143,
+      "linesRemoved": 0,
+      "calls": {}
+    },
+    {
+      "path": "recall-backend/bench/seed-vectors.ts",
+      "status": "added",
+      "linesAdded": 140,
+      "linesRemoved": 0,
+      "calls": {}
+    },
+    {
+      "path": "recall-backend/bench/shared.ts",
+      "status": "added",
+      "linesAdded": 225,
+      "linesRemoved": 0,
+      "calls": {}
+    },
+    {
+      "path": "recall-backend/config/db.ts",
+      "status": "modified",
+      "linesAdded": 4,
+      "linesRemoved": 1,
+      "componentId": "recall-backend:shared",
+      "calls": {
+        "base": {
+          "resolved": 0,
+          "external": 3,
+          "dynamic": 0
+        },
+        "head": {
+          "resolved": 0,
+          "external": 3,
+          "dynamic": 0
+        }
+      }
+    },
+    {
+      "path": "recall-backend/db/schema.ts",
+      "status": "modified",
+      "linesAdded": 15,
+      "linesRemoved": 2,
+      "componentId": "recall-backend:shared",
+      "calls": {
+        "base": {
+          "resolved": 2,
+          "external": 62,
+          "dynamic": 0
+        },
+        "head": {
+          "resolved": 2,
+          "external": 65,
+          "dynamic": 1
+        }
+      }
+    },
+    {
+      "path": "recall-backend/drizzle/0001_hnsw_index.sql",
+      "status": "added",
+      "linesAdded": 27,
+      "linesRemoved": 0,
+      "calls": {}
+    },
+    {
+      "path": "recall-backend/index.ts",
+      "status": "modified",
+      "linesAdded": 9,
+      "linesRemoved": 124,
+      "componentId": "recall-backend:brainly-server",
+      "calls": {
+        "base": {
+          "resolved": 4,
+          "external": 160,
+          "dynamic": 67
+        },
+        "head": {
+          "resolved": 5,
+          "external": 124,
+          "dynamic": 66
+        }
+      }
+    },
+    {
+      "path": "recall-backend/services/searchService.ts",
+      "status": "added",
+      "linesAdded": 157,
+      "linesRemoved": 0,
+      "componentId": "recall-backend:brainly-server",
+      "calls": {
+        "head": {
+          "resolved": 0,
+          "external": 35,
+          "dynamic": 9
+        }
+      }
+    }
+  ],
+  "declarations": [
+    {
+      "id": "recall-backend/services/searchService.ts#<module>",
+      "name": "<module>",
+      "file": "recall-backend/services/searchService.ts",
+      "kind": "module",
+      "exported": false,
+      "status": "added",
+      "componentId": "recall-backend:brainly-server",
+      "modifications": [],
+      "lines": {
+        "added": 48,
+        "removed": 0
+      },
+      "head": {
+        "file": "recall-backend/services/searchService.ts",
+        "startLine": 1,
+        "endLine": 158
+      }
+    },
+    {
+      "id": "recall-backend/services/searchService.ts#hybridSearch",
+      "name": "hybridSearch",
+      "file": "recall-backend/services/searchService.ts",
+      "kind": "function",
+      "exported": true,
+      "status": "added",
+      "componentId": "recall-backend:brainly-server",
+      "modifications": [],
+      "lines": {
+        "added": 104,
+        "removed": 0
+      },
+      "head": {
+        "file": "recall-backend/services/searchService.ts",
+        "startLine": 54,
+        "endLine": 157
+      }
+    },
+    {
+      "id": "recall-backend/services/searchService.ts#HybridSearchTimings",
+      "name": "HybridSearchTimings",
+      "file": "recall-backend/services/searchService.ts",
+      "kind": "type",
+      "exported": true,
+      "status": "added",
+      "componentId": "recall-backend:brainly-server",
+      "modifications": [],
+      "lines": {
+        "added": 5,
+        "removed": 0
+      },
+      "head": {
+        "file": "recall-backend/services/searchService.ts",
+        "startLine": 11,
+        "endLine": 15
+      }
+    },
+    {
+      "id": "recall-backend/config/db.ts#db",
+      "name": "db",
+      "file": "recall-backend/config/db.ts",
+      "kind": "variable",
+      "exported": true,
+      "status": "modified",
+      "componentId": "recall-backend:shared",
+      "modifications": [
+        "body"
+      ],
+      "lines": {
+        "added": 4,
+        "removed": 1
+      },
+      "base": {
+        "file": "recall-backend/config/db.ts",
+        "startLine": 11,
+        "endLine": 15
+      },
+      "head": {
+        "file": "recall-backend/config/db.ts",
+        "startLine": 11,
+        "endLine": 18
+      }
+    },
+    {
+      "id": "recall-backend/db/schema.ts#<module>",
+      "name": "<module>",
+      "file": "recall-backend/db/schema.ts",
+      "kind": "module",
+      "exported": false,
+      "status": "modified",
+      "componentId": "recall-backend:shared",
+      "modifications": [
+        "body"
+      ],
+      "lines": {
+        "added": 1,
+        "removed": 1
+      },
+      "base": {
+        "file": "recall-backend/db/schema.ts",
+        "startLine": 1,
+        "endLine": 66
+      },
+      "head": {
+        "file": "recall-backend/db/schema.ts",
+        "startLine": 1,
+        "endLine": 79
+      }
+    },
+    {
+      "id": "recall-backend/db/schema.ts#contents",
+      "name": "contents",
+      "file": "recall-backend/db/schema.ts",
+      "kind": "variable",
+      "exported": true,
+      "status": "modified",
+      "componentId": "recall-backend:shared",
+      "modifications": [
+        "body"
+      ],
+      "lines": {
+        "added": 14,
+        "removed": 1
+      },
+      "base": {
+        "file": "recall-backend/db/schema.ts",
+        "startLine": 29,
+        "endLine": 48
+      },
+      "head": {
+        "file": "recall-backend/db/schema.ts",
+        "startLine": 29,
+        "endLine": 61
+      }
+    },
+    {
+      "id": "recall-backend/index.ts#<module>",
+      "name": "<module>",
+      "file": "recall-backend/index.ts",
+      "kind": "module",
+      "exported": false,
+      "status": "modified",
+      "componentId": "recall-backend:brainly-server",
+      "modifications": [
+        "body"
+      ],
+      "lines": {
+        "added": 2,
+        "removed": 1
+      },
+      "base": {
+        "file": "recall-backend/index.ts",
+        "startLine": 1,
+        "endLine": 601
+      },
+      "head": {
+        "file": "recall-backend/index.ts",
+        "startLine": 1,
+        "endLine": 486
+      }
+    },
+    {
+      "id": "recall-backend/index.ts#route:GET /api/v1/content",
+      "name": "route:GET /api/v1/content",
+      "file": "recall-backend/index.ts",
+      "kind": "route-handler",
+      "exported": false,
+      "status": "modified",
+      "componentId": "recall-backend:brainly-server",
+      "modifications": [
+        "formatting"
+      ],
+      "lines": {
+        "added": 0,
+        "removed": 3
+      },
+      "base": {
+        "file": "recall-backend/index.ts",
+        "startLine": 188,
+        "endLine": 222
+      },
+      "head": {
+        "file": "recall-backend/index.ts",
+        "startLine": 175,
+        "endLine": 206
+      }
+    },
+    {
+      "id": "recall-backend/index.ts#route:GET /api/v1/search",
+      "name": "route:GET /api/v1/search",
+      "file": "recall-backend/index.ts",
+      "kind": "route-handler",
+      "exported": false,
+      "status": "modified",
+      "componentId": "recall-backend:brainly-server",
+      "modifications": [
+        "body"
+      ],
+      "lines": {
+        "added": 4,
+        "removed": 99
+      },
+      "base": {
+        "file": "recall-backend/index.ts",
+        "startLine": 323,
+        "endLine": 438
+      },
+      "head": {
+        "file": "recall-backend/index.ts",
+        "startLine": 307,
+        "endLine": 327
+      }
+    },
+    {
+      "id": "recall-backend/index.ts#route:POST /api/v1/chat",
+      "name": "route:POST /api/v1/chat",
+      "file": "recall-backend/index.ts",
+      "kind": "route-handler",
+      "exported": false,
+      "status": "modified",
+      "componentId": "recall-backend:brainly-server",
+      "modifications": [
+        "formatting"
+      ],
+      "lines": {
+        "added": 1,
+        "removed": 5
+      },
+      "base": {
+        "file": "recall-backend/index.ts",
+        "startLine": 440,
+        "endLine": 594
+      },
+      "head": {
+        "file": "recall-backend/index.ts",
+        "startLine": 329,
+        "endLine": 479
+      }
+    },
+    {
+      "id": "recall-backend/index.ts#route:POST /api/v1/content",
+      "name": "route:POST /api/v1/content",
+      "file": "recall-backend/index.ts",
+      "kind": "route-handler",
+      "exported": false,
+      "status": "modified",
+      "componentId": "recall-backend:brainly-server",
+      "modifications": [
+        "formatting"
+      ],
+      "lines": {
+        "added": 0,
+        "removed": 8
+      },
+      "base": {
+        "file": "recall-backend/index.ts",
+        "startLine": 123,
+        "endLine": 186
+      },
+      "head": {
+        "file": "recall-backend/index.ts",
+        "startLine": 118,
+        "endLine": 173
+      }
+    },
+    {
+      "id": "recall-backend/index.ts#route:POST /api/v1/signin",
+      "name": "route:POST /api/v1/signin",
+      "file": "recall-backend/index.ts",
+      "kind": "route-handler",
+      "exported": false,
+      "status": "modified",
+      "componentId": "recall-backend:brainly-server",
+      "modifications": [
+        "formatting"
+      ],
+      "lines": {
+        "added": 0,
+        "removed": 2
+      },
+      "base": {
+        "file": "recall-backend/index.ts",
+        "startLine": 76,
+        "endLine": 121
+      },
+      "head": {
+        "file": "recall-backend/index.ts",
+        "startLine": 73,
+        "endLine": 116
+      }
+    },
+    {
+      "id": "recall-backend/index.ts#route:POST /api/v1/signup",
+      "name": "route:POST /api/v1/signup",
+      "file": "recall-backend/index.ts",
+      "kind": "route-handler",
+      "exported": false,
+      "status": "modified",
+      "componentId": "recall-backend:brainly-server",
+      "modifications": [
+        "formatting"
+      ],
+      "lines": {
+        "added": 2,
+        "removed": 6
+      },
+      "base": {
+        "file": "recall-backend/index.ts",
+        "startLine": 33,
+        "endLine": 74
+      },
+      "head": {
+        "file": "recall-backend/index.ts",
+        "startLine": 34,
+        "endLine": 71
+      }
+    },
+    {
+      "id": "recall-backend/db/schema.ts#contentTypeEnum",
+      "name": "contentTypeEnum",
+      "file": "recall-backend/db/schema.ts",
+      "kind": "variable",
+      "exported": true,
+      "status": "unchanged",
+      "componentId": "recall-backend:shared",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 0
+      },
+      "base": {
+        "file": "recall-backend/db/schema.ts",
+        "startLine": 3,
+        "endLine": 11
+      },
+      "head": {
+        "file": "recall-backend/db/schema.ts",
+        "startLine": 3,
+        "endLine": 11
+      }
+    },
+    {
+      "id": "recall-backend/db/schema.ts#processingStatusEnum",
+      "name": "processingStatusEnum",
+      "file": "recall-backend/db/schema.ts",
+      "kind": "variable",
+      "exported": true,
+      "status": "unchanged",
+      "componentId": "recall-backend:shared",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 0
+      },
+      "base": {
+        "file": "recall-backend/db/schema.ts",
+        "startLine": 13,
+        "endLine": 18
+      },
+      "head": {
+        "file": "recall-backend/db/schema.ts",
+        "startLine": 13,
+        "endLine": 18
+      }
+    },
+    {
+      "id": "recall-backend/services/embeddings.ts#generateEmbedding",
+      "name": "generateEmbedding",
+      "file": "recall-backend/services/embeddings.ts",
+      "kind": "function",
+      "exported": true,
+      "status": "unchanged",
+      "componentId": "recall-backend:shared",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 0
+      },
+      "base": {
+        "file": "recall-backend/services/embeddings.ts",
+        "startLine": 7,
+        "endLine": 37
+      },
+      "head": {
+        "file": "recall-backend/services/embeddings.ts",
+        "startLine": 7,
+        "endLine": 37
+      }
+    },
+    {
+      "id": "recall-backend/services/linkDetector.ts#detectLinkType",
+      "name": "detectLinkType",
+      "file": "recall-backend/services/linkDetector.ts",
+      "kind": "function",
+      "exported": true,
+      "status": "unchanged",
+      "componentId": "recall-backend:shared",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 0
+      },
+      "base": {
+        "file": "recall-backend/services/linkDetector.ts",
+        "startLine": 150,
+        "endLine": 189
+      },
+      "head": {
+        "file": "recall-backend/services/linkDetector.ts",
+        "startLine": 150,
+        "endLine": 189
+      }
+    },
+    {
+      "id": "recall-backend/services/metadataFetcher.ts#fetchMetadata",
+      "name": "fetchMetadata",
+      "file": "recall-backend/services/metadataFetcher.ts",
+      "kind": "function",
+      "exported": true,
+      "status": "unchanged",
+      "componentId": "recall-backend:brainly-server",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 0
+      },
+      "base": {
+        "file": "recall-backend/services/metadataFetcher.ts",
+        "startLine": 52,
+        "endLine": 135
+      },
+      "head": {
+        "file": "recall-backend/services/metadataFetcher.ts",
+        "startLine": 52,
+        "endLine": 135
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "recall-backend/index.ts#route:GET /api/v1/search->recall-backend/services/searchService.ts#hybridSearch:calls",
+      "from": "recall-backend/index.ts#route:GET /api/v1/search",
+      "to": "recall-backend/services/searchService.ts#hybridSearch",
+      "kind": "calls",
+      "status": "added",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/index.ts",
+          "line": 320,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    },
+    {
+      "id": "recall-backend/db/schema.ts#contents->recall-backend/db/schema.ts#contentTypeEnum:calls",
+      "from": "recall-backend/db/schema.ts#contents",
+      "to": "recall-backend/db/schema.ts#contentTypeEnum",
+      "kind": "calls",
+      "status": "unchanged",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/db/schema.ts",
+          "line": 33,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    },
+    {
+      "id": "recall-backend/db/schema.ts#contents->recall-backend/db/schema.ts#processingStatusEnum:calls",
+      "from": "recall-backend/db/schema.ts#contents",
+      "to": "recall-backend/db/schema.ts#processingStatusEnum",
+      "kind": "calls",
+      "status": "unchanged",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/db/schema.ts",
+          "line": 44,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    },
+    {
+      "id": "recall-backend/index.ts#route:GET /api/v1/search->recall-backend/services/embeddings.ts#generateEmbedding:calls",
+      "from": "recall-backend/index.ts#route:GET /api/v1/search",
+      "to": "recall-backend/services/embeddings.ts#generateEmbedding",
+      "kind": "calls",
+      "status": "unchanged",
+      "crossComponent": true,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/index.ts",
+          "line": 319,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    },
+    {
+      "id": "recall-backend/index.ts#route:POST /api/v1/chat->recall-backend/services/embeddings.ts#generateEmbedding:calls",
+      "from": "recall-backend/index.ts#route:POST /api/v1/chat",
+      "to": "recall-backend/services/embeddings.ts#generateEmbedding",
+      "kind": "calls",
+      "status": "unchanged",
+      "crossComponent": true,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/index.ts",
+          "line": 353,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    },
+    {
+      "id": "recall-backend/index.ts#route:POST /api/v1/content->queue:bullmq:content-processing:produces",
+      "from": "recall-backend/index.ts#route:POST /api/v1/content",
+      "to": "queue:bullmq:content-processing",
+      "kind": "produces",
+      "status": "unchanged",
+      "crossComponent": true,
+      "crossProcess": true,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/index.ts",
+          "line": 155,
+          "extractor": "bullmq-queues"
+        }
+      ]
+    },
+    {
+      "id": "recall-backend/index.ts#route:POST /api/v1/content->recall-backend/services/linkDetector.ts#detectLinkType:calls",
+      "from": "recall-backend/index.ts#route:POST /api/v1/content",
+      "to": "recall-backend/services/linkDetector.ts#detectLinkType",
+      "kind": "calls",
+      "status": "unchanged",
+      "crossComponent": true,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/index.ts",
+          "line": 126,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    },
+    {
+      "id": "recall-backend/index.ts#route:POST /api/v1/content->recall-backend/services/metadataFetcher.ts#fetchMetadata:calls",
+      "from": "recall-backend/index.ts#route:POST /api/v1/content",
+      "to": "recall-backend/services/metadataFetcher.ts#fetchMetadata",
+      "kind": "calls",
+      "status": "unchanged",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/index.ts",
+          "line": 128,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    },
+    {
+      "id": "route:GET /api/v1/content->recall-backend/index.ts#route:GET /api/v1/content:route",
+      "from": "route:GET /api/v1/content",
+      "to": "recall-backend/index.ts#route:GET /api/v1/content",
+      "kind": "route",
+      "status": "unchanged",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/index.ts",
+          "line": 175,
+          "extractor": "http-routes"
+        }
+      ]
+    },
+    {
+      "id": "route:GET /api/v1/search->recall-backend/index.ts#route:GET /api/v1/search:route",
+      "from": "route:GET /api/v1/search",
+      "to": "recall-backend/index.ts#route:GET /api/v1/search",
+      "kind": "route",
+      "status": "unchanged",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/index.ts",
+          "line": 307,
+          "extractor": "http-routes"
+        }
+      ]
+    },
+    {
+      "id": "route:POST /api/v1/chat->recall-backend/index.ts#route:POST /api/v1/chat:route",
+      "from": "route:POST /api/v1/chat",
+      "to": "recall-backend/index.ts#route:POST /api/v1/chat",
+      "kind": "route",
+      "status": "unchanged",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/index.ts",
+          "line": 329,
+          "extractor": "http-routes"
+        }
+      ]
+    },
+    {
+      "id": "route:POST /api/v1/content->recall-backend/index.ts#route:POST /api/v1/content:route",
+      "from": "route:POST /api/v1/content",
+      "to": "recall-backend/index.ts#route:POST /api/v1/content",
+      "kind": "route",
+      "status": "unchanged",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/index.ts",
+          "line": 118,
+          "extractor": "http-routes"
+        }
+      ]
+    },
+    {
+      "id": "route:POST /api/v1/signin->recall-backend/index.ts#route:POST /api/v1/signin:route",
+      "from": "route:POST /api/v1/signin",
+      "to": "recall-backend/index.ts#route:POST /api/v1/signin",
+      "kind": "route",
+      "status": "unchanged",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/index.ts",
+          "line": 73,
+          "extractor": "http-routes"
+        }
+      ]
+    },
+    {
+      "id": "route:POST /api/v1/signup->recall-backend/index.ts#route:POST /api/v1/signup:route",
+      "from": "route:POST /api/v1/signup",
+      "to": "recall-backend/index.ts#route:POST /api/v1/signup",
+      "kind": "route",
+      "status": "unchanged",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/index.ts",
+          "line": 34,
+          "extractor": "http-routes"
+        }
+      ]
+    }
+  ],
+  "warnings": [],
+  "stats": {
+    "declarations": {
+      "added": 3,
+      "removed": 0,
+      "modified": 5,
+      "formatting": 5,
+      "unchanged": 156
+    },
+    "edges": {
+      "added": 1,
+      "removed": 0,
+      "unchanged": 48
+    },
+    "files": {
+      "added": 11,
+      "removed": 0,
+      "modified": 4
+    },
+    "calls": {
+      "base": {
+        "resolved": 100,
+        "external": 443,
+        "dynamic": 172
+      },
+      "head": {
+        "resolved": 101,
+        "external": 445,
+        "dynamic": 181
+      }
+    },
+    "runtimeMs": 1239
+  },
+  "limitations": [
+    "Renames are not detected: a renamed or moved declaration appears as removed + added (ids are file path + qualified name), and file renames are diffed with --no-renames.",
+    "Return types are compared only where annotated; inferred return types are not compared.",
+    "Bodies, signatures and types are compared as token streams: an edit that only touches whitespace or comments is modification \"formatting\" and doesn't count as modified in the rollups. JSX text is compared with its whitespace collapsed.",
+    "Interfaces, type aliases and enums are declarations (kind type, modification shape); non-exported module-level values and namespaces are not: their edits show as the module's body.",
+    "Call resolution is static (ts-morph symbols). Calls through parameters, locals, element access or untyped values are counted as dynamic per file; calls into packages or the TS lib are counted as external. Neither produces an edge.",
+    "Without a package's or the runtime's types installed, a call is counted external when its receiver chain starts at something imported, typed or constructed from a package, or at an undeclared runtime global from a fixed list (console, crypto, setTimeout, fetch, …); any other free identifier is dynamic.",
+    "Both trees are analyzed in git worktrees with the source checkout's node_modules symlinked in (listed in nodeModules): base and head see the checkout's installed dependency versions, which may differ from what either side's lockfile declares. A checkout without node_modules gets no package or runtime types, and calls on values typed only by them are dynamic.",
+    "Top-level code is one declaration per file (kind module): a change to statements outside any function shows as the module's body, not a finer declaration.",
+    "Route and queue edges come from the existing extractors (http-routes, bullmq-queues, redis) and are attributed to the innermost declaration around their evidence line."
+  ]
+}

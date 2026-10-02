@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 2,
+  "analyzerVersion": "0.9.0",
+  "repo": {
+    "name": "SunnyBagal/Recall",
+    "path": "/var/folders/5y/x6df6srs1x185pb1vqytnkn80000gn/T/tmp.f7eqQX5sAa"
+  },
+  "base": {
+    "ref": "5d2165a^",
+    "sha": "42ba6f540ab043db751130a1292e5068ef8139fb"
+  },
+  "head": {
+    "ref": "5d2165a",
+    "sha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b"
+  },
+  "config": "/Users/sunny/Projects/tracehound-ui/configs/recall.tracehound.json",
+  "nodeModules": [],
+  "components": [
+    {
+      "id": "recall-backend:brainly-server",
+      "name": "Brainly Server",
+      "declarations": {
+        "added": 0,
+        "modified": 1,
+        "removed": 0,
+        "formatting": 0
+      },
+      "edges": {
+        "crossComponentAdded": 0,
+        "crossComponentRemoved": 0,
+        "crossProcessAdded": 0,
+        "crossProcessRemoved": 0
+      },
+      "componentEdges": {
+        "added": [],
+        "removed": [],
+        "regrouped": []
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "recall-backend/scripts/backfill-embeddings.ts",
+      "status": "added",
+      "linesAdded": 139,
+      "linesRemoved": 0,
+      "calls": {}
+    },
+    {
+      "path": "recall-backend/services/metadataFetcher.ts",
+      "status": "modified",
+      "linesAdded": 8,
+      "linesRemoved": 1,
+      "componentId": "recall-backend:brainly-server",
+      "calls": {
+        "base": {
+          "resolved": 10,
+          "external": 24,
+          "dynamic": 25
+        },
+        "head": {
+          "resolved": 10,
+          "external": 24,
+          "dynamic": 25
+        }
+      }
+    }
+  ],
+  "declarations": [
+    {
+      "id": "recall-backend/services/metadataFetcher.ts#fallbackFromUrl",
+      "name": "fallbackFromUrl",
+      "file": "recall-backend/services/metadataFetcher.ts",
+      "kind": "function",
+      "exported": false,
+      "status": "modified",
+      "componentId": "recall-backend:brainly-server",
+      "modifications": [
+        "body"
+      ],
+      "lines": {
+        "added": 8,
+        "removed": 1
+      },
+      "base": {
+        "file": "recall-backend/services/metadataFetcher.ts",
+        "startLine": 69,
+        "endLine": 91
+      },
+      "head": {
+        "file": "recall-backend/services/metadataFetcher.ts",
+        "startLine": 69,
+        "endLine": 98
+      }
+    },
+    {
+      "id": "recall-backend/services/metadataFetcher.ts#fetchMetadata",
+      "name": "fetchMetadata",
+      "file": "recall-backend/services/metadataFetcher.ts",
+      "kind": "function",
+      "exported": true,
+      "status": "unchanged",
+      "componentId": "recall-backend:brainly-server",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 0
+      },
+      "base": {
+        "file": "recall-backend/services/metadataFetcher.ts",
+        "startLine": 130,
+        "endLine": 255
+      },
+      "head": {
+        "file": "recall-backend/services/metadataFetcher.ts",
+        "startLine": 137,
+        "endLine": 262
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "recall-backend/services/metadataFetcher.ts#fetchMetadata->recall-backend/services/metadataFetcher.ts#fallbackFromUrl:calls",
+      "from": "recall-backend/services/metadataFetcher.ts#fetchMetadata",
+      "to": "recall-backend/services/metadataFetcher.ts#fallbackFromUrl",
+      "kind": "calls",
+      "status": "unchanged",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/services/metadataFetcher.ts",
+          "line": 142,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    }
+  ],
+  "warnings": [],
+  "stats": {
+    "declarations": {
+      "added": 0,
+      "removed": 0,
+      "modified": 1,
+      "formatting": 0,
+      "unchanged": 203
+    },
+    "edges": {
+      "added": 0,
+      "removed": 0,
+      "unchanged": 52
+    },
+    "files": {
+      "added": 1,
+      "removed": 0,
+      "modified": 1
+    },
+    "calls": {
+      "base": {
+        "resolved": 104,
+        "external": 458,
+        "dynamic": 192
+      },
+      "head": {
+        "resolved": 104,
+        "external": 458,
+        "dynamic": 192
+      }
+    },
+    "runtimeMs": 1379
+  },
+  "limitations": [
+    "Renames are not detected: a renamed or moved declaration appears as removed + added (ids are file path + qualified name), and file renames are diffed with --no-renames.",
+    "Return types are compared only where annotated; inferred return types are not compared.",
+    "Bodies, signatures and types are compared as token streams: an edit that only touches whitespace or comments is modification \"formatting\" and doesn't count as modified in the rollups. JSX text is compared with its whitespace collapsed.",
+    "Interfaces, type aliases and enums are declarations (kind type, modification shape); non-exported module-level values and namespaces are not: their edits show as the module's body.",
+    "Call resolution is static (ts-morph symbols). Calls through parameters, locals, element access or untyped values are counted as dynamic per file; calls into packages or the TS lib are counted as external. Neither produces an edge.",
+    "Without a package's or the runtime's types installed, a call is counted external when its receiver chain starts at something imported, typed or constructed from a package, or at an undeclared runtime global from a fixed list (console, crypto, setTimeout, fetch, …); any other free identifier is dynamic.",
+    "Both trees are analyzed in git worktrees with the source checkout's node_modules symlinked in (listed in nodeModules): base and head see the checkout's installed dependency versions, which may differ from what either side's lockfile declares. A checkout without node_modules gets no package or runtime types, and calls on values typed only by them are dynamic.",
+    "Top-level code is one declaration per file (kind module): a change to statements outside any function shows as the module's body, not a finer declaration.",
+    "Route and queue edges come from the existing extractors (http-routes, bullmq-queues, redis) and are attributed to the innermost declaration around their evidence line."
+  ]
+}

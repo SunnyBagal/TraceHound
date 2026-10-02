@@ -3,7 +3,7 @@
 // a deploy that can't load data must not go green.
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { ImpactReport, impactReferenceErrors, Snapshot } from "@tracehound/analyzer/schema";
+import { ChangeSet, CHANGESET_SCHEMA_VERSION, ImpactReport, impactReferenceErrors, Snapshot } from "@tracehound/analyzer/schema";
 
 const VIEWER = path.resolve(import.meta.dirname, "..");
 export const SOURCE = path.resolve(VIEWER, "../snapshots");
@@ -13,10 +13,19 @@ export const EXPORT = path.join(VIEWER, "out/snapshots");
 export const IMPACT_SOURCE = path.resolve(VIEWER, "../impacts");
 export const IMPACT_PUBLIC = path.join(VIEWER, "public/impacts");
 export const IMPACT_EXPORT = path.join(VIEWER, "out/impacts");
+// Change sets (`tracehound changes --out ../changesets/<file>`), listed in ../changesets/index.json, served for ?changes=<id>.
+export const CHANGESET_SOURCE = path.resolve(VIEWER, "../changesets");
+export const CHANGESET_PUBLIC = path.join(VIEWER, "public/changesets");
+export const CHANGESET_EXPORT = path.join(VIEWER, "out/changesets");
 
 class SnapshotDataError extends Error {}
 
-/** Throws unless dir/index.json parses, has a `latest`, and every referenced file exists and parses. */
+/**
+ * Throws unless dir/index.json parses, has a `latest`, and every referenced file exists and parses.
+ * Every repo of `repos` (decision 039) is checked, not only the top-level `latest` (which the
+ * deployed viewer reads and which follows `defaultRepo` on the next manifest write): each repo's
+ * latest snapshot must exist, validate as a Snapshot, and be of that repo and commit.
+ */
 export function verifySnapshots(dir, label = dir) {
   const indexFile = path.join(dir, "index.json");
   if (!existsSync(indexFile)) throw new SnapshotDataError(`${label}/index.json is missing`);
@@ -27,15 +36,33 @@ export function verifySnapshots(dir, label = dir) {
     throw new SnapshotDataError(`${label}/index.json is not valid JSON: ${error.message}`);
   }
   if (!manifest.latest?.path) throw new SnapshotDataError(`${label}/index.json has no "latest" snapshot`);
-  const referenced = [...new Set([manifest.latest.path, ...(manifest.snapshots ?? []).map((s) => s.path)])];
+  const repos = manifest.repos ?? [];
+  if (manifest.defaultRepo && !repos.some((r) => r.id === manifest.defaultRepo)) throw new SnapshotDataError(`${label}/index.json: defaultRepo "${manifest.defaultRepo}" is not in repos`);
+  const role = new Map([[manifest.latest.path, "as latest"]]);
+  for (const r of repos) {
+    if (!r.latest?.path) throw new SnapshotDataError(`${label}/index.json: repo "${r.id}" has no latest snapshot`);
+    role.set(r.latest.path, `as repo ${r.id}'s latest`);
+  }
+  const referenced = [
+    ...new Set([manifest.latest.path, ...(manifest.snapshots ?? []).map((s) => s.path), ...repos.flatMap((r) => [r.latest.path, ...(r.versions ?? []).map((v) => v.path)])]),
+  ];
+  const parsed = new Map();
   for (const rel of referenced) {
     if (rel.includes("..") || path.isAbsolute(rel)) throw new SnapshotDataError(`${label}/index.json references an unsafe path: ${rel}`);
     const file = path.join(dir, rel);
-    if (!existsSync(file)) throw new SnapshotDataError(`${label}/${rel} is missing (referenced by index.json${rel === manifest.latest.path ? " as latest" : ""})`);
+    if (!existsSync(file)) throw new SnapshotDataError(`${label}/${rel} is missing (referenced by index.json${role.has(rel) ? ` ${role.get(rel)}` : ""})`);
     try {
-      JSON.parse(readFileSync(file, "utf8"));
+      parsed.set(rel, JSON.parse(readFileSync(file, "utf8")));
     } catch (error) {
       throw new SnapshotDataError(`${label}/${rel} is not valid JSON: ${error.message}`);
+    }
+  }
+  // older versions stay JSON-checked only (their schema may predate today's); every repo's latest must validate
+  for (const r of repos) {
+    const result = Snapshot.safeParse(parsed.get(r.latest.path));
+    if (!result.success) throw new SnapshotDataError(`${label}/${r.latest.path} (repo ${r.id}'s latest) is not a valid snapshot: ${result.error.issues[0]?.message}`);
+    if (result.data.repo.name !== r.name || result.data.repo.commitSha !== r.latest.sha) {
+      throw new SnapshotDataError(`${label}/${r.latest.path} is ${result.data.repo.name}@${result.data.repo.commitSha}, but index.json lists it as repo ${r.id}'s latest (${r.name}@${r.latest.sha})`);
     }
   }
   return { manifest, referenced };
@@ -105,6 +132,63 @@ export function copyImpacts() {
   return names;
 }
 
+const ENTRY_KINDS = ["commit", "run", "demo"];
+
+/**
+ * Throws unless dir/index.json is an array of { id, repo, title, kind, base, head, file } and every
+ * entry's file exists and parses as a ChangeSet of the current schemaVersion. Returns the files to
+ * serve (each change set, plus any run record an entry names for patch line numbers).
+ */
+export function verifyChangesets(dir, label = dir) {
+  const indexFile = path.join(dir, "index.json");
+  if (!existsSync(indexFile)) return [];
+  let entries;
+  try {
+    entries = JSON.parse(readFileSync(indexFile, "utf8"));
+  } catch (error) {
+    throw new SnapshotDataError(`${label}/index.json is not valid JSON: ${error.message}`);
+  }
+  if (!Array.isArray(entries)) throw new SnapshotDataError(`${label}/index.json must be an array of change-set entries`);
+  const files = [];
+  const ids = new Set();
+  for (const [i, e] of entries.entries()) {
+    const where = `${label}/index.json[${i}]`;
+    for (const key of ["id", "repo", "title", "kind", "base", "head", "file"]) {
+      if (typeof e?.[key] !== "string" || !e[key]) throw new SnapshotDataError(`${where} has no "${key}"`);
+    }
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(e.id)) throw new SnapshotDataError(`${where}: ids must be lowercase letters, digits and dashes`);
+    if (ids.has(e.id)) throw new SnapshotDataError(`${where}: duplicate id ${e.id}`);
+    ids.add(e.id);
+    if (!ENTRY_KINDS.includes(e.kind)) throw new SnapshotDataError(`${where}: kind must be one of ${ENTRY_KINDS.join(", ")}`);
+    for (const rel of [e.file, e.runRecord].filter(Boolean)) {
+      if (rel.includes("..") || path.isAbsolute(rel)) throw new SnapshotDataError(`${where} references an unsafe path: ${rel}`);
+      if (!existsSync(path.join(dir, rel))) throw new SnapshotDataError(`${label}/${rel} is missing (referenced by ${where})`);
+    }
+    let changeSet;
+    try {
+      changeSet = ChangeSet.parse(JSON.parse(readFileSync(path.join(dir, e.file), "utf8")));
+    } catch (error) {
+      throw new SnapshotDataError(`${label}/${e.file} is not a ChangeSet (schemaVersion ${CHANGESET_SCHEMA_VERSION}): ${error.message}`);
+    }
+    if (changeSet.base.sha !== e.base) throw new SnapshotDataError(`${where}: base ${e.base} does not match ${e.file}'s base ${changeSet.base.sha}`);
+    files.push(e.file, ...(e.runRecord ? [e.runRecord] : []));
+  }
+  return files;
+}
+
+/** Copy ../changesets/index.json + the files it lists (verified) into public/changesets. */
+export function copyChangesets() {
+  const files = verifyChangesets(CHANGESET_SOURCE, "../changesets");
+  rmSync(CHANGESET_PUBLIC, { recursive: true, force: true });
+  if (!existsSync(path.join(CHANGESET_SOURCE, "index.json"))) return files;
+  for (const rel of ["index.json", ...files]) {
+    const to = path.join(CHANGESET_PUBLIC, rel);
+    mkdirSync(path.dirname(to), { recursive: true });
+    writeFileSync(to, readFileSync(path.join(CHANGESET_SOURCE, rel)));
+  }
+  return files;
+}
+
 function listFiles(dir, prefix = "") {
   if (!existsSync(dir)) return [];
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
@@ -119,11 +203,14 @@ if (import.meta.url === `file://${process.argv[1]}` && command) {
     if (command === "copy") {
       const files = copySnapshots();
       const impacts = copyImpacts();
-      console.log(`[snapshots] copied index.json + ${files.length} snapshot file(s) → public/snapshots; ${impacts.length} impact report(s) → public/impacts`);
+      const changesets = copyChangesets();
+      console.log(`[snapshots] copied index.json + ${files.length} snapshot file(s) → public/snapshots; ${impacts.length} impact report(s) → public/impacts; ${changesets.length} change-set file(s) → public/changesets`);
     } else if (command === "verify-export") {
       const { manifest } = verifySnapshots(EXPORT, "out/snapshots");
+      const repos = (manifest.repos ?? []).map((r) => `${r.id} → ${r.latest.path}`);
       const impacts = verifyImpacts(IMPACT_EXPORT, EXPORT, "out/impacts");
-      console.log(`[snapshots] export OK: out/snapshots/index.json → latest ${manifest.latest.path}; ${impacts.length} impact report(s) verified`);
+      const changesets = verifyChangesets(CHANGESET_EXPORT, "out/changesets");
+      console.log(`[snapshots] export OK: out/snapshots/index.json → latest ${manifest.latest.path}; repos: ${repos.join(", ") || "(none)"}; ${impacts.length} impact report(s), ${changesets.length} change-set file(s) verified`);
     } else {
       throw new Error(`unknown command ${command}`);
     }

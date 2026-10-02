@@ -1,0 +1,54 @@
+[
+  {
+    "id": "recall-worker-deleted",
+    "repo": "recall",
+    "title": "Worker deleted (demo)",
+    "kind": "demo",
+    "base": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b",
+    "head": "bcfaa67f33958eb517d1dc9e8a7fff52a0072002",
+    "file": "recall-worker-deleted.json",
+    "patch": "sources/recall-worker-deleted.patch",
+    "regenerate": "d=$(mktemp -d) && git clone -q https://github.com/SunnyBagal/Recall.git \"$d\" && git -C \"$d\" switch -q --detach 5d2165a && git -C \"$d\" -c user.name='TraceHound demo' -c user.email=demo@tracehound.invalid am -q --committer-date-is-author-date \"$PWD/changesets/sources/recall-worker-deleted.patch\" && pnpm tracehound changes --repo \"$d\" --diff 5d2165a..bcfaa67f33958eb517d1dc9e8a7fff52a0072002 --config configs/recall.tracehound.json --out changesets/recall-worker-deleted.json"
+  },
+  {
+    "id": "recall-7943212",
+    "repo": "recall",
+    "title": "Hybrid search service (largest commit)",
+    "kind": "commit",
+    "base": "d9caa4c31b12447718ef86241111631cf1f50f4f",
+    "head": "794321222da902471fe0f92d96dedcdf2a2f06c3",
+    "file": "recall-7943212.json",
+    "regenerate": "d=$(mktemp -d) && git clone -q https://github.com/SunnyBagal/Recall.git \"$d\" && pnpm tracehound changes --repo \"$d\" --diff 7943212^..7943212 --config configs/recall.tracehound.json --out changesets/recall-7943212.json"
+  },
+  {
+    "id": "recall-5d2165a",
+    "repo": "recall",
+    "title": "Blocked-fetch logo, embeddings backfill (median commit)",
+    "kind": "commit",
+    "base": "42ba6f540ab043db751130a1292e5068ef8139fb",
+    "head": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b",
+    "file": "recall-5d2165a.json",
+    "regenerate": "d=$(mktemp -d) && git clone -q https://github.com/SunnyBagal/Recall.git \"$d\" && pnpm tracehound changes --repo \"$d\" --diff 5d2165a^..5d2165a --config configs/recall.tracehound.json --out changesets/recall-5d2165a.json"
+  },
+  {
+    "id": "cex-seed-queue-consumer",
+    "repo": "cex-v2-boilercode",
+    "title": "Seed: queue consumer renames a payload field",
+    "kind": "commit",
+    "base": "da0e3d640a9c02f815fcca48f8328c94558cc058",
+    "head": "c389d3df0cfa45579061ad5c79bd0d852901d664",
+    "file": "cex-seed-queue-consumer.json",
+    "regenerate": "d=$(mktemp -d) && git clone -q https://github.com/SunnyBagal/cex-v2-boilercode.git \"$d\" && git -C \"$d\" fetch -q origin seed/impact-queue-consumer:refs/remotes/origin/seed/impact-queue-consumer && pnpm tracehound changes --repo \"$d\" --diff da0e3d6..origin/seed/impact-queue-consumer --config configs/cex-v2-boilercode.tracehound.json --out changesets/cex-seed-queue-consumer.json"
+  },
+  {
+    "id": "toy-discount-run",
+    "repo": "toy-cart",
+    "title": "Repair run: toy-discount fix (Nemotron, resolved)",
+    "kind": "run",
+    "base": "3582f355e884dc4512ee157ee59848796893ec27",
+    "head": "toy-discount__nemotron__2026-09-30T20-46-41-586Z__62d49a",
+    "file": "toy-discount-run.json",
+    "runRecord": "sources/toy-discount-run.json",
+    "regenerate": "node eval/fixtures/build-toy-repo.ts && pnpm tracehound changes --run changesets/sources/toy-discount-run.json --out changesets/toy-discount-run.json"
+  }
+]

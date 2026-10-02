@@ -1,17 +1,13 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { Snapshot, SnapshotManifest } from "@tracehound/analyzer/schema";
 import { ReactFlowProvider } from "@xyflow/react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { GraphCanvas } from "@/components/GraphCanvas";
 import { permalink } from "@/lib/github";
 import { EDGE_STYLES } from "@/lib/graph";
+import { repoSnapshot } from "./repo-snapshot";
 
-// The committed demo snapshot, loaded exactly as the viewer does: manifest → latest.
-const root = path.resolve(import.meta.dirname, "../../snapshots");
-const manifest = SnapshotManifest.parse(JSON.parse(readFileSync(path.join(root, "index.json"), "utf8")));
-const snapshot = Snapshot.parse(JSON.parse(readFileSync(path.join(root, manifest.latest!.path), "utf8")));
+// The committed CEX demo snapshot, asked for by repo id (not the index's top-level `latest`).
+const snapshot = repoSnapshot("cex-v2-boilercode");
 
 function renderCanvas() {
   return render(
