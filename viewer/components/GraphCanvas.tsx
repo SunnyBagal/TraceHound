@@ -59,7 +59,9 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
   const roles = useMemo(() => (impact ? impactRoles(impact) : null), [impact]);
   const chainEdges = useMemo(() => (impact ? impactEdges(impact) : null), [impact]);
   const base = useMemo(() => buildGraph(snapshot), [snapshot]);
-  const storageKey = `${snapshot.repo.commitSha}:${snapshot.analyzerVersion}`;
+  // positions are per repo (lib/positions.ts); the commit is only used to pick up pre-040 saves
+  const storageKey = snapshot.repo.name;
+  const legacySha = snapshot.repo.commitSha;
   const [nodes, setNodes, onNodesChange] = useNodesState<ComponentNodeType>([]);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [layoutRun, setLayoutRun] = useState(0);
@@ -81,14 +83,14 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusId, focusNonce
       .catch((): Positions => Object.fromEntries(base.nodes.map((n, i) => [n.id, { x: (i % 3) * (NODE_WIDTH + 120), y: Math.floor(i / 3) * (NODE_HEIGHT + 80) }])))
       .then((layout) => {
         if (cancelled) return;
-        const saved = loadPositions(storageKey);
+        const saved = loadPositions(storageKey, legacySha);
         setNodes(base.nodes.map((n) => ({ ...n, position: saved[n.id] ?? layout[n.id] ?? n.position })));
         requestAnimationFrame(() => void fitView(fitRef.current).then(() => !cancelled && setFitted((n) => n + 1)));
       });
     return () => {
       cancelled = true;
     };
-  }, [base, storageKey, setNodes, fitView, layoutRun]);
+  }, [base, storageKey, legacySha, setNodes, fitView, layoutRun]);
 
   // Warnings panel focus: pan to and pulse the component, centred in the part of the canvas the
   // inspector doesn't cover.
