@@ -1515,11 +1515,12 @@ then restored), each group fails: formatting-only as modified (3 tests), no warn
 no component order (2), unchanged not collapsed (3), zero counts kept (3), `?repo=` ignored (1),
 `defaultRepo` back to CEX (2), switching repo keeping `?component=` (2), positions keyed by
 commit:version (3).
-**Analyzer test left failing:** `packages/analyzer/test/agent.test.ts` "context and query take
---repo-id against the committed index" asserts that the default repo's search equals
-`--repo-id cex-v2-boilercode`; with `defaultRepo` = `recall` it fails (it passes with the old
-value). Analyzer code was out of scope for this lane, so it is not edited; the fix is to compare
-against `--repo-id recall` or pass `--repo-id` explicitly.
+**Analyzer test changed (one line):** `packages/analyzer/test/agent.test.ts:224` ("context and
+query take --repo-id against the committed index") asserted that a search without `--repo-id`
+equals `--repo-id cex-v2-boilercode`, i.e. that the default repo is CEX. With `defaultRepo` =
+`recall` it failed, so it now compares against `--repo-id recall`. It still fails if the default
+is anything else (checked by setting `defaultRepo` back to CEX: 1 failed). Nothing else in
+`packages/analyzer` changed.
 **Performance:** largest change set (`recall-7943212`, 26 KB) on a local production build
 (`next build` export served statically, headless Chromium 1440×900, 6 warm runs): navigation to
 the first component node with the summary bar rendered, median **285 ms** (269–288), against
