@@ -1327,3 +1327,22 @@ Test: a reindented, respaced, commented function → `formatting`; a JSDoc-only 
   queue-orphaned warning still fires. Test: a shared `util.ts` whose co-user is deleted keeps
   its `shared` component, and the shared import edge is `regrouped`. With the stable mapping
   reverted, the test fails ("app:app-app" instead).
+**Step 5 · Multi-repo snapshot index.**
+- `snapshots/index.json` gains `repos: [{ id, name, repoUrl, defaultRef, latest, versions[] }]`
+  and `defaultRepo`. The `id` is the repo name's last segment, lowercased
+  (`cex-v2-boilercode`).
+- The old fields stay and keep their meaning for the deployed viewer, which reads only `latest`
+  and `snapshots` and whose `z.object` strips unknown keys. `latest` is now always the default
+  repo's latest, so analyzing a second repo doesn't move what the live site shows.
+  `defaultRepo` is the first repo indexed (the repo of the current `latest` when an old index is
+  upgraded).
+- An index without `repos` (written before 0.9.0) still parses; `reposOf` derives the repos from
+  `snapshots`.
+- `context` and `query` take `--repo-id <id>`. The MCP server takes an optional `repo` argument
+  on every tool, loads each repo's snapshot once on first use, and defaults to `defaultRepo`.
+  `--snapshot <file>` still pins one file, and the MCP server then rejects `repo`.
+- Rejected: replacing `latest` with a map keyed by repo. It would break the live viewer before it
+  redeploys.
+- **Recall is not in the published index.** `SunnyBagal/Recall` main has no LICENSE (GitHub
+  license API: 404; no LICENSE* file at the root, rechecked 2026-10-02). Its snapshot stays under
+  `docs/recall/snapshots/` with its own index.

@@ -7,13 +7,13 @@ import { LexicalDecider, NemotronDecider, type Decider } from "./decider.ts";
 import { getEdgeEvidence, getNeighbors, getRelatedTests, loadSnapshot, QueryError, searchComponents, type Direction } from "./query.ts";
 
 export const QUERY_USAGE = [
-  "usage: tracehound query <tool> [args] [--snapshot <path>] [--json]",
+  "usage: tracehound query <tool> [args] [--snapshot <path> | --repo-id <id>] [--json]",
   "  search_components --query <text>",
   "  get_neighbors --component <id> [--direction in|out|both] [--kinds imports,produces,...]",
   "  get_edge_evidence --edge <edgeId>",
   "  get_related_tests --component <id>",
 ].join("\n");
-export const CONTEXT_USAGE = 'usage: tracehound context --issue "<text>" [--decider lexical|nemotron] [--k 3] [--snapshot <path>] [--budget <tokens>] [--json]';
+export const CONTEXT_USAGE = 'usage: tracehound context --issue "<text>" [--decider lexical|nemotron] [--k 3] [--snapshot <path> | --repo-id <id>] [--budget <tokens>] [--json]';
 
 export async function runContext(argv: string[]): Promise<string> {
   const { values } = parseArgs({
@@ -21,6 +21,7 @@ export async function runContext(argv: string[]): Promise<string> {
     options: {
       issue: { type: "string" },
       snapshot: { type: "string" },
+      "repo-id": { type: "string" },
       budget: { type: "string", default: "2000" },
       json: { type: "boolean", default: false },
       decider: { type: "string", default: "lexical" }, // the evaluation decides whether nemotron becomes the default
@@ -33,7 +34,7 @@ export async function runContext(argv: string[]): Promise<string> {
   if (!values.issue?.trim()) throw new QueryError(CONTEXT_USAGE);
   const budget = Number(values.budget);
   if (!Number.isInteger(budget) || budget <= 0) throw new QueryError(`--budget must be a positive integer (estimated tokens)\n${CONTEXT_USAGE}`);
-  const { snapshot } = loadSnapshot(values.snapshot);
+  const { snapshot } = loadSnapshot(values.snapshot, values["repo-id"]);
   const decider: Decider = values.decider === "nemotron" ? new NemotronDecider(createTokenFactoryClient().client) : new LexicalDecider();
   const decided = await decider.decide({ issue: values.issue, snapshot, k });
   const packet = buildContext(snapshot, values.issue, { budget, decided });
@@ -51,10 +52,11 @@ export function runQuery(argv: string[]): string {
       kinds: { type: "string" },
       edge: { type: "string" },
       snapshot: { type: "string" },
+      "repo-id": { type: "string" },
       json: { type: "boolean", default: false },
     },
   });
-  const { snapshot } = loadSnapshot(values.snapshot);
+  const { snapshot } = loadSnapshot(values.snapshot, values["repo-id"]);
   const need = (v: string | undefined, flag: string) => {
     if (!v) throw new QueryError(`${tool} needs --${flag}\n${QUERY_USAGE}`);
     return v;

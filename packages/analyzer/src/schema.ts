@@ -301,11 +301,28 @@ export const ManifestEntry = z.object({
 });
 export type ManifestEntry = z.infer<typeof ManifestEntry>;
 
-/** snapshots/index.json — the static entry point the viewer loads first. */
+/** One repo in the index (0.9.0): its latest snapshot and every version of it, newest first. */
+export const ManifestRepo = z.object({
+  id: z.string(), // lowercase last segment of the repo name, e.g. "cex-v2-boilercode"
+  name: z.string(), // "SunnyBagal/cex-v2-boilercode"
+  repoUrl: z.string().optional(),
+  defaultRef: z.string(), // the commit the latest snapshot is of
+  latest: ManifestEntry,
+  versions: z.array(ManifestEntry),
+});
+export type ManifestRepo = z.infer<typeof ManifestRepo>;
+
+/**
+ * snapshots/index.json — the static entry point the viewer loads first. `latest` and `snapshots`
+ * are the original fields (the deployed viewer reads only those); since 0.9.0 `latest` always
+ * points at the default repo's latest snapshot, and `repos` / `defaultRepo` index every repo.
+ */
 export const SnapshotManifest = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
   latest: ManifestEntry.nullable(),
   snapshots: z.array(ManifestEntry),
+  defaultRepo: z.string().optional(),
+  repos: z.array(ManifestRepo).optional(),
 });
 export type SnapshotManifest = z.infer<typeof SnapshotManifest>;
 

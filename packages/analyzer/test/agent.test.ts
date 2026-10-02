@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildContext, confidenceOf, formatContext } from "../src/agent/context.ts";
+import { runContext, runQuery } from "../src/agent/cli.ts";
 import { createServer } from "../src/agent/mcp.ts";
 import { getEdgeEvidence, getNeighbors, getRelatedTests, QueryError, searchComponents } from "../src/agent/query.ts";
 import { rankComponents, stem, terms, termsMatch } from "../src/agent/rank.ts";
@@ -179,5 +180,50 @@ describe("tracehound mcp (in-memory transport)", () => {
     const bad = await client.callTool({ name: "get_neighbors", arguments: { componentId: "nope" } });
     expect(bad.isError).toBe(true);
     await client.close();
+  });
+});
+
+describe("repo ids (decision 039)", () => {
+  it("MCP tools take an optional repo; the default repo answers when it's omitted", async () => {
+    const other: Snapshot = { ...snapshot, repo: { ...snapshot.repo, name: "me/other" }, components: snapshot.components.filter((c) => c.id === "orders") };
+    const asked: (string | undefined)[] = [];
+    const server = createServer((repo?: string) => {
+      asked.push(repo);
+      if (repo && repo !== "other") throw new QueryError(`unknown repo id "${repo}"`);
+      return repo === "other" ? other : snapshot;
+    });
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverSide);
+    const client = new Client({ name: "test", version: "0" });
+    await client.connect(clientSide);
+    const ids = async (args: Record<string, unknown>) => {
+      const res = await client.callTool({ name: "search_components", arguments: args });
+      return res.isError ? "error" : (JSON.parse((res.content as { text: string }[])[0]!.text) as { results: { id: string }[] }).results.map((r) => r.id);
+    };
+    expect((await ids({ query: "worker" })) as string[]).toContain("worker:worker-worker");
+    expect(await ids({ query: "orders", repo: "other" })).toEqual(["orders"]);
+    expect(await ids({ query: "orders", repo: "nope" })).toBe("error");
+    expect(asked).toEqual([undefined, "other", "nope"]); // the default is loaded once, at startup
+    await client.close();
+  });
+
+  it("a server started on one snapshot file rejects a repo argument", async () => {
+    const server = createServer(snapshot);
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverSide);
+    const client = new Client({ name: "test", version: "0" });
+    await client.connect(clientSide);
+    const res = await client.callTool({ name: "get_related_tests", arguments: { componentId: "orders", repo: "recall" } });
+    expect(res.isError).toBe(true);
+    await client.close();
+  });
+
+  it("context and query take --repo-id against the committed index", async () => {
+    const q = JSON.parse(runQuery(["search_components", "--query", "engine", "--repo-id", "cex-v2-boilercode", "--json"])) as { results: { id: string }[] };
+    expect(q.results.length).toBeGreaterThan(0);
+    expect(JSON.parse(runQuery(["search_components", "--query", "engine", "--json"]))).toEqual(q); // the default repo is the same one
+    expect(() => runQuery(["search_components", "--query", "engine", "--repo-id", "nope"])).toThrow(/unknown repo id "nope"/);
+    const packet = JSON.parse(await runContext(["--issue", "order matching in the engine", "--repo-id", "cex-v2-boilercode", "--json"])) as { snapshot: { repo: string } };
+    expect(packet.snapshot.repo).toBe("SunnyBagal/cex-v2-boilercode");
   });
 });

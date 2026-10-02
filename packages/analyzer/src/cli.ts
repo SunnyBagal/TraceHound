@@ -115,7 +115,7 @@ const manifestFile = writeManifest(
     analyzerVersion: snapshot.analyzerVersion,
     path: relFile,
     createdAt: snapshot.generatedAt,
-  }),
+  }, { repoUrl: snapshot.repo.url }),
 );
 
 const ms = Math.round(performance.now() - started);

@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { EdgeKind, Snapshot, SnapshotManifest, type Component, type ComponentEdge } from "../schema.ts";
+import { reposOf } from "../manifest.ts";
 import { rankComponents } from "./rank.ts";
 
 export class QueryError extends Error {
@@ -11,18 +12,25 @@ export class QueryError extends Error {
 
 const WORKSPACE_ROOT = path.resolve(import.meta.dirname, "../../../..");
 
-/** --snapshot <file.json>, or the `latest` entry of <workspace>/snapshots/index.json. */
-export function loadSnapshot(file?: string): { snapshot: Snapshot; path: string } {
+/**
+ * `--snapshot <file.json>`, else the latest snapshot of `repoId` in the snapshot index (0.9.0),
+ * else of the index's default repo (`defaultRepo`, or the repo of `latest` in an older index).
+ */
+export function loadSnapshot(file?: string, repoId?: string, indexFile: string = path.join(WORKSPACE_ROOT, "snapshots", "index.json")): { snapshot: Snapshot; path: string; repoId?: string } {
   let target = file;
+  let chosen: string | undefined;
+  if (target && repoId) throw new QueryError("give either a snapshot file or a repo id, not both");
   if (!target) {
-    const index = path.join(WORKSPACE_ROOT, "snapshots", "index.json");
-    if (!existsSync(index)) throw new QueryError(`no --snapshot given and ${index} does not exist`);
-    const manifest = SnapshotManifest.parse(JSON.parse(readFileSync(index, "utf8")));
-    if (!manifest.latest) throw new QueryError(`${index} has no latest snapshot`);
-    target = path.join(path.dirname(index), manifest.latest.path);
+    if (!existsSync(indexFile)) throw new QueryError(`no --snapshot given and ${indexFile} does not exist`);
+    const manifest = SnapshotManifest.parse(JSON.parse(readFileSync(indexFile, "utf8")));
+    const { defaultRepo, repos } = reposOf(manifest);
+    chosen = repoId ?? defaultRepo;
+    const repo = repos.find((r) => r.id === chosen);
+    if (!repo) throw new QueryError(repoId ? `unknown repo id "${repoId}"; the index has: ${repos.map((r) => r.id).join(", ") || "(none)"}` : `${indexFile} has no latest snapshot`);
+    target = path.join(path.dirname(indexFile), repo.latest.path);
   }
   if (!existsSync(target)) throw new QueryError(`snapshot ${target} does not exist`);
-  return { snapshot: Snapshot.parse(JSON.parse(readFileSync(target, "utf8"))), path: target };
+  return { snapshot: Snapshot.parse(JSON.parse(readFileSync(target, "utf8"))), path: target, ...(chosen && { repoId: chosen }) };
 }
 
 const componentOrThrow = (snapshot: Snapshot, id: string): Component => {
