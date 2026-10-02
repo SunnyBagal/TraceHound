@@ -6,7 +6,7 @@
     "url": "https://github.com/SunnyBagal/Recall.git",
     "commitSha": "57d920e4c93b9185c8dbe7350d98633c4732c78e"
   },
-  "generatedAt": "2026-10-02T19:51:40.067Z",
+  "generatedAt": "2026-10-02T20:24:12.443Z",
   "components": [
     {
       "id": "recall-backend:worker",
@@ -312,10 +312,6 @@
         "recall-backend/services/aiProcessor.ts",
         "recall-backend/services/embeddings.ts",
         "recall-backend/services/linkDetector.ts",
-        "recall-backend/test/helpers/app.ts",
-        "recall-backend/test/helpers/db.ts",
-        "recall-backend/test/helpers/network.ts",
-        "recall-backend/test/setup.ts",
         "recall-backend/types/express.d.ts"
       ],
       "entryPoints": [],
@@ -349,22 +345,6 @@
           "reason": "used by Brainly Server, Recall Backend Worker"
         },
         {
-          "file": "recall-backend/test/helpers/app.ts",
-          "reason": "not imported by any entry point; no single owner"
-        },
-        {
-          "file": "recall-backend/test/helpers/db.ts",
-          "reason": "not imported by any entry point; no single owner"
-        },
-        {
-          "file": "recall-backend/test/helpers/network.ts",
-          "reason": "not imported by any entry point; no single owner"
-        },
-        {
-          "file": "recall-backend/test/setup.ts",
-          "reason": "not imported by any entry point; no single owner"
-        },
-        {
           "file": "recall-backend/types/express.d.ts",
           "reason": "not imported by any entry point; no single owner"
         }
@@ -373,13 +353,12 @@
       "envVars": [
         "DATABASE_URL",
         "DRIZZLE_LOGGER",
-        "JWT_SECRET",
         "OPENAI_API_KEY"
       ],
       "counts": {
-        "files": 12,
+        "files": 8,
         "routes": 0,
-        "envVars": 4
+        "envVars": 3
       }
     },
     {
@@ -654,32 +633,6 @@
       "confidence": 1,
       "confidenceLabel": "proven",
       "label": "AnthropicClient, Db, DetectedType +5"
-    },
-    {
-      "id": "recall-backend:shared->recall-backend:brainly-server:imports",
-      "source": "recall-backend:shared",
-      "target": "recall-backend:brainly-server",
-      "kind": "imports",
-      "evidenceIds": [
-        "recall-backend/test/helpers/app.ts#L4-4:imports"
-      ],
-      "weight": 1,
-      "confidence": 1,
-      "confidenceLabel": "proven",
-      "label": "createApp"
-    },
-    {
-      "id": "recall-backend:shared->recall-backend:queue:imports",
-      "source": "recall-backend:shared",
-      "target": "recall-backend:queue",
-      "kind": "imports",
-      "evidenceIds": [
-        "recall-backend/test/helpers/app.ts#L5-5:imports"
-      ],
-      "weight": 1,
-      "confidence": 1,
-      "confidenceLabel": "proven",
-      "label": "ContentQueue"
     },
     {
       "id": "recall-backend:worker->recall-backend:queue:imports",
@@ -13056,22 +13009,6 @@
   ],
   "warnings": [
     {
-      "id": "orphan-file:recall-backend/test/helpers/app.ts",
-      "kind": "orphan-file",
-      "severity": "warning",
-      "file": "recall-backend/test/helpers/app.ts",
-      "componentId": "recall-backend:shared",
-      "message": "recall-backend/test/helpers/app.ts is not imported by any file and is not an entry point (exports 7 symbols nobody uses)"
-    },
-    {
-      "id": "orphan-file:recall-backend/test/setup.ts",
-      "kind": "orphan-file",
-      "severity": "warning",
-      "file": "recall-backend/test/setup.ts",
-      "componentId": "recall-backend:shared",
-      "message": "recall-backend/test/setup.ts is not imported by any file and is not an entry point"
-    },
-    {
       "id": "orphan-file:recall-backend/Usecontent.tsx",
       "kind": "orphan-file",
       "severity": "warning",
@@ -13095,26 +13032,21 @@
       "evidenceIds": [
         "recall-backend/test/ai.test.ts#L5-5:imports",
         "recall-backend/test/ai.test.ts#L6-6:imports",
-        "recall-backend/test/ai.test.ts#L7-7:imports",
-        "recall-backend/test/ai.test.ts#L8-8:imports",
-        "recall-backend/test/ai.test.ts#L9-9:imports"
+        "recall-backend/test/ai.test.ts#L7-7:imports"
       ]
     },
     {
       "file": "recall-backend/test/auth.test.ts",
       "componentId": "recall-backend:shared",
       "evidenceIds": [
-        "recall-backend/test/auth.test.ts#L6-6:imports",
-        "recall-backend/test/auth.test.ts#L7-7:imports"
+        "recall-backend/test/auth.test.ts#L6-6:imports"
       ]
     },
     {
       "file": "recall-backend/test/content.test.ts",
       "componentId": "recall-backend:shared",
       "evidenceIds": [
-        "recall-backend/test/content.test.ts#L5-5:imports",
-        "recall-backend/test/content.test.ts#L6-6:imports",
-        "recall-backend/test/content.test.ts#L7-7:imports"
+        "recall-backend/test/content.test.ts#L5-5:imports"
       ]
     },
     {
@@ -13132,13 +13064,6 @@
       ]
     },
     {
-      "file": "recall-backend/test/metadataFetcher.test.ts",
-      "componentId": "recall-backend:shared",
-      "evidenceIds": [
-        "recall-backend/test/metadataFetcher.test.ts#L6-6:imports"
-      ]
-    },
-    {
       "file": "recall-backend/test/search.test.ts",
       "componentId": "recall-backend:brainly-server",
       "evidenceIds": [
@@ -13149,18 +13074,14 @@
       "file": "recall-backend/test/search.test.ts",
       "componentId": "recall-backend:shared",
       "evidenceIds": [
-        "recall-backend/test/search.test.ts#L5-5:imports",
-        "recall-backend/test/search.test.ts#L7-7:imports",
-        "recall-backend/test/search.test.ts#L8-8:imports"
+        "recall-backend/test/search.test.ts#L5-5:imports"
       ]
     },
     {
       "file": "recall-backend/test/share.test.ts",
       "componentId": "recall-backend:shared",
       "evidenceIds": [
-        "recall-backend/test/share.test.ts#L4-4:imports",
-        "recall-backend/test/share.test.ts#L5-5:imports",
-        "recall-backend/test/share.test.ts#L6-6:imports"
+        "recall-backend/test/share.test.ts#L4-4:imports"
       ]
     },
     {
@@ -13168,9 +13089,7 @@
       "componentId": "recall-backend:shared",
       "evidenceIds": [
         "recall-backend/test/worker.test.ts#L10-10:imports",
-        "recall-backend/test/worker.test.ts#L6-6:imports",
-        "recall-backend/test/worker.test.ts#L8-8:imports",
-        "recall-backend/test/worker.test.ts#L9-9:imports"
+        "recall-backend/test/worker.test.ts#L6-6:imports"
       ]
     },
     {

@@ -11,7 +11,7 @@ on a canvas. Later: a graph-guided repair agent.
 - **Built:** analyzer 0.10.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
   BullMQ queues; anchor-reach grouping; `tracehound.json` overrides, `ignore` and `entryPoints`;
   orphan and queue warnings; `proven` / `resolved-default` / `dynamic` labels; TESTS links from
-  test files; per-file `chars`; error-message literals) → static snapshots + manifest → viewer
+  test files; non-test files under `test/`, `tests/`, `__tests__/` are test support, in no component; per-file `chars`; error-message literals) → static snapshots + manifest → viewer
   (React Flow + ELK, node/edge inspectors, GitHub permalinks, warnings panel, phone bottom sheet).
   Published snapshots (`snapshots/`; older files are kept): CEX @ `da0e3d6` and Recall @ `5d2165a`,
   both analyzer 0.10.0.
@@ -58,8 +58,8 @@ on a canvas. Later: a graph-guided repair agent.
   outcomes in `test/harness-recall.test.ts` (Docker + `TRACEHOUND_NETWORK_TESTS=1`). At
   `57d920e` the queue is injected through `createApp`; since `bullmq-queues@0.2` (decision 042)
   the API -produces-> queue edge is `resolved-default` with three evidence sites (it was missing
-  at 0.9.0). The `57d920e` snapshot is `eval/snapshots/57d920e…/0.10.0.json` (heuristic names,
-  not published), which the smoke task names for `--graph on`.
+  at 0.9.0). The `57d920e` snapshot is `eval/snapshots/57d920e…/0.10.0.json` (7 components, 6 edges,
+  2 orphan warnings; heuristic names, not published), which the smoke task names for `--graph on`.
 - **Impact (feature 4, CLI only):** `pnpm tracehound impact --repo <path> --diff <base>..<head>
   [--depth 2] [--json]` → changed/affected components with evidence chains (decision 023).
   Needs a current-version snapshot of `<base>` in `snapshots/` (the error prints the regenerate

@@ -6,7 +6,7 @@
     "url": "https://github.com/SunnyBagal/Recall",
     "commitSha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b"
   },
-  "generatedAt": "2026-10-02T19:49:14.280Z",
+  "generatedAt": "2026-10-02T20:24:11.501Z",
   "components": [
     {
       "id": "recall-backend:worker",
@@ -9693,7 +9693,7 @@
       "purpose": "component-naming",
       "componentId": "bullmq:content-processing",
       "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-      "latencyMs": 1,
+      "latencyMs": 0,
       "promptTokens": 229,
       "completionTokens": 30,
       "totalTokens": 259,

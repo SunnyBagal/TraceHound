@@ -250,6 +250,53 @@ describe("bullmq-queues@0.2: a queue that reaches the producer through a paramet
   });
 });
 
+describe("test support: non-test files under test/, tests/ or __tests__/ (decision 042)", () => {
+  const FILES = {
+    "src/api.ts": 'import { greet } from "./greet.ts";\nexport function buildApp() {\n  return { hello: () => greet("x") };\n}\nbuildApp();\n',
+    "src/greet.ts": "export const greet = (n: string) => `hi ${n}`;\n",
+    // a helper that imports the app entry, a preload nothing imports, and a real test using the helper
+    "test/helpers/app.ts": 'import { buildApp } from "../../src/api.ts";\nexport const makeApp = () => buildApp();\n',
+    "test/setup.ts": 'process.env.MODE = "test";\n',
+    "test/app.test.ts": 'import { makeApp } from "./helpers/app.ts";\nimport { greet } from "../src/greet.ts";\nmakeApp();\ngreet("t");\n',
+    "tests/fixtures/data.ts": "export const rows = [1, 2];\n",
+  };
+
+  it("they are in no component, draw no component edges and get no orphan warnings; their facts are kept", () => {
+    const s = analyze(FILES);
+    const support = ["test/helpers/app.ts", "test/setup.ts", "tests/fixtures/data.ts"];
+    expect(s.components.flatMap((c) => c.files).sort()).toEqual(["src/api.ts", "src/greet.ts"]);
+    for (const file of support) expect(s.components.some((c) => c.files.includes(file))).toBe(false);
+    expect(s.edges).toEqual([]); // one component: the helper's import of the entry draws nothing
+    expect(s.warnings).toEqual([]);
+    // facts stay: the helper's import is still recorded, with evidence
+    expect(s.files.find((f) => f.path === "test/helpers/app.ts")!.imports[0]).toMatchObject({ target: "src/api.ts" });
+    // TESTS links come from test files only, to components they import directly
+    expect(s.tests.map((t) => [t.file, t.componentId])).toEqual([["test/app.test.ts", componentOf(s, "src/greet.ts")]]);
+  });
+
+  it("without the rule's directories the same files are source (a control): src/helpers is grouped and an unimported file is an orphan", () => {
+    const s = analyze({ "src/api.ts": FILES["src/api.ts"], "src/greet.ts": FILES["src/greet.ts"], "src/helpers/app.ts": 'import { buildApp } from "../api.ts";\nexport const makeApp = () => buildApp();\n' });
+    expect(s.components.some((c) => c.files.includes("src/helpers/app.ts"))).toBe(true);
+    expect(s.warnings.map((w) => w.kind)).toEqual(["orphan-file"]);
+  });
+
+  it("a fake wired in from a test helper is still named in the add site's evidence, and creates nothing", () => {
+    const s = analyze({
+      "src/queues.ts": 'import { Queue } from "bullmq";\nexport const emails = new Queue("emails");\n',
+      "src/app.ts": 'export function buildApp(deps: { mailer: { add(name: string, data: unknown): Promise<unknown> } }) {\n  return (to: string) => deps.mailer.add("welcome", { to });\n}\n',
+      "src/api.ts": 'import { buildApp } from "./app.ts";\nimport { emails } from "./queues.ts";\nawait buildApp({ mailer: emails })("a@b.c");\n',
+      "src/worker.ts": WORKER,
+      "test/helpers/app.ts": 'import { buildApp } from "../../src/app.ts";\nexport const fakeApp = () => buildApp({ mailer: { add: async () => undefined } });\n',
+    });
+    const fact = s.files.find((f) => f.path === "src/app.ts")!.queueOps![0]!;
+    expect(fact).toMatchObject({ queue: { value: "emails" }, resolution: "resolved-default", wiredAt: ["src/api.ts:3"] });
+    expect(evidence(s, fact.evidenceId).detail).toContain("1 other call site passes something that is not a BullMQ Queue (test/helpers/app.ts:2)");
+    expect(s.components.some((c) => c.files.includes("test/helpers/app.ts"))).toBe(false);
+    expect(s.edges.filter((e) => e.evidenceIds.some((id) => id.startsWith("test/")))).toEqual([]);
+    expect(s.warnings).toEqual([]);
+  });
+});
+
 describe("tracehound.json name-only overrides and summary: false (0.7.0)", () => {
   it("renames by component id without pinning files (no model naming for it), drops summaries, and warns on unknown ids", () => {
     const s = analyze({

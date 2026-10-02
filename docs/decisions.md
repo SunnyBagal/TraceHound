@@ -1727,7 +1727,7 @@ The add site's evidence also names the test helper's call (`recall-backend/test/
 as passing something that is not a Queue. Components are unchanged; edges 7 → 8; warnings 5 → 4.
 At the published `5d2165a` this edge was `proven`; at `57d920e` it is `resolved-default`, which
 is what the code now supports.
-**Step 4, reported, not fixed** (Recall `57d920e`):
+**Step 4, as found before the addendum below** (Recall `57d920e`):
 - `recall-backend/test/*.test.ts` (8 files) are in no component; they are `tests` links.
   `test/helpers/app.ts`, `helpers/db.ts`, `helpers/network.ts` and `test/setup.ts` don't match
   the test-file pattern (`*.test|spec.*`, `__tests__/`), so they are source files and land in
@@ -1768,6 +1768,38 @@ nothing tuned): `--agent nemotron --graph on`, agent-v4, Nano, reasoning on → 
 steps, 22 calls, 144,815 tokens (133,783 in / 11,032 out), $0.01067, 111 s. **The agent made no
 graph tool calls** (`graphCalls: []`), so this run says nothing about the graph; it shows that a
 graph-on run on Recall starts and reaches a verdict. Ledger: $0.33144 → $0.34212.
+**Addendum (same branch, still 0.10.0): test support files, and recorded paths.**
+- **Test support.** A non-test file under a directory named `test`, `tests` or `__tests__`
+  (helpers, fixtures, a preload) is handled like a test file: it keeps its facts and evidence
+  but is in no component, so it draws no component edge and gets no orphan warning
+  (`isTestSupportFile` in `aggregate/tests.ts`; the rule is the directory name, nothing
+  repo-specific). It makes **no** TESTS link: it is not a test, and `get_related_tests` should
+  not offer a helper as one. A queue wired in from such a file is still a call site: fixture b
+  is unchanged, and a new fixture puts the fake in `test/helpers/` and still finds it named in
+  the add site's evidence.
+  - Fixtures (`test/bullmq.test.ts`): a helper that imports the app entry, a preload nothing
+    imports and a `tests/fixtures` file → in no component, no edges, no warnings, facts kept; the
+    same helper under `src/` is still grouped and an unimported file is still an orphan.
+  - **Recall `57d920e`** (`eval/snapshots/`), before → after: `shared` 12 → 8 files, edges
+    8 → 6 (`shared → brainly-server` and `shared → queue`, whose only evidence was
+    `test/helpers/app.ts`, are gone), warnings 4 → 2 (the orphans `test/helpers/app.ts` and
+    `test/setup.ts`). No edge was added or changed; the produces edge keeps its three evidence
+    sites and still names `recall-backend/test/helpers/app.ts:119` as the non-Queue call site.
+  - **Consequence for TESTS links:** imports of a helper no longer count. Links 11 → 10:
+    `metadataFetcher.test.ts → shared` existed only through a helper; six other links to
+    `shared` lose their helper imports as evidence. Tests that reach the API only through
+    `helpers/app.ts` have no link to `brainly-server` (they had none before either). Following
+    a test through its helpers to the components they import is not done (backlog).
+- **Recorded paths.** Snapshots never held machine paths. Change sets did: `repo.path` (the
+  temp clone) is no longer written (optional in the schema, so older files still parse), and
+  `config` is relative to the repo when it lives there, else to where the command ran
+  (`configs/recall.tracehound.json`). `nodeModules` was already repo-relative. `repo.name` of a
+  `--run` change set is still the CLI's temp-copy name (a decision 040 CLI gap, unchanged).
+- **Regenerated again, against this branch's previous files:** CEX `da0e3d6` and Recall
+  `5d2165a` snapshots differ only in timestamps (neither has non-test files under a test
+  directory); the Recall produces edge at `5d2165a` is still `proven`. The five change sets
+  differ in `repo.path` (gone), `config` (relative; the toy's has none) and runtime; edges,
+  warnings and rollups are identical. No spend.
 **Limitations:** one hop; named functions only (no methods, no callbacks); the argument must be
 resolvable at the call site (an object literal for a property); call sites in ignored files
 count; a non-Queue site outside test files is treated like a fake (named in evidence, no

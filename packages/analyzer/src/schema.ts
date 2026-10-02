@@ -488,7 +488,8 @@ export type ChangeWarning = z.infer<typeof ChangeWarning>;
 export const ChangeSet = z.object({
   schemaVersion: z.literal(CHANGESET_SCHEMA_VERSION),
   analyzerVersion: z.string(),
-  repo: z.object({ name: z.string(), path: z.string() }),
+  /** `path` was the checkout's absolute path before 0.10.0; it is no longer written. */
+  repo: z.object({ name: z.string(), path: z.string().optional() }),
   base: z.object({ ref: z.string(), sha: z.string() }),
   head: z.union([z.object({ ref: z.string(), sha: z.string() }), z.object({ run: z.object({ runId: z.string(), taskId: z.string(), patchSha256: z.string() }) })]),
   config: z.string().optional(),

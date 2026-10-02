@@ -28,9 +28,10 @@ built.
   warning).
 - An unseen-repo check for the parameter-hop resolution (decision 042): Recall's seams prompted
   it, so Recall doesn't count; same held-out repo as the detector's check above.
-- Test helpers that aren't `*.test.*` (Recall's `test/helpers/*.ts`, `test/setup.ts`) are grouped
-  as source: they land in `shared`, draw `shared → brainly-server` and `shared → queue` import
-  edges, and two get orphan warnings (decision 042, step 4). Needs a rule for test-support files.
+- TESTS links through test helpers: a test that reaches a component only through a helper under
+  `test/` (Recall's API tests via `test/helpers/app.ts`) has no link to it (decision 042).
+- A package whose own source lives under a directory named `test`/`tests` would be treated as
+  test support (decision 042); no such repo has been seen.
 
 ## Repair harness
 - The Recall `57d920e` snapshot in `eval/snapshots/` has heuristic names (the naming cache has no

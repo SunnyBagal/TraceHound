@@ -6,7 +6,7 @@
     "url": "https://github.com/SunnyBagal/cex-v2-boilercode.git",
     "commitSha": "da0e3d640a9c02f815fcca48f8328c94558cc058"
   },
-  "generatedAt": "2026-10-02T19:49:12.438Z",
+  "generatedAt": "2026-10-02T20:24:09.657Z",
   "components": [
     {
       "id": "redis-rpc-bridge",
@@ -5325,7 +5325,7 @@
       "purpose": "component-naming",
       "componentId": "backend:auth-api",
       "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-      "latencyMs": 1,
+      "latencyMs": 0,
       "promptTokens": 330,
       "completionTokens": 36,
       "totalTokens": 366,
@@ -5338,7 +5338,7 @@
       "purpose": "component-naming",
       "componentId": "backend:exchange-api",
       "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-      "latencyMs": 1,
+      "latencyMs": 0,
       "promptTokens": 325,
       "completionTokens": 34,
       "totalTokens": 359,
@@ -5351,7 +5351,7 @@
       "purpose": "component-naming",
       "componentId": "backend:shared",
       "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-      "latencyMs": 1,
+      "latencyMs": 0,
       "promptTokens": 332,
       "completionTokens": 39,
       "totalTokens": 371,

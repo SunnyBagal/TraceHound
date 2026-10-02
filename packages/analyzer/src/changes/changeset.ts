@@ -275,12 +275,12 @@ export function computeChangeSet(input: ChangeSetInput): ChangeSet {
     const changeSet: ChangeSet = {
       schemaVersion: CHANGESET_SCHEMA_VERSION,
       analyzerVersion: ANALYZER_VERSION,
-      repo: { name: head.snapshot.repo.name, path: repo },
+      repo: { name: head.snapshot.repo.name },
       base: { ref: input.base, sha: baseSha },
       head: input.run
         ? { run: { runId: input.run.runId, taskId: input.run.taskId, patchSha256: createHash("sha256").update(input.run.patch).digest("hex") } }
         : { ref: input.head!, sha: headSha! },
-      ...(configPath && { config: configPath }),
+      ...(configPath && { config: recordedPath(configPath, repo) }),
       nodeModules: linked,
       ...result,
       stats: { ...result.stats, runtimeMs: Math.round(performance.now() - started) },
@@ -291,6 +291,16 @@ export function computeChangeSet(input: ChangeSetInput): ChangeSet {
     baseTree.remove();
     headTree.remove();
   }
+}
+
+/** A path as written into a change set: relative to the repo when inside it, else to where the command ran; never this machine's directories. */
+function recordedPath(file: string, repo: string): string {
+  const inside = (rel: string) => !rel.startsWith("..") && !path.isAbsolute(rel);
+  const abs = path.resolve(file);
+  const fromRepo = path.relative(path.resolve(repo), abs);
+  if (inside(fromRepo)) return fromRepo;
+  const fromCwd = path.relative(process.cwd(), abs);
+  return inside(fromCwd) ? fromCwd : path.basename(abs);
 }
 
 function build(base: TreeSide, head: TreeSide, hunks: Map<string, FileHunks>): Omit<ChangeSet, "schemaVersion" | "analyzerVersion" | "repo" | "base" | "head" | "config" | "nodeModules" | "limitations" | "stats"> & { stats: Omit<ChangeSet["stats"], "runtimeMs"> } {
