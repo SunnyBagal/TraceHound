@@ -221,7 +221,7 @@ describe("repo ids (decision 039)", () => {
   it("context and query take --repo-id against the committed index", async () => {
     const q = JSON.parse(runQuery(["search_components", "--query", "engine", "--repo-id", "cex-v2-boilercode", "--json"])) as { results: { id: string }[] };
     expect(q.results.length).toBeGreaterThan(0);
-    expect(JSON.parse(runQuery(["search_components", "--query", "engine", "--json"]))).toEqual(q); // the default repo is the same one
+    expect(JSON.parse(runQuery(["search_components", "--query", "engine", "--json"]))).toEqual(JSON.parse(runQuery(["search_components", "--query", "engine", "--repo-id", "recall", "--json"]))); // the default repo is defaultRepo (recall since decision 040)
     expect(() => runQuery(["search_components", "--query", "engine", "--repo-id", "nope"])).toThrow(/unknown repo id "nope"/);
     const packet = JSON.parse(await runContext(["--issue", "order matching in the engine", "--repo-id", "cex-v2-boilercode", "--json"])) as { snapshot: { repo: string } };
     expect(packet.snapshot.repo).toBe("SunnyBagal/cex-v2-boilercode");

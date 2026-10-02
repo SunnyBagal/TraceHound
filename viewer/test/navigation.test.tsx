@@ -1,14 +1,10 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { Snapshot, SnapshotManifest } from "@tracehound/analyzer/schema";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { Viewer } from "@/components/Viewer";
 import { back, entryFromSearch, jump, push, searchFor, stackFromState, withTab, type Stack } from "@/lib/navigation";
+import { repoSnapshot } from "./repo-snapshot";
 
-const root = path.resolve(import.meta.dirname, "../../snapshots");
-const manifest = SnapshotManifest.parse(JSON.parse(readFileSync(path.join(root, "index.json"), "utf8")));
-const snapshot = Snapshot.parse(JSON.parse(readFileSync(path.join(root, manifest.latest!.path), "utf8")));
+const snapshot = repoSnapshot("cex-v2-boilercode");
 
 const AUTH = "backend:auth-api";
 const authEdge = snapshot.edges.find((e) => e.source === AUTH)!;

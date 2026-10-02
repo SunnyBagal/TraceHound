@@ -1,0 +1,464 @@
+{
+  "schemaVersion": 2,
+  "analyzerVersion": "0.9.0",
+  "repo": {
+    "name": "SunnyBagal/Recall",
+    "path": "/var/folders/5y/x6df6srs1x185pb1vqytnkn80000gn/T/tmp.0xF8DvayId"
+  },
+  "base": {
+    "ref": "5d2165a",
+    "sha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b"
+  },
+  "head": {
+    "ref": "bcfaa67f33958eb517d1dc9e8a7fff52a0072002",
+    "sha": "bcfaa67f33958eb517d1dc9e8a7fff52a0072002"
+  },
+  "config": "/Users/sunny/Projects/tracehound-ui/configs/recall.tracehound.json",
+  "nodeModules": [],
+  "components": [
+    {
+      "id": "bullmq:content-processing",
+      "name": "content-processing queue",
+      "declarations": {
+        "added": 0,
+        "modified": 0,
+        "removed": 0,
+        "formatting": 0
+      },
+      "edges": {
+        "crossComponentAdded": 0,
+        "crossComponentRemoved": 0,
+        "crossProcessAdded": 0,
+        "crossProcessRemoved": 0
+      },
+      "componentEdges": {
+        "added": [],
+        "removed": [
+          "bullmq:content-processing->recall-backend:worker:consumes"
+        ],
+        "regrouped": []
+      }
+    },
+    {
+      "id": "recall-backend:brainly-server",
+      "name": "Brainly Server",
+      "declarations": {
+        "added": 0,
+        "modified": 0,
+        "removed": 0,
+        "formatting": 0
+      },
+      "edges": {
+        "crossComponentAdded": 0,
+        "crossComponentRemoved": 0,
+        "crossProcessAdded": 0,
+        "crossProcessRemoved": 0
+      },
+      "componentEdges": {
+        "added": [],
+        "removed": [],
+        "regrouped": [
+          "recall-backend:shared->recall-backend:brainly-server:imports",
+          "recall-backend:brainly-server->recall-backend:shared:imports"
+        ]
+      }
+    },
+    {
+      "id": "recall-backend:queue",
+      "name": "Queue Config",
+      "declarations": {
+        "added": 0,
+        "modified": 0,
+        "removed": 0,
+        "formatting": 0
+      },
+      "edges": {
+        "crossComponentAdded": 0,
+        "crossComponentRemoved": 0,
+        "crossProcessAdded": 0,
+        "crossProcessRemoved": 0
+      },
+      "componentEdges": {
+        "added": [],
+        "removed": [
+          "recall-backend:worker->recall-backend:queue:imports"
+        ],
+        "regrouped": []
+      }
+    },
+    {
+      "id": "recall-backend:shared",
+      "name": "Brainly Shared",
+      "declarations": {
+        "added": 0,
+        "modified": 0,
+        "removed": 0,
+        "formatting": 0
+      },
+      "edges": {
+        "crossComponentAdded": 0,
+        "crossComponentRemoved": 2,
+        "crossProcessAdded": 0,
+        "crossProcessRemoved": 0
+      },
+      "componentEdges": {
+        "added": [],
+        "removed": [],
+        "regrouped": [
+          "recall-backend:shared->recall-backend:brainly-server:imports",
+          "recall-backend:brainly-server->recall-backend:shared:imports",
+          "recall-backend:worker->recall-backend:shared:imports"
+        ]
+      }
+    },
+    {
+      "id": "recall-backend:worker",
+      "name": "Recall Backend Worker",
+      "declarations": {
+        "added": 0,
+        "modified": 0,
+        "removed": 3,
+        "formatting": 0
+      },
+      "edges": {
+        "crossComponentAdded": 0,
+        "crossComponentRemoved": 3,
+        "crossProcessAdded": 0,
+        "crossProcessRemoved": 1
+      },
+      "componentEdges": {
+        "added": [],
+        "removed": [
+          "bullmq:content-processing->recall-backend:worker:consumes",
+          "recall-backend:worker->recall-backend:queue:imports"
+        ],
+        "regrouped": [
+          "recall-backend:worker->recall-backend:shared:imports"
+        ]
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "recall-backend/worker.ts",
+      "status": "removed",
+      "linesAdded": 0,
+      "linesRemoved": 155,
+      "componentId": "recall-backend:worker",
+      "calls": {
+        "base": {
+          "resolved": 4,
+          "external": 50,
+          "dynamic": 0
+        }
+      }
+    }
+  ],
+  "declarations": [
+    {
+      "id": "recall-backend/worker.ts#<module>",
+      "name": "<module>",
+      "file": "recall-backend/worker.ts",
+      "kind": "module",
+      "exported": false,
+      "status": "removed",
+      "componentId": "recall-backend:worker",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 60
+      },
+      "base": {
+        "file": "recall-backend/worker.ts",
+        "startLine": 1,
+        "endLine": 156
+      }
+    },
+    {
+      "id": "recall-backend/worker.ts#ContentJobData",
+      "name": "ContentJobData",
+      "file": "recall-backend/worker.ts",
+      "kind": "type",
+      "exported": false,
+      "status": "removed",
+      "componentId": "recall-backend:worker",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 3
+      },
+      "base": {
+        "file": "recall-backend/worker.ts",
+        "startLine": 14,
+        "endLine": 16
+      }
+    },
+    {
+      "id": "recall-backend/worker.ts#processContent",
+      "name": "processContent",
+      "file": "recall-backend/worker.ts",
+      "kind": "function",
+      "exported": false,
+      "status": "removed",
+      "componentId": "recall-backend:worker",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 92
+      },
+      "base": {
+        "file": "recall-backend/worker.ts",
+        "startLine": 18,
+        "endLine": 109
+      }
+    },
+    {
+      "id": "recall-backend/services/aiProcessor.ts#generateSummaryAndTags",
+      "name": "generateSummaryAndTags",
+      "file": "recall-backend/services/aiProcessor.ts",
+      "kind": "function",
+      "exported": true,
+      "status": "unchanged",
+      "componentId": "recall-backend:worker",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 0
+      },
+      "base": {
+        "file": "recall-backend/services/aiProcessor.ts",
+        "startLine": 10,
+        "endLine": 59
+      },
+      "head": {
+        "file": "recall-backend/services/aiProcessor.ts",
+        "startLine": 10,
+        "endLine": 59
+      }
+    },
+    {
+      "id": "recall-backend/services/embeddings.ts#generateEmbedding",
+      "name": "generateEmbedding",
+      "file": "recall-backend/services/embeddings.ts",
+      "kind": "function",
+      "exported": true,
+      "status": "unchanged",
+      "componentId": "recall-backend:shared",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 0
+      },
+      "base": {
+        "file": "recall-backend/services/embeddings.ts",
+        "startLine": 7,
+        "endLine": 37
+      },
+      "head": {
+        "file": "recall-backend/services/embeddings.ts",
+        "startLine": 7,
+        "endLine": 37
+      }
+    },
+    {
+      "id": "recall-backend/services/linkDetector.ts#detectLinkType",
+      "name": "detectLinkType",
+      "file": "recall-backend/services/linkDetector.ts",
+      "kind": "function",
+      "exported": true,
+      "status": "unchanged",
+      "componentId": "recall-backend:shared",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 0
+      },
+      "base": {
+        "file": "recall-backend/services/linkDetector.ts",
+        "startLine": 150,
+        "endLine": 189
+      },
+      "head": {
+        "file": "recall-backend/services/linkDetector.ts",
+        "startLine": 150,
+        "endLine": 189
+      }
+    },
+    {
+      "id": "recall-backend/services/textExtractor.ts#extractText",
+      "name": "extractText",
+      "file": "recall-backend/services/textExtractor.ts",
+      "kind": "function",
+      "exported": true,
+      "status": "unchanged",
+      "componentId": "recall-backend:worker",
+      "modifications": [],
+      "lines": {
+        "added": 0,
+        "removed": 0
+      },
+      "base": {
+        "file": "recall-backend/services/textExtractor.ts",
+        "startLine": 43,
+        "endLine": 74
+      },
+      "head": {
+        "file": "recall-backend/services/textExtractor.ts",
+        "startLine": 43,
+        "endLine": 74
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "queue:bullmq:content-processing->recall-backend/worker.ts#<module>:consumes",
+      "from": "queue:bullmq:content-processing",
+      "to": "recall-backend/worker.ts#<module>",
+      "kind": "consumes",
+      "status": "removed",
+      "crossComponent": true,
+      "crossProcess": true,
+      "evidence": [
+        {
+          "side": "base",
+          "file": "recall-backend/worker.ts",
+          "line": 111,
+          "extractor": "bullmq-queues"
+        }
+      ]
+    },
+    {
+      "id": "recall-backend/worker.ts#processContent->recall-backend/services/aiProcessor.ts#generateSummaryAndTags:calls",
+      "from": "recall-backend/worker.ts#processContent",
+      "to": "recall-backend/services/aiProcessor.ts#generateSummaryAndTags",
+      "kind": "calls",
+      "status": "removed",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "base",
+          "file": "recall-backend/worker.ts",
+          "line": 75,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    },
+    {
+      "id": "recall-backend/worker.ts#processContent->recall-backend/services/embeddings.ts#generateEmbedding:calls",
+      "from": "recall-backend/worker.ts#processContent",
+      "to": "recall-backend/services/embeddings.ts#generateEmbedding",
+      "kind": "calls",
+      "status": "removed",
+      "crossComponent": true,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "base",
+          "file": "recall-backend/worker.ts",
+          "line": 91,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    },
+    {
+      "id": "recall-backend/worker.ts#processContent->recall-backend/services/linkDetector.ts#detectLinkType:calls",
+      "from": "recall-backend/worker.ts#processContent",
+      "to": "recall-backend/services/linkDetector.ts#detectLinkType",
+      "kind": "calls",
+      "status": "removed",
+      "crossComponent": true,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "base",
+          "file": "recall-backend/worker.ts",
+          "line": 43,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    },
+    {
+      "id": "recall-backend/worker.ts#processContent->recall-backend/services/textExtractor.ts#extractText:calls",
+      "from": "recall-backend/worker.ts#processContent",
+      "to": "recall-backend/services/textExtractor.ts#extractText",
+      "kind": "calls",
+      "status": "removed",
+      "crossComponent": false,
+      "crossProcess": false,
+      "evidence": [
+        {
+          "side": "base",
+          "file": "recall-backend/worker.ts",
+          "line": 44,
+          "extractor": "calls (ts-morph symbols)"
+        }
+      ]
+    }
+  ],
+  "warnings": [
+    {
+      "id": "queue-orphaned-by-diff:queue:bullmq:content-processing",
+      "kind": "queue-orphaned-by-diff",
+      "rule": "A queue that had both a producer and a consumer at base has only one side at head.",
+      "message": "bullmq:content-processing lost its last consumer: at head it has 1 producer call site(s) and no consumer",
+      "evidence": [
+        {
+          "side": "head",
+          "file": "recall-backend/index.ts",
+          "line": 153,
+          "detail": "remaining producer (bullmq-queues)"
+        },
+        {
+          "side": "base",
+          "file": "recall-backend/worker.ts",
+          "line": 111,
+          "detail": "consumer at base, gone at head (bullmq-queues)"
+        }
+      ]
+    }
+  ],
+  "stats": {
+    "declarations": {
+      "added": 0,
+      "removed": 3,
+      "modified": 0,
+      "formatting": 0,
+      "unchanged": 201
+    },
+    "edges": {
+      "added": 0,
+      "removed": 5,
+      "unchanged": 47
+    },
+    "files": {
+      "added": 0,
+      "removed": 1,
+      "modified": 0
+    },
+    "calls": {
+      "base": {
+        "resolved": 104,
+        "external": 458,
+        "dynamic": 192
+      },
+      "head": {
+        "resolved": 100,
+        "external": 408,
+        "dynamic": 192
+      }
+    },
+    "runtimeMs": 1356
+  },
+  "limitations": [
+    "Renames are not detected: a renamed or moved declaration appears as removed + added (ids are file path + qualified name), and file renames are diffed with --no-renames.",
+    "Return types are compared only where annotated; inferred return types are not compared.",
+    "Bodies, signatures and types are compared as token streams: an edit that only touches whitespace or comments is modification \"formatting\" and doesn't count as modified in the rollups. JSX text is compared with its whitespace collapsed.",
+    "Interfaces, type aliases and enums are declarations (kind type, modification shape); non-exported module-level values and namespaces are not: their edits show as the module's body.",
+    "Call resolution is static (ts-morph symbols). Calls through parameters, locals, element access or untyped values are counted as dynamic per file; calls into packages or the TS lib are counted as external. Neither produces an edge.",
+    "Without a package's or the runtime's types installed, a call is counted external when its receiver chain starts at something imported, typed or constructed from a package, or at an undeclared runtime global from a fixed list (console, crypto, setTimeout, fetch, …); any other free identifier is dynamic.",
+    "Both trees are analyzed in git worktrees with the source checkout's node_modules symlinked in (listed in nodeModules): base and head see the checkout's installed dependency versions, which may differ from what either side's lockfile declares. A checkout without node_modules gets no package or runtime types, and calls on values typed only by them are dynamic.",
+    "Top-level code is one declaration per file (kind module): a change to statements outside any function shows as the module's body, not a finer declaration.",
+    "Route and queue edges come from the existing extractors (http-routes, bullmq-queues, redis) and are attributed to the innermost declaration around their evidence line."
+  ]
+}

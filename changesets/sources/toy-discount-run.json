@@ -1,0 +1,8 @@
+{
+  "note": "Trimmed from a local run record (runs/prompt-i/toy/, gitignored): only the fields `tracehound changes --run` reads. Agent nemotron, final state RESOLVED.",
+  "runId": "toy-discount__nemotron__2026-09-30T20-46-41-586Z__62d49a",
+  "taskId": "toy-discount",
+  "baseSha": "3582f355e884dc4512ee157ee59848796893ec27",
+  "finalState": "RESOLVED",
+  "diff": "diff --git a/src/cart.ts b/src/cart.ts\nindex cd31080..f487312 100644\n--- a/src/cart.ts\n+++ b/src/cart.ts\n@@ -9,7 +9,7 @@ export function subtotal(items: Item[]): number {\n \n /** Apply a percentage discount (0-100) to a total. */\n export function applyDiscount(total: number, percent: number): number {\n-  return total - percent;\n+  return total - total * percent / 100;\n }\n \n /** Total to charge, rounded to cents. */\n"
+}

@@ -1,4 +1,5 @@
 import { Position, type Edge, type Node } from "@xyflow/react";
+import type { ComponentDiff, EdgeDiffStatus, ExtraEdge } from "./changes";
 import type { ImpactRole } from "./impact";
 import { techFacts, type TechFact } from "./tech";
 import type { Component, ComponentEdge, Resolution, Snapshot, Warning } from "./types";
@@ -23,6 +24,10 @@ export type ComponentNodeData = {
   panelHover?: boolean; // an inspector row pointing at this node is hovered/focused
   /** impact mode (?impact=): changed / affected; null = not part of the impact */
   impact?: ImpactRole | null;
+  /** change view (?changes=): the component's rollup; null = the change didn't touch it */
+  change?: ComponentDiff | null;
+  /** change view: the component exists only in the change set (no published snapshot has it) */
+  changeSetOnly?: boolean;
 };
 export type ComponentNode = Node<ComponentNodeData, "component">;
 
@@ -37,6 +42,12 @@ export type EvidenceEdgeData = {
   /** impact mode: this edge is a hop on some affected component's chain */
   onImpactChain?: boolean;
   impactMode?: boolean;
+  /** change view: the component edge's status in the change set's rollup */
+  diff?: EdgeDiffStatus;
+  /** change view: declaration-level edges added/removed between the two components */
+  declEdges?: { added: number; removed: number };
+  /** change view: an added component edge that only the change set knows (no snapshot evidence) */
+  extra?: boolean;
 };
 export type EvidenceEdge = Edge<EvidenceEdgeData, "evidence">;
 
@@ -48,7 +59,7 @@ const handles = [
   { type: "source" as const, position: Position.Right, x: NODE_WIDTH - HANDLE / 2, y: NODE_HEIGHT / 2 - HANDLE / 2, width: HANDLE, height: HANDLE },
 ];
 
-export function buildGraph(snapshot: Snapshot): { nodes: ComponentNode[]; edges: EvidenceEdge[] } {
+export function buildGraph(snapshot: Snapshot, extraEdges: ExtraEdge[] = []): { nodes: ComponentNode[]; edges: EvidenceEdge[] } {
   const nodes: ComponentNode[] = snapshot.components.map((component) => ({
     id: component.id,
     type: "component",
@@ -59,18 +70,33 @@ export function buildGraph(snapshot: Snapshot): { nodes: ComponentNode[]; edges:
     data: { component, warnings: snapshot.warnings.filter((w) => w.componentId === component.id), tech: techFacts(snapshot, component) },
   }));
 
+  // A change set's added component edge carries no snapshot evidence; it is drawn from its id and
+  // labelled as such (EvidenceEdge), and clicking it opens the declaration edges behind it.
+  const extras: ComponentEdge[] = extraEdges.map((x) => ({
+    id: x.id,
+    source: x.source,
+    target: x.target,
+    kind: x.kind as ComponentEdge["kind"],
+    evidenceIds: [],
+    weight: 1,
+    confidence: 0,
+    confidenceLabel: "proven",
+    label: "added at head (change set)",
+  }));
+  const extraIds = new Set(extras.map((e) => e.id));
+  const all = [...snapshot.edges, ...extras];
   const pairKey = (e: ComponentEdge) => [e.source, e.target].sort().join("|");
   const groups = new Map<string, ComponentEdge[]>();
-  for (const e of snapshot.edges) groups.set(pairKey(e), [...(groups.get(pairKey(e)) ?? []), e]);
+  for (const e of all) groups.set(pairKey(e), [...(groups.get(pairKey(e)) ?? []), e]);
 
-  const edges: EvidenceEdge[] = snapshot.edges.map((edge) => {
+  const edges: EvidenceEdge[] = all.map((edge) => {
     const group = groups.get(pairKey(edge))!;
     return {
       id: edge.id,
       source: edge.source,
       target: edge.target,
       type: "evidence",
-      data: { edge, parallelIndex: group.indexOf(edge), parallelCount: group.length },
+      data: { edge, parallelIndex: group.indexOf(edge), parallelCount: group.length, ...(extraIds.has(edge.id) && { extra: true }) },
     };
   });
   return { nodes, edges };

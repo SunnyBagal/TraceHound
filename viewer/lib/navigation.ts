@@ -8,7 +8,7 @@ import type { Snapshot } from "./types";
  * browser history entry (and ?component= / ?edge=), so the back button walks back through the
  * panel. The whole stack rides in history.state, so any history entry restores its breadcrumb.
  */
-export type Tab = "overview" | "files" | "connections" | "evidence";
+export type Tab = "overview" | "files" | "connections" | "evidence" | "changes";
 export type Entry = { type: "node" | "edge"; id: string; tab?: Tab };
 export type Stack = Entry[];
 
@@ -37,7 +37,7 @@ export function entryFromSearch(search: string, snapshot: Snapshot): Entry | nul
   return null;
 }
 
-/** The query string for `entry`, keeping every other parameter (e.g. ?impact=). */
+/** The query string for `entry`, keeping every other parameter (?repo=, ?changes=, ?impact=). */
 export function searchFor(search: string, entry: Entry | undefined): string {
   const params = new URLSearchParams(search);
   params.delete("component");

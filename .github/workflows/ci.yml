@@ -39,9 +39,19 @@ jobs:
       - name: Build static viewer
         run: pnpm --filter @tracehound/viewer build
 
-      - name: Assert the export can load data
+      - name: Assert the export can load data (top-level latest and every repo's latest)
         run: |
           test -f viewer/out/snapshots/index.json || { echo "::error::viewer/out/snapshots/index.json missing"; exit 1; }
-          latest=$(node -p "require('./viewer/out/snapshots/index.json').latest.path")
-          test -f "viewer/out/snapshots/$latest" || { echo "::error::latest snapshot $latest missing from export"; exit 1; }
-          echo "export OK: index.json + $latest"
+          node -e '
+            const fs = require("fs");
+            const dir = "viewer/out/snapshots";
+            const index = JSON.parse(fs.readFileSync(dir + "/index.json", "utf8"));
+            const want = [["latest", index.latest && index.latest.path], ...(index.repos || []).map((r) => ["repo " + r.id, r.latest && r.latest.path])];
+            if (!(index.repos || []).length) { console.log("::error::index.json lists no repos"); process.exit(1); }
+            if (index.defaultRepo && !index.repos.some((r) => r.id === index.defaultRepo)) { console.log("::error::defaultRepo " + index.defaultRepo + " is not in repos"); process.exit(1); }
+            for (const [what, rel] of want) {
+              if (!rel || !fs.existsSync(dir + "/" + rel)) { console.log("::error::" + what + " snapshot " + rel + " missing from export"); process.exit(1); }
+              const snap = JSON.parse(fs.readFileSync(dir + "/" + rel, "utf8"));
+              console.log("export OK: " + what + " → " + rel + " (" + snap.repo.name + ", " + snap.components.length + " components)");
+            }
+          '
