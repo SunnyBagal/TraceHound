@@ -794,3 +794,32 @@ them.
 
 **Spend in Phase 4** (ledger): Nano $0.09448 (first batch, incl. the $0.00179 failed request) +
 $0.18850 (re-run) = $0.28298; Super $0.39121; total **$0.67419**. Ledger $0.91718 → **$1.59137** (cap for this prompt: $4.00, ledger $4.91718).
+
+**Gates** (GIT_* env check printed nothing; nothing else ran): version guard exit 0;
+`TRACEHOUND_NETWORK_TESTS=1 pnpm test` exit 0, analyzer 360 passed (31 files), viewer 88 passed
+(11 files), 844 s; `pnpm typecheck` exit 0; viewer build exit 0; no run record kept. Commit
+`850ac4b`, pushed.
+
+## Phase 5: re-freeze
+
+Rules block re-read at the start. CI for the Phase 4 commit `850ac4b`: see the PR.
+
+**Done:**
+- `docs/freeze.md` rewritten for **agent-v6** (prompt `agent-v5.md` byte-identical, `556861d4…`),
+  with a note that **`eval-freeze` is superseded** (its tag stays), the agent-v6 tool behaviour,
+  and **per-model cost limits per run: Nano $0.10 (the task's limit), Super $0.60 (via
+  `--cost-limit-usd 0.6`)**; every other frozen item re-checked by hash and unchanged (snapshot,
+  prompt files, price table, profile, Dockerfile, image id).
+- README: the agent version line (agent-v4 → agent-v6).
+- CLAUDE.md: the line reserving Super (now: Super only via `--model`, probed on the dev tasks with
+  `--cost-limit-usd 0.6`, not the evaluation's model), the agent-v6 and freeze lines, the spend
+  figure.
+- Tag `eval-freeze-2` on this phase's commit once its gate and CI are green; `eval-freeze` left in
+  place. PR #9 marked ready for review, not merged.
+
+**Scratch worktrees (amendment item 9): not removed.** `git worktree remove` (no `--force`)
+refused all three, as it should: `scratchpad/wt` has uncommitted drafts of Phase 2 (identical to
+what `01dc0f8` committed), `scratchpad/wt3` uncommitted drafts of Phase 3 plus `node_modules`
+symlinks, `scratchpad/wtfreeze` (the `eval-freeze` control) only `node_modules` symlinks.
+`git branch -d wip/agent-v6-phase2` refused because that branch is checked out in `scratchpad/wt`.
+All four are left as they are.

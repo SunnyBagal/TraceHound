@@ -53,7 +53,7 @@ pnpm tracehound repair --task eval/tasks/toy-discount/task.json --agent nemotron
 - `--agent noop` makes no model calls and ends UNRESOLVED (the bug isn't fixed). It checks the
   setup.
 - `--agent nemotron` needs `NEBIUS_API_KEY`; `pnpm tracehound` loads the workspace `.env` itself.
-  It runs agent-v4 on Nemotron Nano with reasoning on (`--reasoning off` to disable); `--graph on`
+  It runs agent-v6 (decision 047; prompt `harness/prompts/agent-v5.md`) on Nemotron Nano with reasoning on (`--reasoning off` to disable); `--graph on`
   adds the architecture-graph tools.
 - Each run writes `runs/<runId>.json` with the state, the diff, every command, tokens and cost,
   and the sandbox it ran in (image id, Docker version, provider version, graph snapshot or

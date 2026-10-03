@@ -3,7 +3,7 @@
 Analyzes a TypeScript repo and renders it as an interactive, evidence-backed component graph
 on a canvas. Later: a graph-guided repair agent.
 
-## Current state (2026-10-03)
+## Current state (2026-10-04)
 - **Live:** https://tracehound-tau.vercel.app (Vercel, Root Directory `viewer`, auto-deploys
   from `main`; leave Output Directory unset). CI (`.github/workflows/ci.yml`) runs the snapshot
   version guard, tests, typecheck, and the viewer build, and checks that `out/snapshots/index.json`
@@ -100,19 +100,29 @@ on a canvas. Later: a graph-guided repair agent.
   agent-v3 (decision 033) added a 4,000-char output cap, a "stuck" stop and one no-edit nudge.
   agent-v4 (decision 034): reasoning on (`--reasoning off` to disable), scratch code in
   `/scratch` outside the repo, edits counted only on base files, agent-added test files removed
-  before verification. **agent-v5 is the default (decision 045):** graph on puts the
+  before verification. agent-v5 (decision 045): graph on puts the
   `tracehound context` packet for the issue in the first message (graph tools stay; graph off
   has neither; same budgets); run records carry `arm`. Its prompt was tuned in two rounds on the
   dev tasks and **round 1's prompt is frozen** (round 2 was reverted). Graph tool calls were 0 in
   every graph-on dev run. Under load Recall's own tests can time out and turn a correct patch
   UNRESOLVED: evaluate with concurrency 1. v1–v4 prompts are kept.
+  **agent-v6 is the default (decision 047):** agent-v5's prompt byte-identical; `str_replace_editor`
+  (never offered) runs as `read_file` / `list_dir` / `edit_file` for the eight argument shapes Nano
+  used, anything else gets the one-line unknown-tool error; `edit_file` retries with trailing
+  whitespace and line endings ignored (exactly one match) before the agent-v2 fallback, and every
+  edit error shows the closest region (≤ 40 lines). Run records add `faultFileRead` (step and tokens
+  to the first read of a seeded file) and `limits`. The Docker test files run one at a time after
+  the rest (`packages/analyzer/vitest.config.ts`); a failing Recall harness test keeps its run
+  record in `runs/test-records/`.
 - **Evaluation runner (decision 046):** `node packages/analyzer/src/harness/evaluate.ts --tasks
-  <dir> [--arms on,off] [--repeats N] [--kind k] [--out dir] [--max-spend-usd x]` → one
-  `tracehound repair` per run, `results.json` + `results.md` (n beside every total, no
-  significance claims). **Frozen for the evaluation: `docs/freeze.md`, tag `eval-freeze`**
-  (analyzer 0.10.0, agent-v5, prompt sha256 `556861d4…`, image
-  `tracehound-sandbox:bun1.4.2-ts5.9.3-2`, Nano, reasoning on, temperature 0, per-test gate on
-  Recall). Build log of that work: `docs/build-log.md`.
+  <dir> [--arms on,off] [--repeats N] [--kind k] [--out dir] [--max-spend-usd x] [--model id]
+  [--cost-limit-usd x]` → one `tracehound repair` per run, `results.json` + `results.md` (n beside
+  every total, no significance claims; end reason, failed edits, unknown-tool calls, time to fault
+  file, baseline tests passed / total with a `baselineAnomaly` flag). **Frozen for the evaluation:
+  `docs/freeze.md`, tag `eval-freeze-2`** (analyzer 0.10.0, agent-v6, prompt sha256 `556861d4…`,
+  image `tracehound-sandbox:bun1.4.2-ts5.9.3-2`, Nano, reasoning on, temperature 0, per-test gate
+  on Recall; per-run cost limit Nano $0.10, Super $0.60). `eval-freeze` (agent-v5) is superseded
+  and kept. Build log: `docs/build-log.md`.
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**
@@ -132,7 +142,7 @@ on a canvas. Later: a graph-guided repair agent.
 - **Naming:** Nano with reasoning off (`chat_template_kwargs.enable_thinking=false`, decision
   020) plus deterministic checks (021). Nano beat Super on cost and tied on checks, so Nano
   stays the default. Naming spend was about $0.043; all-time spend is in `pnpm spend`
-  ($0.917 on 2026-10-03, mostly repair-agent runs). A wrong name is fixed with a
+  ($1.591 on 2026-10-04, mostly repair-agent runs). A wrong name is fixed with a
   `tracehound.json` name override (never labelled model-written); a wrong summary is dropped with
   `summary: false`, never replaced by hand. Audited by hand on 2026-10-01: Recall 5 of 7
   summaries wrong (3 names), CEX 2 of 7 summaries wrong (0 names); fixes are in
@@ -164,7 +174,8 @@ failure, and every call is logged in `snapshot.llmCalls` (model, latency, tokens
 All model calls go through `src/llm/client.ts`: response cache → budget reservation (run cap
 `TRACEHOUND_BUDGET_RUN_USD`=1, total cap `TRACEHOUND_BUDGET_TOTAL_USD`=45) → request → ledger
 (`.tracehound/spend.jsonl`, `pnpm spend`). Nano is the default; Super/Ultra only via explicit
-`--model`, reserved for the final evaluation. Tests must never hit the network or need
+`--model`. Super (`nvidia/nemotron-3-super-120b-a12b`) was probed on the dev tasks with
+`--cost-limit-usd 0.6` (agent-v6 amendment 1, $0.39 for 8 runs); it is not the evaluation's model. Tests must never hit the network or need
 `NEBIUS_API_KEY` (`test/setup.ts` enforces this). Keep `config/prices.json` placeholders until
 real catalog prices are filled in. Unresolved facts (e.g. an import of a generated file that isn't in the
 repo) are recorded as facts but never produce edges.
