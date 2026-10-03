@@ -111,6 +111,13 @@ npx vercel deploy viewer/out --prod              # first run: `npx vercel login`
 
 To serve it under a sub-path, build with `NEXT_PUBLIC_BASE_PATH=/tracehound`.
 
+## Known limits
+- BullMQ queue pairing works when queues are constructed with literal names in plain variables.
+  On ten repos it had never seen, the macro-average pairing rate was 2.1% (4 of 179 producers),
+  with no wrongly named queues and one false edge. Most real code reaches queues through getters,
+  wrapper functions, enum members or runtime-built names. See
+  [study S1](docs/studies/s1-unseen-repos.md).
+
 ## Docs
 - `CLAUDE.md` — stack, product rule, spending rules, roadmap
 - `docs/decisions.md` — every non-obvious choice and the alternative we rejected

@@ -1,6 +1,7 @@
 // Decision 041: the harness on a second repo, through a repo profile with a subdirectory
-// (Recall's backend lives in recall-backend/). A SMOKE task with a seeded one-line bug and
-// scripted patches only: no model, and never an evaluation result.
+// (Recall's backend lives in recall-backend/). SMOKE tasks with seeded bugs and scripted patches
+// only: no model, and never an evaluation result. Decision 043: the per-test regression gate, on a
+// second task whose seed also makes one existing test fail at baseline.
 // Needs Docker and outbound network (GitHub, npm): runs only with TRACEHOUND_NETWORK_TESTS=1 (CI sets it).
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -13,11 +14,14 @@ import { NETWORK_PROBES, REPO_TSC, runRepair, type RunRecord } from "../src/harn
 import { loadTask } from "../src/harness/task.ts";
 
 const DIR = path.resolve(import.meta.dirname, "../../../eval/tasks/recall-smoke-trending");
+const DIR2 = path.resolve(import.meta.dirname, "../../../eval/tasks/recall-smoke-baseline-failing");
 const INSTALL = 'cd "recall-backend" && bun install --frozen-lockfile';
 const TEST = 'cd "recall-backend" && bun test';
 const containerExists = (id: string) => spawnSync("docker", ["ps", "-a", "-q", "--filter", `name=^/${id}$`], { encoding: "utf8" }).stdout.trim() !== "";
-const oracle = (patch: string) => new OracleAgent(readFileSync(path.join(DIR, patch), "utf8"));
-const smoke = (agent: Agent, provider = new LocalDockerProvider()): Promise<RunRecord> => runRepair({ task: loadTask(path.join(DIR, "task.json")), agent, provider, image: SANDBOX_IMAGE });
+const oracle = (patch: string, dir = DIR) => new OracleAgent(readFileSync(path.join(dir, patch), "utf8"));
+const smoke = (agent: Agent, provider = new LocalDockerProvider(), task = loadTask(path.join(DIR, "task.json"))): Promise<RunRecord> => runRepair({ task, agent, provider, image: SANDBOX_IMAGE });
+const LINK = "test/linkDetector.test.ts > detectLinkType >";
+const TSC_BASELINE = "typecheck recall-backend: 5 error(s) at baseline, 5 now"; // Recall's own tsc errors (decision 041)
 
 const docker = dockerAvailable();
 const enabled = docker.ok && process.env.TRACEHOUND_NETWORK_TESTS === "1";
@@ -48,7 +52,11 @@ if (!enabled) {
       expect(at(INSTALL)).toBeLessThan(at(NETWORK_PROBES[0]!));
       expect(at(NETWORK_PROBES[1]!)).toBeLessThan(r.commands.findIndex((c) => c.phase === "REPRODUCING"));
       // the suite passes at the seeded base with the network off; the repo's own tsc ran, and its errors are the baseline
-      expect(r.baseline!.regression).toEqual([{ cmd: TEST, exitCode: 0, timedOut: false }]);
+      expect(r.baseline!.regression).toMatchObject([{ cmd: TEST, exitCode: 0, timedOut: false }]);
+      // per test (decision 043): bun's JUnit report, 62 tests, all passing
+      expect(r.baseline!.regression[0]!.tests).toHaveLength(62);
+      expect(r.baseline!.regression[0]!.tests!.every((t) => t.status === "passed")).toBe(true);
+      expect(r.comparison).toMatchObject({ granularity: "test", regressedTests: [] });
       const base = r.baseline!.typecheck[0]!;
       expect(base).toMatchObject({ package: "recall-backend", command: `bun ${REPO_TSC} --noEmit`, tsc: { source: "repo" } });
       expect(base.errors).toBeGreaterThan(0); // pre-existing errors don't fail a run
@@ -69,7 +77,11 @@ if (!enabled) {
 
     it("3. fixes the reproduction but breaks another test → UNRESOLVED, naming the regression", async () => {
       const r = await smoke(oracle("fix-breaks-test.patch"));
-      expect(r).toMatchObject({ finalState: "UNRESOLVED", reason: `regression "${TEST}" now fails (exit 1; passed at baseline)`, repro: { afterPatch: { exitCode: 0 } } });
+      // decision 043: the reason now names the tests instead of the command
+      expect(r).toMatchObject({ finalState: "UNRESOLVED", repro: { afterPatch: { exitCode: 0 } }, comparison: { granularity: "test" } });
+      expect(r.reason).toBe(
+        `regression "${TEST}": 2 test(s) that passed at baseline now fail or are missing: ${LINK} github repos, including deeper paths; reserved first segments are not repos (failed); ${LINK} input without a scheme gets https://; unparseable input is a link (failed)`,
+      );
     }, 300_000);
 
     it("4. fixes the reproduction but adds a tsc error → UNRESOLVED, naming the new error; the baseline's errors are not counted against it", async () => {
@@ -96,4 +108,41 @@ if (!enabled) {
       for (let i = 0; i < 60 && containerExists(r.sandbox.id!); i++) await new Promise((res) => setTimeout(res, 500));
       expect(containerExists(r.sandbox.id!)).toBe(false);
     }, 300_000);
+
+    describe("decision 043: one existing test already fails at the seeded base", () => {
+      const task2 = () => loadTask(path.join(DIR2, "task.json"));
+      const INSTAGRAM = { file: "test/linkDetector.test.ts", name: "detectLinkType > instagram posts and reels", status: "failed" };
+
+      it("6. fixes the reproduction and breaks two other tests → UNRESOLVED naming them; the already-failing test is not counted", async () => {
+        const r = await smoke(oracle("fix-breaks-test.patch", DIR2), undefined, task2());
+        expect(r).toMatchObject({ finalState: "UNRESOLVED", taskKind: "smoke", repro: { atBase: { exitCode: 1 }, afterPatch: { exitCode: 0 } } });
+        // the suite already fails at baseline: exit codes alone are 1 and 1
+        expect(r.baseline!.regression[0]).toMatchObject({ cmd: TEST, exitCode: 1 });
+        expect(r.final!.regression[0]).toMatchObject({ cmd: TEST, exitCode: 1 });
+        expect(r.baseline!.regression[0]!.tests!.filter((t) => t.status !== "passed")).toEqual([INSTAGRAM]);
+        expect(r.comparison).toMatchObject({ granularity: "test", preExistingFailures: [`regression "${TEST}": 1 test(s) failed at baseline, 1 of them still fail`, TSC_BASELINE] });
+        expect(r.comparison!.regressedTests).toEqual([
+          { cmd: TEST, file: "test/linkDetector.test.ts", name: "detectLinkType > github repos, including deeper paths; reserved first segments are not repos", now: "failed" },
+          { cmd: TEST, file: "test/linkDetector.test.ts", name: "detectLinkType > input without a scheme gets https://; unparseable input is a link", now: "failed" },
+        ]);
+        expect(r.reason).toBe(
+          `regression "${TEST}": 2 test(s) that passed at baseline now fail or are missing: ${LINK} github repos, including deeper paths; reserved first segments are not repos (failed); ${LINK} input without a scheme gets https://; unparseable input is a link (failed)`,
+        );
+      }, 300_000);
+
+      it("7. the correct patch → RESOLVED, the already-failing test still failing", async () => {
+        const r = await smoke(oracle("fix.patch", DIR2), undefined, task2());
+        expect(r).toMatchObject({ finalState: "RESOLVED", reason: "repro passes and nothing fails that passed at baseline", comparison: { granularity: "test", newFailures: [], regressedTests: [] } });
+        expect(r.final!.regression[0]!.tests!.filter((t) => t.status !== "passed")).toEqual([INSTAGRAM]);
+        expect(r.final!.regression[0]!.tests).toHaveLength(62);
+      }, 300_000);
+
+      it("8. the same breaking patch without a test report: exit-code fallback, granularity \"command\", and it passes (the blind spot)", async () => {
+        const t = task2();
+        const { testReport: _dropped, ...profile } = t.profile!;
+        const r = await smoke(oracle("fix-breaks-test.patch", DIR2), undefined, { ...t, profile });
+        expect(r).toMatchObject({ finalState: "RESOLVED", comparison: { granularity: "command", regressedTests: [], preExistingFailures: [`regression "${TEST}" also failed at baseline (exit 1)`, TSC_BASELINE] } });
+        expect(r.baseline!.regression[0]!.tests).toBeUndefined();
+      }, 300_000);
+    });
   });

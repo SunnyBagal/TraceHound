@@ -8,6 +8,8 @@ import { NoopAgent, OracleAgent, type Agent } from "../src/harness/agents.ts";
 import type { ExecResult, SandboxHandle, SandboxProvider } from "../src/harness/provider.ts";
 import { fakeClient } from "./helpers.ts";
 import { checkPlan, RepoProfile } from "../src/harness/profile.ts";
+import { run as runProcess } from "../src/harness/docker.ts";
+import { parseJunit } from "../src/harness/junit.ts";
 import { compareChecks, newTscErrors, parseTscErrors, PREPARE_SCRATCH, REPO_TSC, runRepair, splitChanges, SQUASH_HISTORY, type CheckResults } from "../src/harness/run.ts";
 import { loadTask, type LoadedTask, type TaskSpec } from "../src/harness/task.ts";
 
@@ -321,7 +323,7 @@ describe("typecheck gate: errors are compared with the baseline, not counted (de
   });
 
   it("shifted lines pass: the same errors at other lines and columns are the baseline's", () => {
-    expect(compareChecks(checks(BASE), checks(shift(BASE, 12)))).toEqual({ newFailures: [], preExistingFailures: ["typecheck pkg: 4 error(s) at baseline, 4 now"] });
+    expect(compareChecks(checks(BASE), checks(shift(BASE, 12)))).toEqual({ newFailures: [], preExistingFailures: ["typecheck pkg: 4 error(s) at baseline, 4 now"], granularity: "command", regressedTests: [] });
   });
 
   it("a new error fails, and is named; an equal count doesn't hide it", () => {
@@ -338,7 +340,7 @@ describe("typecheck gate: errors are compared with the baseline, not counted (de
 
   it("a removed baseline error passes", () => {
     const fewer = BASE.split("\n").slice(1).join("\n");
-    expect(compareChecks(checks(BASE), checks(fewer))).toEqual({ newFailures: [], preExistingFailures: ["typecheck pkg: 4 error(s) at baseline, 3 now"] });
+    expect(compareChecks(checks(BASE), checks(fewer))).toEqual({ newFailures: [], preExistingFailures: ["typecheck pkg: 4 error(s) at baseline, 3 now"], granularity: "command", regressedTests: [] });
     expect(compareChecks(checks(BASE), checks("", 0)).newFailures).toEqual([]); // all fixed, tsc exits 0
   });
 
@@ -451,5 +453,176 @@ describe("task.json", () => {
     expect(t.spec).toMatchObject({ setup: [], regression: [], limits: { commandTimeoutMs: 120_000 } });
     writeFileSync(path.join(dir, "task.json"), JSON.stringify({ ...spec, repro: { ...spec.repro, dest: "../escape.test.ts" } }));
     expect(() => loadTask(path.join(dir, "task.json"))).toThrow(/repro.dest must be a path inside the repo/);
+  });
+});
+
+describe("per-test regression gate (decision 043)", () => {
+  type Case = [name: string, status: "passed" | "failed" | "skipped"];
+  /** A report shaped like bun 1.4.2's: a suite per file, a nested suite per describe block. */
+  const junit = (cases: Case[], file = "test/a.test.ts") =>
+    [
+      `<?xml version="1.0" encoding="UTF-8"?>`,
+      `<testsuites name="bun test" tests="${cases.length}">`,
+      `  <testsuite name="${file}" file="${file}" tests="${cases.length}">`,
+      `    <testsuite name="suite" file="${file}" line="3" tests="${cases.length}">`,
+      ...cases.map(([name, status]) =>
+        status === "passed"
+          ? `      <testcase name="${name}" classname="suite" time="0" file="${file}" line="4" assertions="1" />`
+          : `      <testcase name="${name}" classname="suite" time="0" file="${file}" line="4" assertions="1">\n        ${status === "failed" ? `<failure type="AssertionError" message="nope">AssertionError</failure>` : "<skipped />"}\n      </testcase>`,
+      ),
+      `    </testsuite>`,
+      `  </testsuite>`,
+      `</testsuites>`,
+    ].join("\n");
+
+  // baseline (the seeded base): A already fails, B and C pass
+  const BASE: Case[] = [["A", "failed"], ["B", "passed"], ["C", "passed"]];
+  const AFTER: Record<string, Case[] | undefined> = {
+    "fix-only": BASE, // fixes the repro, leaves A failing
+    "fix-and-a": [["A", "passed"], ["B", "passed"], ["C", "passed"]],
+    "breaks-b": [["A", "failed"], ["B", "failed"], ["C", "passed"]],
+    "deletes-c": [["A", "failed"], ["B", "passed"]],
+    "renames-c": [["A", "failed"], ["B", "passed"], ["C renamed", "passed"]],
+    "skips-c": [["A", "failed"], ["B", "passed"], ["C", "skipped"]],
+    "adds-failing-d": [...BASE, ["D", "failed"]],
+    "no-report": undefined,
+    "same-tests": [["B", "passed"], ["C", "passed"]],
+  };
+  const profile = (testReport = true) =>
+    RepoProfile.parse({ id: "sub", workdir: "pkg-a", test: "run-suite", ...(testReport && { testReport: { format: "junit", command: "run-suite --junit $REPORT" } }) });
+  const SUITE = 'cd "pkg-a" && run-suite';
+
+  /** The suite exits 1 whenever a test fails; it writes its report when run with --junit. */
+  function suiteProvider(opts: { base?: Case[]; baseReport?: boolean; exitAfter?: number } = {}) {
+    const provider = new FakeProvider();
+    provider.onExec = (cmd) => {
+      const state = provider.files.get("state");
+      if (cmd.startsWith("run-repro")) return state === undefined ? fail() : ok(); // every scripted patch fixes the repro
+      if (!cmd.includes("run-suite")) return undefined;
+      const cases = state === undefined ? (opts.baseReport === false ? undefined : (opts.base ?? BASE)) : AFTER[state];
+      const out = /--junit (\S+)/.exec(cmd)?.[1];
+      if (out && cases) provider.files.set(out, junit(cases));
+      const code = state !== undefined && opts.exitAfter !== undefined ? opts.exitAfter : (cases ?? opts.base ?? BASE).some(([, s]) => s === "failed") ? 1 : 0;
+      return code ? fail(code) : ok();
+    };
+    // a file that doesn't exist can't be read (the fake's default returns "")
+    const read = provider.readFile.bind(provider);
+    provider.readFile = async (h, p) => {
+      if (!provider.files.has(p)) throw new Error(`readFile ${p} failed: No such file or directory`);
+      return read(h, p);
+    };
+    return provider;
+  }
+  const run = (state: string, opts: { testReport?: boolean; base?: Case[]; baseReport?: boolean; exitAfter?: number } = {}) =>
+    runRepair({ task: { ...task({ regression: [], typecheck: undefined }), profile: profile(opts.testReport) }, agent: writer(state), provider: suiteProvider(opts), image: "img" });
+
+  it("parses bun's JUnit report: file, describe path, status; entities decoded; duplicates numbered; garbage throws", () => {
+    const xml = junit([["x &lt;&amp;&gt; &quot;q&quot;", "passed"], ["two", "failed"], ["two", "passed"], ["s", "skipped"]], "test/b.test.ts").replace(
+      '<testsuite name="suite"',
+      '<testsuite name="outer" file="test/b.test.ts" line="1" tests="4">\n<testsuite name="suite"',
+    ).replace("    </testsuite>\n  </testsuite>", "    </testsuite>\n</testsuite>\n  </testsuite>");
+    expect(parseJunit(xml)).toEqual([
+      { file: "test/b.test.ts", name: 'outer > suite > x <&> "q"', status: "passed" },
+      { file: "test/b.test.ts", name: "outer > suite > two", status: "failed" },
+      { file: "test/b.test.ts", name: "outer > suite > two (2)", status: "passed" },
+      { file: "test/b.test.ts", name: "outer > suite > s", status: "skipped" },
+    ]);
+    // a top-level test (no describe) and an <error> child
+    expect(parseJunit(`<testsuites><testsuite name="t.test.ts" file="t.test.ts"><testcase name="top" file="t.test.ts"><error message="boom"/></testcase></testsuite></testsuites>`)).toEqual([
+      { file: "t.test.ts", name: "top", status: "failed" },
+    ]);
+    expect(() => parseJunit("")).toThrow(/not a JUnit report/);
+    expect(() => parseJunit("62 pass\n0 fail")).toThrow(/not a JUnit report/);
+  });
+
+  it("baseline has failing test A and the patch breaks B → UNRESOLVED naming B (exit-code comparison alone can't see it)", async () => {
+    const r = await run("breaks-b");
+    expect(r.baseline!.regression[0]).toMatchObject({ cmd: SUITE, exitCode: 1, tests: [{ name: "suite > A", status: "failed" }, { name: "suite > B", status: "passed" }, { name: "suite > C", status: "passed" }] });
+    expect(r).toMatchObject({ finalState: "UNRESOLVED", comparison: { granularity: "test", regressedTests: [{ cmd: SUITE, file: "test/a.test.ts", name: "suite > B", now: "failed" }] } });
+    expect(r.reason).toBe(`regression "${SUITE}": 1 test(s) that passed at baseline now fail or are missing: test/a.test.ts > suite > B (failed)`);
+    expect(r.comparison!.preExistingFailures).toEqual([`regression "${SUITE}": 1 test(s) failed at baseline, 1 of them still fail`]);
+    // the report command ran, to a fresh file outside the repo, removed afterwards; the agent was told the plain command
+    const runs = r.commands.filter((c) => c.cmd.includes("run-suite"));
+    expect(runs.map((c) => c.phase)).toEqual(["BASELINE", "VERIFYING"]);
+    for (const c of runs) expect(c.cmd).toMatch(/^rm -f (\/tmp\/\.th-report-[0-9a-f-]{36}\.xml) && cd "pkg-a" && run-suite --junit \1$/);
+    expect(new Set(runs.map((c) => c.cmd)).size).toBe(2);
+    expect(r.plan).toMatchObject({ regression: [SUITE], reports: { [SUITE]: { format: "junit", command: 'cd "pkg-a" && run-suite --junit $REPORT' } } });
+  });
+
+  it("the patch deletes a passing test → UNRESOLVED (missing)", async () => {
+    const r = await run("deletes-c");
+    expect(r).toMatchObject({ finalState: "UNRESOLVED", comparison: { regressedTests: [{ name: "suite > C", now: "missing" }] } });
+  });
+
+  it("the patch renames a passing test → UNRESOLVED: the old name is missing; strict on purpose", async () => {
+    const r = await run("renames-c");
+    expect(r).toMatchObject({ finalState: "UNRESOLVED", comparison: { regressedTests: [{ name: "suite > C", now: "missing" }] } });
+    expect(r.reason).toContain("test/a.test.ts > suite > C (missing)");
+  });
+
+  it("a passing test skipped after the patch is regressed too", async () => {
+    const r = await run("skips-c");
+    expect(r).toMatchObject({ finalState: "UNRESOLVED", comparison: { regressedTests: [{ name: "suite > C", now: "skipped" }] } });
+  });
+
+  it("the patch fixes A, or leaves it failing: no effect on the verdict", async () => {
+    for (const state of ["fix-and-a", "fix-only"]) {
+      const r = await run(state);
+      expect(r).toMatchObject({ finalState: "RESOLVED", comparison: { granularity: "test", newFailures: [], regressedTests: [] } });
+    }
+    expect((await run("fix-and-a")).comparison!.preExistingFailures).toEqual([`regression "${SUITE}": 1 test(s) failed at baseline, 0 of them still fail`]);
+  });
+
+  it("tests added by the patch don't count, even failing ones", async () => {
+    expect(await run("adds-failing-d")).toMatchObject({ finalState: "RESOLVED", comparison: { regressedTests: [] } });
+  });
+
+  it("no report after the patch: every test that passed at baseline is missing", async () => {
+    const r = await run("no-report");
+    expect(r.finalState).toBe("UNRESOLVED");
+    expect(r.final!.regression[0]).toMatchObject({ reportError: "no report written" });
+    expect(r.comparison!.regressedTests.map((t) => [t.name, t.now])).toEqual([["suite > B", "missing"], ["suite > C", "missing"]]);
+    expect(r.reason).toContain("now fail or are missing [no report written]");
+  });
+
+  it("a suite that passed at baseline and now exits non-zero fails the run even if every test still passes", async () => {
+    // e.g. an unhandled error between tests: the same tests pass, the runner exits 1
+    const r = await run("same-tests", { base: [["B", "passed"], ["C", "passed"]], exitAfter: 1 });
+    expect(r.finalState).toBe("UNRESOLVED");
+    expect(r.reason).toBe(`regression "${SUITE}" now fails (exit 1; passed at baseline) though every baseline test still passes`);
+  });
+
+  it("no report available → exit-code fallback, granularity \"command\" (and the blind spot it has)", async () => {
+    // the profile has no testReport
+    const r = await run("breaks-b", { testReport: false });
+    expect(r).toMatchObject({ finalState: "RESOLVED", comparison: { granularity: "command", regressedTests: [], preExistingFailures: [`regression "${SUITE}" also failed at baseline (exit 1)`] } });
+    expect(r.baseline!.regression[0]!.tests).toBeUndefined();
+    expect(r.commands.some((c) => c.cmd.includes("--junit"))).toBe(false);
+    // a testReport is configured, but the runner wrote no report at baseline
+    const r2 = await run("breaks-b", { baseReport: false });
+    expect(r2).toMatchObject({ finalState: "RESOLVED", comparison: { granularity: "command" } });
+    expect(r2.baseline!.regression[0]).toMatchObject({ reportError: "no report written" });
+  });
+
+  it("granularity is \"mixed\" when only some regression commands have a report", () => {
+    const res = (tests?: [string, "passed" | "failed"][]) => ({ cmd: "c", exitCode: 0, timedOut: false, ...(tests && { tests: tests.map(([name, status]) => ({ file: "f", name, status })) }) });
+    expect(compareChecks({ regression: [res([["x", "passed"]]), res()], typecheck: [] }, { regression: [res([["x", "passed"]]), res()], typecheck: [] }).granularity).toBe("mixed");
+  });
+
+  it("profile: testReport needs test and a $REPORT placeholder; checkPlan maps the test command to its report command", () => {
+    expect(() => RepoProfile.parse({ id: "x", testReport: { format: "junit", command: "bun test --reporter=junit --reporter-outfile=$REPORT" } })).toThrow(/testReport needs test/);
+    expect(() => RepoProfile.parse({ id: "x", test: "bun test", testReport: { format: "junit", command: "bun test --reporter=junit" } })).toThrow(/must contain \$REPORT/);
+    expect(checkPlan({ setup: [], regression: ["more"] }, profile())).toEqual({ setup: [], regression: [SUITE, "more"], typecheck: [], reports: { [SUITE]: { format: "junit", command: 'cd "pkg-a" && run-suite --junit $REPORT' } } });
+  });
+});
+
+describe("process runner: a child that exits before reading its stdin", () => {
+  it("is a failed result with the reason in stderr, never an unhandled EPIPE (seen on CI in harness-docker)", async () => {
+    // 8 MB is far more than a pipe buffers, so the write hits a closed pipe
+    const r = await runProcess("sh", ["-c", "exit 0"], { input: "x".repeat(8 * 1024 * 1024), timeoutMs: 10_000 });
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toMatch(/writing stdin failed: .*EPIPE/);
+    // a child that reads its input is unaffected
+    expect(await runProcess("sh", ["-c", "wc -c"], { input: "abc", timeoutMs: 10_000 })).toMatchObject({ exitCode: 0, stdout: expect.stringMatching(/^\s*3\s*$/) });
   });
 });

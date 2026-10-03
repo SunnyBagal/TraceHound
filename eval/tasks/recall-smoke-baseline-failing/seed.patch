@@ -1,0 +1,22 @@
+diff --git a/recall-backend/services/linkDetector.ts b/recall-backend/services/linkDetector.ts
+index 4ccc445..5e868d7 100644
+--- a/recall-backend/services/linkDetector.ts
++++ b/recall-backend/services/linkDetector.ts
+@@ -89,7 +89,7 @@ function detectGitHub(url: URL) : LinkDetectionResult | null {
+   const [owner, repo] = parts;
+   if (!owner || !repo) return null;
+ 
+-  const nonRepoPaths = ["settings", "notifications", "explore", "topics", "trending", "marketplace"];
++  const nonRepoPaths = ["settings", "notifications", "explore", "topics", "marketplace"];
+   if (nonRepoPaths.includes(owner)) return null;
+ 
+   return {
+@@ -102,7 +102,7 @@ function detectGitHub(url: URL) : LinkDetectionResult | null {
+ function detectInstagram(url: URL): LinkDetectionResult | null {
+   if (!url.hostname.includes("instagram.com")) return null;
+ 
+-  const match = url.pathname.match(/\/(p|reel)\/([^/]+)/);
++  const match = url.pathname.match(/\/(p)\/([^/]+)/);
+   if (!match) return null;
+ 
+   return {

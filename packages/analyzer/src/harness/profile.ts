@@ -8,6 +8,17 @@ import { z } from "zod";
 
 /** In a typecheck command: replaced by the tsc the harness picked (the repo's own, else the image's). */
 export const TSC_PLACEHOLDER = "$TSC";
+/** In a test report command: replaced by a fresh file outside the repo that the runner writes its report to. */
+export const REPORT_PLACEHOLDER = "$REPORT";
+
+/** The test suite again, writing a per-test report (decision 043); its exit code still counts like `test`'s. */
+export const TestReport = z
+  .object({
+    format: z.literal("junit"),
+    command: z.string().min(1).refine((c) => c.includes(REPORT_PLACEHOLDER), `command must contain ${REPORT_PLACEHOLDER}`),
+  })
+  .strict();
+export type TestReport = z.infer<typeof TestReport>;
 
 export const RepoProfile = z
   .object({
@@ -24,8 +35,11 @@ export const RepoProfile = z
     test: z.string().min(1).optional(),
     /** The repo's typecheck; `$TSC` is the repo's own tsc from node_modules when present, else the image's. */
     typecheck: z.string().min(1).optional(),
+    /** Per-test results for `test`: without it the regression gate compares exit codes only. */
+    testReport: TestReport.optional(),
   })
-  .strict();
+  .strict()
+  .refine((p) => !p.testReport || p.test, { message: "testReport needs test", path: ["testReport"] });
 export type RepoProfile = z.infer<typeof RepoProfile>;
 
 export function loadProfile(file: string): RepoProfile {
@@ -40,6 +54,8 @@ export interface CheckPlan {
   regression: string[];
   /** Run as `cd <package> && <command>`; a command may contain `$TSC` until the run resolves it. */
   typecheck: { package: string; command: string }[];
+  /** Regression command (as above) → the same suite writing a per-test report; absent = exit code only. */
+  reports?: Record<string, TestReport>;
 }
 
 export const inDir = (dir: string, cmd: string) => (dir === "." ? cmd : `cd ${JSON.stringify(dir)} && ${cmd}`);
@@ -51,9 +67,11 @@ export function checkPlan(
 ): CheckPlan {
   const own = (spec.typecheck?.packages ?? []).map((pkg) => ({ package: pkg, command: spec.typecheck!.command }));
   if (!profile) return { setup: spec.setup, regression: spec.regression, typecheck: own };
+  const test = profile.test && inDir(profile.workdir, profile.test);
   return {
     setup: [...(profile.install ? [inDir(profile.workdir, profile.install)] : []), ...spec.setup],
-    regression: [...(profile.test ? [inDir(profile.workdir, profile.test)] : []), ...spec.regression],
+    regression: [...(test ? [test] : []), ...spec.regression],
     typecheck: [...(profile.typecheck ? [{ package: profile.workdir, command: profile.typecheck }] : []), ...own],
+    ...(test && profile.testReport && { reports: { [test]: { format: profile.testReport.format, command: inDir(profile.workdir, profile.testReport.command) } } }),
   };
 }
