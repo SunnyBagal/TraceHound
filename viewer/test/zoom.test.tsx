@@ -10,20 +10,32 @@ const snapshot = repoSnapshot("cex-v2-boilercode");
 
 // test/setup.ts's ResizeObserver never fires, so React Flow never measures nodes and fitView
 // waits forever. Here it reports each observed element at its offset size, so the canvas's own
-// fit view actually runs.
-const measured = new WeakSet<Element>();
+// fit view actually runs. Like a real observer it reports every element observed since its last
+// callback in one batch: React Flow runs a queued fitView on the first measurement it gets, so
+// one callback per node fitted the first node alone (zoom 1.22) when the canvas's fit was queued
+// before its nodes were measured. And like a real observer, observe() always reports once, so a
+// node React Flow re-observes is measured again.
 class MeasuringResizeObserver {
   cb: ResizeObserverCallback;
+  pending = new Set<HTMLElement>();
   constructor(cb: ResizeObserverCallback) {
     this.cb = cb;
   }
   observe(el: HTMLElement) {
-    if (measured.has(el)) return; // sizes never change here, and a real observer reports only changes
-    measured.add(el);
-    queueMicrotask(() => this.cb([{ target: el, contentRect: { width: el.offsetWidth, height: el.offsetHeight } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver));
+    if (!this.pending.size) queueMicrotask(() => this.deliver());
+    this.pending.add(el);
   }
-  unobserve() {}
-  disconnect() {}
+  deliver() {
+    const entries = [...this.pending].map((el) => ({ target: el, contentRect: { width: el.offsetWidth, height: el.offsetHeight } }) as unknown as ResizeObserverEntry);
+    this.pending.clear();
+    if (entries.length) this.cb(entries, this as unknown as ResizeObserver);
+  }
+  unobserve(el: HTMLElement) {
+    this.pending.delete(el);
+  }
+  disconnect() {
+    this.pending.clear();
+  }
 }
 const shimmed = globalThis.ResizeObserver;
 beforeAll(() => {
