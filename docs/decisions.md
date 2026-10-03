@@ -1984,10 +1984,76 @@ Recall tasks written here (build log, step 0, item 2), so the ids are `recall-de
   | `recall-dev-session-expiry` | RESOLVED (same) | UNRESOLVED, repro still fails (exit 1) |
   | `recall-dev-chat-recent` | RESOLVED (same) | UNRESOLVED, repro still fails (exit 1) |
 
-  The same eight runs are `test/harness-recall-dev.test.ts` (Docker + `TRACEHOUND_NETWORK_TESTS=1`).
+  The same eight runs are the decision 044 block of `test/harness-recall.test.ts` (Docker +
+  `TRACEHOUND_NETWORK_TESTS=1`; first a file of their own, merged in Phase 3 so that no two Recall
+  sandboxes run at once, see decision 045).
 - **Kept out of this repo on purpose:** nothing about Recall's existing behaviour beyond what each
   seed changes; no task is built on an existing bug.
 **Rejected:** (a) Seeds that make an existing test fail: the failing test points at the file, and
 the per-test gate would have one test fewer to watch. (b) Repro tests that call the faulty
 function directly for the cross-component tasks: the queue task's repro goes through the API, as
 the symptom does. (c) Replacing the CEX tasks' ids: they stay the user's.
+
+## 045 · The graph-on arm: the context packet in the first message (agent-v5)
+**Context:** until now "graph on" only added the graph tools and one prompt sentence; in the two
+graph-on smoke runs and the four graph-on baseline runs below the agent never called a graph
+tool. The evaluation compares two arms, so the graph-on arm has to put the graph in front of the
+agent (prompt `docs/prompts/build-to-freeze.md`, Phase 3).
+**Choice (agent-v5, `LOOP_VERSION = "agent-v5"`, `harness/prompts/agent-v5.md`; v1–v4 kept):**
+- **Graph on:** the first user message is the issue, then the context packet for the issue text,
+  then the limits sentence. The packet is exactly what `tracehound context --issue "<issue>"`
+  prints for the task's snapshot (`formatContext(buildContext(…))`, default budget 2,000
+  estimated tokens), built with the run's `--decider` (default lexical: deterministic, no model
+  call; decider-v1 stays frozen). It is preceded by one fixed heading line. The graph tools stay
+  available, and the prompt gets one more `GRAPH:` line saying the packet is there and is a hint
+  from static analysis to be confirmed in the code.
+- **Graph off:** neither the packet nor the tools nor the `GRAPH:` lines. Otherwise the two first
+  messages are the same text.
+- **Budgets are identical:** steps, tokens, wall clock and cost come from the task. The packet
+  costs no step. Its tokens are part of every model call's input, so they count against the
+  token budget like everything else (test: a 1,500-token limit lets graph off start and stops
+  graph on after its first call).
+- **Run record:** `arm { arm: "graph-on" | "graph-off", packetInjected, packetChars,
+  packetTokensEstimated (chars/4), graphToolCalls }`, from the agent once it stops
+  (`Agent.armReport`); scripted agents have none. The trace keeps `packet { injected, chars,
+  tokensEstimated, sha256, decider, confidence }`. The CLI prints an `arm:` line.
+- Everything else is agent-v4's: Nano, reasoning on, temperature 0, guards, nudge, output cap,
+  /scratch, edit accounting.
+**Baseline and tuning** (dev tasks only, Nano, reasoning on, one run per task and arm, both arms of
+a task run at the same time, 2026-10-03, local Docker 29.8.0). Changes were made only to text
+both arms get; the `GRAPH:` lines were not touched. Single runs: the differences below are within
+what one run per cell can show, and no conclusion about the graph is drawn from them.
+
+| Round | Prompt (sha256 of agent-v5.md) | Change | graph-on resolved | graph-off resolved |
+|---|---|---|---|---|
+| baseline | `d1d07e8f…` | — | 1 of 4 | 1 of 4 |
+| 1 | `556861d4…` | a rule to keep outputs small: the token limit runs out first, so search narrowly, read line ranges around hits, don't re-read | 2 of 4 | 3 of 4 |
+| 2 | `644e6477…` | round 1 + "every reply must call a tool; think briefly" | 2 of 4 | 1 of 4 |
+
+- Why these changes: in the baseline 5 of 8 runs ended on the 300,000-token budget at about 30
+  turns (each call resends the conversation); round 1 then had 20 replies without a tool call,
+  6 of them 4,096 output tokens of reasoning with no call.
+- **Round 2 made its own target worse:** replies without a tool call 20 → 38, of them at the
+  output cap 6 → 17 (unknown-tool calls 12 → 9). **The frozen prompt is round 1's**
+  (`556861d4…`), the exact file all eight round-1 runs used: round 2's line is removed, nothing
+  new is added, and there is no third round. This is a choice between two states that were both
+  run, made on round 2's mechanism, not on its resolve count.
+- **Graph tool calls: 0 in all 12 graph-on runs.** The packet in the first message was the only
+  graph input any run used.
+- Full per-run tables are in `docs/build-log.md` (Phase 3).
+- **Finding: load can turn a correct patch into UNRESOLVED.** In the first Phase 3 gate, two
+  Recall test files ran their sandboxes in parallel (with the other Docker files; Docker VM 10
+  CPUs, 8 GB, 2 GB per sandbox). The oracle fix of `recall-dev-session-expiry` came out
+  UNRESOLVED (repro exit 1 after the patch), and in smoke test 6 all five `worker.test.ts` tests
+  were reported missing after the patch. Unloaded, the repro takes about 3.5 s and the suite
+  about 10 s, against bun's 5 s default timeout, which Recall's PGlite setup hooks can exceed when
+  starved. Fix: the dev-task tests moved into `test/harness-recall.test.ts`, so Recall sandboxes
+  run one at a time; the next gate passed. **For evaluation runs this means concurrency 1** (the
+  runner's default, decision 046): the per-test gate is only as reliable as the target suite's
+  timing.
+**Rejected:** (a) Injecting the packet as a fake tool result: it would cost a step in one arm only.
+(b) The JSON packet the `context_packet` tool returns: the CLI's text form is shorter and is what
+"the existing context tool" prints. (c) The nemotron decider for the injected packet: a model call
+in one arm only, and decider-v1 is frozen. (d) Keeping round 2's line because it was the last
+round: it doubled the behaviour it was meant to remove. (e) Tuning `GRAPH:` lines: wording only
+one arm gets.

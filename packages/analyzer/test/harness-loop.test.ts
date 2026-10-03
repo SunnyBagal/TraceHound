@@ -12,17 +12,26 @@ import {
   AGENT_PROMPT_V1_FILE,
   AGENT_PROMPT_V2_FILE,
   AGENT_PROMPT_V3_FILE,
+  AGENT_PROMPT_V4_FILE,
   checkArgs,
   EMPTY_FINISH_MESSAGE,
   formatTestCommands,
   noEditNudge,
+  PACKET_HEADING,
   RepairLoopAgent,
   renderSystemPrompt,
   type LoopTrace,
 } from "../src/harness/loop.ts";
 import { repoStateCommand, runRepair, SQUASH_HISTORY } from "../src/harness/run.ts";
 import { loadTask, type LoadedTask, type TaskSpec } from "../src/harness/task.ts";
-import { capOutput, confinePath, EDIT_FALLBACK_JS, REPO_TOOLS } from "../src/harness/tools.ts";
+import { capOutput, confinePath, EDIT_FALLBACK_JS, GRAPH_TOOLS, REPO_TOOLS } from "../src/harness/tools.ts";
+import { buildContext, formatContext } from "../src/agent/context.ts";
+import { LexicalDecider } from "../src/agent/decider.ts";
+import { NoopAgent } from "../src/harness/agents.ts";
+import { loadSnapshot } from "../src/agent/query.ts";
+
+/** A real snapshot (Recall @ 57d920e, eval/snapshots), so graph-on runs build a real context packet. */
+const RECALL_SNAPSHOT = loadSnapshot(path.resolve(import.meta.dirname, "../../../eval/snapshots/57d920e4c93b9185c8dbe7350d98633c4732c78e/0.10.0.json")).snapshot;
 
 let n = 0;
 const call = (name: string, args: unknown, raw?: string): ToolCall => ({ id: `call-${++n}`, type: "function", function: { name, arguments: raw ?? JSON.stringify(args) } });
@@ -93,14 +102,15 @@ const fakeTask = (limits: Partial<TaskSpec["limits"]> = {}): LoadedTask => ({
 const trace = (r: { agentRun?: { trace?: unknown } }) => r.agentRun!.trace as LoopTrace;
 
 describe("prompt", () => {
-  it("agent-v4 is the default: one frozen file for both conditions; only the GRAPH sentence differs; environment facts identical", () => {
+  it("agent-v5 is the default: one frozen file for both conditions; only the two GRAPH sentences differ; environment facts identical", () => {
     const vars = { TEST_COMMANDS: formatTestCommands(["bun test ./tests", "tsc --noEmit"]) };
     const off = renderSystemPrompt(AGENT_PROMPT_FILE, false, vars);
     const on = renderSystemPrompt(AGENT_PROMPT_FILE, true, vars);
     expect(off.fileSha256).toBe(on.fileSha256);
     expect(on.text.startsWith(off.text)).toBe(true);
-    expect(on.text.slice(off.text.length).trim().split("\n")).toHaveLength(1); // exactly one extra sentence line
-    expect(off.text).not.toMatch(/GRAPH|graph|context_packet|component/);
+    expect(on.text.slice(off.text.length).trim().split("\n")).toHaveLength(2); // the graph tools, and the injected packet (agent-v5)
+    expect(on.text.split("\n").at(-1)).toMatch(/^The first message also contains a context packet built from that graph/);
+    expect(off.text).not.toMatch(/GRAPH|graph|context_packet|component|packet/);
     expect(off.text).toContain("- Test commands for this repository (run from /work):\n  - `bun test ./tests`\n  - `tsc --noEmit`");
     expect(off.text).toMatch(/Not installed: node, npm, npx, yarn, ts-node, ripgrep \(rg\)/);
     expect(() => renderSystemPrompt(AGENT_PROMPT_FILE, false)).toThrow(/no value for \{\{TEST_COMMANDS\}\}/);
@@ -108,18 +118,24 @@ describe("prompt", () => {
     expect(off.text).toContain("- To run scratch code: write the file in /scratch with write_file");
     expect(off.text).toContain("then run it with `bun run /scratch/check.ts`. /scratch is outside the repository and never part of your change. This is the only way to run scratch code.");
     expect(off.text).not.toContain("bun -e");
-    // v1-v3 are kept, and their GRAPH sentence is the same one
-    for (const file of [AGENT_PROMPT_V1_FILE, AGENT_PROMPT_V2_FILE, AGENT_PROMPT_V3_FILE]) expect(renderSystemPrompt(file, true, vars).text.split("\n").at(-1)).toBe(on.text.split("\n").at(-1));
-    expect(new RepairLoopAgent().trace.reasoning).toBe("on"); // agent-v4 default
+    // v1-v4 are kept, and their GRAPH sentence is v5's first one
+    for (const file of [AGENT_PROMPT_V1_FILE, AGENT_PROMPT_V2_FILE, AGENT_PROMPT_V3_FILE, AGENT_PROMPT_V4_FILE]) expect(renderSystemPrompt(file, true, vars).text.split("\n").at(-1)).toBe(on.text.split("\n").at(-2));
+    // v5 only adds lines to v4 (the packet's GRAPH line, and the tuning rounds' lines, which both arms get)
+    const v4 = renderSystemPrompt(AGENT_PROMPT_V4_FILE, true, vars).text.split("\n");
+    const v5 = on.text.split("\n");
+    let at = 0;
+    for (const line of v5) if (line === v4[at]) at++;
+    expect(at).toBe(v4.length);
+    expect(new RepairLoopAgent().trace.reasoning).toBe("on"); // agent-v4 default, kept in v5
     const agent = new RepairLoopAgent({ reasoning: "off" });
-    expect(agent.trace).toMatchObject({ loopVersion: "agent-v4", promptFile: "agent-v4.md", promptSha256: off.fileSha256, graph: false, reasoning: "off", deciderVersion: "decider-v1" });
+    expect(agent.trace).toMatchObject({ loopVersion: "agent-v5", promptFile: "agent-v5.md", promptSha256: off.fileSha256, graph: false, reasoning: "off", deciderVersion: "decider-v1" });
     expect(agent.trace.tools).toEqual(["list_dir", "read_file", "search", "edit_file", "write_file", "run", "finish"]);
   });
 
   it("the rendered prompt (with the task's test commands) and its hash are recorded, the same text with graph off and on", async () => {
     const run = async (graph: boolean) => {
       const { client, requests } = fakeModel(() => [call("finish", { summary: "x" })]);
-      const agent = new RepairLoopAgent(graph ? { graph: { snapshot: { components: [], edges: [], files: [] } as never, decider: "lexical" } } : {});
+      const agent = new RepairLoopAgent(graph ? { graph: { snapshot: RECALL_SNAPSHOT, decider: "lexical" } } : {});
       const r = await runRepair({ task: fakeTask(), agent, provider: new FakeProvider(), image: "img", llm: client });
       return { system: requests[0]!.messages[0]!.content as string, t: trace(r) };
     };
@@ -128,7 +144,63 @@ describe("prompt", () => {
     expect(on.t.testCommands).toEqual(off.t.testCommands);
     expect(off.t.renderedPromptSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(on.system.startsWith(off.system)).toBe(true);
-    expect(on.system.slice(off.system.length).trim().split("\n")).toHaveLength(1);
+    expect(on.system.slice(off.system.length).trim().split("\n")).toHaveLength(2);
+  });
+});
+
+describe("agent-v5: the graph-on arm (decision 045; fake provider, fake model)", () => {
+  const graphOn = () => new RepairLoopAgent({ graph: { snapshot: RECALL_SNAPSHOT, decider: "lexical" } });
+  const firstUser = (requests: ChatRequest[]) => requests[0]!.messages[1]!.content as string;
+  const finishTwice = () => fakeModel(() => [call("finish", { summary: "x" })]);
+
+  it("graph on: the first message carries the context tool's packet for the issue; graph off: the same message without it", async () => {
+    const off = finishTwice();
+    const on = finishTwice();
+    const rOff = await runRepair({ task: fakeTask(), agent: new RepairLoopAgent(), provider: new FakeProvider(), image: "img", llm: off.client });
+    const rOn = await runRepair({ task: fakeTask(), agent: graphOn(), provider: new FakeProvider(), image: "img", llm: on.client });
+    // exactly what `tracehound context --issue <issue>` prints for this snapshot (lexical decider, default budget)
+    const packet = formatContext(buildContext(RECALL_SNAPSHOT, "discounts are wrong", { decided: await new LexicalDecider().decide({ issue: "discounts are wrong", snapshot: RECALL_SNAPSHOT, k: 3 }) }));
+    expect(firstUser(on.requests)).toBe(firstUser(off.requests).replace("\n\nLimits for this task", `\n\n${PACKET_HEADING}\n${packet}\n\nLimits for this task`));
+    expect(firstUser(off.requests)).toBe("Issue:\ndiscounts are wrong\n\nLimits for this task: at most 10 tool calls, 100000 model tokens, 60 s. Start by exploring the repository.");
+    expect(trace(rOn).packet).toEqual({ injected: true, chars: packet.length, tokensEstimated: Math.ceil(packet.length / 4), sha256: expect.stringMatching(/^[0-9a-f]{64}$/), decider: "lexical", confidence: expect.any(String) });
+    expect(trace(rOff).packet).toEqual({ injected: false });
+    expect(rOn.arm).toEqual({ arm: "graph-on", packetInjected: true, packetChars: packet.length, packetTokensEstimated: Math.ceil(packet.length / 4), graphToolCalls: 0 });
+    expect(rOff.arm).toEqual({ arm: "graph-off", packetInjected: false, graphToolCalls: 0 });
+    // graph tools only with graph on; the packet costs no step
+    expect(on.requests[0]!.tools!.map((t) => t.function.name)).toEqual([...REPO_TOOLS, ...GRAPH_TOOLS].map((t) => t.function.name));
+    expect(off.requests[0]!.tools!.map((t) => t.function.name)).toEqual(REPO_TOOLS.map((t) => t.function.name));
+    expect(rOn.agentRun!.steps).toBe(rOff.agentRun!.steps);
+  });
+
+  it("graph tool calls are counted in the record's arm", async () => {
+    const { client } = fakeModel((turn) =>
+      turn === 1 ? [call("search_components", { query: "worker" }), call("get_neighbors", { componentId: "recall-backend:worker" })] : [call("finish", { summary: "x" })],
+    );
+    const r = await runRepair({ task: fakeTask(), agent: graphOn(), provider: new FakeProvider(), image: "img", llm: client });
+    expect(r.arm).toMatchObject({ arm: "graph-on", packetInjected: true, graphToolCalls: 2 });
+    expect(trace(r).graphCalls.map((c) => c.tool)).toEqual(["search_components", "get_neighbors"]);
+  });
+
+  it("the packet counts against the token budget: the same limit that lets graph off start stops graph on", async () => {
+    // a model that bills input tokens as characters / 4 of everything it is sent
+    const billing = () => ({
+      async chat(req: ChatRequest): Promise<ChatResult> {
+        const chars = req.messages.reduce((n, m) => n + String(m.content ?? "").length, 0);
+        return { content: "", cached: false, latencyMs: 1, inputTokens: Math.ceil(chars / 4), outputTokens: 10, costUSD: 0, toolCalls: [call("finish", { summary: "x" })], finishReason: "tool_calls" };
+      },
+    });
+    const limit = { tokens: 1500 }; // the system prompt + issue are under it; with a ~1,000-token packet they are over
+    const rOff = await runRepair({ task: fakeTask(limit), agent: new RepairLoopAgent(), provider: new FakeProvider(), image: "img", llm: billing() });
+    const rOn = await runRepair({ task: fakeTask(limit), agent: graphOn(), provider: new FakeProvider(), image: "img", llm: billing() });
+    expect(rOff.agentRun!.budgetExhausted).toBeUndefined();
+    expect(rOn.agentRun!.budgetExhausted).toBe("tokens 1500");
+    // graph off made two calls (finish, then the confirming finish); graph on stopped after its first
+    expect(rOn.usage.inputTokens).toBeGreaterThan(rOff.usage.inputTokens / 2 + rOn.arm!.packetTokensEstimated!);
+  });
+
+  it("scripted agents record no arm", async () => {
+    const r = await runRepair({ task: fakeTask(), agent: new NoopAgent(), provider: new FakeProvider(), image: "img" });
+    expect(r.arm).toBeUndefined();
   });
 });
 
@@ -202,7 +274,7 @@ describe("loop protocol and limits (fake provider, fake model)", () => {
 describe("agent-v2 competence guards (fake provider, fake model; identical with graph on and off)", () => {
   const conditions = [
     ["graph off", () => new RepairLoopAgent()],
-    ["graph on", () => new RepairLoopAgent({ graph: { snapshot: { components: [], edges: [], files: [] } as never, decider: "lexical" } })],
+    ["graph on", () => new RepairLoopAgent({ graph: { snapshot: RECALL_SNAPSHOT, decider: "lexical" } })],
   ] as const;
 
   for (const [label, make] of conditions) {
@@ -260,7 +332,7 @@ describe("agent-v3: output cap, stuck stop, no-edit nudge (fake provider, fake m
 
   const conditions = [
     ["graph off", () => new RepairLoopAgent()],
-    ["graph on", () => new RepairLoopAgent({ graph: { snapshot: { components: [], edges: [], files: [] } as never, decider: "lexical" } })],
+    ["graph on", () => new RepairLoopAgent({ graph: { snapshot: RECALL_SNAPSHOT, decider: "lexical" } })],
   ] as const;
   for (const [label, make] of conditions) {
     it(`output cap (${label}): the model sees head + "[harness: N characters omitted]" + tail; truncations are counted`, async () => {
@@ -320,7 +392,7 @@ describe("agent-v3: output cap, stuck stop, no-edit nudge (fake provider, fake m
 describe("agent-v4: edit accounting and reads (fake provider, fake model; identical with graph on and off)", () => {
   const conditions = [
     ["graph off", () => new RepairLoopAgent()],
-    ["graph on", () => new RepairLoopAgent({ graph: { snapshot: { components: [], edges: [], files: [] } as never, decider: "lexical" } })],
+    ["graph on", () => new RepairLoopAgent({ graph: { snapshot: RECALL_SNAPSHOT, decider: "lexical" } })],
   ] as const;
   for (const [label, make] of conditions) {
     it(`only modifying or deleting a base file counts as a change (${label}): new files alone still get the nudge and the finish check`, async () => {

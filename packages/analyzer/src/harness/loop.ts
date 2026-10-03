@@ -5,23 +5,25 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { buildContext } from "../agent/context.ts";
-import { DECIDER_VERSION, LexicalDecider, NemotronDecider } from "../agent/decider.ts";
+import { buildContext, formatContext } from "../agent/context.ts";
+import { DECIDER_VERSION, LexicalDecider, NemotronDecider, type Decider } from "../agent/decider.ts";
+import { estimateTokens } from "../agent/rank.ts";
 import { getEdgeEvidence, getNeighbors, getRelatedTests, searchComponents, type Direction } from "../agent/query.ts";
 import type { ChatMessage, ChatRequest, ToolCall, ToolDefinition } from "../llm/client.ts";
 import { DEFAULT_MODEL, NO_REASONING } from "../naming/llm.ts";
 import type { Snapshot } from "../schema.ts";
-import { AgentStopped, type Agent, type AgentContext, type RepoState } from "./agents.ts";
+import { AgentStopped, type Agent, type AgentContext, type ArmReport, type RepoState } from "./agents.ts";
 import { capOutput, confinePath, GRAPH_TOOLS, REPO_TOOLS, sandboxCommand, ToolInputError, truncate, WORKDIR } from "./tools.ts";
 
 const PROMPTS = path.resolve(import.meta.dirname, "../../../../harness/prompts");
-export const AGENT_PROMPT_FILE = path.join(PROMPTS, "agent-v4.md");
-/** Kept for reference and for reproducing earlier runs; agent-v4 is the default (decision 034). */
+export const AGENT_PROMPT_FILE = path.join(PROMPTS, "agent-v5.md");
+/** Kept for reference and for reproducing earlier runs; agent-v5 is the default (decision 045). */
 export const AGENT_PROMPT_V1_FILE = path.join(PROMPTS, "agent-v1.md");
 export const AGENT_PROMPT_V2_FILE = path.join(PROMPTS, "agent-v2.md");
 export const AGENT_PROMPT_V3_FILE = path.join(PROMPTS, "agent-v3.md");
+export const AGENT_PROMPT_V4_FILE = path.join(PROMPTS, "agent-v4.md");
 /** The loop's own behaviour (guards, edit fallback, finish check, cap, stops), recorded next to the prompt hashes. */
-export const LOOP_VERSION = "agent-v4";
+export const LOOP_VERSION = "agent-v5";
 /** agent-v3: this many refused calls in a row end the run UNRESOLVED "stuck". */
 export const STUCK_AFTER_REFUSALS = 3;
 /** reasoning "on": thinking explicitly enabled (reasoning "off" sends enable_thinking: false). */
@@ -35,6 +37,8 @@ const MUTATING_TOOLS = new Set(["edit_file", "write_file", "run"]);
 /** The 3rd identical call on an unchanged repository (and every later one) is refused. */
 const MAX_IDENTICAL_CALLS = 2;
 /** agent-v4: sent on the first finish while no file that existed at the start is modified or deleted. */
+/** agent-v5: the line before the injected packet (graph on only). */
+export const PACKET_HEADING = "Context packet for this issue, from the architecture graph (`tracehound context`, computed before you started):";
 export const EMPTY_FINISH_MESSAGE =
   "not finished: no file that existed at the start has been modified or deleted. If you are sure no code change is needed, call finish again to confirm; otherwise continue working.";
 
@@ -107,6 +111,12 @@ export interface LoopTrace {
   /** agent-v4: files read that the agent created (in the repo or in /scratch) */
   agentFilesRead: string[];
   graphCalls: { turn: number; tool: string; args: unknown }[];
+  /**
+   * agent-v5 (decision 045): graph on, the context packet for the issue text (the context tool's
+   * text output) is in the first user message. Its tokens are part of every call's input, so they
+   * count against the run's token budget like everything else.
+   */
+  packet: { injected: false } | { injected: true; chars: number; tokensEstimated: number; sha256: string; decider: string; confidence?: string };
   toolCallCount: number;
   guards: { repeatsBlocked: number; emptyFinishRejected: number; editWhitespaceFallbacks: number };
   /** agent-v3: tool results cut to head + tail (and the characters omitted in total) */
@@ -169,6 +179,7 @@ export class RepairLoopAgent implements Agent {
       baseFilesRead: [],
       agentFilesRead: [],
       graphCalls: [],
+      packet: { injected: false },
       toolCallCount: 0,
       guards: { repeatsBlocked: 0, emptyFinishRejected: 0, editWhitespaceFallbacks: 0 },
       outputTruncations: { count: 0, charsOmitted: 0 },
@@ -184,11 +195,13 @@ export class RepairLoopAgent implements Agent {
     this.trace.renderedPromptSha256 = prompt.renderedSha256;
     this.trace.testCommands = ctx.testCommands;
     this.#state = await ctx.repoState();
+    // graph on: the packet goes between the issue and the limits; everything else is the same text in both arms
+    const packet = this.#opts.graph ? await this.#contextPacket(ctx.issue, ctx) : undefined;
     const messages: ChatMessage[] = [
       { role: "system", content: prompt.text },
       {
         role: "user",
-        content: `Issue:\n${ctx.issue}\n\nLimits for this task: at most ${limits.steps} tool calls, ${limits.tokens} model tokens, ${Math.round(limits.wallClockMs / 1000)} s. Start by exploring the repository.`,
+        content: `Issue:\n${ctx.issue}\n\n${packet ? `${PACKET_HEADING}\n${packet}\n\n` : ""}Limits for this task: at most ${limits.steps} tool calls, ${limits.tokens} model tokens, ${Math.round(limits.wallClockMs / 1000)} s. Start by exploring the repository.`,
       },
     ];
     for (let turn = 1; ; turn++) {
@@ -344,13 +357,45 @@ export class RepairLoopAgent implements Agent {
     return { ok: false, content: `error: ${(r.stderr || r.stdout).trim() || `exit code ${r.exitCode}`}` };
   }
 
+  /** What the harness records about this run's arm (decision 045). */
+  armReport(): ArmReport {
+    const p = this.trace.packet;
+    return {
+      arm: this.trace.graph ? "graph-on" : "graph-off",
+      packetInjected: p.injected,
+      ...(p.injected && { packetChars: p.chars, packetTokensEstimated: p.tokensEstimated }),
+      graphToolCalls: this.trace.graphCalls.length,
+    };
+  }
+
+  /** The decider the context tool uses (`tracehound context --decider`); a nemotron call goes through ctx.llm. */
+  #decider(ctx: AgentContext): Decider {
+    return this.#opts.graph!.decider === "nemotron" ? new NemotronDecider({ chat: (req, meta) => ctx.llm!.chat(req, meta) }) : new LexicalDecider();
+  }
+
+  /** agent-v5: the context tool's packet for the issue, as `tracehound context` prints it (default budget). */
+  async #contextPacket(issue: string, ctx: AgentContext): Promise<string> {
+    const { snapshot } = this.#opts.graph!;
+    const decided = await this.#decider(ctx).decide({ issue, snapshot, k: 3 });
+    const built = buildContext(snapshot, issue, { decided });
+    const text = formatContext(built);
+    this.trace.packet = {
+      injected: true,
+      chars: text.length,
+      tokensEstimated: estimateTokens(text.length),
+      sha256: createHash("sha256").update(text).digest("hex"),
+      decider: built.ranking.decider,
+      ...(built.confidence && { confidence: built.confidence.level }),
+    };
+    return text;
+  }
+
   async #graphTool(name: string, args: Record<string, unknown>, ctx: AgentContext): Promise<unknown> {
-    const { snapshot, decider } = this.#opts.graph!;
+    const { snapshot } = this.#opts.graph!;
     switch (name) {
       case "context_packet": {
         const query = typeof args.query === "string" && args.query.trim() ? args.query : ctx.issue;
-        const d = decider === "nemotron" ? new NemotronDecider({ chat: (req, meta) => ctx.llm!.chat(req, meta) }) : new LexicalDecider();
-        const decided = await d.decide({ issue: query, snapshot, k: 3 });
+        const decided = await this.#decider(ctx).decide({ issue: query, snapshot, k: 3 });
         return buildContext(snapshot, query, { decided });
       }
       case "search_components":

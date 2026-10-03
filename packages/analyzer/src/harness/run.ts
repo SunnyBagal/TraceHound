@@ -4,7 +4,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { BudgetExceededError } from "../llm/budget.ts";
 import type { ChatRequest, ChatResult } from "../llm/client.ts";
-import { AgentStopped, type Agent, type AgentContext } from "./agents.ts";
+import { AgentStopped, type Agent, type AgentContext, type ArmReport } from "./agents.ts";
 import { SCRATCH } from "./tools.ts";
 import { SandboxGoneError, type ExecResult, type SandboxDescription, type SandboxHandle, type SandboxProvider, type SandboxSource } from "./provider.ts";
 import { parseJunit, testKey, type TestResult } from "./junit.ts";
@@ -118,6 +118,8 @@ export interface RunRecord {
   /** agent-added files matching the task's test discovery pattern, removed before verification */
   removedBeforeVerify?: string[];
   agentRun?: { steps: number; budgetExhausted?: string; stopped?: string; error?: string; trace?: unknown };
+  /** Decision 045: the arm (graph-on / graph-off), whether the packet was injected, its size, graph tool calls. */
+  arm?: ArmReport;
   /** Counted by the harness from API usage fields (via the shared client), never from the agent. */
   usage: {
     llmCalls: number;
@@ -702,6 +704,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     } finally {
       record.agentRun.steps = Math.min(steps, spec.limits.steps);
       if (agent.trace !== undefined) record.agentRun.trace = agent.trace;
+      if (agent.armReport) record.arm = agent.armReport();
     }
 
     // ── VERIFYING: the harness's own checks only (not bounded by the agent's wall-clock) ────
