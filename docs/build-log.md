@@ -265,3 +265,31 @@ pnpm test` exit 0, analyzer 337 passed (29 files), viewer 88 passed (11 files), 
 
 **Spend:** +$0.14833 (the runner's 8 runs); ledger $0.76885 → $0.91718 (this prompt so far:
 $0.57506 of $1.50).
+
+## Phase 5: freeze
+
+Rules block and this log re-read at the start. CI for the Phase 4 commit `58efbc1`: **success**,
+https://github.com/SunnyBagal/TraceHound/actions/runs/37127176921.
+
+**Done:**
+- `docs/freeze.md`: analyzer 0.10.0 and the graph snapshot's sha256; agent-v5; the sha256 of every
+  prompt file (the frozen one: `agent-v5.md` `556861d4…`); image
+  `tracehound-sandbox:bun1.4.2-ts5.9.3-2` with its id and Dockerfile hash; Nano
+  (`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`), reasoning on, temperature 0, `max_tokens` 4096; the
+  per-test gate on Recall (granularity `test`, 62 tests) and the baseline-matched typecheck gate.
+- CLAUDE.md (dev tasks, agent-v5, runner, freeze, spend) and `docs/backlog.md` (findings left for
+  after the evaluation).
+- The commit is tagged `eval-freeze` once its CI is green; PR #8 is marked ready for review and
+  not merged.
+
+**Gates** (GIT_* env check printed nothing): version guard exit 0; `TRACEHOUND_NETWORK_TESTS=1
+pnpm test` exit 0, analyzer 337 passed (29 files), viewer 88 passed (11 files), 868 s;
+`pnpm typecheck` exit 0; viewer build exit 0. This commit's CI run is on PR #8.
+
+**Spend:** $0. **Total for this prompt: $0.57506** (ledger $0.34212 → $0.91718), Nano only;
+cap $1.50.
+
+**Not done:**
+- README.md still says agent-v4: it is outside the paths this prompt may touch (backlog).
+- No evaluation task was created, read or looked for; dev results are not evaluation results.
+- The graph's effect is untested: one run per cell, and the agent made no graph tool calls.

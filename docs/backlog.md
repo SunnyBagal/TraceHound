@@ -58,6 +58,16 @@ built.
 - The README's Repair harness section doesn't mention repo profiles, seed patches or the Recall
   smoke task (README was out of scope for decision 041).
 - Recall evaluation tasks: none exist yet; `recall-smoke-trending` is a smoke task only.
+- After the freeze (build log, decisions 044–046), not changed before the evaluation ends:
+  - The agent never called a graph tool in 12 graph-on dev runs; only the injected packet reached it.
+  - Nano still calls `str_replace_editor` (`{"command":"view"}`) 9–18 times per 8 runs, and sends
+    replies with no tool call (17–38 per 8 runs, up to a third at the 4,096-token output cap).
+  - Most dev failures end on the 300,000-token budget at about 30 turns: the conversation is
+    resent on every call. History trimming or a larger budget would be a new agent version.
+  - The per-test gate inherits the target suite's timing: under load Recall's PGlite tests time
+    out (decision 045 finding). A retry or a longer bun timeout in the harness would be a gate change.
+  - README.md (outside this run's may-touch list) still describes agent-v4; update it with agent-v5
+    and the runner.
 
 ## Viewer
 - Change view: the canvas fit view on a 1440px screen with the warnings panel open lands near the
