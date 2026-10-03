@@ -7,7 +7,8 @@ import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import { AgentStopped, type Agent, type AgentContext } from "./agents.ts";
 import { SCRATCH } from "./tools.ts";
 import { SandboxGoneError, type ExecResult, type SandboxDescription, type SandboxHandle, type SandboxProvider, type SandboxSource } from "./provider.ts";
-import { checkPlan, TSC_PLACEHOLDER, type CheckPlan } from "./profile.ts";
+import { parseJunit, testKey, type TestResult } from "./junit.ts";
+import { checkPlan, REPORT_PLACEHOLDER, TSC_PLACEHOLDER, type CheckPlan } from "./profile.ts";
 import { BUN_TEST_FILE_PATTERN, type LoadedTask } from "./task.ts";
 
 export type RunState = "PREPARING_SANDBOX" | "REPRODUCING" | "PATCHING" | "VERIFYING" | "RESOLVED" | "UNRESOLVED" | "FAILED" | "CANCELLED";
@@ -37,8 +38,34 @@ export interface TscChoice {
   version: string;
 }
 
+export interface RegressionResult {
+  cmd: string;
+  exitCode: number;
+  timedOut: boolean;
+  /** Per-test results from the command's report (decision 043); absent when it had none. */
+  tests?: TestResult[];
+  /** Why a configured report gave no per-test results ("no report written", a parse error). */
+  reportError?: string;
+}
+
+/** A test that passed at baseline and, after the patch, failed, was skipped or is no longer reported. */
+export interface RegressedTest {
+  cmd: string;
+  file: string;
+  name: string;
+  now: "failed" | "skipped" | "missing";
+}
+
+export interface Comparison {
+  newFailures: string[];
+  preExistingFailures: string[];
+  /** "test": every regression command was compared per test; "command": by exit code only; "mixed": some of each. */
+  granularity: "test" | "command" | "mixed";
+  regressedTests: RegressedTest[];
+}
+
 export interface CheckResults {
-  regression: { cmd: string; exitCode: number; timedOut: boolean }[];
+  regression: RegressionResult[];
   typecheck: { package: string; command: string; exitCode: number; errors: number; diagnostics: TscError[]; tsc?: TscChoice }[];
 }
 
@@ -84,7 +111,7 @@ export interface RunRecord {
   repro: { atBase?: { exitCode: number; timedOut: boolean }; afterPatch?: { exitCode: number; timedOut: boolean } };
   baseline?: CheckResults;
   final?: CheckResults;
-  comparison?: { newFailures: string[]; preExistingFailures: string[] };
+  comparison?: Comparison;
   diff?: string;
   /** agent-v4: the diff by kind (repo-relative paths), taken before anything is removed */
   changes?: { modifiedBase: string[]; deletedBase: string[]; addedInRepo: string[] };
@@ -328,12 +355,48 @@ export async function resolvePlan(sh: Sh, phase: Phase, plan: CheckPlan): Promis
   return { ...plan, typecheck, tsc };
 }
 
-/** Regression exit codes and the `tsc` errors per package (baseline and final). */
-export async function collectChecks(sh: Sh, phase: Phase, plan: Pick<CheckPlan, "regression" | "typecheck"> & { tsc?: Record<string, TscChoice> }): Promise<CheckResults> {
-  const regression = [];
+/** A fresh report file per run of a command, outside /work; the agent can't know its name in advance. */
+const reportFile = () => `/tmp/.th-report-${randomUUID()}.xml`;
+
+/**
+ * Regression exit codes (with per-test results where the plan has a report command) and the `tsc`
+ * errors per package (baseline and final). A command with a report runs as its report command; its
+ * exit code counts exactly like the plain command's. `readFile` returns a sandbox file's content or
+ * throws; without it no report is read.
+ */
+export async function collectChecks(
+  sh: Sh,
+  phase: Phase,
+  plan: Pick<CheckPlan, "regression" | "typecheck" | "reports"> & { tsc?: Record<string, TscChoice> },
+  readFile?: (file: string) => Promise<string>,
+): Promise<CheckResults> {
+  const regression: RegressionResult[] = [];
   for (const cmd of plan.regression) {
-    const r = await sh(phase, cmd);
-    regression.push({ cmd, exitCode: r.exitCode, timedOut: r.timedOut });
+    const report = readFile && plan.reports?.[cmd];
+    if (!report) {
+      const r = await sh(phase, cmd);
+      regression.push({ cmd, exitCode: r.exitCode, timedOut: r.timedOut });
+      continue;
+    }
+    const file = reportFile();
+    const r = await sh(phase, `rm -f ${file} && ${report.command.replaceAll(REPORT_PLACEHOLDER, file)}`);
+    const result: RegressionResult = { cmd, exitCode: r.exitCode, timedOut: r.timedOut };
+    let xml: string | undefined;
+    try {
+      xml = await readFile(file);
+    } catch (error) {
+      if (error instanceof SandboxGoneError) throw error;
+      result.reportError = "no report written";
+    }
+    if (xml !== undefined) {
+      try {
+        result.tests = parseJunit(xml);
+      } catch (error) {
+        result.reportError = `report not readable: ${(error as Error).message}`;
+      }
+    }
+    await mustPass(sh, phase, `rm -f ${file}`, "removing the test report");
+    regression.push(result);
   }
   const typecheck = [];
   for (const t of plan.typecheck) {
@@ -363,16 +426,55 @@ export function newTscErrors(baseline: TscError[], final: TscError[]): TscError[
   });
 }
 
-/** A new failure = failed now but passed at baseline, or a TS error the baseline doesn't have. */
-export function compareChecks(baseline: CheckResults, final: CheckResults): { newFailures: string[]; preExistingFailures: string[] } {
+const LISTED = 10; // regressed tests named in a reason; the record has all of them
+
+/**
+ * Per test (decision 043), when the baseline run of a command reported its tests: every test that
+ * passed at baseline must pass after the patch. Failed, skipped or no longer reported (deleted,
+ * renamed, its file no longer loads, no report at all) → regressed. Tests that failed at baseline,
+ * and tests the baseline didn't have, don't count either way. On top of that, a command that passed
+ * at baseline must still pass (an unhandled error between tests fails the run without failing a test).
+ */
+export function compareRegression(b: RegressionResult, f: RegressionResult): { newFailure?: string; preExisting?: string; regressed: RegressedTest[] } {
+  const failed = f.exitCode !== 0 || f.timedOut;
+  const how = `exit ${f.exitCode}${f.timedOut ? ", timed out" : ""}`;
+  const commandBroke = failed && b.exitCode === 0 && !b.timedOut;
+  if (!b.tests?.length) {
+    if (commandBroke) return { newFailure: `regression "${f.cmd}" now fails (${how}; passed at baseline)`, regressed: [] };
+    return { ...(failed && { preExisting: `regression "${f.cmd}" also failed at baseline (exit ${b.exitCode})` }), regressed: [] };
+  }
+  const now = new Map((f.tests ?? []).map((t) => [testKey(t), t.status]));
+  const regressed: RegressedTest[] = [];
+  for (const t of b.tests) {
+    if (t.status !== "passed") continue;
+    const s = now.get(testKey(t));
+    if (s !== "passed") regressed.push({ cmd: f.cmd, file: t.file, name: t.name, now: s ?? "missing" });
+  }
+  const baseFailing = b.tests.filter((t) => t.status === "failed");
+  const preExisting = baseFailing.length ? `regression "${f.cmd}": ${baseFailing.length} test(s) failed at baseline, ${baseFailing.filter((t) => now.get(testKey(t)) === "failed").length} of them still fail` : undefined;
+  if (regressed.length) {
+    const named = regressed.slice(0, LISTED).map((t) => `${t.file} > ${t.name} (${t.now})`);
+    const more = regressed.length > LISTED ? `; and ${regressed.length - LISTED} more` : "";
+    const noReport = f.reportError ? ` [${f.reportError}]` : "";
+    return { newFailure: `regression "${f.cmd}": ${regressed.length} test(s) that passed at baseline now fail or are missing${noReport}: ${named.join("; ")}${more}`, ...(preExisting && { preExisting }), regressed };
+  }
+  if (commandBroke) return { newFailure: `regression "${f.cmd}" now fails (${how}; passed at baseline) though every baseline test still passes`, ...(preExisting && { preExisting }), regressed };
+  return { ...(preExisting && { preExisting }), regressed };
+}
+
+/** A new failure = a regression that broke (per test or per command), or a TS error the baseline doesn't have. */
+export function compareChecks(baseline: CheckResults, final: CheckResults): Comparison {
   const newFailures: string[] = [];
   const preExistingFailures: string[] = [];
+  const regressedTests: RegressedTest[] = [];
   final.regression.forEach((f, i) => {
-    const b = baseline.regression[i]!;
-    const failed = f.exitCode !== 0 || f.timedOut;
-    if (failed && b.exitCode === 0 && !b.timedOut) newFailures.push(`regression "${f.cmd}" now fails (exit ${f.exitCode}${f.timedOut ? ", timed out" : ""}; passed at baseline)`);
-    else if (failed) preExistingFailures.push(`regression "${f.cmd}" also failed at baseline (exit ${b.exitCode})`);
+    const c = compareRegression(baseline.regression[i]!, f);
+    if (c.newFailure) newFailures.push(c.newFailure);
+    if (c.preExisting) preExistingFailures.push(c.preExisting);
+    regressedTests.push(...c.regressed);
   });
+  const perTest = baseline.regression.filter((b) => b.tests?.length).length;
+  const granularity = perTest > 0 && perTest === baseline.regression.length ? "test" : perTest === 0 ? "command" : "mixed";
   final.typecheck.forEach((f, i) => {
     const b = baseline.typecheck[i]!;
     const added = newTscErrors(b.diagnostics, f.diagnostics);
@@ -383,7 +485,7 @@ export function compareChecks(baseline: CheckResults, final: CheckResults): { ne
     else if (f.exitCode !== 0 && f.errors === 0 && b.errors > 0) newFailures.push(`typecheck ${f.package} failed (exit ${f.exitCode}) without TS errors; the baseline reported ${b.errors}`);
     else if (b.errors > 0) preExistingFailures.push(`typecheck ${f.package}: ${b.errors} error(s) at baseline, ${f.errors} now`);
   });
-  return { newFailures, preExistingFailures };
+  return { newFailures, preExistingFailures, granularity, regressedTests };
 }
 
 export interface RunOptions {
@@ -493,8 +595,9 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     await mustPass(sh, "REPRODUCING", `test -z "$(git status --porcelain)"`, "checking the tree is clean before the agent starts");
     if ((await treeState("REPRODUCING")) !== beforeRepro) throw new RunFailed("the repro run left files behind (git status --porcelain --ignored changed)");
     const plan = await resolvePlan(sh, "BASELINE", rawPlan);
-    record.plan = { setup: plan.setup, regression: plan.regression, typecheck: plan.typecheck };
-    record.baseline = await collectChecks(sh, "BASELINE", plan);
+    record.plan = { setup: plan.setup, regression: plan.regression, typecheck: plan.typecheck, ...(plan.reports && { reports: plan.reports }) };
+    const readReport = (file: string) => guarded(`reading ${file}`, () => provider.readFile(handle!, file));
+    record.baseline = await collectChecks(sh, "BASELINE", plan, readReport);
     if (Date.now() >= deadline) throw new RunFailed(`wall-clock limit ${spec.limits.wallClockMs}ms reached before the agent started`);
 
     // ── PATCHING: the agent's budget is wall-clock, steps and harness-counted tokens ────────
@@ -614,7 +717,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     if (record.removedBeforeVerify.length)
       await mustPass(sh, "VERIFYING", `git rm -q -f -- ${record.removedBeforeVerify.map((f) => `'${f.replace(/'/g, `'\\''`)}'`).join(" ")}`, "removing agent-added test files");
     record.repro.afterPatch = await runRepro("VERIFYING");
-    record.final = await collectChecks(sh, "VERIFYING", plan);
+    record.final = await collectChecks(sh, "VERIFYING", plan, readReport);
     record.comparison = compareChecks(record.baseline, record.final);
 
     const reproPasses = record.repro.afterPatch.exitCode === 0 && !record.repro.afterPatch.timedOut;
