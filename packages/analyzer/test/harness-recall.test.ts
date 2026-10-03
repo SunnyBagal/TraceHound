@@ -1,7 +1,7 @@
 // Decision 041: the harness on a second repo, through a repo profile with a subdirectory
 // (Recall's backend lives in recall-backend/). SMOKE tasks with seeded bugs and scripted patches
 // only: no model, and never an evaluation result. Decision 043: the per-test regression gate, on a
-// second task whose seed also makes one existing test fail at baseline.
+// second task whose seed also makes one existing test fail at baseline. Decision 044: the four dev tasks.
 // Needs Docker and outbound network (GitHub, npm): runs only with TRACEHOUND_NETWORK_TESTS=1 (CI sets it).
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -144,5 +144,28 @@ if (!enabled) {
         expect(r).toMatchObject({ finalState: "RESOLVED", comparison: { granularity: "command", regressedTests: [], preExistingFailures: [`regression "${TEST}" also failed at baseline (exit 1)`, TSC_BASELINE] } });
         expect(r.baseline!.regression[0]!.tests).toBeUndefined();
       }, 300_000);
+    });
+
+    // Decision 044: the four seeded dev tasks, in this file so that no two Recall sandboxes run at
+    // the same time (two files in parallel made Recall's own PGlite tests time out; build log, Phase 3).
+    describe("decision 044: dev tasks, oracle fix → RESOLVED and empty patch → UNRESOLVED", () => {
+      const TASKS = path.resolve(import.meta.dirname, "../../../eval/tasks");
+      const dev = (id: string, agent: Agent) => smoke(agent, new LocalDockerProvider(), loadTask(path.join(TASKS, id, "task.json")));
+      for (const id of ["recall-dev-short-summary", "recall-dev-search-description", "recall-dev-session-expiry", "recall-dev-chat-recent"]) {
+        it(`${id}: oracle fix → RESOLVED, per test, nothing regressed`, async () => {
+          const r = await dev(id, new OracleAgent(readFileSync(path.join(TASKS, id, "fix.patch"), "utf8")));
+          expect(r).toMatchObject({ finalState: "RESOLVED", taskKind: "dev", repro: { atBase: { exitCode: 1 }, afterPatch: { exitCode: 0 } } });
+          // the seed leaves Recall's own suite green: 62 tests, all passing at the seeded base and after the fix
+          expect(r.baseline!.regression[0]!.tests).toHaveLength(62);
+          expect(r.baseline!.regression[0]!.tests!.every((t) => t.status === "passed")).toBe(true);
+          expect(r.comparison).toMatchObject({ granularity: "test", regressedTests: [], newFailures: [] });
+          expect(r.changes!.modifiedBase).toHaveLength(1);
+        }, 300_000);
+
+        it(`${id}: empty patch → UNRESOLVED, repro still fails`, async () => {
+          const r = await dev(id, new NoopAgent());
+          expect(r).toMatchObject({ finalState: "UNRESOLVED", taskKind: "dev", reason: "repro still fails (exit 1)" });
+        }, 300_000);
+      }
     });
   });

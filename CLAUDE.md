@@ -3,7 +3,7 @@
 Analyzes a TypeScript repo and renders it as an interactive, evidence-backed component graph
 on a canvas. Later: a graph-guided repair agent.
 
-## Current state (2026-10-02)
+## Current state (2026-10-03)
 - **Live:** https://tracehound-tau.vercel.app (Vercel, Root Directory `viewer`, auto-deploys
   from `main`; leave Output Directory unset). CI (`.github/workflows/ci.yml`) runs the snapshot
   version guard, tests, typecheck, and the viewer build, and checks that `out/snapshots/index.json`
@@ -83,8 +83,13 @@ on a canvas. Later: a graph-guided repair agent.
   and provider versions) and `snapshot` (path, analyzerVersion, commit, sha256, or `"none"`).
   The sandbox's history is squashed to one fixed `base` commit after setup (no `git log -p`
   leak). Toy fixture: `node eval/fixtures/build-toy-repo.ts`, tasks
-  `eval/tasks/toy-*`. **Dev tasks pending:** the user writes the CEX tasks (`eval/tasks/dev-01`,
-  `dev-02`), not on main yet; validation and the 12 dev runs (Prompt I steps 4–5) wait for them.
+  `eval/tasks/toy-*`. **Dev tasks (decision 044):** four seeded Recall tasks, kind `dev`
+  (tuned on, never evaluation results): `eval/tasks/recall-dev-{short-summary,search-description,
+  session-expiry,chat-recent}`; each seed is one line in a different backend file and leaves
+  Recall's 62 tests green; two have the symptom in the API and the fault elsewhere (one across
+  the queue, in `processContent`). Oracle → RESOLVED, noop → UNRESOLVED for all four (Docker test
+  block in `test/harness-recall.test.ts`). The ids `dev-01` / `dev-02` stay free for the user's
+  CEX tasks.
   `--graph on` reads the snapshot named in task.json, on the host (toy-discount:
   `eval/snapshots/3582f35…/0.6.0.json`).
 - **Repair agent (decisions 029, 030):** host-side loop with native tool calls, Nano by default.
@@ -93,9 +98,21 @@ on a canvas. Later: a graph-guided repair agent.
   (`eval/dev-log/2026-09-30-toy-gate.md`). The toy is a single-file bug, so on/off there says
   nothing about the graph.
   agent-v3 (decision 033) added a 4,000-char output cap, a "stuck" stop and one no-edit nudge.
-  **agent-v4 is the default (decision 034):** reasoning on (`--reasoning off` to disable),
-  scratch code in `/scratch` outside the repo, edits counted only on base files, agent-added
-  test files removed before verification. v1–v3 prompts are kept.
+  agent-v4 (decision 034): reasoning on (`--reasoning off` to disable), scratch code in
+  `/scratch` outside the repo, edits counted only on base files, agent-added test files removed
+  before verification. **agent-v5 is the default (decision 045):** graph on puts the
+  `tracehound context` packet for the issue in the first message (graph tools stay; graph off
+  has neither; same budgets); run records carry `arm`. Its prompt was tuned in two rounds on the
+  dev tasks and **round 1's prompt is frozen** (round 2 was reverted). Graph tool calls were 0 in
+  every graph-on dev run. Under load Recall's own tests can time out and turn a correct patch
+  UNRESOLVED: evaluate with concurrency 1. v1–v4 prompts are kept.
+- **Evaluation runner (decision 046):** `node packages/analyzer/src/harness/evaluate.ts --tasks
+  <dir> [--arms on,off] [--repeats N] [--kind k] [--out dir] [--max-spend-usd x]` → one
+  `tracehound repair` per run, `results.json` + `results.md` (n beside every total, no
+  significance claims). **Frozen for the evaluation: `docs/freeze.md`, tag `eval-freeze`**
+  (analyzer 0.10.0, agent-v5, prompt sha256 `556861d4…`, image
+  `tracehound-sandbox:bun1.4.2-ts5.9.3-2`, Nano, reasoning on, temperature 0, per-test gate on
+  Recall). Build log of that work: `docs/build-log.md`.
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**
@@ -115,7 +132,7 @@ on a canvas. Later: a graph-guided repair agent.
 - **Naming:** Nano with reasoning off (`chat_template_kwargs.enable_thinking=false`, decision
   020) plus deterministic checks (021). Nano beat Super on cost and tied on checks, so Nano
   stays the default. Naming spend was about $0.043; all-time spend is in `pnpm spend`
-  ($0.321 on 2026-10-01, mostly repair-agent runs). A wrong name is fixed with a
+  ($0.917 on 2026-10-03, mostly repair-agent runs). A wrong name is fixed with a
   `tracehound.json` name override (never labelled model-written); a wrong summary is dropped with
   `summary: false`, never replaced by hand. Audited by hand on 2026-10-01: Recall 5 of 7
   summaries wrong (3 names), CEX 2 of 7 summaries wrong (0 names); fixes are in

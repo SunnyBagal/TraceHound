@@ -98,6 +98,8 @@ export async function main(argv: string[]): Promise<number> {
   console.log(
     `${record.finalState} · ${record.taskId} · agent ${record.agent} · ${record.agentRun?.steps ?? 0} steps · ${record.usage.tokens} tokens · $${record.usage.costUSD.toFixed(5)} · ${record.sandbox.createToDestroyMs ?? "?"}ms create→destroy · ${record.reason}`,
   );
+  if (record.arm)
+    console.log(`arm: ${record.arm.arm} · packet ${record.arm.packetInjected ? `injected, ${record.arm.packetChars} chars (~${record.arm.packetTokensEstimated} tokens est.)` : "not injected"} · ${record.arm.graphToolCalls} graph tool call(s)`);
   const env = record.sandboxEnv;
   console.log(
     `sandbox: ${env ? `${env.providerVersion} · ${env.engineVersion ?? "engine ?"} · ${env.image} ${env.imageId ?? "(image id unknown)"}` : "(not described)"} · snapshot: ${record.snapshot === "none" ? "none" : `${record.snapshot.path} (${record.snapshot.analyzerVersion}, sha256 ${record.snapshot.sha256.slice(0, 12)}…)`}`,

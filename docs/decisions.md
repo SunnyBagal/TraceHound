@@ -1944,3 +1944,157 @@ target repos (its lines 72, 84–86 and 90–92). On the owner's instruction the
 file:line references at the study's pinned commits, using sampled ground-truth sites; nothing
 else changed. `new Queue(...)` stays: it names BullMQ's constructor in the description of the
 detector and isn't quoted from a target.
+
+## 044 · Four seeded dev tasks on Recall
+**Context:** the agent's prompts need tasks to be tuned on that are not evaluation tasks (prompt
+`docs/prompts/build-to-freeze.md`, Phase 2). Recall (`57d920e`, `testable-baseline`) is the
+evaluation repo. CLAUDE.md had the dev tasks as the user's, on CEX; this prompt has four seeded
+Recall tasks written here (build log, step 0, item 2), so the ids are `recall-dev-*` and
+`dev-01` / `dev-02` stay free.
+**Choice:**
+- **Task kind `"dev"`** (`TaskSpec.kind`, copied to `taskKind`): a task the prompts may be tuned
+  on. Like `smoke`, never an evaluation result.
+- **Four tasks**, each a one-line seed in a different backend file (none in `linkDetector.ts`),
+  an issue written as a user's bug report with no file or function names, a reproduction copied in
+  only while the harness reproduces and verifies (as for every task), and an oracle `fix.patch`.
+  Components are those of `eval/snapshots/57d920e…/0.10.0.json`.
+
+  | Task | Seeded fault (file) | Symptom seen in | Fault in |
+  |---|---|---|---|
+  | `recall-dev-short-summary` | not-enough-text threshold 20 → 200 (`worker.ts`, `processContent`) | API: a short saved page is listed as done with no summary or tags | worker, **across the `content-processing` queue** |
+  | `recall-dev-search-description` | `og_description` dropped from the generated `search_vector` (`db/schema.ts`) | API: keyword search misses a description-only match | shared library |
+  | `recall-dev-session-expiry` | `jwt.verify(…, { ignoreExpiration: true })` (`middleware/middleware.ts`) | API | API (same component) |
+  | `recall-dev-chat-recent` | chat's no-embedding fallback orders oldest first (`index.ts`) | API: Ask AI cites the oldest saves | API (same component) |
+
+  Two tasks have the symptom in one component and the fault in another; one of them crosses the
+  queue (the repro saves through `POST /api/v1/content`, processes the queued job with
+  `processContent`, and reads `GET /api/v1/content`).
+- **Every seed leaves Recall's own suite green** (62 of 62 at the seeded base), so the per-test
+  gate (decision 043) watches every existing test; the seeds were chosen against behaviour the
+  existing tests don't pin. Each seed and repro was first checked on a local clone (seeded suite
+  62 pass; repro fails on its assertion at the seed and passes with the fix), then in the sandbox.
+- **Validation** (scripted, no model, 2026-10-03, local Docker 29.8.0, image
+  `tracehound-sandbox:bun1.4.2-ts5.9.3-2`, about 50 s each). All four passed both checks, so none
+  was replaced:
+
+  | Task | `oracle` + `fix.patch` | `noop` |
+  |---|---|---|
+  | `recall-dev-short-summary` | RESOLVED (granularity `test`, 62/62 baseline tests still pass, tsc 5 → 5) | UNRESOLVED, repro still fails (exit 1) |
+  | `recall-dev-search-description` | RESOLVED (same) | UNRESOLVED, repro still fails (exit 1) |
+  | `recall-dev-session-expiry` | RESOLVED (same) | UNRESOLVED, repro still fails (exit 1) |
+  | `recall-dev-chat-recent` | RESOLVED (same) | UNRESOLVED, repro still fails (exit 1) |
+
+  The same eight runs are the decision 044 block of `test/harness-recall.test.ts` (Docker +
+  `TRACEHOUND_NETWORK_TESTS=1`; first a file of their own, merged in Phase 3 so that no two Recall
+  sandboxes run at once, see decision 045).
+- **Kept out of this repo on purpose:** nothing about Recall's existing behaviour beyond what each
+  seed changes; no task is built on an existing bug.
+**Rejected:** (a) Seeds that make an existing test fail: the failing test points at the file, and
+the per-test gate would have one test fewer to watch. (b) Repro tests that call the faulty
+function directly for the cross-component tasks: the queue task's repro goes through the API, as
+the symptom does. (c) Replacing the CEX tasks' ids: they stay the user's.
+
+## 045 · The graph-on arm: the context packet in the first message (agent-v5)
+**Context:** until now "graph on" only added the graph tools and one prompt sentence; in the two
+graph-on smoke runs and the four graph-on baseline runs below the agent never called a graph
+tool. The evaluation compares two arms, so the graph-on arm has to put the graph in front of the
+agent (prompt `docs/prompts/build-to-freeze.md`, Phase 3).
+**Choice (agent-v5, `LOOP_VERSION = "agent-v5"`, `harness/prompts/agent-v5.md`; v1–v4 kept):**
+- **Graph on:** the first user message is the issue, then the context packet for the issue text,
+  then the limits sentence. The packet is exactly what `tracehound context --issue "<issue>"`
+  prints for the task's snapshot (`formatContext(buildContext(…))`, default budget 2,000
+  estimated tokens), built with the run's `--decider` (default lexical: deterministic, no model
+  call; decider-v1 stays frozen). It is preceded by one fixed heading line. The graph tools stay
+  available, and the prompt gets one more `GRAPH:` line saying the packet is there and is a hint
+  from static analysis to be confirmed in the code.
+- **Graph off:** neither the packet nor the tools nor the `GRAPH:` lines. Otherwise the two first
+  messages are the same text.
+- **Budgets are identical:** steps, tokens, wall clock and cost come from the task. The packet
+  costs no step. Its tokens are part of every model call's input, so they count against the
+  token budget like everything else (test: a 1,500-token limit lets graph off start and stops
+  graph on after its first call).
+- **Run record:** `arm { arm: "graph-on" | "graph-off", packetInjected, packetChars,
+  packetTokensEstimated (chars/4), graphToolCalls }`, from the agent once it stops
+  (`Agent.armReport`); scripted agents have none. The trace keeps `packet { injected, chars,
+  tokensEstimated, sha256, decider, confidence }`. The CLI prints an `arm:` line.
+- Everything else is agent-v4's: Nano, reasoning on, temperature 0, guards, nudge, output cap,
+  /scratch, edit accounting.
+**Baseline and tuning** (dev tasks only, Nano, reasoning on, one run per task and arm, both arms of
+a task run at the same time, 2026-10-03, local Docker 29.8.0). Changes were made only to text
+both arms get; the `GRAPH:` lines were not touched. Single runs: the differences below are within
+what one run per cell can show, and no conclusion about the graph is drawn from them.
+
+| Round | Prompt (sha256 of agent-v5.md) | Change | graph-on resolved | graph-off resolved |
+|---|---|---|---|---|
+| baseline | `d1d07e8f…` | — | 1 of 4 | 1 of 4 |
+| 1 | `556861d4…` | a rule to keep outputs small: the token limit runs out first, so search narrowly, read line ranges around hits, don't re-read | 2 of 4 | 3 of 4 |
+| 2 | `644e6477…` | round 1 + "every reply must call a tool; think briefly" | 2 of 4 | 1 of 4 |
+
+- Why these changes: in the baseline 5 of 8 runs ended on the 300,000-token budget at about 30
+  turns (each call resends the conversation); round 1 then had 20 replies without a tool call,
+  6 of them 4,096 output tokens of reasoning with no call.
+- **Round 2 made its own target worse:** replies without a tool call 20 → 38, of them at the
+  output cap 6 → 17 (unknown-tool calls 12 → 9). **The frozen prompt is round 1's**
+  (`556861d4…`), the exact file all eight round-1 runs used: round 2's line is removed, nothing
+  new is added, and there is no third round. This is a choice between two states that were both
+  run, made on round 2's mechanism, not on its resolve count.
+- **Graph tool calls: 0 in all 12 graph-on runs.** The packet in the first message was the only
+  graph input any run used.
+- Full per-run tables are in `docs/build-log.md` (Phase 3).
+- **Finding: load can turn a correct patch into UNRESOLVED.** In the first Phase 3 gate, two
+  Recall test files ran their sandboxes in parallel (with the other Docker files; Docker VM 10
+  CPUs, 8 GB, 2 GB per sandbox). The oracle fix of `recall-dev-session-expiry` came out
+  UNRESOLVED (repro exit 1 after the patch), and in smoke test 6 all five `worker.test.ts` tests
+  were reported missing after the patch. Unloaded, the repro takes about 3.5 s and the suite
+  about 10 s, against bun's 5 s default timeout, which Recall's PGlite setup hooks can exceed when
+  starved. Fix: the dev-task tests moved into `test/harness-recall.test.ts`, so Recall sandboxes
+  run one at a time; the next gate passed. **For evaluation runs this means concurrency 1** (the
+  runner's default, decision 046): the per-test gate is only as reliable as the target suite's
+  timing.
+**Rejected:** (a) Injecting the packet as a fake tool result: it would cost a step in one arm only.
+(b) The JSON packet the `context_packet` tool returns: the CLI's text form is shorter and is what
+"the existing context tool" prints. (c) The nemotron decider for the injected packet: a model call
+in one arm only, and decider-v1 is frozen. (d) Keeping round 2's line because it was the last
+round: it doubled the behaviour it was meant to remove. (e) Tuning `GRAPH:` lines: wording only
+one arm gets.
+
+## 046 · The evaluation runner
+**Context:** the evaluation needs one command that runs every task in both arms, with repeats,
+and writes the results (prompt `docs/prompts/build-to-freeze.md`, Phase 4). The held-out tasks
+live outside this repo.
+**Choice** (`packages/analyzer/src/harness/evaluate.ts`):
+```
+node packages/analyzer/src/harness/evaluate.ts --tasks <dir> [--arms on,off] [--repeats 1]
+     [--kind <kind>] [--out <dir>] [--concurrency 1] [--max-spend-usd <usd>]
+     [--reasoning on|off] [--decider lexical|nemotron]
+```
+- **Its own entry point**, not a `tracehound` subcommand: the CLI dispatcher (`src/bin.ts`) and
+  the root `package.json` are outside the paths this prompt may touch (build log, step 0, item 7).
+- **Tasks:** every `<dir>/*/task.json` (or `<dir>/task.json` itself), each loaded and validated
+  with `loadTask` before anything runs, sorted by id, optionally filtered by `kind`. The directory
+  may be anywhere; task paths resolve against each task's own directory, as always.
+- **One run = one `tracehound repair --agent nemotron --graph <arm>` process**, in task-major
+  order (both arms of a repeat, then the next repeat, then the next task). That is the same code
+  path as a single run: the same record, the same ledger, and a fresh client per run, so the
+  shared client's per-process cap (`TRACEHOUND_BUDGET_RUN_USD`) stays per run. The record is read
+  from the file the run names on stdout.
+- **Concurrency defaults to 1.** Decision 045 found that two Recall sandboxes at once can make
+  Recall's own tests time out and turn a correct patch into UNRESOLVED.
+- **Spend stop** (`--max-spend-usd`): before a run starts, the ledger's growth since the runner
+  started, plus the task cost limits of the runs in flight and of this one, must stay within the
+  cap. Otherwise that run and every later one are `NOT_RUN`, with the reason. The exit code is 2
+  when any run is NOT_RUN or FAILED.
+- **Output** in `--out` (default `runs/eval-<timestamp>/`): `runs/` (each record), `results.json`
+  (settings, ledger before/after, one row per run, per-arm totals) and `results.md`. Per run:
+  task, arm, repeat, state, steps, tokens, cost, wall time (record start → end), files opened
+  (`baseFilesRead`, decision 034), graph tool calls. Then per arm: n, resolved / unresolved /
+  failed "k of n", and sums with means, **n printed beside every total**. The table states that no
+  significance test was run; none is computed.
+- **Tests** (`test/harness-evaluate.test.ts`, fake executor, no Docker or model): discovery
+  (kind filter, one task dir, a directory outside the repo, errors), task-major planning, rows
+  from records, a run without a record → FAILED with the reason, the spend stop (that run and every
+  later one NOT_RUN, the reason gives the numbers), totals and the table, bad arguments → exit 3.
+**Rejected:** (a) Calling `runRepair` in-process: one client and one per-process cap for all
+runs, and a crash in one run would end the others. (b) Parallel runs by default: see decision
+045. (c) Mean resolve rates with intervals or tests: four tasks and one repeat can't support them,
+so the table gives counts with n.

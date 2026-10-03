@@ -1,0 +1,13 @@
+diff --git a/recall-backend/index.ts b/recall-backend/index.ts
+index 1104444..94d7f6e 100644
+--- a/recall-backend/index.ts
++++ b/recall-backend/index.ts
+@@ -407,7 +407,7 @@ export function createApp(deps: AppDeps) {
+           })
+           .from(contents)
+           .where(eq(contents.userId, userId))
+-          .orderBy(contents.createdAt)
++          .orderBy(desc(contents.createdAt))
+           .limit(5);
+       }
+ 

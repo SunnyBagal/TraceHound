@@ -12,8 +12,11 @@ export const TaskSpec = z.object({
   /** gitUrl: cloned on the host, then copied in. localPath: a git repo on disk (test fixtures only). */
   source: z.union([z.object({ gitUrl: z.string().min(1) }).strict(), z.object({ localPath: z.string().min(1) }).strict()]),
   baseSha: Sha, // the buggy commit
-  /** "smoke": checks the harness on a repo; never an evaluation task, never counted in results. */
-  kind: z.enum(["smoke", "evaluation"]).optional(),
+  /**
+   * "smoke": checks the harness on a repo; never an evaluation task, never counted in results.
+   * "dev": a seeded task the agent's prompts may be tuned on (decision 044); never an evaluation result.
+   */
+  kind: z.enum(["smoke", "dev", "evaluation"]).optional(),
   /** Repo profile (install / test / typecheck and their directory), relative to the task dir (decision 041). */
   profile: z.string().optional(),
   /**

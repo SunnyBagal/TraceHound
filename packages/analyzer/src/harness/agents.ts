@@ -58,11 +58,26 @@ export interface AgentContext {
   };
 }
 
+/**
+ * Decision 045: which arm a model agent ran in. graph-on: the context packet was in the first
+ * message and the graph tools were available; graph-off: neither. Budgets are the task's, identical.
+ */
+export interface ArmReport {
+  arm: "graph-on" | "graph-off";
+  packetInjected: boolean;
+  packetChars?: number;
+  /** chars / 4, like every estimate in the context tool; the real tokens are in the API usage */
+  packetTokensEstimated?: number;
+  graphToolCalls: number;
+}
+
 export interface Agent {
   readonly name: string;
   run(ctx: AgentContext): Promise<void>;
   /** Observational record of what the agent did (transcript etc.). Never used for verification. */
   readonly trace?: unknown;
+  /** Model agents: the arm, read once the agent has stopped (decision 045). Scripted agents have none. */
+  armReport?(): ArmReport;
 }
 
 /** Scripted: applies a known patch with `git apply`. Proves the harness can reach RESOLVED. */
