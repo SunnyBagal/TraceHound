@@ -11,6 +11,7 @@ export const DOCKER_TEST_FILES = [
   "test/harness-infra.test.ts",
   "test/harness-loop.test.ts",
   "test/harness-recall.test.ts",
+  "test/harness-reproduce.test.ts",
 ];
 
 export default defineConfig({

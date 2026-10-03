@@ -916,3 +916,47 @@ file per case, checked before writing Phase 2):
 So an assertion failure is a `<testcase>` whose `<failure>` has `type="AssertionError"`. A load
 error writes no `<testcase>` for the file. **The report does separate the two; Phase 2 is not
 blocked.**
+
+## Phase 1: evaluation protocol (docs only)
+
+Rules block re-read at the start. `docs/eval/protocol.md` written with exactly the Protocol
+block's text. Commit `4b9fe61`.
+
+**Gate** (GIT_* env check printed nothing; nothing else ran; the Phase 2 drafts were kept out of
+the tree during the gate):
+- version guard: exit 0;
+- `TRACEHOUND_NETWORK_TESTS=1 pnpm test`: exit 0; analyzer 360 passed (31 files, 827 s), viewer
+  88 passed (11 files);
+- `pnpm typecheck`: exit 0;
+- viewer build: exit 0.
+
+Pushed (`build/reproduce`). Spend: $0.
+
+## Phase 2 (decision 048): the reproduce stage
+
+Rules block re-read at the start. Paths touched: `src/harness/reproduce.ts` (new),
+`harness/prompts/repro-v1.md` (new), `test/reproduce.test.ts` and `test/harness-reproduce.test.ts`
+(new), the Docker test-file list in `vitest.config.ts` (one line added), `docs/`. No frozen file
+was changed: `loop.ts`, `run.ts`, `junit.ts`, `evaluate.ts`, `agent-v5.md` and `eval/tasks/` are
+untouched. No existing test was modified. The pin for a repair run's first request messages
+(`bc57c40b…`) was computed from the tree at `4b9fe61` before any reproduce-stage file was in it.
+
+**How an assertion failure is told apart from a load error:** from bun's JUnit report (step 0
+table):
+- an assertion failure is a `<testcase>` with `<failure type="AssertionError">`;
+- a file that fails to load (import, syntax, top-level error) writes no report when run alone;
+- zero tests also writes none, but exits 0;
+- a runtime error or timeout is a `<failure>` with another `type`.
+
+The prompt's STOP condition does not apply.
+
+**Scripted test results** (no model): the 8 Docker cases in decision 048's table all pass, as do
+the 15 unit tests in `test/reproduce.test.ts`. Recall, scripted, before any model run:
+- seeded claim + the task's repro → REPRODUCED;
+- control → NOT_REPRODUCED;
+- oracle-check → true reproduction;
+- emitted task + oracle → RESOLVED.
+
+One Docker test expectation was wrong at first: the edit-to-an-existing-file case's reason names
+both problems ("modified existing file(s): tests/cart.test.ts; added 0 files, not exactly one").
+The code was right; the expected string was corrected.

@@ -2174,3 +2174,104 @@ have to be told about, i.e. a prompt change. (b) Mapping the editor's full comma
 (c) Ignoring whitespace-only lines, or fuzzy matching, to catch the 12 failures: not what was asked,
 and a fuzzy edit can land in the wrong place. (d) Removing the agent-v2 fallback to follow step 3
 literally: see above.
+
+## 048 · The reproduce stage: a claim, one agent-written test, a check independent of the agent
+**Context:** the findings pipeline needs a stage before repair. Given a claim that a repo misbehaves,
+it has to decide whether the claim holds at the base commit, and it must not rely on the agent's
+word for it (prompt `docs/prompts/reproduce-stage.md`). Contradictions with the prompt, and how each
+was resolved, are in `docs/build-log.md` (reproduce stage, step 0).
+**Choice** (`packages/analyzer/src/harness/reproduce.ts`, its own entry point next to `evaluate.ts`;
+`repro-v1`):
+- **Claim** (JSON, strict): `id`, `profile` (a repo profile with a JUnit `testReport`), `source`
+  and `baseSha` (a profile names neither), `title`, `claim` (observed and expected behaviour),
+  optional `evidence` (`file:line` list), optional `seed.patch` (for testing the stage only),
+  optional `testFilePattern`. The agent's issue text is the title, the claim and the evidence.
+- **Agent:** the existing loop and tools (`RepairLoopAgent`, agent-v6, unchanged) with
+  `promptFile: harness/prompts/repro-v1.md`. `LoopOptions.promptFile` already existed, so no
+  parameter was added. A unit test pins a default repair run's first request messages to their
+  sha256 at `main` (`bc57c40b…`), and checks that the prompt file is still `agent-v5.md`
+  (`556861d4…`). The prompt asks for exactly one new test file asserting the expected behaviour,
+  allows no change to an existing file, and says "the test passes, so the claim does not
+  reproduce" is a valid and wanted outcome. It also tells the agent that the loop's two
+  repair-only messages (the step-15 no-edit nudge and the empty-finish confirmation) do not apply
+  to it. Limits are the dev tasks': 40 steps, 300,000 tokens, 900 s, 300 s per command, and Nano
+  $0.10 / Super $0.60 per run.
+- **Sandboxes:** two, each prepared exactly as a repair run's (`prepareSandbox`: seed, setup,
+  squashed base, network off and proven off). The agent works in the first. **The check runs in a
+  fresh second sandbox** at the same base commit (the SHAs must match), with only the agent's file
+  written into it.
+- **Checks**, in order; the first one that fails decides:
+  - **a:** the diff in the agent's sandbox (`git add -A`, name-status vs base) adds exactly one
+    file, matching the test-file pattern (bun's discovery by default) and inside the profile's
+    `workdir`, and nothing else changed. If there is no change at all, the result is
+    NOT_REPRODUCED ("no qualifying file").
+  - **b:** the file run alone (`<profile test report command> ./<file>`):
+    - REJECTED if it writes no report (the file did not load), reports zero tests, times out, has
+      a failing case whose `<failure type>` is not `AssertionError`, or has every case skipped;
+    - NOT_REPRODUCED if every case passes;
+    - otherwise REJECTED if the tsc errors with the file added include one the base doesn't have
+      (decision 041's baseline-matched gate; that is what "type error" means here).
+  - **c:** a second run fails on an assertion in exactly the same cases.
+  - **d:** the whole suite with the file in it. Decision 043's per-test rule is unchanged: every
+    test that passed at baseline still passes, and none is skipped or missing. Its exit-code half
+    is replaced, because a reproducing file makes the suite exit 1 by design: a non-zero exit is
+    accepted only when every failing test is in the new file or already failed at baseline. The
+    new file's name in the suite report is taken from bun's report of the single-file run.
+- **States:**
+  - REPRODUCED;
+  - NOT_REPRODUCED (no qualifying file, or the test passes);
+  - REJECTED with `failedCheck` a–d;
+  - FAILED for infrastructure: sandbox, setup, a missing per-test baseline, and **any agent
+    error that is not a budget or stuck stop**, which includes model request timeouts. A run
+    that ends on a budget is still checked, since its file may be complete.
+- **Record** (`runs/repro__<claim>__…json`, gitignored): the claim, the test file's text, path and
+  sha256, each check's `{ok, detail}`, both file runs per case (with the failure type), baseline and
+  with-file results, tsc diagnostics, state, steps, tokens, cost, end reason, the trace, and each
+  sandbox's commands. Docs get states and counts only.
+- **Commands:**
+  - `run --claim`: one run, one process.
+  - `batch --claims <dir> [--model] [--cost-limit-usd] [--max-ledger-usd]`: a `run` process per
+    claim, one at a time. Before each run it reads the ledger, and the run is NOT_RUN if the
+    ledger plus this run's cost limit would exceed `--max-ledger-usd`.
+  - `oracle-check --record --patch`: a fresh sandbox at the seeded base, the fix applied, the test
+    run alone. It passes → a true reproduction.
+  - `to-task --record`: a task folder the repair harness's `loadTask` accepts. Issue = the claim
+    text, repro = the test at its path, the seed copied in; written under `runs/`, and it refuses
+    `eval/tasks/`.
+**Tests:**
+- `test/reproduce.test.ts`, no Docker or model: the report's failure types, each check's rule,
+  claims, the emitted task, a model error → FAILED with no check sandbox, the pinned repair first
+  message.
+- `test/harness-reproduce.test.ts`, Docker, scripted agents on toy-cart, in the Docker project
+  list; 8 cases, about 24 s in all:
+
+  | Case | Result |
+  |---|---|
+  | correct failing test | REPRODUCED, a–d ok |
+  | passing test | NOT_REPRODUCED |
+  | no file | NOT_REPRODUCED, no check sandbox |
+  | import error | REJECTED b (no report, exit 1) |
+  | runtime TypeError | REJECTED b |
+  | file outside the pattern | REJECTED a |
+  | edit to an existing file | REJECTED a |
+  | flaky test | REJECTED c |
+
+**Checked on Recall before any model run** (scripted, no model, not committed as a test): the
+seeded short-summary claim, with that task's own `repro.test.ts` as the agent's file:
+- **REPRODUCED**: a–d ok, and 62 of 62 baseline tests still pass with the file added;
+- its control (no seed) with the same file: **NOT_REPRODUCED** (the test passes);
+- `oracle-check` with the task's `fix.patch`: a true reproduction;
+- `to-task` on that record, then `tracehound repair --agent oracle`: RESOLVED.
+
+**Rejected:**
+- (a) Judging in the agent's own sandbox: the agent could leave state behind (files in `/tmp`,
+  caches) that makes its test pass or fail there only. The flaky case shows why.
+- (b) Parsing bun's console output to tell an assertion from a crash: the report's
+  `<failure type>` is structured (decision 043's reason).
+- (c) Accepting any failing case: a TypeError or a timeout says the test is broken, not that the
+  claim holds.
+- (d) Applying decision 043's exit-code half literally: it rejects every reproduction.
+- (e) New loop options to silence the nudge and the empty-finish confirmation: the repair agent's
+  behaviour is frozen, so the prompt explains both messages instead.
+- (f) Running the batch in one process: one client, one per-process cap and one failure domain for
+  every run, which decision 046 rejected for the runner too.
