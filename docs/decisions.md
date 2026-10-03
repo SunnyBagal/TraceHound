@@ -1919,7 +1919,11 @@ the process runner (`src/harness/docker.ts`, `run`), raised while `harness-docke
 `child.stdin` had no error listener, so a docker process that exited before reading its input
 crashed the test worker. Now a stdin error is appended to stderr, and a child that exits 0
 without taking non-empty input counts as exit 1. A unit test pipes 8 MB into `sh -c "exit 0"`;
-it fails without the fix and passes with it. It never reproduced locally in the full suite.
+it fails without the fix and passes with it. It never reproduced locally in the full suite. **The failure is intermittent:** the PR #5 head
+`c8f1c24` and the merge `72bc39f` have identical trees, and CI passed on the first and failed on
+the second. It appeared in 2 of the last 60 CI runs (`main` at `72bc39f`, and this branch's first
+push). No merge introduced it: the unguarded stdin write dates from the harness core (`3ddeb5e`,
+decision 026).
 
 ### Study S1: the BullMQ detector on ten unseen repos
 Study S1 (`tracehound-study` @ `75913ef`, read only) ran the analyzer on ten public BullMQ repos it
@@ -1935,7 +1939,8 @@ The five miss reasons, by count:
 
 Decision 042's parameter-following path fired in 0 of 10 repos. Reading 348 history candidates
 found 4 queue contract bugs.
-**The report itself is not copied into `docs/` yet.** `REPORT.md` was to be copied unchanged,
-on the understanding that it holds only file:line references and permalinks. It also quotes short
-code expressions from the target repos (its lines 72, 84–86 and 90–92), so the copy is held for
-the owner's call.
+The report is in `docs/studies/s1-unseen-repos.md`. It quoted short code expressions from the
+target repos (its lines 72, 84–86 and 90–92). On the owner's instruction these were replaced by
+file:line references at the study's pinned commits, using sampled ground-truth sites; nothing
+else changed. `new Queue(...)` stays: it names BullMQ's constructor in the description of the
+detector and isn't quoted from a target.
