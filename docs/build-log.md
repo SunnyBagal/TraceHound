@@ -293,3 +293,147 @@ cap $1.50.
 - README.md still says agent-v4: it is outside the paths this prompt may touch (backlog).
 - No evaluation task was created, read or looked for; dev results are not evaluation results.
 - The graph's effect is untested: one run per cell, and the agent made no graph tool calls.
+
+---
+
+# Build log: agent-v6
+
+Prompt: `docs/prompts/agent-v6.md` (saved verbatim, commit `5e60e05`). Branch `build/agent-v6` off
+`origin/main` @ `ee23827`. Started 2026-10-03. Decision 047.
+
+Ledger at the start (`pnpm spend`): **$0.91718**. This prompt may add at most $3.00 (cap: $3.91718).
+
+## Step 0: contradictions with the prompt
+
+Read: CLAUDE.md, decisions 043–046, `docs/freeze.md`, this log (build-to-freeze), `src/harness/loop.ts`,
+`tools.ts`, `agents.ts`, `run.ts` (record fields), `cli.ts`, `evaluate.ts`, `harness/prompts/agent-v5.md`,
+`test/harness-loop.test.ts`, `config/prices.json`.
+
+None blocks a phase. Each is resolved as stated:
+
+1. **Step 3's retry already exists, in a broader form.** agent-v2's edit fallback (decision 030)
+   already retries an unmatched `oldText` with indentation *and* trailing whitespace ignored per
+   line (`trim()` also drops `\r`), applies it only on exactly one match, and otherwise returns the
+   closest region with line numbers, at most 40 lines. Resolution: add the narrower retry the prompt
+   describes (trailing whitespace and line endings only) **before** the existing fallback, keep the
+   existing fallback (removing it would change the agent beyond "edit mechanics", and it applied in
+   13 of the 32 runs), and make the closest-region error complete: also on the ambiguous
+   normalized match, never omitted for a non-empty file, and its line range equal to the lines shown.
+2. **The measured failures are not whitespace failures** (Phase 1 below): in all 12 "oldText not
+   found" errors the existing fallback, which ignores more whitespace than step 3's retry, found no
+   match. The model's `oldText` differed in characters (dropped `)` in a long SQL line, a missing
+   leading `.`), by a whole whitespace-only line it left out or added, or quoted lines its own
+   earlier edit had already changed. Step 3 is built as written;
+   it is not expected to turn those 12 into successes (checked by replay in Phase 2).
+3. **"All 19 unresolved runs … with failed edits and calls to str_replace_editor."** In the records:
+   8 of the 19 had a failed edit; 7 of the 19 made no edit call at all; 1 (round 2,
+   search-description, graph on) had neither a failed edit nor an unknown-tool call. 18 of 19 made at
+   least one `str_replace_editor` call. Of the 53 `str_replace_editor` calls, 47 were reads
+   (`view` / `read` / a bare `path`), 2 directory listings, 1 an edit and 3 had no arguments.
+4. **CLAUDE.md: "Super/Ultra only via explicit `--model`, reserved for the final evaluation"** vs the
+   Super probe on dev tasks (step 7). The prompt is the owner's explicit instruction; it is followed.
+   The Super id named in the repo is `nvidia/nemotron-3-super-120b-a12b` (`config/prices.json`, a
+   real third-party rate, $0.30 / $0.90 per 1M input / output). `tracehound repair` has no `--model`
+   flag, so one is added to `src/harness/cli.ts` and passed through by the runner. `cli.ts` is read as
+   run-record code (it runs one repair and writes its record; the runner spawns it).
+5. **Super and the task cost limit.** At Super's rates a run that reaches the 300,000-token limit
+   costs about $0.09–0.12, so the tasks' `limits.costUSD` 0.10 may end a Super run before the token
+   limit. "Same budgets" is followed: task limits are not changed, and a cost-limit end is recorded
+   as such.
+6. **CI runs only on pull requests and pushes to `main`** (build-to-freeze contradiction 11). "CI
+   green after every phase" needs a PR from the first push, so the one PR is opened as a draft after
+   the Phase 1 push and marked ready in Phase 5. Not merged.
+7. **Step 0 is not a phase.** The prompt commit is its own (as the prompt says); this step's log
+   goes into the Phase 1 commit.
+8. **"Read" and "step" in Phase 3** are defined as: a successful `read_file` call (including a
+   `str_replace_editor` call that ran as `read_file`) whose path, normalized to the repo root, is a
+   file in the seed patch; `search` hits and `run cat …` are not reads. Steps are counted as the
+   harness counts them (each executed tool call is one step, a reply without a tool call is one
+   step). Tokens are input + output of every model call up to and including the call that made the
+   read.
+9. **Agent label vs prompt file name.** `LOOP_VERSION` becomes `agent-v6`; the prompt file stays
+   `harness/prompts/agent-v5.md`, byte-identical, so records carry `loopVersion: agent-v6` with
+   `promptFile: agent-v5.md`.
+10. **Unknown tools.** The existing unknown-tool error is already one line listing the valid
+    names; it is kept. A `str_replace_editor` call whose argument shape was not seen in Phase 1
+    (including the empty `{}` that was seen, which names no file) gets that same line.
+
+Spend in step 0: $0 (ledger $0.91718).
+
+## Phase 1: measure (no code change)
+
+Rules block re-read at the start. Source: the 32 dev run records (`runs/phase3-baseline`,
+`phase3-round1`, `phase3-round2`, `phase4-runner/runs`; not committed), all `agent-v5`; prompt
+`d1d07e8f…` (baseline), `556861d4…` (round 1 and runner, the frozen prompt), `644e6477…` (round 2).
+"Failed" = an `edit_file` / `write_file` result with `ok: false`; "whitespace fallback" = an edit
+applied by the existing indentation-ignoring fallback.
+
+| Set | Task | Arm | State | End | Steps | Edit/write calls | Failed, by error | Whitespace fallback applied | Unknown-tool calls |
+|---|---|---|---|---|---|---|---|---|---|
+| baseline | chat-recent | off | UNRESOLVED | budget steps 40 | 40 | 0 | 0 | 0 | str_replace_editor 3 |
+| baseline | chat-recent | on | UNRESOLVED | budget tokens 300000 | 33 | 0 | 0 | 0 | str_replace_editor 3 |
+| baseline | search-description | off | UNRESOLVED | budget tokens 300000 | 30 | 1 | oldText not found 1 | 0 | str_replace_editor 2 |
+| baseline | search-description | on | RESOLVED | finish | 20 | 1 | 0 | 0 | str_replace_editor 1 |
+| baseline | session-expiry | off | RESOLVED | finish | 21 | 1 | 0 | 0 | str_replace_editor 2 |
+| baseline | session-expiry | on | UNRESOLVED | stopped stuck | 27 | 1 | 0 | 1 | str_replace_editor 2 |
+| baseline | short-summary | off | UNRESOLVED | budget tokens 300000 | 31 | 0 | 0 | 0 | str_replace_editor 3 |
+| baseline | short-summary | on | UNRESOLVED | budget tokens 300000 | 29 | 2 | oldText not found 1 | 1 | str_replace_editor 2 |
+| round1 | chat-recent | off | RESOLVED | finish | 25 | 2 | ambiguous (exact) 1 | 1 | 0 |
+| round1 | chat-recent | on | RESOLVED | finish | 21 | 1 | 0 | 0 | str_replace_editor 1 |
+| round1 | search-description | off | RESOLVED | finish | 26 | 1 | 0 | 0 | str_replace_editor 2 |
+| round1 | search-description | on | UNRESOLVED | budget tokens 300000 | 29 | 2 | oldText not found 2 | 0 | str_replace_editor 1 |
+| round1 | session-expiry | on | RESOLVED | finish | 30 | 1 | 0 | 0 | str_replace_editor 3 |
+| round1 | session-expiry | off | RESOLVED | finish | 23 | 1 | 0 | 1 | str_replace_editor 2 |
+| round1 | short-summary | on | UNRESOLVED | budget tokens 300000 | 27 | 1 | oldText not found 1 | 0 | str_replace_editor 2 |
+| round1 | short-summary | off | UNRESOLVED | budget steps 40 | 40 | 3 | oldText not found 2 | 1 | str_replace_editor 1 |
+| round2 | chat-recent | off | UNRESOLVED | budget steps 40 | 40 | 2 | oldText not found 1 | 0 | 0 |
+| round2 | chat-recent | on | RESOLVED | finish | 22 | 1 | 0 | 1 | str_replace_editor 1 |
+| round2 | search-description | on | UNRESOLVED | budget tokens 300000 | 25 | 0 | 0 | 0 | 0 |
+| round2 | search-description | off | UNRESOLVED | budget tokens 300000 | 28 | 0 | 0 | 0 | str_replace_editor 1 |
+| round2 | session-expiry | on | RESOLVED | finish | 29 | 3 | invalid arguments 1 | 1 | str_replace_editor 1 |
+| round2 | session-expiry | off | RESOLVED | finish | 18 | 1 | 0 | 0 | str_replace_editor 1 |
+| round2 | short-summary | off | UNRESOLVED | budget tokens 300000 | 34 | 1 | 0 | 1 | str_replace_editor 1 |
+| round2 | short-summary | on | UNRESOLVED | budget tokens 300000 | 29 | 1 | oldText not found 1 | 0 | str_replace_editor 4 |
+| runner | chat-recent | on | RESOLVED | finish | 31 | 1 | 0 | 1 | 0 |
+| runner | chat-recent | off | UNRESOLVED | budget steps 40 | 40 | 0 | 0 | 0 | str_replace_editor 1 |
+| runner | search-description | on | UNRESOLVED | budget tokens 300000 | 28 | 1 | 0 | 0 | str_replace_editor 6 |
+| runner | search-description | off | UNRESOLVED | budget steps 40 | 40 | 3 | oldText not found 3 | 0 | 0 |
+| runner | session-expiry | on | RESOLVED | finish | 24 | 1 | 0 | 1 | str_replace_editor 2 |
+| runner | session-expiry | off | RESOLVED | finish | 25 | 2 | 0 | 1 | str_replace_editor 1 |
+| runner | short-summary | on | UNRESOLVED | budget tokens 300000 | 28 | 1 | 0 | 1 | str_replace_editor 2 |
+| runner | short-summary | off | UNRESOLVED | budget tokens 300000 | 32 | 0 | 0 | 0 | str_replace_editor 2 |
+
+**Totals over 32 runs.** Ends: 13 `finish` (all 13 RESOLVED), 13 token budget, 5 step budget,
+1 stuck (all 19 UNRESOLVED). Failed edit calls: 14, of them "oldText not found" (even ignoring
+indentation and trailing spaces) 12, exact match more than once 1, invalid arguments 1. Unknown-tool
+calls: 53, all `str_replace_editor` (no other unknown name occurred).
+
+**Why the 12 "oldText not found" edits failed.** Replayed on a scratch clone of Recall at `57d920e`
+with the four seeds applied (outside this repo, never pushed), applying each run's successful edits
+in order with the agent-v5 edit logic; the replay reproduces every recorded edit outcome (12 not
+found, 1 exact ×3, 19 applied). Causes:
+- 6 (`db/schema.ts`): characters dropped in the long SQL line (`coalesce(title, '')` written as
+  `coalesce(title, ''`);
+- 3 (`worker.ts`): a whitespace-only line left out of, or added to, an otherwise exact block;
+- 2 (`worker.ts`, round 1 short-summary graph off): `oldText` of lines the run's own earlier edit
+  had already changed;
+- 1 (`index.ts`): started at `orderBy(` without its leading `.`, the next line without its
+  indentation.
+
+None is a trailing-whitespace or line-ending difference.
+
+**`str_replace_editor` argument shapes** (53 calls):
+
+| Shape (keys; `command`) | Calls | Example | Maps to |
+|---|---|---|---|
+| `{command, path}`; `view` | 37 | `{"command": "view", "path": "/work/recall-backend/services/searchService.ts"}` | `read_file {path}` |
+| `{command, path, startLine, endLine}`; `view` (line numbers as strings) | 4 | `{"command": "view", "path": "/work/recall-backend/index.ts", "startLine": "430", "endLine": "460"}` | `read_file {path, startLine, endLine}` |
+| `{command, path}`; `read` | 2 | `{"command": "read", "path": "/work/recall-backend/middleware/middleware.ts"}` | `read_file {path}` |
+| `{command, path, startLine, endLine}`; `read` (strings) | 1 | `{"path": "/work/recall-backend/test/content.test.ts", "command": "read", "startLine": "38", "endLine": "50"}` | `read_file {path, startLine, endLine}` |
+| `{path}`, no command | 2 | `{"path": "recall-backend/middleware/middleware.ts"}` | `read_file {path}` |
+| `{path, view_range}`, no command (`view_range` a string) | 1 | `{"path": "recall-backend/index.ts", "view_range": "[75, 90]"}` | `read_file {path, startLine, endLine}` |
+| `{command, path}`; `list` | 2 | `{"command": "list", "path": "/work/recall-backend/middleware"}` | `list_dir {path}` |
+| `{command, path, oldText, newText}`; `edit_file` | 1 | `{"path": "/work/recall-backend/drizzle/0002_fts_search_vector.sql", "oldText": "…", "newText": "…", "command": "edit_file"}` | `edit_file {path, oldText, newText}` |
+| `{}` | 3 | `{}` | none (names no file): the unknown-tool line |
+
+Analysis script: kept outside the repo (session scratchpad); the numbers above are its output.
