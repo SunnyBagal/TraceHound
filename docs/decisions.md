@@ -2057,3 +2057,44 @@ what one run per cell can show, and no conclusion about the graph is drawn from 
 in one arm only, and decider-v1 is frozen. (d) Keeping round 2's line because it was the last
 round: it doubled the behaviour it was meant to remove. (e) Tuning `GRAPH:` lines: wording only
 one arm gets.
+
+## 046 · The evaluation runner
+**Context:** the evaluation needs one command that runs every task in both arms, with repeats,
+and writes the results (prompt `docs/prompts/build-to-freeze.md`, Phase 4). The held-out tasks
+live outside this repo.
+**Choice** (`packages/analyzer/src/harness/evaluate.ts`):
+```
+node packages/analyzer/src/harness/evaluate.ts --tasks <dir> [--arms on,off] [--repeats 1]
+     [--kind <kind>] [--out <dir>] [--concurrency 1] [--max-spend-usd <usd>]
+     [--reasoning on|off] [--decider lexical|nemotron]
+```
+- **Its own entry point**, not a `tracehound` subcommand: the CLI dispatcher (`src/bin.ts`) and
+  the root `package.json` are outside the paths this prompt may touch (build log, step 0, item 7).
+- **Tasks:** every `<dir>/*/task.json` (or `<dir>/task.json` itself), each loaded and validated
+  with `loadTask` before anything runs, sorted by id, optionally filtered by `kind`. The directory
+  may be anywhere; task paths resolve against each task's own directory, as always.
+- **One run = one `tracehound repair --agent nemotron --graph <arm>` process**, in task-major
+  order (both arms of a repeat, then the next repeat, then the next task). That is the same code
+  path as a single run: the same record, the same ledger, and a fresh client per run, so the
+  shared client's per-process cap (`TRACEHOUND_BUDGET_RUN_USD`) stays per run. The record is read
+  from the file the run names on stdout.
+- **Concurrency defaults to 1.** Decision 045 found that two Recall sandboxes at once can make
+  Recall's own tests time out and turn a correct patch into UNRESOLVED.
+- **Spend stop** (`--max-spend-usd`): before a run starts, the ledger's growth since the runner
+  started, plus the task cost limits of the runs in flight and of this one, must stay within the
+  cap. Otherwise that run and every later one are `NOT_RUN`, with the reason. The exit code is 2
+  when any run is NOT_RUN or FAILED.
+- **Output** in `--out` (default `runs/eval-<timestamp>/`): `runs/` (each record), `results.json`
+  (settings, ledger before/after, one row per run, per-arm totals) and `results.md`. Per run:
+  task, arm, repeat, state, steps, tokens, cost, wall time (record start → end), files opened
+  (`baseFilesRead`, decision 034), graph tool calls. Then per arm: n, resolved / unresolved /
+  failed "k of n", and sums with means, **n printed beside every total**. The table states that no
+  significance test was run; none is computed.
+- **Tests** (`test/harness-evaluate.test.ts`, fake executor, no Docker or model): discovery
+  (kind filter, one task dir, a directory outside the repo, errors), task-major planning, rows
+  from records, a run without a record → FAILED with the reason, the spend stop (that run and every
+  later one NOT_RUN, the reason gives the numbers), totals and the table, bad arguments → exit 3.
+**Rejected:** (a) Calling `runRepair` in-process: one client and one per-process cap for all
+runs, and a crash in one run would end the others. (b) Parallel runs by default: see decision
+045. (c) Mean resolve rates with intervals or tests: four tasks and one repeat can't support them,
+so the table gives counts with n.
