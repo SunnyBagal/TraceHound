@@ -644,3 +644,21 @@ load), but it is not shown.
   says which limit ended a run.
 - Tests: `test/harness-evaluate.test.ts` (counts, a lone off count flagged, a tie flagging all
   four, no report → no flag, the table and summary line, bad `--cost-limit-usd` in both CLIs).
+
+### Gate after amendment A and B (step A3)
+
+GIT_* env check printed nothing; no container running at the start; nothing else ran. Commit
+`b91b887`.
+
+| Run | Analyzer suite (`TRACEHOUND_NETWORK_TESTS=1`) | Time |
+|---|---|---|
+| 1 | exit 0, 360 passed (30 files) | 944 s |
+| 2 | exit 0, 360 passed | 960 s |
+| 3 | exit 0, 360 passed | 829 s |
+
+Then: version guard exit 0; viewer 88 passed; `pnpm typecheck` exit 0; viewer build exit 0. No
+run record was kept (`runs/test-records/` empty), so no Recall test failed. Three green runs
+with the Docker files serialized are consistent with the load explanation, but they don't prove
+it: the earlier failures came 3 times in 5 unserialized runs, and the cause stays **unproven**.
+
+**Spend:** $0 (ledger $0.91718).

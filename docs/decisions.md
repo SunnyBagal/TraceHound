@@ -2154,8 +2154,9 @@ including that call. Computed on the host after the agent stops (`src/harness/ru
 for seeded tasks and model agents only; never part of the verdict. The runner's table also shows
 the end reason, failed edits and unknown-tool calls. `tracehound repair` and the runner take
 `--model` (the Super probe).
-**Gate isolation (amendment 1):** in this work the full suite went red four times on one Recall
-smoke test, Recall's own suite exiting 1 at baseline before any patch, while passing alone. **The
+**Gate isolation (amendment 1):** in this work four full-suite runs went red in the Recall harness
+file: three times its smoke test 1 (Recall's own suite exiting 1 at baseline, before any patch;
+the test passes alone), once two dev-task tests reaching their 300 s timeout. **The
 cause is unproven:** those runs kept no record. The likely cause is decision 045's (Recall's suite
 under parallel Docker load), not shown. Since then the five test files that start Docker
 sandboxes run after all other files and one at a time (`packages/analyzer/vitest.config.ts`,
