@@ -659,6 +659,138 @@ GIT_* env check printed nothing; no container running at the start; nothing else
 Then: version guard exit 0; viewer 88 passed; `pnpm typecheck` exit 0; viewer build exit 0. No
 run record was kept (`runs/test-records/` empty), so no Recall test failed. Three green runs
 with the Docker files serialized are consistent with the load explanation, but they don't prove
-it: the earlier failures came 3 times in 5 unserialized runs, and the cause stays **unproven**.
+it: smoke test 1 had failed in 3 of the 6 unserialized full-suite runs on this branch, and the cause stays **unproven**.
 
 **Spend:** $0 (ledger $0.91718).
+
+## Phase 4: dev batches (agent-v6)
+
+Rules block re-read at the start. CI for `8806d5a` (amendment gate): **success**,
+https://github.com/SunnyBagal/TraceHound/actions/runs/37145415103. Nothing else ran during
+either batch. Ledger before the first model step: $0.91718.
+
+**Contradiction resolved (amendment 1 over the original):** the original stopped the Super probe if
+its first run cost more than $0.30; the amendment sets a $0.60 per-run cost limit for the probe and
+stops it only if its total passes $3.00. The amendment's limits were used.
+
+### Step 6: Nano, agent-v6, 4 dev tasks × 2 arms × 2 repeats
+
+`node packages/analyzer/src/harness/evaluate.ts --tasks eval/tasks --kind dev --arms on,off --repeats 2
+--concurrency 1 --max-spend-usd 1.0 --out runs/phase4-v6-nano`. All runs: `loopVersion` agent-v6,
+prompt `556861d4…`, `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`, reasoning on, task limits (40 steps,
+300,000 tokens, 900 s, $0.10).
+
+**Loss: a network outage.** Runs 1–6 completed. From about 19:20 UTC the host could not resolve
+`github.com`: runs 7–16 ended FAILED within a second each ("git clone … Could not resolve host:
+github.com"), before any model call ($0). Run 6 (search-description, graph off, repeat 1) was in
+progress when it started: its model request timed out after 26 turns ("The operation was aborted
+due to timeout"), and the harness scored it UNRESOLVED (repro still fails). **That run is kept as
+recorded, a loss to the outage, not re-run.** Once GitHub answered again, the 10 FAILED runs were
+re-run once, same settings (`runs/phase4-v6-nano-b/`, one runner call per task; the
+search-description call's repeat is repeat 2). A first attempt at this re-run failed instantly on
+my own shell quoting (zsh did not split the arguments; nothing ran, $0) and was repeated with
+explicit commands. Merged: `runs/phase4-v6-nano-merged/` (baseline flags recomputed over all 16),
+copied to `docs/eval/agent-v6-dev-2026-10-04/nano/`.
+
+**Baseline-anomaly flags: none** (every run's baseline was 62 / 62).
+
+**v6 Nano beside the 16 frozen-prompt v5 runs** (v5: round 1 = rep 1, runner test = rep 2; their
+counts computed from the records with the same code; "Aliased calls" did not exist in v5):
+| Task | Arm | Set | Rep | State | End | Steps | Failed edits | Unknown-tool calls | Aliased calls | First fault-file read: step (tokens) | Tokens | Cost | Baseline passed / total |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| chat-recent | on | v5 round1 | 1 | RESOLVED | finish | 21 | 0 | 1 | — | 9 (42341) | 158603 | $0.01085 | 62 / 62 |
+| chat-recent | on | v5 runner | 2 | RESOLVED | finish | 31 | 0 | 0 | — | 8 (34031) | 255518 | $0.01738 | 62 / 62 |
+| chat-recent | on | v6 Nano | 1 | UNRESOLVED | budget: tokens 300000 | 35 | 0 | 0 | 0 | 9 (38231) | 307928 | $0.02156 | 62 / 62 |
+| chat-recent | on | v6 Nano | 2 | UNRESOLVED | budget: tokens 300000 | 40 | 0 | 0 | 0 | 21 (104538) | 303195 | $0.02220 | 62 / 62 |
+| chat-recent | off | v5 round1 | 1 | RESOLVED | finish | 25 | 1 | 0 | — | 12 (30750) | 107259 | $0.00761 | 62 / 62 |
+| chat-recent | off | v5 runner | 2 | UNRESOLVED | budget: steps 40 | 40 | 0 | 1 | — | 20 (65926) | 280433 | $0.01952 | 62 / 62 |
+| chat-recent | off | v6 Nano | 1 | RESOLVED | finish | 20 | 0 | 0 | 0 | 8 (20304) | 103347 | $0.00721 | 62 / 62 |
+| chat-recent | off | v6 Nano | 2 | RESOLVED | finish | 23 | 0 | 0 | 0 | 11 (32136) | 100896 | $0.00810 | 62 / 62 |
+| search-description | on | v5 round1 | 1 | UNRESOLVED | budget: tokens 300000 | 29 | 2 | 1 | — | 7 (29128) | 305616 | $0.02524 | 62 / 62 |
+| search-description | on | v5 runner | 2 | UNRESOLVED | budget: tokens 300000 | 28 | 0 | 6 | — | 7 (34044) | 311297 | $0.02266 | 62 / 62 |
+| search-description | on | v6 Nano | 1 | RESOLVED | finish | 19 | 0 | 0 | 7 | 7 (31273) | 146236 | $0.01158 | 62 / 62 |
+| search-description | on | v6 Nano | 2 | UNRESOLVED | budget: tokens 300000 | 26 | 0 | 1 | 0 | 6 (25363) | 314568 | $0.02776 | 62 / 62 |
+| search-description | off | v5 round1 | 1 | RESOLVED | finish | 26 | 0 | 2 | — | 12 (46474) | 229102 | $0.01592 | 62 / 62 |
+| search-description | off | v5 runner | 2 | UNRESOLVED | budget: steps 40 | 40 | 3 | 0 | — | 23 (85808) | 284574 | $0.02634 | 62 / 62 |
+| search-description | off | v6 Nano | 1 | UNRESOLVED | error: The operation was aborted due to timeout | 26 | 0 | 5 | 8 | 8 (24441) | 236425 | $0.02203 | 62 / 62 |
+| search-description | off | v6 Nano | 2 | UNRESOLVED | budget: tokens 300000 | 27 | 0 | 0 | 7 | 6 (18095) | 313061 | $0.02845 | 62 / 62 |
+| session-expiry | on | v5 round1 | 1 | RESOLVED | finish | 30 | 0 | 3 | — | 16 (86137) | 230149 | $0.01489 | 62 / 62 |
+| session-expiry | on | v5 runner | 2 | RESOLVED | finish | 24 | 0 | 2 | — | 13 (64320) | 153318 | $0.00999 | 62 / 62 |
+| session-expiry | on | v6 Nano | 1 | RESOLVED | finish | 23 | 0 | 1 | 4 | 7 (32948) | 178439 | $0.01182 | 62 / 62 |
+| session-expiry | on | v6 Nano | 2 | RESOLVED | finish | 22 | 0 | 0 | 5 | 5 (22483) | 160043 | $0.01062 | 62 / 62 |
+| session-expiry | off | v5 round1 | 1 | RESOLVED | finish | 23 | 0 | 2 | — | 10 (23109) | 103436 | $0.00701 | 62 / 62 |
+| session-expiry | off | v5 runner | 2 | RESOLVED | finish | 25 | 0 | 1 | — | 9 (20964) | 109653 | $0.00748 | 62 / 62 |
+| session-expiry | off | v6 Nano | 1 | RESOLVED | finish | 19 | 0 | 0 | 0 | 9 (20286) | 75890 | $0.00553 | 62 / 62 |
+| session-expiry | off | v6 Nano | 2 | RESOLVED | finish | 20 | 0 | 0 | 4 | 5 (11127) | 119767 | $0.00836 | 62 / 62 |
+| short-summary | on | v5 round1 | 1 | UNRESOLVED | budget: tokens 300000 | 27 | 1 | 2 | — | 9 (52170) | 309351 | $0.02281 | 62 / 62 |
+| short-summary | on | v5 runner | 2 | UNRESOLVED | budget: tokens 300000 | 28 | 0 | 2 | — | 7 (37198) | 313254 | $0.02337 | 62 / 62 |
+| short-summary | on | v6 Nano | 1 | UNRESOLVED | budget: tokens 300000 | 32 | 1 | 0 | 9 | 9 (44360) | 309009 | $0.02323 | 62 / 62 |
+| short-summary | on | v6 Nano | 2 | UNRESOLVED | budget: tokens 300000 | 27 | 0 | 1 | 9 | 8 (43529) | 307227 | $0.02616 | 62 / 62 |
+| short-summary | off | v5 round1 | 1 | UNRESOLVED | budget: steps 40 | 40 | 2 | 1 | — | 6 (13290) | 295163 | $0.02103 | 62 / 62 |
+| short-summary | off | v5 runner | 2 | UNRESOLVED | budget: tokens 300000 | 32 | 0 | 2 | — | 13 (66545) | 306398 | $0.02159 | 62 / 62 |
+| short-summary | off | v6 Nano | 1 | UNRESOLVED | budget: tokens 300000 | 36 | 0 | 0 | 12 | 6 (15011) | 304181 | $0.02337 | 62 / 62 |
+| short-summary | off | v6 Nano | 2 | UNRESOLVED | budget: tokens 300000 | 35 | 0 | 1 | 6 | 16 (73758) | 301180 | $0.02321 | 62 / 62 |
+
+| Set | Arm | n | Resolved | Ends: finish / tokens / steps / cost / stuck / error | Failed edits | Unknown-tool calls | Fault file read (mean step) | Cost |
+|---|---|---|---|---|---|---|---|---|
+| v5 (round 1 + runner test) | on | 8 | 4 of 8 | 4 / 4 / 0 / 0 / 0 / 0 | 3 | 17 | 8 of 8 (9.5) | $0.14719 |
+| v5 (round 1 + runner test) | off | 8 | 4 of 8 | 4 / 1 / 3 / 0 / 0 / 0 | 6 | 9 | 8 of 8 (13.1) | $0.12650 |
+| v6 Nano | on | 8 | 3 of 8 | 3 / 5 / 0 / 0 / 0 / 0 | 1 | 3 | 8 of 8 (9.0) | $0.15493 |
+| v6 Nano | off | 8 | 4 of 8 | 4 / 3 / 0 / 0 / 0 / 1 | 0 | 6 | 8 of 8 (8.6) | $0.12626 |
+
+What the v6 records show, and only that (n = 8 per arm and set; no significance test, none implied):
+- Resolved: v6 Nano 7 of 16 (on 3 of 8, off 4 of 8); v5 8 of 16 (on 4 of 8, off 4 of 8).
+- Every v6 run that called `finish` was RESOLVED (7 of 7); the other 9 ended on the token budget
+  (8) or on the outage (1). No v6 run ended on the step budget (v5: 3) or the stuck stop.
+- Failed edits: v6 1, v5 9. The new line-end retry applied **0** times in 16 runs (the replay in
+  Phase 2 predicted it would not change the recorded failures); the agent-v2 fallback applied 6.
+- Unknown-tool calls: v6 9 (`execute_bash` ×5, a name not seen before; `str_replace_editor` with
+  `command: "edit"` ×3, a shape not seen in Phase 1 and so not mapped; `str_replace_editor {}` ×1);
+  v5 26. **71 `str_replace_editor` calls ran as real tools** (70 `read_file`, 1 `list_dir`).
+- Every run read a fault file; mean step of the first read: v6 on 9.0, off 8.6; v5 on 9.5, off 13.1.
+- v6 Nano spend: the 16 records sum to $0.28119 ($0.15493 on, $0.12626 off); the ledger grew by
+  $0.28298. The $0.00179 difference is one ledger entry with `ok: false` at 19:20:22 UTC, the model
+  request that timed out in the outage, priced as an estimate and in no run record.
+
+### Step 7: Super probe
+
+`… --arms on,off --repeats 1 --concurrency 1 --model nvidia/nemotron-3-super-120b-a12b
+--cost-limit-usd 0.6 --max-spend-usd 3.0 --out runs/phase4-v6-super`. Same agent (agent-v6, prompt
+`556861d4…`, reasoning on, temperature 0), same step, token and time limits; the per-run cost limit
+$0.60 for this probe only (recorded in each record's `limits`). Ledger before: $1.20016. The model
+id is the one in `config/prices.json` ($0.30 / $0.90 per 1M input / output, third-party rate).
+Copied to `docs/eval/agent-v6-dev-2026-10-04/super/`. Baseline-anomaly flags: none (62 / 62).
+| Task | Arm | Set | Rep | State | End | Steps | Failed edits | Unknown-tool calls | Aliased calls | First fault-file read: step (tokens) | Tokens | Cost | Baseline passed / total |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| chat-recent | on | v6 Super | 1 | RESOLVED | finish | 26 | 0 | 0 | 0 | 13 (71627) | 213244 | $0.06560 | 62 / 62 |
+| chat-recent | off | v6 Super | 1 | RESOLVED | finish | 14 | 0 | 0 | 0 | 6 (13584) | 56694 | $0.01789 | 62 / 62 |
+| search-description | on | v6 Super | 1 | RESOLVED | finish | 16 | 1 | 0 | 0 | 3 (11771) | 132154 | $0.04145 | 62 / 62 |
+| search-description | off | v6 Super | 1 | UNRESOLVED | budget: tokens 300000 | 27 | 0 | 0 | 0 | 5 (13084) | 311723 | $0.10090 | 62 / 62 |
+| session-expiry | on | v6 Super | 1 | RESOLVED | finish | 9 | 0 | 0 | 0 | 3 (12914) | 52143 | $0.01632 | 62 / 62 |
+| session-expiry | off | v6 Super | 1 | RESOLVED | finish | 8 | 0 | 0 | 0 | 5 (10241) | 19773 | $0.00626 | 62 / 62 |
+| short-summary | on | v6 Super | 1 | UNRESOLVED | stopped: stuck | 16 | 0 | 0 | 0 | 4 (18068) | 127836 | $0.04202 | 62 / 62 |
+| short-summary | off | v6 Super | 1 | UNRESOLVED | budget: tokens 300000 | 31 | 0 | 0 | 0 | 6 (15190) | 305522 | $0.10075 | 62 / 62 |
+
+| Set | Arm | n | Resolved | Ends: finish / tokens / steps / cost / stuck / error | Failed edits | Unknown-tool calls | Fault file read (mean step) | Cost |
+|---|---|---|---|---|---|---|---|---|
+| v6 Super | on | 4 | 3 of 4 | 3 / 0 / 0 / 0 / 1 / 0 | 1 | 0 | 4 of 4 (5.8) | $0.16540 |
+| v6 Super | off | 4 | 2 of 4 | 2 / 2 / 0 / 0 / 0 / 0 | 0 | 0 | 4 of 4 (5.5) | $0.22580 |
+
+**Which limit ended each Super run:** chat-recent on / off, search-description on, session-expiry
+on / off: none (`finish`, RESOLVED). search-description off: the **token** limit (311,723 tokens,
+$0.10090). short-summary on: the **stuck stop** (3 refused calls in a row, 16 steps, $0.04202).
+short-summary off: the **token** limit (305,522 tokens, $0.10075). The $0.60 cost limit ended none;
+the most a run cost was $0.10090. Probe total **$0.39120** (8 runs; $0.00626–$0.10090 per run,
+mean $0.04890), far under the $3.00 stop.
+
+Super resolved 5 of 8 (on 3 of 4, off 2 of 4) with no unknown-tool calls and no aliased calls, and
+read a fault file first at a mean step of 5.8 (on) / 5.5 (off). One run per cell, dev tasks:
+this is a probe, not a comparison of models.
+
+### Step 8
+
+No tuning after these batches. Nothing in the agent, prompt or settings was changed in response to
+them.
+
+**Spend in Phase 4** (ledger): Nano $0.09448 (first batch, incl. the $0.00179 failed request) +
+$0.18850 (re-run) = $0.28298; Super $0.39121; total **$0.67419**. Ledger $0.91718 → **$1.59137** (cap for this prompt: $4.00, ledger $4.91718).
