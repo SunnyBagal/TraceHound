@@ -1,7 +1,7 @@
 // Evaluation runner (decision 046):
 //   node packages/analyzer/src/harness/evaluate.ts --tasks <dir> [--arms on,off] [--repeats 1]
 //        [--kind <kind>] [--out <dir>] [--concurrency 1] [--max-spend-usd <usd>]
-//        [--reasoning on|off] [--decider lexical|nemotron]
+//        [--reasoning on|off] [--decider lexical|nemotron] [--model <id>]
 // Every (task, arm, repeat) is one `tracehound repair --agent nemotron` process: the same code path,
 // budget caps and ledger as a single run, a fresh client (and per-process cap) per run. Writes
 // <out>/results.json and <out>/results.md, and keeps each run record under <out>/runs/.
@@ -14,13 +14,14 @@ import { SpendLedger } from "../llm/ledger.ts";
 import { cleanGitEnv } from "../git-env.ts";
 import type { LoopTrace } from "./loop.ts";
 import type { RunRecord } from "./run.ts";
+import { runMetrics } from "./run-metrics.ts";
 import { loadTask } from "./task.ts";
 
 const WORKSPACE_ROOT = path.resolve(import.meta.dirname, "../../../..");
 const BIN = path.resolve(import.meta.dirname, "../bin.ts");
 const LEDGER = path.join(WORKSPACE_ROOT, ".tracehound", "spend.jsonl");
 export const USAGE =
-  "usage: node packages/analyzer/src/harness/evaluate.ts --tasks <dir> [--arms on,off] [--repeats 1] [--kind <kind>] [--out <dir>] [--concurrency 1] [--max-spend-usd <usd>] [--reasoning on|off] [--decider lexical|nemotron]";
+  "usage: node packages/analyzer/src/harness/evaluate.ts --tasks <dir> [--arms on,off] [--repeats 1] [--kind <kind>] [--out <dir>] [--concurrency 1] [--max-spend-usd <usd>] [--reasoning on|off] [--decider lexical|nemotron] [--model <id>]";
 
 export type Arm = "on" | "off";
 export interface Job {
@@ -51,6 +52,16 @@ export interface ResultRow {
   graphToolCalls?: number;
   packetInjected?: boolean;
   packetChars?: number;
+  /** decision 047: "finish", "budget: …", "stopped: …" or "error: …" */
+  endReason?: string;
+  failedEdits?: number;
+  unknownToolCalls?: number;
+  /** agent-v6: str_replace_editor calls run as a real tool */
+  aliasCalls?: number;
+  /** decision 047: step of the first read of a file the seed changed (null: never read; absent: no seed / no record field) */
+  faultReadStep?: number | null;
+  /** model tokens used up to and including that step */
+  faultReadTokens?: number | null;
   runFile?: string;
 }
 
@@ -97,6 +108,8 @@ export function rowFromRecord(job: Job, record: RunRecord, runFile?: string): Re
     graphToolCalls: record.arm?.graphToolCalls ?? trace?.graphCalls?.length ?? 0,
     packetInjected: record.arm?.packetInjected ?? false,
     ...(record.arm?.packetChars !== undefined && { packetChars: record.arm.packetChars }),
+    ...runMetrics(record),
+    ...(record.faultFileRead && { faultReadStep: record.faultFileRead.read?.step ?? null, faultReadTokens: record.faultFileRead.read?.tokens ?? null }),
     ...(runFile && { runFile }),
   };
 }
@@ -115,6 +128,12 @@ export interface ArmTotal {
   wallMs: number;
   filesOpened: number;
   graphToolCalls: number;
+  failedEdits: number;
+  unknownToolCalls: number;
+  /** runs whose record has the fault-file field, and of them those that read a fault file (with the steps summed) */
+  faultReadKnown: number;
+  faultRead: number;
+  faultReadSteps: number;
 }
 
 export function armTotals(rows: ResultRow[], arms: Arm[]): ArmTotal[] {
@@ -135,6 +154,11 @@ export function armTotals(rows: ResultRow[], arms: Arm[]): ArmTotal[] {
       wallMs: sum("wallMs"),
       filesOpened: sum("filesOpened"),
       graphToolCalls: sum("graphToolCalls"),
+      failedEdits: sum("failedEdits"),
+      unknownToolCalls: sum("unknownToolCalls"),
+      faultReadKnown: ran.filter((r) => r.faultReadStep !== undefined).length,
+      faultRead: ran.filter((r) => typeof r.faultReadStep === "number").length,
+      faultReadSteps: sum("faultReadStep"),
     };
   });
 }
@@ -144,22 +168,25 @@ const usd = (x?: number) => (x === undefined ? "—" : `$${x.toFixed(5)}`);
 const num = (x?: number) => (x === undefined ? "—" : String(x));
 const mean = (total: number, n: number, f: (x: number) => string) => (n ? f(total / n) : "—");
 const armName = (a: Arm) => `graph-${a}`;
+const faultRead = (r: ResultRow) => (r.faultReadStep === undefined ? "—" : r.faultReadStep === null ? "never" : `${r.faultReadStep} (${r.faultReadTokens})`);
 
 export function markdownTable(rows: ResultRow[], totals: ArmTotal[], meta: { tasksDir: string; repeats: number; generatedAt: string }): string {
   const out: string[] = [];
   out.push(`# Evaluation results`, "");
   out.push(`Tasks: \`${meta.tasksDir}\` · arms: ${totals.map((t) => armName(t.arm)).join(", ")} · repeats: ${meta.repeats} · ${meta.generatedAt}`, "");
-  out.push("| Task | Arm | Rep | State | Steps | Tokens | Cost | Wall time | Files opened | Graph tool calls |");
-  out.push("|---|---|---|---|---|---|---|---|---|---|");
+  out.push("| Task | Arm | Rep | State | End | Steps | Tokens | Cost | Wall time | Files opened | Graph tool calls | Failed edits | Unknown-tool calls | Fault file first read: step (tokens) |");
+  out.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   for (const r of rows)
-    out.push(`| ${r.taskId} | ${armName(r.arm)} | ${r.repeat} | ${r.state} | ${num(r.steps)} | ${num(r.tokens)} | ${usd(r.costUSD)} | ${s(r.wallMs)} | ${num(r.filesOpened)} | ${num(r.graphToolCalls)} |`);
+    out.push(
+      `| ${r.taskId} | ${armName(r.arm)} | ${r.repeat} | ${r.state} | ${r.endReason ?? "—"} | ${num(r.steps)} | ${num(r.tokens)} | ${usd(r.costUSD)} | ${s(r.wallMs)} | ${num(r.filesOpened)} | ${num(r.graphToolCalls)} | ${num(r.failedEdits)} | ${num(r.unknownToolCalls)} | ${faultRead(r)} |`,
+    );
   out.push("", "## Per arm (totals; n = runs with a record)", "");
-  out.push("| Arm | n | Resolved | Unresolved | Failed | Steps (mean) | Tokens (mean) | Cost (mean) | Wall time (mean) | Files opened (mean) | Graph tool calls |");
-  out.push("|---|---|---|---|---|---|---|---|---|---|---|");
+  out.push("| Arm | n | Resolved | Unresolved | Failed | Steps (mean) | Tokens (mean) | Cost (mean) | Wall time (mean) | Files opened (mean) | Graph tool calls | Failed edits | Unknown-tool calls | Fault file read (mean step) |");
+  out.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   for (const t of totals) {
     const n = `n = ${t.n}`;
     out.push(
-      `| ${armName(t.arm)} | ${t.n}${t.notRun ? ` (+${t.notRun} not run)` : ""} | ${t.resolved} of ${t.n} | ${t.unresolved} of ${t.n} | ${t.failed} of ${t.n} | ${t.steps} (${mean(t.steps, t.n, (x) => x.toFixed(1))}; ${n}) | ${t.tokens} (${mean(t.tokens, t.n, (x) => String(Math.round(x)))}; ${n}) | ${usd(t.costUSD)} (${mean(t.costUSD, t.n, usd)}; ${n}) | ${s(t.wallMs)} (${mean(t.wallMs, t.n, s)}; ${n}) | ${t.filesOpened} (${mean(t.filesOpened, t.n, (x) => x.toFixed(1))}; ${n}) | ${t.graphToolCalls} (${n}) |`,
+      `| ${armName(t.arm)} | ${t.n}${t.notRun ? ` (+${t.notRun} not run)` : ""} | ${t.resolved} of ${t.n} | ${t.unresolved} of ${t.n} | ${t.failed} of ${t.n} | ${t.steps} (${mean(t.steps, t.n, (x) => x.toFixed(1))}; ${n}) | ${t.tokens} (${mean(t.tokens, t.n, (x) => String(Math.round(x)))}; ${n}) | ${usd(t.costUSD)} (${mean(t.costUSD, t.n, usd)}; ${n}) | ${s(t.wallMs)} (${mean(t.wallMs, t.n, s)}; ${n}) | ${t.filesOpened} (${mean(t.filesOpened, t.n, (x) => x.toFixed(1))}; ${n}) | ${t.graphToolCalls} (${n}) | ${t.failedEdits} (${n}) | ${t.unknownToolCalls} (${n}) | ${t.faultRead} of ${t.faultReadKnown} (${mean(t.faultReadSteps, t.faultRead, (x) => x.toFixed(1))}; n = ${t.faultRead}) |`,
     );
   }
   out.push("", "Counts and sums over the runs above, with the sample size beside each. No significance test was run and none is implied.");
@@ -170,10 +197,10 @@ export function markdownTable(rows: ResultRow[], totals: ArmTotal[], meta: { tas
 export type Execute = (job: Job) => Promise<{ record?: RunRecord; runFile?: string; error?: string }>;
 
 /** Spawns `tracehound repair` for one job and reads the record it wrote (its stdout names the file). */
-export function spawnRepair(opts: { runsDir: string; reasoning: string; decider: string }): Execute {
+export function spawnRepair(opts: { runsDir: string; reasoning: string; decider: string; model?: string }): Execute {
   return (job) =>
     new Promise((resolve) => {
-      const args = [BIN, "repair", "--task", job.taskFile, "--agent", "nemotron", "--graph", job.arm, "--reasoning", opts.reasoning, "--decider", opts.decider, "--provider", "docker", "--runs-dir", opts.runsDir];
+      const args = [BIN, "repair", "--task", job.taskFile, "--agent", "nemotron", "--graph", job.arm, "--reasoning", opts.reasoning, "--decider", opts.decider, ...(opts.model ? ["--model", opts.model] : []), "--provider", "docker", "--runs-dir", opts.runsDir];
       const child = spawn(process.execPath, args, { cwd: WORKSPACE_ROOT, stdio: ["ignore", "pipe", "pipe"], env: cleanGitEnv() });
       let stdout = "";
       let stderr = "";
@@ -244,6 +271,7 @@ export async function main(argv: string[]): Promise<number> {
       "max-spend-usd": { type: "string" },
       reasoning: { type: "string", default: "on" },
       decider: { type: "string", default: "lexical" },
+      model: { type: "string" },
     },
   });
   const fail = (msg: string) => (console.error(`✖ ${msg}\n${USAGE}`), 3);
@@ -267,7 +295,7 @@ export async function main(argv: string[]): Promise<number> {
   const ledgerBefore = ledger.totalUSD();
   console.error(`[evaluate] ${tasks.length} task(s) × ${arms.length} arm(s) × ${repeats} repeat(s) = ${jobs.length} run(s), concurrency ${concurrency} → ${out}`);
   const startedAt = new Date().toISOString();
-  const rows = await runJobs(jobs, spawnRepair({ runsDir, reasoning: values.reasoning!, decider: values.decider! }), {
+  const rows = await runJobs(jobs, spawnRepair({ runsDir, reasoning: values.reasoning!, decider: values.decider!, ...(values.model && { model: values.model }) }), {
     concurrency,
     ...(maxSpendUSD !== undefined && { maxSpendUSD }),
     spentUSD: () => ledger.totalUSD(),
@@ -282,7 +310,7 @@ export async function main(argv: string[]): Promise<number> {
     arms,
     repeats,
     kind: values.kind ?? null,
-    settings: { agent: "nemotron", reasoning: values.reasoning, decider: values.decider, concurrency, maxSpendUSD: maxSpendUSD ?? null },
+    settings: { agent: "nemotron", model: values.model ?? "default (Nano)", reasoning: values.reasoning, decider: values.decider, concurrency, maxSpendUSD: maxSpendUSD ?? null },
     ledger: { beforeUSD: ledgerBefore, afterUSD: ledgerAfter, spentUSD: ledgerAfter - ledgerBefore },
     rows: rows.map((r) => ({ ...r, ...(r.runFile && { runFile: path.relative(out, r.runFile) }) })),
     totals,

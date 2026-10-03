@@ -496,3 +496,71 @@ call of the 32 runs, each run's successful edits applied in order), agent-v6 cod
 
 The new retry changes none of the recorded edit outcomes. Only the alias changes what the 32 runs
 would have got (50 of 53 calls run as real tools).
+
+**Gates** (GIT_* env check printed nothing):
+- First run: version guard exit 0; `TRACEHOUND_NETWORK_TESTS=1 pnpm test` **exit 1**, 2 of 350
+  analyzer tests failed: `changes.test.ts` "a cross-component signature change lists the callers"
+  (vitest's 5 s timeout) and `harness-recall.test.ts` test 1 (Recall's own `bun test` exited 1 **at
+  baseline**, before any patch). Typecheck exit 0; viewer build exit 0.
+- Diagnosis: both are load failures, in code this phase didn't touch. **My error:** while this gate
+  ran I ran the Phase 3 unit tests in a second worktree on the same machine, the load decision 045
+  warns about.
+- **Fix (the one attempt):** the gate re-run with nothing else running: version guard exit 0;
+  tests exit 0, analyzer 350 passed (29 files), viewer 88 passed (11 files), 802 s; typecheck exit
+  0; viewer build exit 0. From here on nothing else runs during a gate.
+
+**Spend:** $0 (ledger $0.91718).
+
+## Phase 3: time to fault file
+
+Rules block re-read at the start. CI for the Phase 1 commit `2b88f9e`: **success**,
+https://github.com/SunnyBagal/TraceHound/actions/runs/37133622382. CI for Phase 2 (`01dc0f8`): see
+the next phase's entry.
+
+**Done:**
+- `src/harness/run-metrics.ts`: `patchFiles` (the files a seed patch touches, from its
+  `diff --git` headers), `faultFileRead` (walks the trace the way the harness counts steps: a reply
+  without a tool call is one step, every executed call is one step, a call after `finish` in the
+  same turn is none; a read is a successful `read_file` or a call run as one), `runMetrics` (end
+  reason, failed edits, unknown-tool calls, aliased calls).
+- Run record `faultFileRead { files, read: { step, turn, tokens, file } | null }`, computed on the
+  host in `runRepair` after the agent stops, for seeded tasks and model agents only (`src/harness/run.ts`,
+  not part of the verdict). The repair CLI prints a `fault file:` line.
+- The runner's rows and `results.md` gain End, Failed edits, Unknown-tool calls and "Fault file
+  first read: step (tokens)"; per arm: failed edits, unknown-tool calls, and "k of n (mean step)".
+- `tracehound repair --model <id>` and the runner's `--model` (step 0, item 4); the runner records
+  the model in `results.json`.
+- Tests: `test/harness-metrics.test.ts` (patch files incl. the four dev seeds, path forms, step
+  counting with a reply without a call, a failed read, a search hit, an aliased read, a call after
+  `finish`; never read → null; the counts), `test/harness-loop.test.ts` (the field end to end
+  through `runRepair` with a seeded fake task; no field without a seed or for a scripted agent),
+  `test/harness-evaluate.test.ts` (rows, totals and the table's new columns).
+- Check of the step walk: on all 32 existing agent-v5 records it ends at exactly the harness's
+  recorded step count.
+
+**The 16 frozen-prompt agent-v5 runs** (round 1 and the runner test, prompt `556861d4…`),
+computed with the same code from the records and each task's `seed.patch`:
+
+| Set | Task | Arm | State | End | Steps | Failed edits | Unknown-tool calls | First fault-file read: step | Tokens up to it | File |
+|---|---|---|---|---|---|---|---|---|---|---|
+| round1 | chat-recent | off | RESOLVED | finish | 25 | 1 | 0 | 12 | 30750 | recall-backend/index.ts |
+| round1 | chat-recent | on | RESOLVED | finish | 21 | 0 | 1 | 9 | 42341 | recall-backend/index.ts |
+| round1 | search-description | off | RESOLVED | finish | 26 | 0 | 2 | 12 | 46474 | recall-backend/db/schema.ts |
+| round1 | search-description | on | UNRESOLVED | budget: tokens 300000 | 29 | 2 | 1 | 7 | 29128 | recall-backend/db/schema.ts |
+| round1 | session-expiry | on | RESOLVED | finish | 30 | 0 | 3 | 16 | 86137 | recall-backend/middleware/middleware.ts |
+| round1 | session-expiry | off | RESOLVED | finish | 23 | 0 | 2 | 10 | 23109 | recall-backend/middleware/middleware.ts |
+| round1 | short-summary | on | UNRESOLVED | budget: tokens 300000 | 27 | 1 | 2 | 9 | 52170 | recall-backend/worker.ts |
+| round1 | short-summary | off | UNRESOLVED | budget: steps 40 | 40 | 2 | 1 | 6 | 13290 | recall-backend/worker.ts |
+| runner | chat-recent | on | RESOLVED | finish | 31 | 0 | 0 | 8 | 34031 | recall-backend/index.ts |
+| runner | chat-recent | off | UNRESOLVED | budget: steps 40 | 40 | 0 | 1 | 20 | 65926 | recall-backend/index.ts |
+| runner | search-description | on | UNRESOLVED | budget: tokens 300000 | 28 | 0 | 6 | 7 | 34044 | recall-backend/db/schema.ts |
+| runner | search-description | off | UNRESOLVED | budget: steps 40 | 40 | 3 | 0 | 23 | 85808 | recall-backend/db/schema.ts |
+| runner | session-expiry | on | RESOLVED | finish | 24 | 0 | 2 | 13 | 64320 | recall-backend/middleware/middleware.ts |
+| runner | session-expiry | off | RESOLVED | finish | 25 | 0 | 1 | 9 | 20964 | recall-backend/middleware/middleware.ts |
+| runner | short-summary | on | UNRESOLVED | budget: tokens 300000 | 28 | 0 | 2 | 7 | 37198 | recall-backend/worker.ts |
+| runner | short-summary | off | UNRESOLVED | budget: tokens 300000 | 32 | 0 | 2 | 13 | 66545 | recall-backend/worker.ts |
+
+Every one of the 16 read a fault file. Mean step of the first read: graph on 9.5, graph off 13.1
+(n = 8 each); mean tokens up to it: graph on 47,421, graph off 44,108 (n = 8 each; the graph-on
+first message carries the packet). Two runs per cell: a description of these records, not a
+measured effect of the graph.

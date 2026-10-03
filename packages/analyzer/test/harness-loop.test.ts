@@ -75,6 +75,7 @@ class FakeProvider implements SandboxProvider {
     if (cmd === SQUASH_HISTORY) return { exitCode: 0, stdout: `${"b".repeat(40)}\n`, stderr: "", durationMs: 1, timedOut: false };
     if (cmd === repoStateCommand("b".repeat(40)))
       return { exitCode: 0, stdout: `${String(this.changes).padStart(64, "0")}\n${this.changes ? 100 : 0}\n${this.baseChanges}\n`, stderr: "", durationMs: 1, timedOut: false };
+    if (cmd === "git status --porcelain") return { exitCode: 0, stdout: " M src/cart.ts\n", stderr: "", durationMs: 1, timedOut: false }; // a seed patch changed something
     if (cmd.startsWith("git ls-tree")) return { exitCode: 0, stdout: "package.json\0src/cart.ts\0tests/cart.test.ts\0", stderr: "", durationMs: 1, timedOut: false };
     if (/ (edit_file|write_file)$/.test(cmd) || cmd.includes("touch") || cmd === "delete-base-file") this.changes++;
     if (/ edit_file$/.test(cmd) || cmd === "delete-base-file") this.baseChanges++;
@@ -509,6 +510,27 @@ describe("agent-v6 (decision 047): the frozen prompt file and the str_replace_ed
       expect(r.agentRun!.steps).toBe(8 + 2); // every call is one step, aliased or not; 2 finishes (unchanged repo)
     });
   }
+});
+
+describe("decision 047: the first read of a seeded file, in the run record", () => {
+  const seedPatch = "diff --git a/src/cart.ts b/src/cart.ts\n--- a/src/cart.ts\n+++ b/src/cart.ts\n@@ -1 +1 @@\n-a\n+b\n";
+  it("a seeded task: step and tokens of the first successful read of a file the seed changed", async () => {
+    const { client } = fakeModel((turn) =>
+      turn === 1 ? [call("list_dir", { path: "." }), call("read_file", { path: "tests/cart.test.ts" })] : turn === 2 ? "thinking" : turn === 3 ? [call("str_replace_editor", { command: "view", path: "/work/src/cart.ts" })] : [call("finish", { summary: "x" }), call("finish", { summary: "x" })],
+    );
+    const r = await runRepair({ task: { ...fakeTask(), seedPatch }, agent: new RepairLoopAgent(), provider: new FakeProvider(), image: "img", llm: client });
+    expect(r.faultFileRead).toEqual({ files: ["src/cart.ts"], read: { step: 4, turn: 3, tokens: 330, file: "src/cart.ts" } }); // fake model: 110 tokens per call
+  });
+
+  it("never read → null; a task without a seed, or a scripted agent, has no field", async () => {
+    const { client } = fakeModel(() => [call("finish", { summary: "x" }), call("finish", { summary: "x" })]);
+    const seeded = await runRepair({ task: { ...fakeTask(), seedPatch }, agent: new RepairLoopAgent(), provider: new FakeProvider(), image: "img", llm: client });
+    expect(seeded.faultFileRead).toEqual({ files: ["src/cart.ts"], read: null });
+    const plain = await runRepair({ task: fakeTask(), agent: new RepairLoopAgent(), provider: new FakeProvider(), image: "img", llm: fakeModel(() => [call("finish", { summary: "x" })]).client });
+    expect(plain.faultFileRead).toBeUndefined();
+    const scripted = await runRepair({ task: { ...fakeTask(), seedPatch }, agent: new NoopAgent(), provider: new FakeProvider(), image: "img" });
+    expect(scripted.faultFileRead).toBeUndefined();
+  });
 });
 
 describe("agent-v6 (decision 047): edit_file retry with trailing whitespace and line endings ignored (the sandbox helper's JS, evaluated on the host)", () => {

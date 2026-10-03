@@ -2147,6 +2147,13 @@ agent-v6's: **the new retry turns none of the 12 "not found" failures into an ed
 are characters the model dropped (6), a whitespace-only line left out or added (3), lines the run
 had already changed (2), and a partial first line without its leading `.` (1). The alias, by
 contrast, would have run 50 of the 53 wasted calls as real tools (47 reads, 2 listings, 1 edit).
+**Run records (same prompt, Phase 3):** `faultFileRead { files, read: { step, turn, tokens, file } |
+null }`: the step of the first successful read (`read_file`, or a call run as one) of a file the
+task's seed patch changed, counted as the harness counts steps, and the tokens used up to and
+including that call. Computed on the host after the agent stops (`src/harness/run-metrics.ts`),
+for seeded tasks and model agents only; never part of the verdict. The runner's table also shows
+the end reason, failed edits and unknown-tool calls. `tracehound repair` and the runner take
+`--model` (the Super probe).
 **Rejected:** (a) Adding `str_replace_editor` to the schemas: a second edit tool both arms would
 have to be told about, i.e. a prompt change. (b) Mapping the editor's full command set (`create`,
 `str_replace`, `insert`, `undo_edit`): shapes never seen in the runs; a guess at what Nano means.
