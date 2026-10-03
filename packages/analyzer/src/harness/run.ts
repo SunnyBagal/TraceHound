@@ -5,11 +5,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { BudgetExceededError } from "../llm/budget.ts";
 import type { ChatRequest, ChatResult } from "../llm/client.ts";
 import { AgentStopped, type Agent, type AgentContext, type ArmReport } from "./agents.ts";
+import type { LoopTurn } from "./loop.ts";
+import { faultFileRead, type FaultFileRead } from "./run-metrics.ts";
 import { SCRATCH } from "./tools.ts";
 import { SandboxGoneError, type ExecResult, type SandboxDescription, type SandboxHandle, type SandboxProvider, type SandboxSource } from "./provider.ts";
 import { parseJunit, testKey, type TestResult } from "./junit.ts";
 import { checkPlan, REPORT_PLACEHOLDER, TSC_PLACEHOLDER, type CheckPlan } from "./profile.ts";
-import { BUN_TEST_FILE_PATTERN, type LoadedTask } from "./task.ts";
+import { BUN_TEST_FILE_PATTERN, type LoadedTask, type TaskSpec } from "./task.ts";
 
 export type RunState = "PREPARING_SANDBOX" | "REPRODUCING" | "PATCHING" | "VERIFYING" | "RESOLVED" | "UNRESOLVED" | "FAILED" | "CANCELLED";
 export type Phase = "PREPARING_SANDBOX" | "NETWORK_OFF" | "REPRODUCING" | "BASELINE" | "PATCHING" | "VERIFYING";
@@ -80,6 +82,8 @@ export interface RunRecord {
   /** The repo profile the checks came from, and the commands as run from /work. */
   profile?: { id: string; workdir: string };
   plan?: CheckPlan;
+  /** Amendment 1 (decision 047): the limits this run had (the task's, or a CLI --cost-limit-usd override). */
+  limits?: TaskSpec["limits"];
   /** A seeded bug applied before the base commit was made (sha256 of the patch file). */
   seed?: { patchSha256: string };
   /** Decision 036: provider version, engine version and the image id actually used. */
@@ -120,6 +124,12 @@ export interface RunRecord {
   agentRun?: { steps: number; budgetExhausted?: string; stopped?: string; error?: string; trace?: unknown };
   /** Decision 045: the arm (graph-on / graph-off), whether the packet was injected, its size, graph tool calls. */
   arm?: ArmReport;
+  /**
+   * Decision 047: for a seeded task and a model agent, the step of the first successful read of a
+   * file the seed patch changed, and the tokens used up to it. Computed on the host from the trace
+   * after the agent stops; observational, never part of the verdict.
+   */
+  faultFileRead?: FaultFileRead;
   /** Counted by the harness from API usage fields (via the shared client), never from the agent. */
   usage: {
     llmCalls: number;
@@ -523,6 +533,7 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
     ...(spec.kind && { taskKind: spec.kind }),
     ...(task.profile && { profile: { id: task.profile.id, workdir: task.profile.workdir } }),
     ...(task.seedPatch !== undefined && { seed: { patchSha256: createHash("sha256").update(task.seedPatch).digest("hex") } }),
+    limits: spec.limits,
     startedAt: new Date(started).toISOString(),
     states: [],
     sandbox: { destroyed: false },
@@ -705,6 +716,8 @@ export async function runRepair(opts: RunOptions): Promise<RunRecord> {
       record.agentRun.steps = Math.min(steps, spec.limits.steps);
       if (agent.trace !== undefined) record.agentRun.trace = agent.trace;
       if (agent.armReport) record.arm = agent.armReport();
+      const turns = (agent.trace as { turns?: unknown } | undefined)?.turns;
+      if (task.seedPatch !== undefined && Array.isArray(turns)) record.faultFileRead = faultFileRead({ turns: turns as LoopTurn[] }, task.seedPatch);
     }
 
     // ── VERIFYING: the harness's own checks only (not bounded by the agent's wall-clock) ────

@@ -4,7 +4,7 @@
 // second task whose seed also makes one existing test fail at baseline. Decision 044: the four dev tasks.
 // Needs Docker and outbound network (GitHub, npm): runs only with TRACEHOUND_NETWORK_TESTS=1 (CI sets it).
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { NoopAgent, OracleAgent, type Agent } from "../src/harness/agents.ts";
@@ -19,7 +19,38 @@ const INSTALL = 'cd "recall-backend" && bun install --frozen-lockfile';
 const TEST = 'cd "recall-backend" && bun test';
 const containerExists = (id: string) => spawnSync("docker", ["ps", "-a", "-q", "--filter", `name=^/${id}$`], { encoding: "utf8" }).stdout.trim() !== "";
 const oracle = (patch: string, dir = DIR) => new OracleAgent(readFileSync(path.join(dir, patch), "utf8"));
-const smoke = (agent: Agent, provider = new LocalDockerProvider(), task = loadTask(path.join(DIR, "task.json"))): Promise<RunRecord> => runRepair({ task, agent, provider, image: SANDBOX_IMAGE });
+/**
+ * agent-v6 amendment 1: every run record is written here as soon as its run returns; a passing test
+ * deletes its records, a failing one keeps them and names them in its failure message. (A test that
+ * hits its timeout fails before its run returns: its record still lands here when the run ends.)
+ */
+const KEPT = path.resolve(import.meta.dirname, "../../../runs/test-records");
+let records: string[] = [];
+const keep = (r: RunRecord): RunRecord => {
+  mkdirSync(KEPT, { recursive: true });
+  const file = path.join(KEPT, `${r.runId}.json`);
+  writeFileSync(file, JSON.stringify(r, null, 2) + "\n");
+  records.push(file);
+  return r;
+};
+/** it(), keeping the test's run records when it fails. */
+const itKeeps = (name: string, body: () => Promise<void>, timeout: number) =>
+  it(
+    name,
+    async () => {
+      records = [];
+      try {
+        await body();
+      } catch (error) {
+        if (error instanceof Error) error.message += records.length ? `\nrun record kept: ${records.join(", ")}` : "\n(no run record: the run did not return)";
+        throw error;
+      }
+      for (const file of records) rmSync(file, { force: true });
+    },
+    timeout,
+  );
+const smoke = async (agent: Agent, provider = new LocalDockerProvider(), task = loadTask(path.join(DIR, "task.json"))): Promise<RunRecord> =>
+  keep(await runRepair({ task, agent, provider, image: SANDBOX_IMAGE }));
 const LINK = "test/linkDetector.test.ts > detectLinkType >";
 const TSC_BASELINE = "typecheck recall-backend: 5 error(s) at baseline, 5 now"; // Recall's own tsc errors (decision 041)
 
@@ -36,7 +67,7 @@ if (!enabled) {
       await LocalDockerProvider.ensureImage();
     }, 15 * 60_000);
 
-    it("1. correct patch → RESOLVED; seeded, installed in the subdirectory with the network on, then off and proven off before any check", async () => {
+    itKeeps("1. correct patch → RESOLVED; seeded, installed in the subdirectory with the network on, then off and proven off before any check", async () => {
       const r = await smoke(oracle("fix.patch"));
       expect(r).toMatchObject({ finalState: "RESOLVED", taskKind: "smoke", snapshot: "none", profile: { id: "recall", workdir: "recall-backend" }, repro: { atBase: { exitCode: 1 }, afterPatch: { exitCode: 0 } } });
       const cmds = r.commands.map((c) => c.cmd);
@@ -70,12 +101,12 @@ if (!enabled) {
       expect(containerExists(r.sandbox.id!)).toBe(false);
     }, 300_000);
 
-    it("2. empty patch (noop) → UNRESOLVED, repro still fails", async () => {
+    itKeeps("2. empty patch (noop) → UNRESOLVED, repro still fails", async () => {
       const r = await smoke(new NoopAgent());
       expect(r).toMatchObject({ finalState: "UNRESOLVED", reason: "repro still fails (exit 1)", diff: "" });
     }, 300_000);
 
-    it("3. fixes the reproduction but breaks another test → UNRESOLVED, naming the regression", async () => {
+    itKeeps("3. fixes the reproduction but breaks another test → UNRESOLVED, naming the regression", async () => {
       const r = await smoke(oracle("fix-breaks-test.patch"));
       // decision 043: the reason now names the tests instead of the command
       expect(r).toMatchObject({ finalState: "UNRESOLVED", repro: { afterPatch: { exitCode: 0 } }, comparison: { granularity: "test" } });
@@ -84,7 +115,7 @@ if (!enabled) {
       );
     }, 300_000);
 
-    it("4. fixes the reproduction but adds a tsc error → UNRESOLVED, naming the new error; the baseline's errors are not counted against it", async () => {
+    itKeeps("4. fixes the reproduction but adds a tsc error → UNRESOLVED, naming the new error; the baseline's errors are not counted against it", async () => {
       const r = await smoke(oracle("fix-adds-tsc-error.patch"));
       expect(r).toMatchObject({ finalState: "UNRESOLVED", repro: { afterPatch: { exitCode: 0 } } });
       expect(r.reason).toBe("typecheck recall-backend: 1 error(s) not in the baseline: services/linkDetector.ts TS2322: Type 'string' is not assignable to type 'number'.");
@@ -92,7 +123,7 @@ if (!enabled) {
       expect(r.final!.typecheck[0]!.errors).toBe(r.baseline!.typecheck[0]!.errors + 1);
     }, 300_000);
 
-    it("5. sandbox killed mid-run → FAILED, never UNRESOLVED", async () => {
+    itKeeps("5. sandbox killed mid-run → FAILED, never UNRESOLVED", async () => {
       const provider = new LocalDockerProvider();
       const exec = provider.exec.bind(provider);
       // kill the container as the agent's patch is about to be applied
@@ -113,7 +144,7 @@ if (!enabled) {
       const task2 = () => loadTask(path.join(DIR2, "task.json"));
       const INSTAGRAM = { file: "test/linkDetector.test.ts", name: "detectLinkType > instagram posts and reels", status: "failed" };
 
-      it("6. fixes the reproduction and breaks two other tests → UNRESOLVED naming them; the already-failing test is not counted", async () => {
+      itKeeps("6. fixes the reproduction and breaks two other tests → UNRESOLVED naming them; the already-failing test is not counted", async () => {
         const r = await smoke(oracle("fix-breaks-test.patch", DIR2), undefined, task2());
         expect(r).toMatchObject({ finalState: "UNRESOLVED", taskKind: "smoke", repro: { atBase: { exitCode: 1 }, afterPatch: { exitCode: 0 } } });
         // the suite already fails at baseline: exit codes alone are 1 and 1
@@ -130,14 +161,14 @@ if (!enabled) {
         );
       }, 300_000);
 
-      it("7. the correct patch → RESOLVED, the already-failing test still failing", async () => {
+      itKeeps("7. the correct patch → RESOLVED, the already-failing test still failing", async () => {
         const r = await smoke(oracle("fix.patch", DIR2), undefined, task2());
         expect(r).toMatchObject({ finalState: "RESOLVED", reason: "repro passes and nothing fails that passed at baseline", comparison: { granularity: "test", newFailures: [], regressedTests: [] } });
         expect(r.final!.regression[0]!.tests!.filter((t) => t.status !== "passed")).toEqual([INSTAGRAM]);
         expect(r.final!.regression[0]!.tests).toHaveLength(62);
       }, 300_000);
 
-      it("8. the same breaking patch without a test report: exit-code fallback, granularity \"command\", and it passes (the blind spot)", async () => {
+      itKeeps("8. the same breaking patch without a test report: exit-code fallback, granularity \"command\", and it passes (the blind spot)", async () => {
         const t = task2();
         const { testReport: _dropped, ...profile } = t.profile!;
         const r = await smoke(oracle("fix-breaks-test.patch", DIR2), undefined, { ...t, profile });
@@ -152,7 +183,7 @@ if (!enabled) {
       const TASKS = path.resolve(import.meta.dirname, "../../../eval/tasks");
       const dev = (id: string, agent: Agent) => smoke(agent, new LocalDockerProvider(), loadTask(path.join(TASKS, id, "task.json")));
       for (const id of ["recall-dev-short-summary", "recall-dev-search-description", "recall-dev-session-expiry", "recall-dev-chat-recent"]) {
-        it(`${id}: oracle fix → RESOLVED, per test, nothing regressed`, async () => {
+        itKeeps(`${id}: oracle fix → RESOLVED, per test, nothing regressed`, async () => {
           const r = await dev(id, new OracleAgent(readFileSync(path.join(TASKS, id, "fix.patch"), "utf8")));
           expect(r).toMatchObject({ finalState: "RESOLVED", taskKind: "dev", repro: { atBase: { exitCode: 1 }, afterPatch: { exitCode: 0 } } });
           // the seed leaves Recall's own suite green: 62 tests, all passing at the seeded base and after the fix
@@ -162,7 +193,7 @@ if (!enabled) {
           expect(r.changes!.modifiedBase).toHaveLength(1);
         }, 300_000);
 
-        it(`${id}: empty patch → UNRESOLVED, repro still fails`, async () => {
+        itKeeps(`${id}: empty patch → UNRESOLVED, repro still fails`, async () => {
           const r = await dev(id, new NoopAgent());
           expect(r).toMatchObject({ finalState: "UNRESOLVED", taskKind: "dev", reason: "repro still fails (exit 1)" });
         }, 300_000);

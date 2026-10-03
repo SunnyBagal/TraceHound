@@ -4,7 +4,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { armTotals, discoverTasks, main, markdownTable, planJobs, rowFromRecord, runJobs, type Execute, type Job } from "../src/harness/evaluate.ts";
+import { armTotals, discoverTasks, flagBaselineAnomalies, main, markdownTable, planJobs, rowFromRecord, runJobs, type Execute, type Job } from "../src/harness/evaluate.ts";
+import { main as repairMain } from "../src/harness/cli.ts";
 import type { RunRecord } from "../src/harness/run.ts";
 
 const TASKS = path.resolve(import.meta.dirname, "../../../eval/tasks");
@@ -108,15 +109,72 @@ describe("evaluation runner (decision 046)", () => {
     const rows = jobs.map((j, i) => rowFromRecord(j, record(j, i % 4 === 0 ? "UNRESOLVED" : "RESOLVED", { files: 2, graphCalls: j.arm === "on" ? 1 : 0 })));
     const totals = armTotals(rows, ["on", "off"]);
     expect(totals).toEqual([
-      { arm: "on", n: 4, notRun: 0, resolved: 2, unresolved: 2, failed: 0, steps: 48, tokens: 380_000, costUSD: 0.04, wallMs: 480_000, filesOpened: 8, graphToolCalls: 4 },
-      { arm: "off", n: 4, notRun: 0, resolved: 4, unresolved: 0, failed: 0, steps: 48, tokens: 380_000, costUSD: 0.04, wallMs: 480_000, filesOpened: 8, graphToolCalls: 0 },
+      { arm: "on", n: 4, notRun: 0, resolved: 2, unresolved: 2, failed: 0, steps: 48, tokens: 380_000, costUSD: 0.04, wallMs: 480_000, filesOpened: 8, graphToolCalls: 4, failedEdits: 0, unknownToolCalls: 0, faultReadKnown: 0, faultRead: 0, faultReadSteps: 0 },
+      { arm: "off", n: 4, notRun: 0, resolved: 4, unresolved: 0, failed: 0, steps: 48, tokens: 380_000, costUSD: 0.04, wallMs: 480_000, filesOpened: 8, graphToolCalls: 0, failedEdits: 0, unknownToolCalls: 0, faultReadKnown: 0, faultRead: 0, faultReadSteps: 0 },
     ]);
     const md = markdownTable(rows, totals, { tasksDir: "eval/tasks", repeats: 1, generatedAt: "2026-10-03T12:00:00.000Z" });
-    expect(md).toContain("| Task | Arm | Rep | State | Steps | Tokens | Cost | Wall time | Files opened | Graph tool calls |");
-    expect(md).toContain("| recall-dev-chat-recent | graph-on | 1 | UNRESOLVED | 12 | 95000 | $0.01000 | 120 s | 2 | 1 |");
-    expect(md).toContain("| graph-on | 4 | 2 of 4 | 2 of 4 | 0 of 4 | 48 (12.0; n = 4) | 380000 (95000; n = 4) | $0.04000 ($0.01000; n = 4) | 480 s (120 s; n = 4) | 8 (2.0; n = 4) | 4 (n = 4) |");
+    expect(md).toContain("| Task | Arm | Rep | State | End | Steps | Tokens | Cost | Wall time | Files opened | Graph tool calls | Failed edits | Unknown-tool calls | Fault file first read: step (tokens) |");
+    expect(md).toContain("| recall-dev-chat-recent | graph-on | 1 | UNRESOLVED | — | 12 | 95000 | $0.01000 | 120 s | 2 | 1 | 0 | 0 | — |");
+    expect(md).toContain("| graph-on | 4 | 2 of 4 | 2 of 4 | 0 of 4 | 48 (12.0; n = 4) | 380000 (95000; n = 4) | $0.04000 ($0.01000; n = 4) | 480 s (120 s; n = 4) | 8 (2.0; n = 4) | 4 (n = 4) | 0 (n = 4) | 0 (n = 4) | 0 of 0 (—; n = 0) |");
     expect(md).toContain("No significance test was run and none is implied.");
     expect(md).not.toMatch(/significant(ly)? (better|worse|differ)|p-value|confidence interval/i);
+  });
+
+  it("decision 047: end reason, failed edits, unknown-tool calls and the first fault-file read come from the record", () => {
+    const [on, off] = planJobs(discoverTasks(TASKS, "dev").slice(0, 1), ["on", "off"], 1);
+    const turns = [
+      { turn: 1, inputTokens: 900, outputTokens: 100, toolCalls: [{ id: "a", name: "str_replace_editor", arguments: "{}" }], toolResults: [{ id: "a", name: "str_replace_editor", ok: false, result: 'error: unknown tool "str_replace_editor". Available: read_file' }] },
+      { turn: 2, inputTokens: 900, outputTokens: 100, toolCalls: [{ id: "b", name: "edit_file", arguments: "{}" }], toolResults: [{ id: "b", name: "edit_file", ok: false, result: "error: oldText not found" }] },
+    ];
+    const withTrace = (job: Job, state: string, read: { step: number; turn: number; tokens: number; file: string } | null, end: object) => {
+      const r = record(job, state);
+      r.agentRun = { steps: 2, ...end, trace: { ...(r.agentRun!.trace as object), turns, ...(state === "RESOLVED" && { finishSummary: "fixed" }) } };
+      r.faultFileRead = { files: ["recall-backend/index.ts"], read };
+      return rowFromRecord(job, r);
+    };
+    const rows = [withTrace(on!, "RESOLVED", { step: 7, turn: 5, tokens: 31_000, file: "recall-backend/index.ts" }, {}), withTrace(off!, "UNRESOLVED", null, { budgetExhausted: "tokens 300000" })];
+    expect(rows[0]).toMatchObject({ endReason: "finish", failedEdits: 1, unknownToolCalls: 1, aliasCalls: 0, faultReadStep: 7, faultReadTokens: 31_000 });
+    expect(rows[1]).toMatchObject({ endReason: "budget: tokens 300000", faultReadStep: null, faultReadTokens: null });
+    const totals = armTotals(rows, ["on", "off"]);
+    expect(totals.map((t) => [t.failedEdits, t.unknownToolCalls, t.faultReadKnown, t.faultRead, t.faultReadSteps])).toEqual([[1, 1, 1, 1, 7], [1, 1, 1, 0, 0]]);
+    const md = markdownTable(rows, totals, { tasksDir: "eval/tasks", repeats: 1, generatedAt: "x" });
+    expect(md).toContain("| recall-dev-chat-recent | graph-on | 1 | RESOLVED | finish | 2 | 95000 | $0.01000 | 120 s | 3 | 0 | 1 | 1 | 7 (31000) |");
+    expect(md).toContain("| recall-dev-chat-recent | graph-off | 1 | UNRESOLVED | budget: tokens 300000 | 2 | 95000 | $0.01000 | 120 s | 3 | 0 | 1 | 1 | never |");
+    expect(md).toContain("| 1 (n = 1) | 1 (n = 1) | 1 of 1 (7.0; n = 1) |");
+    expect(md).toContain("| 1 (n = 1) | 1 (n = 1) | 0 of 1 (—; n = 0) |");
+  });
+
+  it("amendment 1: baseline tests passed / total per run; a run off the most common count for its task is flagged, the verdict untouched", () => {
+    const jobs = planJobs(discoverTasks(TASKS, "dev").slice(0, 2), ["on", "off"], 2); // 2 tasks x 2 arms x 2 repeats
+    const tests = (passed: number, total = 62) => Array.from({ length: total }, (_, i) => ({ file: "t.ts", name: `t${i}`, status: (i < passed ? "passed" : "failed") as "passed" | "failed" }));
+    // task 1: 62, 62, 62, 57 → the 57 is flagged; task 2: 62, 62, 60, 60 → a tie, all four flagged
+    const passed = [62, 62, 62, 57, 62, 62, 60, 60];
+    const rows = flagBaselineAnomalies(
+      jobs.map((j, i) => {
+        const r = record(j, "RESOLVED");
+        r.baseline = { regression: [{ cmd: "bun test", exitCode: passed[i] === 62 ? 0 : 1, timedOut: false, tests: tests(passed[i]!) }], typecheck: [] };
+        return rowFromRecord(j, r);
+      }),
+    );
+    expect(rows.map((r) => [r.baselinePassed, r.baselineTotal, r.baselineAnomaly])).toEqual([
+      [62, 62, false],
+      [62, 62, false],
+      [62, 62, false],
+      [57, 62, true],
+      [62, 62, true],
+      [62, 62, true],
+      [60, 62, true],
+      [60, 62, true],
+    ]);
+    expect(rows.every((r) => r.state === "RESOLVED")).toBe(true);
+    const md = markdownTable(rows, armTotals(rows, ["on", "off"]), { tasksDir: "eval/tasks", repeats: 2, generatedAt: "x" });
+    expect(md).toContain("| Baseline tests passed / total |");
+    expect(md).toContain("| 57 / 62 **baseline-anomaly** |");
+    expect(md).toContain("**baseline-anomaly: 5 run(s)** (recall-dev-chat-recent graph-off #2, recall-dev-search-description graph-on #1,");
+    // no per-test report: no counts, nothing compared or flagged
+    const plain = flagBaselineAnomalies(jobs.slice(0, 2).map((j) => rowFromRecord(j, record(j, "UNRESOLVED"))));
+    expect(plain.map((r) => [r.baselinePassed, r.baselineAnomaly])).toEqual([[undefined, undefined], [undefined, undefined]]);
+    expect(markdownTable(plain, armTotals(plain, ["on", "off"]), { tasksDir: "x", repeats: 1, generatedAt: "x" })).toContain("baseline-anomaly: none");
   });
 
   it("rejects bad arguments with exit code 3 before running anything", async () => {
@@ -127,6 +185,9 @@ describe("evaluation runner (decision 046)", () => {
       expect(await main(["--tasks", TASKS, "--arms", "on,maybe"])).toBe(3);
       expect(await main(["--tasks", TASKS, "--repeats", "0"])).toBe(3);
       expect(await main(["--tasks", TASKS, "--max-spend-usd=-1"])).toBe(3);
+      expect(await main(["--tasks", TASKS, "--cost-limit-usd", "0"])).toBe(3);
+      // the repair CLI checks its own --cost-limit-usd before any sandbox or model client exists
+      expect(await repairMain(["--task", path.join(TASKS, "recall-dev-chat-recent", "task.json"), "--agent", "noop", "--cost-limit-usd=-1"])).toBe(3);
     } finally {
       console.error = quiet;
     }

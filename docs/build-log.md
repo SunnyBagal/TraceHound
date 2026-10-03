@@ -293,3 +293,533 @@ cap $1.50.
 - README.md still says agent-v4: it is outside the paths this prompt may touch (backlog).
 - No evaluation task was created, read or looked for; dev results are not evaluation results.
 - The graph's effect is untested: one run per cell, and the agent made no graph tool calls.
+
+---
+
+# Build log: agent-v6
+
+Prompt: `docs/prompts/agent-v6.md` (saved verbatim, commit `5e60e05`). Branch `build/agent-v6` off
+`origin/main` @ `ee23827`. Started 2026-10-03. Decision 047.
+
+Ledger at the start (`pnpm spend`): **$0.91718**. This prompt may add at most $3.00 (cap: $3.91718).
+
+## Step 0: contradictions with the prompt
+
+Read: CLAUDE.md, decisions 043–046, `docs/freeze.md`, this log (build-to-freeze), `src/harness/loop.ts`,
+`tools.ts`, `agents.ts`, `run.ts` (record fields), `cli.ts`, `evaluate.ts`, `harness/prompts/agent-v5.md`,
+`test/harness-loop.test.ts`, `config/prices.json`.
+
+None blocks a phase. Each is resolved as stated:
+
+1. **Step 3's retry already exists, in a broader form.** agent-v2's edit fallback (decision 030)
+   already retries an unmatched `oldText` with indentation *and* trailing whitespace ignored per
+   line (`trim()` also drops `\r`), applies it only on exactly one match, and otherwise returns the
+   closest region with line numbers, at most 40 lines. Resolution: add the narrower retry the prompt
+   describes (trailing whitespace and line endings only) **before** the existing fallback, keep the
+   existing fallback (removing it would change the agent beyond "edit mechanics", and it applied in
+   13 of the 32 runs), and make the closest-region error complete: also on the ambiguous
+   normalized match, never omitted for a non-empty file, and its line range equal to the lines shown.
+2. **The measured failures are not whitespace failures** (Phase 1 below): in all 12 "oldText not
+   found" errors the existing fallback, which ignores more whitespace than step 3's retry, found no
+   match. The model's `oldText` differed in characters (dropped `)` in a long SQL line, a missing
+   leading `.`), by a whole whitespace-only line it left out or added, or quoted lines its own
+   earlier edit had already changed. Step 3 is built as written;
+   it is not expected to turn those 12 into successes (checked by replay in Phase 2).
+3. **"All 19 unresolved runs … with failed edits and calls to str_replace_editor."** In the records:
+   8 of the 19 had a failed edit; 7 of the 19 made no edit call at all; 1 (round 2,
+   search-description, graph on) had neither a failed edit nor an unknown-tool call. 18 of 19 made at
+   least one `str_replace_editor` call. Of the 53 `str_replace_editor` calls, 47 were reads
+   (`view` / `read` / a bare `path`), 2 directory listings, 1 an edit and 3 had no arguments.
+4. **CLAUDE.md: "Super/Ultra only via explicit `--model`, reserved for the final evaluation"** vs the
+   Super probe on dev tasks (step 7). The prompt is the owner's explicit instruction; it is followed.
+   The Super id named in the repo is `nvidia/nemotron-3-super-120b-a12b` (`config/prices.json`, a
+   real third-party rate, $0.30 / $0.90 per 1M input / output). `tracehound repair` has no `--model`
+   flag, so one is added to `src/harness/cli.ts` and passed through by the runner. `cli.ts` is read as
+   run-record code (it runs one repair and writes its record; the runner spawns it).
+5. **Super and the task cost limit.** At Super's rates a run that reaches the 300,000-token limit
+   costs about $0.09–0.12, so the tasks' `limits.costUSD` 0.10 may end a Super run before the token
+   limit. "Same budgets" is followed: task limits are not changed, and a cost-limit end is recorded
+   as such.
+6. **CI runs only on pull requests and pushes to `main`** (build-to-freeze contradiction 11). "CI
+   green after every phase" needs a PR from the first push, so the one PR is opened as a draft after
+   the Phase 1 push and marked ready in Phase 5. Not merged.
+7. **Step 0 is not a phase.** The prompt commit is its own (as the prompt says); this step's log
+   goes into the Phase 1 commit.
+8. **"Read" and "step" in Phase 3** are defined as: a successful `read_file` call (including a
+   `str_replace_editor` call that ran as `read_file`) whose path, normalized to the repo root, is a
+   file in the seed patch; `search` hits and `run cat …` are not reads. Steps are counted as the
+   harness counts them (each executed tool call is one step, a reply without a tool call is one
+   step). Tokens are input + output of every model call up to and including the call that made the
+   read.
+9. **Agent label vs prompt file name.** `LOOP_VERSION` becomes `agent-v6`; the prompt file stays
+   `harness/prompts/agent-v5.md`, byte-identical, so records carry `loopVersion: agent-v6` with
+   `promptFile: agent-v5.md`.
+10. **Unknown tools.** The existing unknown-tool error is already one line listing the valid
+    names; it is kept. A `str_replace_editor` call whose argument shape was not seen in Phase 1
+    (including the empty `{}` that was seen, which names no file) gets that same line.
+
+Spend in step 0: $0 (ledger $0.91718).
+
+## Phase 1: measure (no code change)
+
+Rules block re-read at the start. Source: the 32 dev run records (`runs/phase3-baseline`,
+`phase3-round1`, `phase3-round2`, `phase4-runner/runs`; not committed), all `agent-v5`; prompt
+`d1d07e8f…` (baseline), `556861d4…` (round 1 and runner, the frozen prompt), `644e6477…` (round 2).
+"Failed" = an `edit_file` / `write_file` result with `ok: false`; "whitespace fallback" = an edit
+applied by the existing indentation-ignoring fallback.
+
+| Set | Task | Arm | State | End | Steps | Edit/write calls | Failed, by error | Whitespace fallback applied | Unknown-tool calls |
+|---|---|---|---|---|---|---|---|---|---|
+| baseline | chat-recent | off | UNRESOLVED | budget steps 40 | 40 | 0 | 0 | 0 | str_replace_editor 3 |
+| baseline | chat-recent | on | UNRESOLVED | budget tokens 300000 | 33 | 0 | 0 | 0 | str_replace_editor 3 |
+| baseline | search-description | off | UNRESOLVED | budget tokens 300000 | 30 | 1 | oldText not found 1 | 0 | str_replace_editor 2 |
+| baseline | search-description | on | RESOLVED | finish | 20 | 1 | 0 | 0 | str_replace_editor 1 |
+| baseline | session-expiry | off | RESOLVED | finish | 21 | 1 | 0 | 0 | str_replace_editor 2 |
+| baseline | session-expiry | on | UNRESOLVED | stopped stuck | 27 | 1 | 0 | 1 | str_replace_editor 2 |
+| baseline | short-summary | off | UNRESOLVED | budget tokens 300000 | 31 | 0 | 0 | 0 | str_replace_editor 3 |
+| baseline | short-summary | on | UNRESOLVED | budget tokens 300000 | 29 | 2 | oldText not found 1 | 1 | str_replace_editor 2 |
+| round1 | chat-recent | off | RESOLVED | finish | 25 | 2 | ambiguous (exact) 1 | 1 | 0 |
+| round1 | chat-recent | on | RESOLVED | finish | 21 | 1 | 0 | 0 | str_replace_editor 1 |
+| round1 | search-description | off | RESOLVED | finish | 26 | 1 | 0 | 0 | str_replace_editor 2 |
+| round1 | search-description | on | UNRESOLVED | budget tokens 300000 | 29 | 2 | oldText not found 2 | 0 | str_replace_editor 1 |
+| round1 | session-expiry | on | RESOLVED | finish | 30 | 1 | 0 | 0 | str_replace_editor 3 |
+| round1 | session-expiry | off | RESOLVED | finish | 23 | 1 | 0 | 1 | str_replace_editor 2 |
+| round1 | short-summary | on | UNRESOLVED | budget tokens 300000 | 27 | 1 | oldText not found 1 | 0 | str_replace_editor 2 |
+| round1 | short-summary | off | UNRESOLVED | budget steps 40 | 40 | 3 | oldText not found 2 | 1 | str_replace_editor 1 |
+| round2 | chat-recent | off | UNRESOLVED | budget steps 40 | 40 | 2 | oldText not found 1 | 0 | 0 |
+| round2 | chat-recent | on | RESOLVED | finish | 22 | 1 | 0 | 1 | str_replace_editor 1 |
+| round2 | search-description | on | UNRESOLVED | budget tokens 300000 | 25 | 0 | 0 | 0 | 0 |
+| round2 | search-description | off | UNRESOLVED | budget tokens 300000 | 28 | 0 | 0 | 0 | str_replace_editor 1 |
+| round2 | session-expiry | on | RESOLVED | finish | 29 | 3 | invalid arguments 1 | 1 | str_replace_editor 1 |
+| round2 | session-expiry | off | RESOLVED | finish | 18 | 1 | 0 | 0 | str_replace_editor 1 |
+| round2 | short-summary | off | UNRESOLVED | budget tokens 300000 | 34 | 1 | 0 | 1 | str_replace_editor 1 |
+| round2 | short-summary | on | UNRESOLVED | budget tokens 300000 | 29 | 1 | oldText not found 1 | 0 | str_replace_editor 4 |
+| runner | chat-recent | on | RESOLVED | finish | 31 | 1 | 0 | 1 | 0 |
+| runner | chat-recent | off | UNRESOLVED | budget steps 40 | 40 | 0 | 0 | 0 | str_replace_editor 1 |
+| runner | search-description | on | UNRESOLVED | budget tokens 300000 | 28 | 1 | 0 | 0 | str_replace_editor 6 |
+| runner | search-description | off | UNRESOLVED | budget steps 40 | 40 | 3 | oldText not found 3 | 0 | 0 |
+| runner | session-expiry | on | RESOLVED | finish | 24 | 1 | 0 | 1 | str_replace_editor 2 |
+| runner | session-expiry | off | RESOLVED | finish | 25 | 2 | 0 | 1 | str_replace_editor 1 |
+| runner | short-summary | on | UNRESOLVED | budget tokens 300000 | 28 | 1 | 0 | 1 | str_replace_editor 2 |
+| runner | short-summary | off | UNRESOLVED | budget tokens 300000 | 32 | 0 | 0 | 0 | str_replace_editor 2 |
+
+**Totals over 32 runs.** Ends: 13 `finish` (all 13 RESOLVED), 13 token budget, 5 step budget,
+1 stuck (all 19 UNRESOLVED). Failed edit calls: 14, of them "oldText not found" (even ignoring
+indentation and trailing spaces) 12, exact match more than once 1, invalid arguments 1. Unknown-tool
+calls: 53, all `str_replace_editor` (no other unknown name occurred).
+
+**Why the 12 "oldText not found" edits failed.** Replayed on a scratch clone of Recall at `57d920e`
+with the four seeds applied (outside this repo, never pushed), applying each run's successful edits
+in order with the agent-v5 edit logic; the replay reproduces every recorded edit outcome (12 not
+found, 1 exact ×3, 19 applied). Causes:
+- 6 (`db/schema.ts`): characters dropped in the long SQL line (`coalesce(title, '')` written as
+  `coalesce(title, ''`);
+- 3 (`worker.ts`): a whitespace-only line left out of, or added to, an otherwise exact block;
+- 2 (`worker.ts`, round 1 short-summary graph off): `oldText` of lines the run's own earlier edit
+  had already changed;
+- 1 (`index.ts`): started at `orderBy(` without its leading `.`, the next line without its
+  indentation.
+
+None is a trailing-whitespace or line-ending difference.
+
+**`str_replace_editor` argument shapes** (53 calls):
+
+| Shape (keys; `command`) | Calls | Example | Maps to |
+|---|---|---|---|
+| `{command, path}`; `view` | 37 | `{"command": "view", "path": "/work/recall-backend/services/searchService.ts"}` | `read_file {path}` |
+| `{command, path, startLine, endLine}`; `view` (line numbers as strings) | 4 | `{"command": "view", "path": "/work/recall-backend/index.ts", "startLine": "430", "endLine": "460"}` | `read_file {path, startLine, endLine}` |
+| `{command, path}`; `read` | 2 | `{"command": "read", "path": "/work/recall-backend/middleware/middleware.ts"}` | `read_file {path}` |
+| `{command, path, startLine, endLine}`; `read` (strings) | 1 | `{"path": "/work/recall-backend/test/content.test.ts", "command": "read", "startLine": "38", "endLine": "50"}` | `read_file {path, startLine, endLine}` |
+| `{path}`, no command | 2 | `{"path": "recall-backend/middleware/middleware.ts"}` | `read_file {path}` |
+| `{path, view_range}`, no command (`view_range` a string) | 1 | `{"path": "recall-backend/index.ts", "view_range": "[75, 90]"}` | `read_file {path, startLine, endLine}` |
+| `{command, path}`; `list` | 2 | `{"command": "list", "path": "/work/recall-backend/middleware"}` | `list_dir {path}` |
+| `{command, path, oldText, newText}`; `edit_file` | 1 | `{"path": "/work/recall-backend/drizzle/0002_fts_search_vector.sql", "oldText": "…", "newText": "…", "command": "edit_file"}` | `edit_file {path, oldText, newText}` |
+| `{}` | 3 | `{}` | none (names no file): the unknown-tool line |
+
+Analysis script: kept outside the repo (session scratchpad); the numbers above are its output.
+
+**Gates** (GIT_* env check printed nothing):
+- First run: version guard exit 0; `TRACEHOUND_NETWORK_TESTS=1 pnpm test` **exit 1**, 2 of 337
+  analyzer tests failed, both by the 300 s test timeout in `test/harness-recall.test.ts` (dev tasks:
+  session-expiry empty patch, 642 s; chat-recent oracle fix, 914 s). The file took 2,256 s against
+  about 600 s in the build-to-freeze gates; this phase changed no code. `pnpm typecheck` exit 0;
+  viewer build exit 0.
+- Diagnosis: the same test alone passed in 54 s right after; GitHub and the npm registry answered
+  in under 1 s. Transient slowness of the host or network during setup, not a code fault.
+- **Fix (the one attempt):** the test suite re-run unchanged: exit 0, analyzer 337 passed
+  (29 files), viewer 88 passed (11 files), 839 s. Recorded as a loss: one gate run was red.
+- Pushed; draft PR #9 opened (https://github.com/SunnyBagal/TraceHound/pull/9) so CI runs on
+  every phase (step 0, item 6).
+
+**Spend:** $0 (ledger $0.91718).
+
+## Phase 2 (decision 047): edit tool
+
+Rules block re-read at the start. CI for the Phase 1 commit `2b88f9e`: see the next phase's entry.
+
+**Done** (both arms identically; prompt file unchanged):
+- `str_replace_editor` alias (`aliasCall`, `ALIASED_TOOL`, `src/harness/loop.ts`) for the eight
+  shapes seen in Phase 1 (table in decision 047), not in the tool schemas. An aliased call runs
+  down the real tool's path (argument check, repeat guard, one step); the record keeps the model's
+  name plus `ranAs`; `guards.aliasCalls`. Unmapped shapes and other unknown names get the existing
+  one-line unknown-tool error.
+- `edit_file` (`applyEdit` in the sandbox helper's JS, `src/harness/tools.ts`): exact → **new retry
+  with trailing whitespace and line endings ignored, applied only at exactly one location** (CRLF
+  kept for `newText` in CRLF files; `guards.editLineEndRetries`) → the agent-v2 indentation fallback
+  (unchanged) → an error. Every error after the exact step ends with the closest region of the
+  current text, with line numbers, at most 40 lines (now also on ambiguous matches and at
+  similarity 0; its line range is the lines shown). The not-found message now says "even ignoring
+  indentation, trailing whitespace and line endings" and "Closest region of the file as it is now".
+- `LOOP_VERSION` = `agent-v6`. **Prompt file `harness/prompts/agent-v5.md` byte-identical:
+  sha256 `556861d40ba86940a72c05d15b08cf07eea15a6d8a5508c6c7d3d352b92222b6`** (checked with
+  `shasum -a 256`, by a unit test, and `git diff origin/main -- harness/prompts` is empty).
+- Tests (`test/harness-loop.test.ts`): the prompt hash and label; every seen shape mapped, 14
+  unseen shapes and names not mapped; an aliased call in a run, both arms (one step, shared repeat
+  guard, `ranAs`, never in a request's tools, bad line numbers rejected by `read_file`'s own check,
+  `{}` / `create` / an unknown name → the one-line error); `applyEdit`: exact unchanged, trailing
+  whitespace in file or `oldText`, CRLF file with LF `oldText` and the reverse, two locations →
+  error with lines and region, indentation still handled by the old fallback, not found → region
+  of 40 lines with line numbers, similarity 0 → region still shown, and the two Phase 1 failure
+  kinds (a dropped character, a missing whitespace-only line) still fail. The Docker test now also
+  edits a CRLF file with LF `oldText` and reads it back through the alias.
+- Decision 047.
+
+**Replay** (scratch clone of Recall `57d920e` + the four seeds, outside this repo; every `edit_file`
+call of the 32 runs, each run's successful edits applied in order), agent-v6 code as committed:
+
+| Recorded outcome | agent-v5 logic | agent-v6 logic |
+|---|---|---|
+| applied (19) | exact 7, whitespace fallback 12 | exact 7, whitespace fallback 12 |
+| failed: not found (12) | not found 12 | **not found 12** |
+| failed: exact ×3 (1) | exact ×3 | exact ×3 |
+| failed: run ended by the step budget before it ran (1) | whitespace fallback | whitespace fallback |
+
+The new retry changes none of the recorded edit outcomes. Only the alias changes what the 32 runs
+would have got (50 of 53 calls run as real tools).
+
+**Gates** (GIT_* env check printed nothing):
+- First run: version guard exit 0; `TRACEHOUND_NETWORK_TESTS=1 pnpm test` **exit 1**, 2 of 350
+  analyzer tests failed: `changes.test.ts` "a cross-component signature change lists the callers"
+  (vitest's 5 s timeout) and `harness-recall.test.ts` test 1 (Recall's own `bun test` exited 1 **at
+  baseline**, before any patch). Typecheck exit 0; viewer build exit 0.
+- Diagnosis: both are load failures, in code this phase didn't touch. **My error:** while this gate
+  ran I ran the Phase 3 unit tests in a second worktree on the same machine, the load decision 045
+  warns about.
+- **Fix (the one attempt):** the gate re-run with nothing else running: version guard exit 0;
+  tests exit 0, analyzer 350 passed (29 files), viewer 88 passed (11 files), 802 s; typecheck exit
+  0; viewer build exit 0. From here on nothing else runs during a gate.
+
+**Spend:** $0 (ledger $0.91718).
+
+## Phase 3: time to fault file
+
+Rules block re-read at the start. CI for the Phase 1 commit `2b88f9e`: **success**,
+https://github.com/SunnyBagal/TraceHound/actions/runs/37133622382. CI for Phase 2 (`01dc0f8`): see
+the next phase's entry.
+
+**Done:**
+- `src/harness/run-metrics.ts`: `patchFiles` (the files a seed patch touches, from its
+  `diff --git` headers), `faultFileRead` (walks the trace the way the harness counts steps: a reply
+  without a tool call is one step, every executed call is one step, a call after `finish` in the
+  same turn is none; a read is a successful `read_file` or a call run as one), `runMetrics` (end
+  reason, failed edits, unknown-tool calls, aliased calls).
+- Run record `faultFileRead { files, read: { step, turn, tokens, file } | null }`, computed on the
+  host in `runRepair` after the agent stops, for seeded tasks and model agents only (`src/harness/run.ts`,
+  not part of the verdict). The repair CLI prints a `fault file:` line.
+- The runner's rows and `results.md` gain End, Failed edits, Unknown-tool calls and "Fault file
+  first read: step (tokens)"; per arm: failed edits, unknown-tool calls, and "k of n (mean step)".
+- `tracehound repair --model <id>` and the runner's `--model` (step 0, item 4); the runner records
+  the model in `results.json`.
+- Tests: `test/harness-metrics.test.ts` (patch files incl. the four dev seeds, path forms, step
+  counting with a reply without a call, a failed read, a search hit, an aliased read, a call after
+  `finish`; never read → null; the counts), `test/harness-loop.test.ts` (the field end to end
+  through `runRepair` with a seeded fake task; no field without a seed or for a scripted agent),
+  `test/harness-evaluate.test.ts` (rows, totals and the table's new columns).
+- Check of the step walk: on all 32 existing agent-v5 records it ends at exactly the harness's
+  recorded step count.
+
+**The 16 frozen-prompt agent-v5 runs** (round 1 and the runner test, prompt `556861d4…`),
+computed with the same code from the records and each task's `seed.patch`:
+
+| Set | Task | Arm | State | End | Steps | Failed edits | Unknown-tool calls | First fault-file read: step | Tokens up to it | File |
+|---|---|---|---|---|---|---|---|---|---|---|
+| round1 | chat-recent | off | RESOLVED | finish | 25 | 1 | 0 | 12 | 30750 | recall-backend/index.ts |
+| round1 | chat-recent | on | RESOLVED | finish | 21 | 0 | 1 | 9 | 42341 | recall-backend/index.ts |
+| round1 | search-description | off | RESOLVED | finish | 26 | 0 | 2 | 12 | 46474 | recall-backend/db/schema.ts |
+| round1 | search-description | on | UNRESOLVED | budget: tokens 300000 | 29 | 2 | 1 | 7 | 29128 | recall-backend/db/schema.ts |
+| round1 | session-expiry | on | RESOLVED | finish | 30 | 0 | 3 | 16 | 86137 | recall-backend/middleware/middleware.ts |
+| round1 | session-expiry | off | RESOLVED | finish | 23 | 0 | 2 | 10 | 23109 | recall-backend/middleware/middleware.ts |
+| round1 | short-summary | on | UNRESOLVED | budget: tokens 300000 | 27 | 1 | 2 | 9 | 52170 | recall-backend/worker.ts |
+| round1 | short-summary | off | UNRESOLVED | budget: steps 40 | 40 | 2 | 1 | 6 | 13290 | recall-backend/worker.ts |
+| runner | chat-recent | on | RESOLVED | finish | 31 | 0 | 0 | 8 | 34031 | recall-backend/index.ts |
+| runner | chat-recent | off | UNRESOLVED | budget: steps 40 | 40 | 0 | 1 | 20 | 65926 | recall-backend/index.ts |
+| runner | search-description | on | UNRESOLVED | budget: tokens 300000 | 28 | 0 | 6 | 7 | 34044 | recall-backend/db/schema.ts |
+| runner | search-description | off | UNRESOLVED | budget: steps 40 | 40 | 3 | 0 | 23 | 85808 | recall-backend/db/schema.ts |
+| runner | session-expiry | on | RESOLVED | finish | 24 | 0 | 2 | 13 | 64320 | recall-backend/middleware/middleware.ts |
+| runner | session-expiry | off | RESOLVED | finish | 25 | 0 | 1 | 9 | 20964 | recall-backend/middleware/middleware.ts |
+| runner | short-summary | on | UNRESOLVED | budget: tokens 300000 | 28 | 0 | 2 | 7 | 37198 | recall-backend/worker.ts |
+| runner | short-summary | off | UNRESOLVED | budget: tokens 300000 | 32 | 0 | 2 | 13 | 66545 | recall-backend/worker.ts |
+
+Every one of the 16 read a fault file. Mean step of the first read: graph on 9.5, graph off 13.1
+(n = 8 each); mean tokens up to it: graph on 47,421, graph off 44,108 (n = 8 each; the graph-on
+first message carries the packet). Two runs per cell: a description of these records, not a
+measured effect of the graph.
+
+**Gates** (GIT_* env check printed nothing; nothing else ran during either run):
+- First run: version guard exit 0; `TRACEHOUND_NETWORK_TESTS=1 pnpm test` **exit 1**, 1 of 358
+  analyzer tests failed: `harness-recall.test.ts` test 1 ("correct patch → RESOLVED …"), whose
+  assertion that Recall's own `cd "recall-backend" && bun test` exits 0 **at baseline** got exit 1.
+  The baseline runs before any agent or patch. Typecheck exit 0; viewer build exit 0.
+- **Fix (the one attempt):** re-run unchanged (the Phase 2 gate's red run was the same test and
+  passed on re-run). **Still red:** the same test, the same assertion (exit 1 at baseline), 357 of
+  358 passed, 826 s. Typecheck exit 0; viewer build exit 0.
+- **STOPPED here** ("a gate is still red after one fix attempt"). Phase 4 (model runs), Phase 5
+  (re-freeze, tag) were not started. No model call was made in this prompt.
+
+**Diagnosis (no change made):**
+- The test alone (`vitest run test/harness-recall.test.ts -t "1. correct patch"`) passed in 52 s.
+- Control: the analyzer suite at the `eval-freeze` commit (`7b1c153`, a scratch worktree, same
+  machine, nothing else running) exited 1 with 2 other failures (`changes.test.ts` "a removed call"
+  by the 5 s timeout; `harness-docker.test.ts` "no host mounts, no host environment …", 190 ms,
+  possibly because of the worktree's path). Recall test 1 **passed** there.
+- Record of this test in full-suite runs this session: agent-v6 commits 3 failed of 4 (`01dc0f8`
+  first run, `3922559` twice), 1 passed (`01dc0f8` re-run); `2b88f9e` (no code change) passed in
+  its green re-run; `eval-freeze` control passed once. CI on `2b88f9e` and `01dc0f8`: success.
+- No agent-v6 code runs before or during a run's baseline: the changes are in the agent's tools
+  (used only by the model agent; this test uses the scripted oracle), the run record after the
+  agent stops, the runner and the CLI. The tests added in Phases 2 and 3 add one short Docker run
+  (two more commands) in `harness-loop.test.ts`, which runs in parallel with this file. The most
+  likely cause is decision 045's known weakness (Recall's suite under parallel Docker load; bun's
+  5 s default per-test timeout), but it is **not proven**, and the failure rate on these commits
+  (3 of 4) is higher than before.
+- Which Recall tests failed at baseline is not known: the test does not keep the run record.
+
+**Spend:** $0 (ledger $0.91718).
+
+## Amendment 1 (`docs/prompts/agent-v6-amendment-1.md`, commit `a2145e4`)
+
+The owner chose option 2 (isolate the Docker test files) plus keeping the run record. The
+amendment overrides the original where they differ: it adds the analyzer test config and
+`test/harness-recall.test.ts` to the may-touch list, sets the prompt's spend cap to $4.00 (ledger cap
+$4.91718), the Super probe's per-task cost limit to $0.60 (probe total at most $3.00), and says
+nothing else runs on the machine during a gate or a model batch. CI on the stopped head `a145696`:
+**success**, https://github.com/SunnyBagal/TraceHound/actions/runs/37138070516.
+
+### A. The gate
+
+**What changed in the test config** (`packages/analyzer/vitest.config.ts`): two vitest projects.
+`unit` is every test file except the five that start Docker sandboxes, run in parallel as before
+(`sequence.groupOrder` 0). `docker` is `harness-docker`, `harness-expiry`, `harness-infra`,
+`harness-loop` and `harness-recall`, with `fileParallelism: false` and `groupOrder` 1: it starts
+after the unit project has finished and runs its files one at a time. No timeout was raised, no
+retry added, no test skipped. Checked first with four throwaway files (two per project): the unit
+pair ran together, then the docker pair one after the other. `test/test-config.test.ts` fails if a
+test file that uses `LocalDockerProvider` or `dockerAvailable` is missing from the list (or vice
+versa), or if the projects lose these settings.
+
+**Kept run records** (`test/harness-recall.test.ts`): every run record is written to
+`runs/test-records/<runId>.json` as soon as its run returns. A passing test deletes its records; a
+failing one keeps them and appends `run record kept: <path>` to its failure message. A test that
+hits its timeout fails before its run returns, so its message can't name the file, but the record
+still lands in that directory when the run ends. Checked once with a throwaway copy of the file
+whose test 2 expected a wrong reason: the failure message ended with the kept record's path; the
+copy and the record were then deleted.
+
+**Cause of the earlier red gates: unproven.** No kept record exists for them (the records were
+not kept then). The likely cause is still decision 045's (Recall's own suite under parallel Docker
+load), but it is not shown.
+
+### B. Runner validity flag
+
+- Per run: baseline tests passed / total (`baselinePassed`, `baselineTotal`, from the per-test
+  reports of all regression commands; absent without a report).
+- `flagBaselineAnomalies`: a run whose baseline passed-count differs from the most common one for
+  its task in the batch gets `baselineAnomaly: true` in `results.json`, and
+  "**baseline-anomaly**" beside its count in `results.md`, plus a summary line naming the flagged
+  runs (or "baseline-anomaly: none"). With a tie for most common, every run of that task is flagged.
+  The verdict is not changed.
+- For the Super probe: `--cost-limit-usd <usd>` on `tracehound repair` and on the runner (which
+  also reserves that amount per run in its spend stop); every run record now carries `limits`, the
+  limits it actually had. The end reason (`budget: cost $…`, `budget: tokens …`, `budget: steps …`)
+  says which limit ended a run.
+- Tests: `test/harness-evaluate.test.ts` (counts, a lone off count flagged, a tie flagging all
+  four, no report → no flag, the table and summary line, bad `--cost-limit-usd` in both CLIs).
+
+### Gate after amendment A and B (step A3)
+
+GIT_* env check printed nothing; no container running at the start; nothing else ran. Commit
+`b91b887`.
+
+| Run | Analyzer suite (`TRACEHOUND_NETWORK_TESTS=1`) | Time |
+|---|---|---|
+| 1 | exit 0, 360 passed (30 files) | 944 s |
+| 2 | exit 0, 360 passed | 960 s |
+| 3 | exit 0, 360 passed | 829 s |
+
+Then: version guard exit 0; viewer 88 passed; `pnpm typecheck` exit 0; viewer build exit 0. No
+run record was kept (`runs/test-records/` empty), so no Recall test failed. Three green runs
+with the Docker files serialized are consistent with the load explanation, but they don't prove
+it: smoke test 1 had failed in 3 of the 6 unserialized full-suite runs on this branch, and the cause stays **unproven**.
+
+**Spend:** $0 (ledger $0.91718).
+
+## Phase 4: dev batches (agent-v6)
+
+Rules block re-read at the start. CI for `8806d5a` (amendment gate): **success**,
+https://github.com/SunnyBagal/TraceHound/actions/runs/37145415103. Nothing else ran during
+either batch. Ledger before the first model step: $0.91718.
+
+**Contradiction resolved (amendment 1 over the original):** the original stopped the Super probe if
+its first run cost more than $0.30; the amendment sets a $0.60 per-run cost limit for the probe and
+stops it only if its total passes $3.00. The amendment's limits were used.
+
+### Step 6: Nano, agent-v6, 4 dev tasks × 2 arms × 2 repeats
+
+`node packages/analyzer/src/harness/evaluate.ts --tasks eval/tasks --kind dev --arms on,off --repeats 2
+--concurrency 1 --max-spend-usd 1.0 --out runs/phase4-v6-nano`. All runs: `loopVersion` agent-v6,
+prompt `556861d4…`, `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`, reasoning on, task limits (40 steps,
+300,000 tokens, 900 s, $0.10).
+
+**Loss: a network outage.** Runs 1–6 completed. From about 19:20 UTC the host could not resolve
+`github.com`: runs 7–16 ended FAILED within a second each ("git clone … Could not resolve host:
+github.com"), before any model call ($0). Run 6 (search-description, graph off, repeat 1) was in
+progress when it started: its model request timed out after 26 turns ("The operation was aborted
+due to timeout"), and the harness scored it UNRESOLVED (repro still fails). **That run is kept as
+recorded, a loss to the outage, not re-run.** Once GitHub answered again, the 10 FAILED runs were
+re-run once, same settings (`runs/phase4-v6-nano-b/`, one runner call per task; the
+search-description call's repeat is repeat 2). A first attempt at this re-run failed instantly on
+my own shell quoting (zsh did not split the arguments; nothing ran, $0) and was repeated with
+explicit commands. Merged: `runs/phase4-v6-nano-merged/` (baseline flags recomputed over all 16),
+copied to `docs/eval/agent-v6-dev-2026-10-04/nano/`.
+
+**Baseline-anomaly flags: none** (every run's baseline was 62 / 62).
+
+**v6 Nano beside the 16 frozen-prompt v5 runs** (v5: round 1 = rep 1, runner test = rep 2; their
+counts computed from the records with the same code; "Aliased calls" did not exist in v5):
+| Task | Arm | Set | Rep | State | End | Steps | Failed edits | Unknown-tool calls | Aliased calls | First fault-file read: step (tokens) | Tokens | Cost | Baseline passed / total |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| chat-recent | on | v5 round1 | 1 | RESOLVED | finish | 21 | 0 | 1 | — | 9 (42341) | 158603 | $0.01085 | 62 / 62 |
+| chat-recent | on | v5 runner | 2 | RESOLVED | finish | 31 | 0 | 0 | — | 8 (34031) | 255518 | $0.01738 | 62 / 62 |
+| chat-recent | on | v6 Nano | 1 | UNRESOLVED | budget: tokens 300000 | 35 | 0 | 0 | 0 | 9 (38231) | 307928 | $0.02156 | 62 / 62 |
+| chat-recent | on | v6 Nano | 2 | UNRESOLVED | budget: tokens 300000 | 40 | 0 | 0 | 0 | 21 (104538) | 303195 | $0.02220 | 62 / 62 |
+| chat-recent | off | v5 round1 | 1 | RESOLVED | finish | 25 | 1 | 0 | — | 12 (30750) | 107259 | $0.00761 | 62 / 62 |
+| chat-recent | off | v5 runner | 2 | UNRESOLVED | budget: steps 40 | 40 | 0 | 1 | — | 20 (65926) | 280433 | $0.01952 | 62 / 62 |
+| chat-recent | off | v6 Nano | 1 | RESOLVED | finish | 20 | 0 | 0 | 0 | 8 (20304) | 103347 | $0.00721 | 62 / 62 |
+| chat-recent | off | v6 Nano | 2 | RESOLVED | finish | 23 | 0 | 0 | 0 | 11 (32136) | 100896 | $0.00810 | 62 / 62 |
+| search-description | on | v5 round1 | 1 | UNRESOLVED | budget: tokens 300000 | 29 | 2 | 1 | — | 7 (29128) | 305616 | $0.02524 | 62 / 62 |
+| search-description | on | v5 runner | 2 | UNRESOLVED | budget: tokens 300000 | 28 | 0 | 6 | — | 7 (34044) | 311297 | $0.02266 | 62 / 62 |
+| search-description | on | v6 Nano | 1 | RESOLVED | finish | 19 | 0 | 0 | 7 | 7 (31273) | 146236 | $0.01158 | 62 / 62 |
+| search-description | on | v6 Nano | 2 | UNRESOLVED | budget: tokens 300000 | 26 | 0 | 1 | 0 | 6 (25363) | 314568 | $0.02776 | 62 / 62 |
+| search-description | off | v5 round1 | 1 | RESOLVED | finish | 26 | 0 | 2 | — | 12 (46474) | 229102 | $0.01592 | 62 / 62 |
+| search-description | off | v5 runner | 2 | UNRESOLVED | budget: steps 40 | 40 | 3 | 0 | — | 23 (85808) | 284574 | $0.02634 | 62 / 62 |
+| search-description | off | v6 Nano | 1 | UNRESOLVED | error: The operation was aborted due to timeout | 26 | 0 | 5 | 8 | 8 (24441) | 236425 | $0.02203 | 62 / 62 |
+| search-description | off | v6 Nano | 2 | UNRESOLVED | budget: tokens 300000 | 27 | 0 | 0 | 7 | 6 (18095) | 313061 | $0.02845 | 62 / 62 |
+| session-expiry | on | v5 round1 | 1 | RESOLVED | finish | 30 | 0 | 3 | — | 16 (86137) | 230149 | $0.01489 | 62 / 62 |
+| session-expiry | on | v5 runner | 2 | RESOLVED | finish | 24 | 0 | 2 | — | 13 (64320) | 153318 | $0.00999 | 62 / 62 |
+| session-expiry | on | v6 Nano | 1 | RESOLVED | finish | 23 | 0 | 1 | 4 | 7 (32948) | 178439 | $0.01182 | 62 / 62 |
+| session-expiry | on | v6 Nano | 2 | RESOLVED | finish | 22 | 0 | 0 | 5 | 5 (22483) | 160043 | $0.01062 | 62 / 62 |
+| session-expiry | off | v5 round1 | 1 | RESOLVED | finish | 23 | 0 | 2 | — | 10 (23109) | 103436 | $0.00701 | 62 / 62 |
+| session-expiry | off | v5 runner | 2 | RESOLVED | finish | 25 | 0 | 1 | — | 9 (20964) | 109653 | $0.00748 | 62 / 62 |
+| session-expiry | off | v6 Nano | 1 | RESOLVED | finish | 19 | 0 | 0 | 0 | 9 (20286) | 75890 | $0.00553 | 62 / 62 |
+| session-expiry | off | v6 Nano | 2 | RESOLVED | finish | 20 | 0 | 0 | 4 | 5 (11127) | 119767 | $0.00836 | 62 / 62 |
+| short-summary | on | v5 round1 | 1 | UNRESOLVED | budget: tokens 300000 | 27 | 1 | 2 | — | 9 (52170) | 309351 | $0.02281 | 62 / 62 |
+| short-summary | on | v5 runner | 2 | UNRESOLVED | budget: tokens 300000 | 28 | 0 | 2 | — | 7 (37198) | 313254 | $0.02337 | 62 / 62 |
+| short-summary | on | v6 Nano | 1 | UNRESOLVED | budget: tokens 300000 | 32 | 1 | 0 | 9 | 9 (44360) | 309009 | $0.02323 | 62 / 62 |
+| short-summary | on | v6 Nano | 2 | UNRESOLVED | budget: tokens 300000 | 27 | 0 | 1 | 9 | 8 (43529) | 307227 | $0.02616 | 62 / 62 |
+| short-summary | off | v5 round1 | 1 | UNRESOLVED | budget: steps 40 | 40 | 2 | 1 | — | 6 (13290) | 295163 | $0.02103 | 62 / 62 |
+| short-summary | off | v5 runner | 2 | UNRESOLVED | budget: tokens 300000 | 32 | 0 | 2 | — | 13 (66545) | 306398 | $0.02159 | 62 / 62 |
+| short-summary | off | v6 Nano | 1 | UNRESOLVED | budget: tokens 300000 | 36 | 0 | 0 | 12 | 6 (15011) | 304181 | $0.02337 | 62 / 62 |
+| short-summary | off | v6 Nano | 2 | UNRESOLVED | budget: tokens 300000 | 35 | 0 | 1 | 6 | 16 (73758) | 301180 | $0.02321 | 62 / 62 |
+
+| Set | Arm | n | Resolved | Ends: finish / tokens / steps / cost / stuck / error | Failed edits | Unknown-tool calls | Fault file read (mean step) | Cost |
+|---|---|---|---|---|---|---|---|---|
+| v5 (round 1 + runner test) | on | 8 | 4 of 8 | 4 / 4 / 0 / 0 / 0 / 0 | 3 | 17 | 8 of 8 (9.5) | $0.14719 |
+| v5 (round 1 + runner test) | off | 8 | 4 of 8 | 4 / 1 / 3 / 0 / 0 / 0 | 6 | 9 | 8 of 8 (13.1) | $0.12650 |
+| v6 Nano | on | 8 | 3 of 8 | 3 / 5 / 0 / 0 / 0 / 0 | 1 | 3 | 8 of 8 (9.0) | $0.15493 |
+| v6 Nano | off | 8 | 4 of 8 | 4 / 3 / 0 / 0 / 0 / 1 | 0 | 6 | 8 of 8 (8.6) | $0.12626 |
+
+What the v6 records show, and only that (n = 8 per arm and set; no significance test, none implied):
+- Resolved: v6 Nano 7 of 16 (on 3 of 8, off 4 of 8); v5 8 of 16 (on 4 of 8, off 4 of 8).
+- Every v6 run that called `finish` was RESOLVED (7 of 7); the other 9 ended on the token budget
+  (8) or on the outage (1). No v6 run ended on the step budget (v5: 3) or the stuck stop.
+- Failed edits: v6 1, v5 9. The new line-end retry applied **0** times in 16 runs (the replay in
+  Phase 2 predicted it would not change the recorded failures); the agent-v2 fallback applied 6.
+- Unknown-tool calls: v6 9 (`execute_bash` ×5, a name not seen before; `str_replace_editor` with
+  `command: "edit"` ×3, a shape not seen in Phase 1 and so not mapped; `str_replace_editor {}` ×1);
+  v5 26. **71 `str_replace_editor` calls ran as real tools** (70 `read_file`, 1 `list_dir`).
+- Every run read a fault file; mean step of the first read: v6 on 9.0, off 8.6; v5 on 9.5, off 13.1.
+- v6 Nano spend: the 16 records sum to $0.28119 ($0.15493 on, $0.12626 off); the ledger grew by
+  $0.28298. The $0.00179 difference is one ledger entry with `ok: false` at 19:20:22 UTC, the model
+  request that timed out in the outage, priced as an estimate and in no run record.
+
+### Step 7: Super probe
+
+`… --arms on,off --repeats 1 --concurrency 1 --model nvidia/nemotron-3-super-120b-a12b
+--cost-limit-usd 0.6 --max-spend-usd 3.0 --out runs/phase4-v6-super`. Same agent (agent-v6, prompt
+`556861d4…`, reasoning on, temperature 0), same step, token and time limits; the per-run cost limit
+$0.60 for this probe only (recorded in each record's `limits`). Ledger before: $1.20016. The model
+id is the one in `config/prices.json` ($0.30 / $0.90 per 1M input / output, third-party rate).
+Copied to `docs/eval/agent-v6-dev-2026-10-04/super/`. Baseline-anomaly flags: none (62 / 62).
+| Task | Arm | Set | Rep | State | End | Steps | Failed edits | Unknown-tool calls | Aliased calls | First fault-file read: step (tokens) | Tokens | Cost | Baseline passed / total |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| chat-recent | on | v6 Super | 1 | RESOLVED | finish | 26 | 0 | 0 | 0 | 13 (71627) | 213244 | $0.06560 | 62 / 62 |
+| chat-recent | off | v6 Super | 1 | RESOLVED | finish | 14 | 0 | 0 | 0 | 6 (13584) | 56694 | $0.01789 | 62 / 62 |
+| search-description | on | v6 Super | 1 | RESOLVED | finish | 16 | 1 | 0 | 0 | 3 (11771) | 132154 | $0.04145 | 62 / 62 |
+| search-description | off | v6 Super | 1 | UNRESOLVED | budget: tokens 300000 | 27 | 0 | 0 | 0 | 5 (13084) | 311723 | $0.10090 | 62 / 62 |
+| session-expiry | on | v6 Super | 1 | RESOLVED | finish | 9 | 0 | 0 | 0 | 3 (12914) | 52143 | $0.01632 | 62 / 62 |
+| session-expiry | off | v6 Super | 1 | RESOLVED | finish | 8 | 0 | 0 | 0 | 5 (10241) | 19773 | $0.00626 | 62 / 62 |
+| short-summary | on | v6 Super | 1 | UNRESOLVED | stopped: stuck | 16 | 0 | 0 | 0 | 4 (18068) | 127836 | $0.04202 | 62 / 62 |
+| short-summary | off | v6 Super | 1 | UNRESOLVED | budget: tokens 300000 | 31 | 0 | 0 | 0 | 6 (15190) | 305522 | $0.10075 | 62 / 62 |
+
+| Set | Arm | n | Resolved | Ends: finish / tokens / steps / cost / stuck / error | Failed edits | Unknown-tool calls | Fault file read (mean step) | Cost |
+|---|---|---|---|---|---|---|---|---|
+| v6 Super | on | 4 | 3 of 4 | 3 / 0 / 0 / 0 / 1 / 0 | 1 | 0 | 4 of 4 (5.8) | $0.16540 |
+| v6 Super | off | 4 | 2 of 4 | 2 / 2 / 0 / 0 / 0 / 0 | 0 | 0 | 4 of 4 (5.5) | $0.22580 |
+
+**Which limit ended each Super run:** chat-recent on / off, search-description on, session-expiry
+on / off: none (`finish`, RESOLVED). search-description off: the **token** limit (311,723 tokens,
+$0.10090). short-summary on: the **stuck stop** (3 refused calls in a row, 16 steps, $0.04202).
+short-summary off: the **token** limit (305,522 tokens, $0.10075). The $0.60 cost limit ended none;
+the most a run cost was $0.10090. Probe total **$0.39120** (8 runs; $0.00626–$0.10090 per run,
+mean $0.04890), far under the $3.00 stop.
+
+Super resolved 5 of 8 (on 3 of 4, off 2 of 4) with no unknown-tool calls and no aliased calls, and
+read a fault file first at a mean step of 5.8 (on) / 5.5 (off). One run per cell, dev tasks:
+this is a probe, not a comparison of models.
+
+### Step 8
+
+No tuning after these batches. Nothing in the agent, prompt or settings was changed in response to
+them.
+
+**Spend in Phase 4** (ledger): Nano $0.09448 (first batch, incl. the $0.00179 failed request) +
+$0.18850 (re-run) = $0.28298; Super $0.39121; total **$0.67419**. Ledger $0.91718 → **$1.59137** (cap for this prompt: $4.00, ledger $4.91718).
+
+**Gates** (GIT_* env check printed nothing; nothing else ran): version guard exit 0;
+`TRACEHOUND_NETWORK_TESTS=1 pnpm test` exit 0, analyzer 360 passed (31 files), viewer 88 passed
+(11 files), 844 s; `pnpm typecheck` exit 0; viewer build exit 0; no run record kept. Commit
+`850ac4b`, pushed.
+
+## Phase 5: re-freeze
+
+Rules block re-read at the start. CI for the Phase 4 commit `850ac4b`: see the PR.
+
+**Done:**
+- `docs/freeze.md` rewritten for **agent-v6** (prompt `agent-v5.md` byte-identical, `556861d4…`),
+  with a note that **`eval-freeze` is superseded** (its tag stays), the agent-v6 tool behaviour,
+  and **per-model cost limits per run: Nano $0.10 (the task's limit), Super $0.60 (via
+  `--cost-limit-usd 0.6`)**; every other frozen item re-checked by hash and unchanged (snapshot,
+  prompt files, price table, profile, Dockerfile, image id).
+- README: the agent version line (agent-v4 → agent-v6).
+- CLAUDE.md: the line reserving Super (now: Super only via `--model`, probed on the dev tasks with
+  `--cost-limit-usd 0.6`, not the evaluation's model), the agent-v6 and freeze lines, the spend
+  figure.
+- Tag `eval-freeze-2` on this phase's commit once its gate and CI are green; `eval-freeze` left in
+  place. PR #9 marked ready for review, not merged.
+
+**Scratch worktrees (amendment item 9): not removed.** `git worktree remove` (no `--force`)
+refused all three, as it should: `scratchpad/wt` has uncommitted drafts of Phase 2 (identical to
+what `01dc0f8` committed), `scratchpad/wt3` uncommitted drafts of Phase 3 plus `node_modules`
+symlinks, `scratchpad/wtfreeze` (the `eval-freeze` control) only `node_modules` symlinks.
+`git branch -d wip/agent-v6-phase2` refused because that branch is checked out in `scratchpad/wt`.
+All four are left as they are.

@@ -89,8 +89,8 @@ export function truncate(text: string, max = MAX_TOOL_RESULT): string {
 const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64");
 const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
-// edit_file fallbacks (agent-v2, decision 030), plain JS so the sandbox helper can embed it and
-// tests can evaluate it on the host. Lines are compared with leading/trailing whitespace ignored.
+// edit_file matching (agent-v2, decision 030; agent-v6, decision 047), plain JS so the sandbox
+// helper can embed it and tests can evaluate it on the host.
 export const EDIT_FALLBACK_JS = String.raw`
 function wsNormalizedEdit(text, oldText, newText) {
   const file = text.split("\n");
@@ -127,8 +127,44 @@ function wsNormalizedEdit(text, oldText, newText) {
   }
   return { ok: true, text: [...file.slice(0, at), ...lines, ...file.slice(at + pat.length)].join("\n"), startLine: at + 1, endLine: at + pat.length, reindent };
 }
+// agent-v6 (decision 047): s without the CR of each CRLF and without the spaces and tabs before each
+// line end (and at the very end). map[i] is the index in s of the i-th kept character; no "\n" is
+// dropped, so line numbers are the same in both.
+function normalizeLineEnds(s) {
+  const out = [], map = [];
+  for (let i = 0; i < s.length; ) {
+    const c = s[i];
+    if (c === "\r" && s[i + 1] === "\n") { i++; continue; }
+    if (c === " " || c === "\t") {
+      let j = i;
+      while (j < s.length && (s[j] === " " || s[j] === "\t")) j++;
+      if (!(j === s.length || s[j] === "\n" || (s[j] === "\r" && s[j + 1] === "\n"))) for (let k = i; k < j; k++) { out.push(s[k]); map.push(k); }
+      i = j;
+      continue;
+    }
+    out.push(c); map.push(i); i++;
+  }
+  return { text: out.join(""), map };
+}
+// agent-v6 (decision 047): oldText matched with trailing whitespace and line endings ignored on both
+// sides; applied only at exactly one location. newText gets CRLF line ends if the file uses them.
+function lineEndEdit(text, oldText, newText) {
+  const t = normalizeLineEnds(text), p = normalizeLineEnds(oldText).text;
+  if (!p.trim()) return { ok: false, lines: [] };
+  const hits = [];
+  for (let i = t.text.indexOf(p); i !== -1; i = t.text.indexOf(p, i + 1)) hits.push(i);
+  const lineAt = (i) => t.text.slice(0, i).split("\n").length;
+  if (hits.length !== 1) return { ok: false, lines: hits.map(lineAt) };
+  const at = hits[0], start = t.map[at], end = t.map[at + p.length - 1] + 1;
+  const nt = text.includes("\r\n") && !newText.includes("\r") ? newText.replace(/\n/g, "\r\n") : newText;
+  return { ok: true, text: text.slice(0, start) + nt + text.slice(end), startLine: lineAt(at), endLine: lineAt(at + p.length - 1) };
+}
+// The file's lines most similar to oldText (character bigrams, whitespace squashed), with line
+// numbers, at most 40 lines. Undefined only for an empty file.
 function closestRegion(text, oldText) {
   const file = text.split("\n");
+  if (file.length && file[file.length - 1] === "") file.pop();
+  if (!file.length) return undefined;
   const n = Math.max(1, Math.min(oldText.trim().split("\n").length, file.length));
   const squash = (s) => s.replace(/\s+/g, " ").trim();
   const grams = (s) => { const m = new Map(); for (let i = 0; i < s.length - 1; i++) { const g = s.slice(i, i + 2); m.set(g, (m.get(g) || 0) + 1); } return m; };
@@ -142,9 +178,33 @@ function closestRegion(text, oldText) {
     const score = tn + gn ? (2 * common) / (tn + gn) : 0;
     if (score > best.score) best = { score, start: i };
   }
-  if (best.score <= 0) return undefined;
   const shown = file.slice(best.start, best.start + Math.min(n, 40));
-  return { startLine: best.start + 1, endLine: best.start + n, score: Math.round(best.score * 100) / 100, snippet: shown.map((l, k) => best.start + 1 + k + "| " + l).join("\n") };
+  return { startLine: best.start + 1, endLine: best.start + shown.length, score: Math.round(best.score * 100) / 100, snippet: shown.map((l, k) => best.start + 1 + k + "| " + l).join("\n") };
+}
+// One edit_file call on a file's text. Order: exact (once) → trailing whitespace and line endings
+// ignored (agent-v6) → indentation and trailing spaces ignored (agent-v2) → an error with the closest
+// region. Returns { ok, text?, message, how }; the sandbox helper writes text and prints message.
+function applyEdit(text, oldText, newText, label) {
+  const n = text.split(oldText).length - 1;
+  if (n === 1) {
+    const at = text.indexOf(oldText);
+    return { ok: true, how: "exact", text: text.slice(0, at) + newText + text.slice(at + oldText.length), message: "edited " + label + ": replaced 1 occurrence starting at line " + text.slice(0, at).split("\n").length };
+  }
+  if (n > 1) return { ok: false, how: "exact-multiple", message: "oldText occurs " + n + " times in " + label + "; include more surrounding lines so it matches exactly once." };
+  const region = () => {
+    const near = closestRegion(text, oldText);
+    return near ? "\nClosest region of the file as it is now (lines " + near.startLine + "-" + near.endLine + ", similarity " + near.score + "):\n" + near.snippet : "";
+  };
+  const le = lineEndEdit(text, oldText, newText);
+  if (le.ok) return { ok: true, how: "line-ends", text: le.text, message: "edited " + label + ": oldText did not match exactly; ignoring trailing whitespace and line endings it matched once, at lines " + le.startLine + "-" + le.endLine + ", and was replaced there. Read those lines back to check." };
+  if (le.lines.length > 1) return { ok: false, how: "ambiguous-line-ends", message: "oldText not found exactly in " + label + "; ignoring trailing whitespace and line endings it matches " + le.lines.length + " places (starting at lines " + le.lines.join(", ") + "), so nothing was changed. Include more surrounding lines so it matches once." + region() };
+  const ws = wsNormalizedEdit(text, oldText, newText);
+  if (ws.ok) {
+    const how = ws.reindent === "shifted" ? "newText was re-indented by the same shift" : ws.reindent === "as given" ? "newText was inserted as given (its indentation was not adjusted)" : "indentation already matched";
+    return { ok: true, how: "whitespace-normalized", text: ws.text, message: "edited " + label + ": oldText did not match exactly, so a whitespace-normalized match (indentation and trailing spaces ignored) was applied to lines " + ws.startLine + "-" + ws.endLine + "; " + how + ". Read those lines back to check." };
+  }
+  if (ws.lines.length > 1) return { ok: false, how: "ambiguous-whitespace", message: "oldText not found exactly in " + label + "; ignoring indentation and trailing spaces it matches " + ws.lines.length + " places (starting at lines " + ws.lines.join(", ") + "), so nothing was changed. Include more surrounding lines so it matches once." + region() };
+  return { ok: false, how: "not-found", message: "oldText not found in " + label + ", even ignoring indentation, trailing whitespace and line endings. Copy it exactly from read_file output, without the '<n>| ' prefixes." + region() };
 }
 `;
 
@@ -184,25 +244,10 @@ if (op === "list_dir") {
   const f = confine(args.path);
   if (!fs.existsSync(f) || !fs.statSync(f).isFile()) fail("not a file: " + args.path + " (write_file creates new files)");
   if (!args.oldText) fail("oldText must not be empty");
-  const text = fs.readFileSync(f, "utf8");
-  const n = text.split(args.oldText).length - 1;
-  if (n === 0) {
-    const ws = wsNormalizedEdit(text, args.oldText, args.newText);
-    if (ws.ok) {
-      fs.writeFileSync(f, ws.text);
-      const how = ws.reindent === "shifted" ? "newText was re-indented by the same shift" : ws.reindent === "as given" ? "newText was inserted as given (its indentation was not adjusted)" : "indentation already matched";
-      process.stdout.write("edited " + args.path + ": oldText did not match exactly, so a whitespace-normalized match (indentation and trailing spaces ignored) was applied to lines " + ws.startLine + "-" + ws.endLine + "; " + how + ". Read those lines back to check.\n");
-      process.exit(0);
-    }
-    if (ws.lines.length > 1) fail("oldText not found exactly in " + args.path + "; ignoring indentation and trailing spaces it matches " + ws.lines.length + " places (starting at lines " + ws.lines.join(", ") + "), so nothing was changed. Include more surrounding lines so it matches once.");
-    const near = closestRegion(text, args.oldText);
-    fail("oldText not found in " + args.path + ", even ignoring indentation and trailing spaces. Copy it exactly from read_file output, without the '<n>| ' prefixes." + (near ? "\nClosest region (lines " + near.startLine + "-" + near.endLine + ", similarity " + near.score + "):\n" + near.snippet : ""));
-  }
-  if (n > 1) fail("oldText occurs " + n + " times in " + args.path + "; include more surrounding lines so it matches exactly once.");
-  const at = text.indexOf(args.oldText);
-  const line = text.slice(0, at).split("\n").length;
-  fs.writeFileSync(f, text.slice(0, at) + args.newText + text.slice(at + args.oldText.length));
-  process.stdout.write("edited " + args.path + ": replaced 1 occurrence starting at line " + line + "\n");
+  const r = applyEdit(fs.readFileSync(f, "utf8"), args.oldText, args.newText, args.path);
+  if (!r.ok) fail(r.message);
+  fs.writeFileSync(f, r.text);
+  process.stdout.write(r.message + "\n");
 } else if (op === "write_file") {
   const f = confine(args.path);
   if (fs.existsSync(f)) fail(args.path + " already exists; use edit_file to change it");

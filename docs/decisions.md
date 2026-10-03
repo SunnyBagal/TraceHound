@@ -2098,3 +2098,79 @@ node packages/analyzer/src/harness/evaluate.ts --tasks <dir> [--arms on,off] [--
 runs, and a crash in one run would end the others. (b) Parallel runs by default: see decision
 045. (c) Mean resolve rates with intervals or tests: four tasks and one repeat can't support them,
 so the table gives counts with n.
+
+## 047 · agent-v6: the str_replace_editor alias and an edit retry for line endings
+**Context:** in the 32 agent-v5 dev runs (decisions 044–046) every run that called `finish` was
+RESOLVED and all 19 UNRESOLVED runs ended on a budget (18) or the stuck stop (1). The agent read the
+fault file in every run. Two mechanical losses: 53 calls to `str_replace_editor`, a tool that
+doesn't exist here (47 of them reads), each a wasted step with its tokens; and 14 failed edits, 12
+of them "oldText not found" (prompt `docs/prompts/agent-v6.md`; per-run table in
+`docs/build-log.md`, agent-v6 Phase 1). This decision fixes edit mechanics the same way in both arms
+and changes nothing else: the prompt file, budgets, guards, model settings and the arms are
+agent-v5's.
+**Choice (agent-v6, `LOOP_VERSION = "agent-v6"`; prompt `harness/prompts/agent-v5.md`, unchanged,
+sha256 `556861d40ba86940a72c05d15b08cf07eea15a6d8a5508c6c7d3d352b92222b6`):**
+- **`str_replace_editor` is an alias** (`aliasCall`, `src/harness/loop.ts`) for exactly the argument
+  shapes the 32 runs used, and nothing else:
+
+  | Shape | Runs as |
+  |---|---|
+  | `{command: "view" \| "read", path}`; `{path}` | `read_file {path}` |
+  | `{command: "view" \| "read", path, startLine, endLine}` (digit strings become integers) | `read_file {path, startLine, endLine}` |
+  | `{path, view_range: "[a, b]"}` (a string or an array, two integers ≥ 1) | `read_file {path, startLine: a, endLine: b}` |
+  | `{command: "list", path}` | `list_dir {path}` |
+  | `{command: "edit_file", path, oldText, newText}` | `edit_file {path, oldText, newText}` |
+
+  It is never in the tool schemas sent to the model. An aliased call goes down the real tool's path
+  from the argument check on: the same step, the same repeat guard (a `read_file` and an aliased
+  read of the same arguments are the same call), the same result text. The record keeps the name
+  the model used and adds `ranAs`; `guards.aliasCalls` counts them. Any other shape (including
+  `{}`, which names no file, and the editor's own `create` / `str_replace` commands) and any other
+  unknown tool get the existing one-line `error: unknown tool "<name>". Available: <names>`.
+- **Edit matching order** (`applyEdit`, the sandbox helper's JS in `src/harness/tools.ts`): exact,
+  once → applied (unchanged). Exact more than once → the unchanged error. Otherwise **new: retry with
+  trailing whitespace and line endings ignored on both sides** (CRLF → LF, spaces and tabs before a
+  line end dropped; `oldText` may start or end mid-line, as an exact match may) → applied only at
+  exactly one location, `newText` given CRLF line ends if the file uses them;
+  `guards.editLineEndRetries` counts them. More than one location → an error listing them. No
+  location → the agent-v2 fallback (indentation and trailing spaces ignored, decision 030),
+  unchanged. Every error after the exact step ends with **the closest region of the file's current
+  text, with line numbers, at most 40 lines**; it was already shown when nothing matched and is now
+  also shown when the match is ambiguous, is no longer dropped when the similarity is 0, and its
+  stated line range is the lines shown.
+- **The agent-v2 fallback stays.** The prompt asked for the narrower retry; the broader one already
+  existed and applied 12 edits in 12 of the 32 runs, none of which the narrower retry matches. Removing it would change the agent beyond edit mechanics.
+**Expected effect, measured before running anything:** replaying every `edit_file` call of the 32
+runs against a scratch clone of Recall with the seeds applied (each run's successful edits applied
+in order) reproduces every recorded outcome with the agent-v5 logic, and gives the same outcomes with
+agent-v6's: **the new retry turns none of the 12 "not found" failures into an edit.** Their causes
+are characters the model dropped (6), a whitespace-only line left out or added (3), lines the run
+had already changed (2), and a partial first line without its leading `.` (1). The alias, by
+contrast, would have run 50 of the 53 wasted calls as real tools (47 reads, 2 listings, 1 edit).
+**Run records (same prompt, Phase 3):** `faultFileRead { files, read: { step, turn, tokens, file } |
+null }`: the step of the first successful read (`read_file`, or a call run as one) of a file the
+task's seed patch changed, counted as the harness counts steps, and the tokens used up to and
+including that call. Computed on the host after the agent stops (`src/harness/run-metrics.ts`),
+for seeded tasks and model agents only; never part of the verdict. The runner's table also shows
+the end reason, failed edits and unknown-tool calls. `tracehound repair` and the runner take
+`--model` (the Super probe).
+**Gate isolation (amendment 1):** in this work four full-suite runs went red in the Recall harness
+file: three times its smoke test 1 (Recall's own suite exiting 1 at baseline, before any patch;
+the test passes alone), once two dev-task tests reaching their 300 s timeout. **The
+cause is unproven:** those runs kept no record. The likely cause is decision 045's (Recall's suite
+under parallel Docker load), not shown. Since then the five test files that start Docker
+sandboxes run after all other files and one at a time (`packages/analyzer/vitest.config.ts`,
+guarded by `test/test-config.test.ts`); timeouts are unchanged and nothing is retried or skipped.
+A failing Recall harness test keeps its run record (`runs/test-records/`) and names it in its
+failure message.
+**Runner validity flag (amendment 1):** each row carries baseline tests passed / total; a run whose
+passed-count is not the most common one for its task in the batch is flagged `baselineAnomaly`
+(every run of the task on a tie). A flag only: the verdict is unchanged. `--cost-limit-usd`
+(repair CLI and runner) replaces the tasks' per-run cost limit for one batch; records carry
+`limits`.
+**Rejected:** (a) Adding `str_replace_editor` to the schemas: a second edit tool both arms would
+have to be told about, i.e. a prompt change. (b) Mapping the editor's full command set (`create`,
+`str_replace`, `insert`, `undo_edit`): shapes never seen in the runs; a guess at what Nano means.
+(c) Ignoring whitespace-only lines, or fuzzy matching, to catch the 12 failures: not what was asked,
+and a fuzzy edit can land in the wrong place. (d) Removing the agent-v2 fallback to follow step 3
+literally: see above.
