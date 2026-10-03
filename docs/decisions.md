@@ -2154,6 +2154,19 @@ including that call. Computed on the host after the agent stops (`src/harness/ru
 for seeded tasks and model agents only; never part of the verdict. The runner's table also shows
 the end reason, failed edits and unknown-tool calls. `tracehound repair` and the runner take
 `--model` (the Super probe).
+**Gate isolation (amendment 1):** in this work the full suite went red four times on one Recall
+smoke test, Recall's own suite exiting 1 at baseline before any patch, while passing alone. **The
+cause is unproven:** those runs kept no record. The likely cause is decision 045's (Recall's suite
+under parallel Docker load), not shown. Since then the five test files that start Docker
+sandboxes run after all other files and one at a time (`packages/analyzer/vitest.config.ts`,
+guarded by `test/test-config.test.ts`); timeouts are unchanged and nothing is retried or skipped.
+A failing Recall harness test keeps its run record (`runs/test-records/`) and names it in its
+failure message.
+**Runner validity flag (amendment 1):** each row carries baseline tests passed / total; a run whose
+passed-count is not the most common one for its task in the batch is flagged `baselineAnomaly`
+(every run of the task on a tie). A flag only: the verdict is unchanged. `--cost-limit-usd`
+(repair CLI and runner) replaces the tasks' per-run cost limit for one batch; records carry
+`limits`.
 **Rejected:** (a) Adding `str_replace_editor` to the schemas: a second edit tool both arms would
 have to be told about, i.e. a prompt change. (b) Mapping the editor's full command set (`create`,
 `str_replace`, `insert`, `undo_edit`): shapes never seen in the runs; a guess at what Nano means.

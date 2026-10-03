@@ -595,3 +595,52 @@ measured effect of the graph.
 - Which Recall tests failed at baseline is not known: the test does not keep the run record.
 
 **Spend:** $0 (ledger $0.91718).
+
+## Amendment 1 (`docs/prompts/agent-v6-amendment-1.md`, commit `a2145e4`)
+
+The owner chose option 2 (isolate the Docker test files) plus keeping the run record. The
+amendment overrides the original where they differ: it adds the analyzer test config and
+`test/harness-recall.test.ts` to the may-touch list, sets the prompt's spend cap to $4.00 (ledger cap
+$4.91718), the Super probe's per-task cost limit to $0.60 (probe total at most $3.00), and says
+nothing else runs on the machine during a gate or a model batch. CI on the stopped head `a145696`:
+**success**, https://github.com/SunnyBagal/TraceHound/actions/runs/37138070516.
+
+### A. The gate
+
+**What changed in the test config** (`packages/analyzer/vitest.config.ts`): two vitest projects.
+`unit` is every test file except the five that start Docker sandboxes, run in parallel as before
+(`sequence.groupOrder` 0). `docker` is `harness-docker`, `harness-expiry`, `harness-infra`,
+`harness-loop` and `harness-recall`, with `fileParallelism: false` and `groupOrder` 1: it starts
+after the unit project has finished and runs its files one at a time. No timeout was raised, no
+retry added, no test skipped. Checked first with four throwaway files (two per project): the unit
+pair ran together, then the docker pair one after the other. `test/test-config.test.ts` fails if a
+test file that uses `LocalDockerProvider` or `dockerAvailable` is missing from the list (or vice
+versa), or if the projects lose these settings.
+
+**Kept run records** (`test/harness-recall.test.ts`): every run record is written to
+`runs/test-records/<runId>.json` as soon as its run returns. A passing test deletes its records; a
+failing one keeps them and appends `run record kept: <path>` to its failure message. A test that
+hits its timeout fails before its run returns, so its message can't name the file, but the record
+still lands in that directory when the run ends. Checked once with a throwaway copy of the file
+whose test 2 expected a wrong reason: the failure message ended with the kept record's path; the
+copy and the record were then deleted.
+
+**Cause of the earlier red gates: unproven.** No kept record exists for them (the records were
+not kept then). The likely cause is still decision 045's (Recall's own suite under parallel Docker
+load), but it is not shown.
+
+### B. Runner validity flag
+
+- Per run: baseline tests passed / total (`baselinePassed`, `baselineTotal`, from the per-test
+  reports of all regression commands; absent without a report).
+- `flagBaselineAnomalies`: a run whose baseline passed-count differs from the most common one for
+  its task in the batch gets `baselineAnomaly: true` in `results.json`, and
+  "**baseline-anomaly**" beside its count in `results.md`, plus a summary line naming the flagged
+  runs (or "baseline-anomaly: none"). With a tie for most common, every run of that task is flagged.
+  The verdict is not changed.
+- For the Super probe: `--cost-limit-usd <usd>` on `tracehound repair` and on the runner (which
+  also reserves that amount per run in its spend stop); every run record now carries `limits`, the
+  limits it actually had. The end reason (`budget: cost $…`, `budget: tokens …`, `budget: steps …`)
+  says which limit ended a run.
+- Tests: `test/harness-evaluate.test.ts` (counts, a lone off count flagged, a tie flagging all
+  four, no report → no flag, the table and summary line, bad `--cost-limit-usd` in both CLIs).

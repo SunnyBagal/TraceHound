@@ -1,5 +1,5 @@
 // tracehound repair --task <task.json> --agent oracle|noop|nemotron [--patch <file>] [--graph on|off]
-//                   [--reasoning on|off] [--decider lexical|nemotron] [--model <id>] --provider docker [--runs-dir runs]
+//                   [--reasoning on|off] [--decider lexical|nemotron] [--model <id>] [--cost-limit-usd <usd>] --provider docker [--runs-dir runs]
 // Exit code: 0 RESOLVED · 1 UNRESOLVED · 2 FAILED/CANCELLED · 3 bad arguments / Docker unavailable.
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -15,7 +15,7 @@ import { loadTask } from "./task.ts";
 
 const WORKSPACE_ROOT = path.resolve(import.meta.dirname, "../../../..");
 const USAGE =
-  "usage: tracehound repair --task <task.json> --agent oracle|noop|nemotron [--patch <file>] [--graph on|off] [--reasoning on|off] [--decider lexical|nemotron] [--model <id>] --provider docker [--runs-dir runs]";
+  "usage: tracehound repair --task <task.json> --agent oracle|noop|nemotron [--patch <file>] [--graph on|off] [--reasoning on|off] [--decider lexical|nemotron] [--model <id>] [--cost-limit-usd <usd>] --provider docker [--runs-dir runs]";
 
 export function writeRun(record: RunRecord, runsDir: string): string {
   mkdirSync(runsDir, { recursive: true });
@@ -38,6 +38,8 @@ export async function main(argv: string[]): Promise<number> {
       decider: { type: "string", default: "lexical" },
       // decision 047: the repair agent's model (default Nano); Super/Ultra only when named here
       model: { type: "string" },
+      // amendment 1: replaces the task's limits.costUSD for this run (the Super probe); recorded in record.limits
+      "cost-limit-usd": { type: "string" },
     },
   });
   const fail = (msg: string) => (console.error(`✖ ${msg}`), 3);
@@ -54,6 +56,11 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   const task = loadTask(values.task);
+  if (values["cost-limit-usd"] !== undefined) {
+    const usd = Number(values["cost-limit-usd"]);
+    if (!(usd > 0)) return fail(`--cost-limit-usd must be a positive number\n${USAGE}`);
+    task.spec.limits = { ...task.spec.limits, costUSD: usd };
+  }
   let llm: ReturnType<typeof createTokenFactoryClient>["client"] | undefined;
   let snapshotRef: GraphSnapshotRef | undefined;
   if (values.agent === "nemotron") {

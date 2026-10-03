@@ -4,7 +4,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { armTotals, discoverTasks, main, markdownTable, planJobs, rowFromRecord, runJobs, type Execute, type Job } from "../src/harness/evaluate.ts";
+import { armTotals, discoverTasks, flagBaselineAnomalies, main, markdownTable, planJobs, rowFromRecord, runJobs, type Execute, type Job } from "../src/harness/evaluate.ts";
+import { main as repairMain } from "../src/harness/cli.ts";
 import type { RunRecord } from "../src/harness/run.ts";
 
 const TASKS = path.resolve(import.meta.dirname, "../../../eval/tasks");
@@ -143,6 +144,39 @@ describe("evaluation runner (decision 046)", () => {
     expect(md).toContain("| 1 (n = 1) | 1 (n = 1) | 0 of 1 (—; n = 0) |");
   });
 
+  it("amendment 1: baseline tests passed / total per run; a run off the most common count for its task is flagged, the verdict untouched", () => {
+    const jobs = planJobs(discoverTasks(TASKS, "dev").slice(0, 2), ["on", "off"], 2); // 2 tasks x 2 arms x 2 repeats
+    const tests = (passed: number, total = 62) => Array.from({ length: total }, (_, i) => ({ file: "t.ts", name: `t${i}`, status: (i < passed ? "passed" : "failed") as "passed" | "failed" }));
+    // task 1: 62, 62, 62, 57 → the 57 is flagged; task 2: 62, 62, 60, 60 → a tie, all four flagged
+    const passed = [62, 62, 62, 57, 62, 62, 60, 60];
+    const rows = flagBaselineAnomalies(
+      jobs.map((j, i) => {
+        const r = record(j, "RESOLVED");
+        r.baseline = { regression: [{ cmd: "bun test", exitCode: passed[i] === 62 ? 0 : 1, timedOut: false, tests: tests(passed[i]!) }], typecheck: [] };
+        return rowFromRecord(j, r);
+      }),
+    );
+    expect(rows.map((r) => [r.baselinePassed, r.baselineTotal, r.baselineAnomaly])).toEqual([
+      [62, 62, false],
+      [62, 62, false],
+      [62, 62, false],
+      [57, 62, true],
+      [62, 62, true],
+      [62, 62, true],
+      [60, 62, true],
+      [60, 62, true],
+    ]);
+    expect(rows.every((r) => r.state === "RESOLVED")).toBe(true);
+    const md = markdownTable(rows, armTotals(rows, ["on", "off"]), { tasksDir: "eval/tasks", repeats: 2, generatedAt: "x" });
+    expect(md).toContain("| Baseline tests passed / total |");
+    expect(md).toContain("| 57 / 62 **baseline-anomaly** |");
+    expect(md).toContain("**baseline-anomaly: 5 run(s)** (recall-dev-chat-recent graph-off #2, recall-dev-search-description graph-on #1,");
+    // no per-test report: no counts, nothing compared or flagged
+    const plain = flagBaselineAnomalies(jobs.slice(0, 2).map((j) => rowFromRecord(j, record(j, "UNRESOLVED"))));
+    expect(plain.map((r) => [r.baselinePassed, r.baselineAnomaly])).toEqual([[undefined, undefined], [undefined, undefined]]);
+    expect(markdownTable(plain, armTotals(plain, ["on", "off"]), { tasksDir: "x", repeats: 1, generatedAt: "x" })).toContain("baseline-anomaly: none");
+  });
+
   it("rejects bad arguments with exit code 3 before running anything", async () => {
     const quiet = console.error;
     console.error = () => {};
@@ -151,6 +185,9 @@ describe("evaluation runner (decision 046)", () => {
       expect(await main(["--tasks", TASKS, "--arms", "on,maybe"])).toBe(3);
       expect(await main(["--tasks", TASKS, "--repeats", "0"])).toBe(3);
       expect(await main(["--tasks", TASKS, "--max-spend-usd=-1"])).toBe(3);
+      expect(await main(["--tasks", TASKS, "--cost-limit-usd", "0"])).toBe(3);
+      // the repair CLI checks its own --cost-limit-usd before any sandbox or model client exists
+      expect(await repairMain(["--task", path.join(TASKS, "recall-dev-chat-recent", "task.json"), "--agent", "noop", "--cost-limit-usd=-1"])).toBe(3);
     } finally {
       console.error = quiet;
     }
