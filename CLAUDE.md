@@ -185,6 +185,7 @@ repo) are recorded as facts but never produce edges.
   via fallback/const indirection · 0.5 real op, dynamic/unresolved operand. Numbers are
   internal; every edge also carries `confidenceLabel` (`proven` · `resolved-default` ·
   `dynamic`), which is what the UI shows.
+- The ten study S1 repos (mirlo, plunk, firecrawl, PeerTube, Flowise, logchimp, usesend, openpanel, midday, langfuse; decision 043) are a seen set: never tune the BullMQ detector on them.
 - Record non-obvious choices in `docs/decisions.md` (choice + rejected alternative).
 - Small, meaningful commits pushed to `main`.
 - **Gates (tests, typecheck, build) run in a plain shell, never via `git rebase --exec` or a git

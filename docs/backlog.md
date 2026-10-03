@@ -32,14 +32,27 @@ built.
   `test/` (Recall's API tests via `test/helpers/app.ts`) has no link to it (decision 042).
 - A package whose own source lives under a directory named `test`/`tests` would be treated as
   test support (decision 042); no such repo has been seen.
+- The analyzer invents a queue node `dynamic-dynamic` from a template of two runtime values
+  (usesend, `apps/web/src/server/service/email-queue-service.ts:34`, study S1, decision 043): a
+  Worker whose name is a template of unresolved values should get no named node, not a
+  literal-looking one. This is S1's one false edge.
+- `packages/analyzer/package.json` says version 0.6.0 while `ANALYZER_VERSION` is 0.10.0 (study S1).
+- BullMQ detector gaps from study S1 (decision 043), by sites missed in the scored sample. **Don't
+  tune on the S1 repos** (they are a seen set):
+  1. a producer reaches its queue through a getter, singleton or forwarder function
+     (`getQueue().add`, `X.getInstance().add`, a function that takes the queue *name*) (116);
+  2. the queue name is a loop variable, map key or runtime-built string, so one construction
+     serves many queues (41);
+  3. the Queue/Worker is constructed inside a wrapper function or class whose queue name is a
+     parameter (35);
+  4. a Worker is named by `someQueue.name`, which isn't resolved to the queue's literal (20);
+  5. the queue name is a TypeScript enum member (16).
 
 ## Repair harness
 - The Recall `57d920e` snapshot in `eval/snapshots/` has heuristic names (the naming cache has no
   entry for that commit's facts); model names would need a naming run.
 - In the one graph-on smoke run (decision 042) the agent made no graph tool calls; whether the
   graph helps on Recall is untested.
-- Per-test regression comparison: the gate compares one exit code per command, so with a single
-  `bun test` a baseline that already has a failing test hides any newly broken one (decision 041).
 - After a sandbox is killed, the run record can say `destroyed: false` while Docker is still
   removing the `--rm` container (`Dead`); recheck for a few seconds before recording.
 - The README's Repair harness section doesn't mention repo profiles, seed patches or the Recall

@@ -1810,3 +1810,125 @@ interface says nothing about which queue. (c) Matching by variable or property n
 (`contentQueue`, `queue`): an edge nobody can point to. (d) `proven` for a single wiring: see the
 label reasoning. (e) Ignoring test call sites by path: a fake is recognised by not resolving to a
 Queue, wherever it lives.
+
+## 043 · A per-test regression gate; study S1 recorded
+**Context:** the regression gate compared one exit code per command (decision 041's finding).
+Recall's profile runs the whole suite as one `bun test`, so once any test fails at the base
+commit, the command exits 1 before and after the patch, and a test the patch breaks is invisible.
+The typecheck gate was already per error (decision 041); this does the same for tests. Separately,
+study S1 measured the BullMQ detector on ten unseen repos; its summary is recorded below.
+**Checked before building:** the sandbox image's bun (1.4.2) has a JUnit reporter
+(`bun test --reporter=junit --reporter-outfile=<file>`). One `<testsuite>` per file, a nested
+`<testsuite>` per `describe`, `<testcase name file line>` with a `<failure>` or `<skipped>` child.
+A file that fails to load writes no `<testcase>` at all, and the console output is unchanged. On
+Recall `57d920e` it reports 62 test cases, the same 62 the console counts.
+**Choice:**
+- **Repo profile** gains an optional `testReport: { format: "junit", command }`. The command is
+  the suite again with the reporter on, and must contain `$REPORT`; it needs `test`. Recall:
+  `bun test --reporter=junit --reporter-outfile=$REPORT`. `CheckPlan.reports` maps the regression
+  command to its report command, and the record's `plan` carries it. The agent is still told the
+  plain `test` command (no agent prompt or tool changed).
+- **Collection:** at BASELINE and VERIFYING a regression command with a report runs as
+  `rm -f <file> && <report command>`, where `<file>` is a fresh `/tmp/.th-report-<uuid>.xml`
+  outside the repo. The harness reads the file, removes it, and parses it (`src/harness/junit.ts`,
+  no XML dependency). The command's exit code is recorded and counts as before. Each test is keyed
+  by its file, as the runner printed it, plus its full name (`describe > … > test`). Same-key
+  duplicates get ` (2)`, ` (3)` in report order. No file, or a file that isn't JUnit, gives
+  `reportError` and no `tests`.
+- **Verdict rule, per test:** when the baseline run reported at least one test, the run is
+  UNRESOLVED if any test that **passed at baseline** is failed, skipped or missing after the
+  patch:
+  - missing covers deleted, renamed, its file no longer loading, and no report at all;
+  - tests that failed at baseline don't count, whether still failing or fixed;
+  - tests the baseline didn't have don't count, even failing ones. Agent-added test *files* are
+    still removed before verification (decision 034).
+
+  Two additions beyond "fails or is missing":
+  - skipped counts as regressed, because a patch can't make a test pass by skipping it;
+  - a command that exited 0 at baseline and now exits non-zero fails the run even if every
+    baseline test still passes, for example an unhandled error between tests. With a passing
+    baseline this is exactly the old rule, so the per-test gate is never weaker than it.
+
+  The reproduction test keeps its own check: it is removed before the regression runs, as before.
+- **A renamed test is a regression, strictly on purpose.** The old name is missing, and the new one
+  is a test the baseline didn't have. Matching renames by line, body or similarity would let a
+  patch replace a test's assertions under a near name. Renaming tests isn't the job of a repair, so
+  a false UNRESOLVED here is the cheaper error.
+- **Fallback:** no `testReport` in the profile, a task's own regression commands, or no usable
+  report at baseline → the exit-code comparison of decision 041, unchanged.
+- **Run record:** `comparison.granularity` is `"test"` when every regression command was compared
+  per test, `"command"` when none was, `"mixed"` otherwise (no task has that today).
+  `comparison.regressedTests` lists `{ cmd, file, name, now: failed | skipped | missing }`. Each
+  regression result carries `tests` and `reportError`. A reason names up to 10 tests;
+  `regressedTests` has them all.
+**Unit tests** (`test/harness-run.test.ts`, "per-test regression gate", fake provider, end to end
+through `runRepair`). The baseline has A failing and B, C passing:
+
+| Case | Result |
+|---|---|
+| the patch breaks B | UNRESOLVED, names B (`failed`); exit codes alone were 1 and 1 |
+| the patch deletes C | UNRESOLVED, C `missing` |
+| the patch renames C | UNRESOLVED, C `missing` (strict, above) |
+| the patch skips C | UNRESOLVED, C `skipped` |
+| the patch fixes A, or leaves A failing | RESOLVED both ways |
+| the patch adds a failing test D | RESOLVED |
+| no report after the patch | UNRESOLVED, B and C `missing`, `[no report written]` |
+| same tests pass, the suite now exits 1 (baseline exit 0) | UNRESOLVED |
+| no `testReport` in the profile | `granularity: "command"`; breaking B is RESOLVED (the blind spot) |
+| a `testReport` but no report at baseline | `granularity: "command"`, `reportError` recorded |
+
+The same file also tests the parser on bun's shape (nested describes, entities, duplicates, an
+`<error>` child, non-JUnit input throws), the profile rules, and `"mixed"`.
+**Recall** (scripted patches, no model, local Docker):
+A second smoke task, `eval/tasks/recall-smoke-baseline-failing` (`kind: smoke`, never an
+evaluation task), has a seed that does two things:
+- it adds the same `"trending"` bug and repro as `recall-smoke-trending`;
+- it stops Instagram `/reel/` URLs being detected.
+
+Checked in the image before writing the tests: at the seeded base, the suite reports 61 passing
+and 1 failing (`detectLinkType > instagram posts and reels`), and `bun test` exits 1. A first
+seed (Twitter's `status` path) failed two tests (the look-alike-domain test uses a status URL), so
+it was replaced. Runs on 2026-10-03, local Docker 29.8.0, image
+`tracehound-sandbox:bun1.4.2-ts5.9.3-2`, about 45–50 s each; these are `test/harness-recall.test.ts`
+6–8:
+
+| Run | Exit code at baseline → after | State | Reason / record |
+|---|---|---|---|
+| `oracle` + `fix-breaks-test.patch` (adds `"trending"` and `"oven-sh"`) | 1 → 1 | **UNRESOLVED** | `regression "cd "recall-backend" && bun test": 2 test(s) that passed at baseline now fail or are missing: test/linkDetector.test.ts > detectLinkType > github repos, including deeper paths; reserved first segments are not repos (failed); test/linkDetector.test.ts > detectLinkType > input without a scheme gets https://; unparseable input is a link (failed)`. Pre-existing: "1 test(s) failed at baseline, 1 of them still fail" |
+| `oracle` + `fix.patch` | 1 → 1 | **RESOLVED** | repro passes and nothing fails that passed at baseline. 62 tests reported after the patch; the Instagram test is still the only failing one |
+| `oracle` + `fix-breaks-test.patch`, profile without `testReport` | 1 → 1 | RESOLVED | `granularity: "command"`: the blind spot this decision closes, shown on the same patch |
+
+**The five existing results hold** (`recall-smoke-trending`, same file, tests 1–5): RESOLVED,
+UNRESOLVED (repro still fails), UNRESOLVED (regression), UNRESOLVED (new tsc error), FAILED
+(sandbox container disappeared).
+- Test 1 now also checks the per-test baseline: 62 tests, all passing, and `granularity: "test"`.
+- Test 3's state is unchanged, but its reason now names the two broken tests instead of saying the
+  command "now fails (exit 1; passed at baseline)". Its assertion was updated to match.
+
+The toy tasks and the CEX infrastructure test have no profile, so they are unchanged
+(`granularity: "command"`). All Docker and network test files pass:
+`TRACEHOUND_NETWORK_TESTS=1 pnpm test`, 317 analyzer and 88 viewer tests.
+**Rejected:** (a) Parsing bun's console output (`(pass)` / `(fail)` lines): it's a display format,
+and multi-line names and errors between tests make it ambiguous. (b) One command per test file:
+slower, and a file-level result still hides a test inside it. (c) Matching renamed tests by line
+or similarity: see above. (d) Keeping exit codes and requiring a passing baseline: seeds and real
+repos have failing tests, and the gate has to work there.
+
+### Study S1: the BullMQ detector on ten unseen repos
+Study S1 (`tracehound-study` @ `75913ef`, read only) ran the analyzer on ten public BullMQ repos it
+had never seen: unmodified, with no config. Macro-average pairing was **2.1%**, on 0.9.0 and on
+0.10.0 alike, against a pre-registered 70% bar. Worker detection was 12.4% and queue detection
+50.0%. No site was named wrong; there was one false edge, a queue node `dynamic-dynamic` (usesend).
+The five miss reasons, by count:
+1. producers reach the queue through a getter, singleton or forwarder (116);
+2. the name is built at runtime or is a loop variable (41);
+3. the Queue or Worker is built inside a wrapper whose name is a parameter (35);
+4. a Worker is named by `someQueue.name` (20);
+5. the name is an enum member (16).
+
+Decision 042's parameter-following path fired in 0 of 10 repos. Reading 348 history candidates
+found 4 queue contract bugs.
+**The report itself is not copied into `docs/` yet.** `REPORT.md` was to be copied unchanged,
+on the understanding that it holds only file:line references and permalinks. It also quotes short
+code expressions from the target repos (its lines 72, 84–86 and 90–92), so the copy is held for
+the owner's call.
