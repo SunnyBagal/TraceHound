@@ -6,6 +6,7 @@
   },
   "baseSha": "57d920e4c93b9185c8dbe7350d98633c4732c78e",
   "profile": "../../../configs/recall.profile.json",
+  "snapshot": "../../snapshots/57d920e4c93b9185c8dbe7350d98633c4732c78e/0.10.0.json",
   "seed": {
     "patch": "seed.patch"
   },

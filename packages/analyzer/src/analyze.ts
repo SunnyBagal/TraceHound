@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { aggregateEdges } from "./aggregate/edges.ts";
 import { componentLabels, loadConfig, normalizeOverrides } from "./config.ts";
-import { isTestFile, testLinks } from "./aggregate/tests.ts";
+import { isTestCode, testLinks } from "./aggregate/tests.ts";
 import { orphanWarnings, queueWarnings } from "./aggregate/warnings.ts";
 import { EvidenceStore, type ExtractContext } from "./extract/evidence.ts";
 import { extractEnv } from "./extract/env.ts";
@@ -116,7 +116,8 @@ export function analyzeRepo(repoPath: string, options: AnalyzeOptions = {}): Sna
   files.sort((a, b) => a.path.localeCompare(b.path));
 
   // Test files keep their facts but belong to no component; they link in via `tests` instead.
-  const sourceFiles = files.filter((f) => !isTestFile(f.path));
+  // So does test support: non-test files under a test directory (helpers, fixtures, preloads).
+  const sourceFiles = files.filter((f) => !isTestCode(f.path));
   const grouping = groupComponents(sourceFiles, ws.packages, { overrides: normalizeOverrides(config) });
   // names (without files) and dropped summaries, by component id; an id that doesn't exist is a warning
   const labels = componentLabels(config);

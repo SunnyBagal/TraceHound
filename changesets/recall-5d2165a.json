@@ -1,9 +1,8 @@
 {
   "schemaVersion": 2,
-  "analyzerVersion": "0.9.0",
+  "analyzerVersion": "0.10.0",
   "repo": {
-    "name": "SunnyBagal/Recall",
-    "path": "/var/folders/5y/x6df6srs1x185pb1vqytnkn80000gn/T/tmp.f7eqQX5sAa"
+    "name": "SunnyBagal/Recall"
   },
   "base": {
     "ref": "5d2165a^",
@@ -13,7 +12,7 @@
     "ref": "5d2165a",
     "sha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b"
   },
-  "config": "/Users/sunny/Projects/tracehound-ui/configs/recall.tracehound.json",
+  "config": "configs/recall.tracehound.json",
   "nodeModules": [],
   "components": [
     {
@@ -168,7 +167,7 @@
         "dynamic": 192
       }
     },
-    "runtimeMs": 1379
+    "runtimeMs": 1421
   },
   "limitations": [
     "Renames are not detected: a renamed or moved declaration appears as removed + added (ids are file path + qualified name), and file renames are diffed with --no-renames.",

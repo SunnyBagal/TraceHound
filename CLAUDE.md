@@ -8,15 +8,16 @@ on a canvas. Later: a graph-guided repair agent.
   from `main`; leave Output Directory unset). CI (`.github/workflows/ci.yml`) runs the snapshot
   version guard, tests, typecheck, and the viewer build, and checks that `out/snapshots/index.json`
   exists.
-- **Built:** analyzer 0.9.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
+- **Built:** analyzer 0.10.0 (imports, routes, Redis, Prisma, env, startup-call extractors;
   BullMQ queues; anchor-reach grouping; `tracehound.json` overrides, `ignore` and `entryPoints`;
   orphan and queue warnings; `proven` / `resolved-default` / `dynamic` labels; TESTS links from
-  test files; per-file `chars`; error-message literals) → static snapshots + manifest → viewer
+  test files; non-test files under `test/`, `tests/`, `__tests__/` are test support, in no component; per-file `chars`; error-message literals) → static snapshots + manifest → viewer
   (React Flow + ELK, node/edge inspectors, GitHub permalinks, warnings panel, phone bottom sheet).
-  The viewer serves CEX @ `da0e3d6`, analyzer 0.9.0 (`snapshots/`; older files are kept).
+  Published snapshots (`snapshots/`; older files are kept): CEX @ `da0e3d6` and Recall @ `5d2165a`,
+  both analyzer 0.10.0.
 - **Snapshot index (decision 039):** `snapshots/index.json` has `repos[]` ({id, name, repoUrl,
-  defaultRef, latest, versions}) and `defaultRepo` (`cex-v2-boilercode`) next to the original
-  `latest` / `snapshots`, which the deployed viewer reads and which stay on the default repo.
+  defaultRef, latest, versions}) and `defaultRepo` (`recall` since decision 040) next to the original
+  `latest` / `snapshots`; since the 0.10.0 regeneration the top-level `latest` is Recall `5d2165a` too.
   `context` / `query` take `--repo-id`; every MCP tool takes an optional `repo`. Version guard:
   `node packages/analyzer/src/version-guard.ts snapshots` fails if any repo's latest snapshot isn't
   the current `ANALYZER_VERSION` and prints the cache-only regenerate command (temp clone).
@@ -31,15 +32,19 @@ on a canvas. Later: a graph-guided repair agent.
   change, removed declaration still referenced). Worktrees get read-only symlinks to the source
   checkout's node_modules. Every call is resolved, external or dynamic (counted, never dropped).
   No model.
-- **BullMQ (decision 035, detector `bullmq-queues@0.1`):** `new Queue` / `<queue>.add` (queue
+- **BullMQ (decisions 035, 042, detector `bullmq-queues@0.2`):** `new Queue` / `<queue>.add` (queue
   resolved through symbols) / `new Worker` → producer `-produces->` one broker node per queue
   name `-consumes->` worker; a file that constructs a Worker is a process entry point. Unpaired,
-  unresolved and unsupported constructs are warnings. Not frozen yet; an unseen third repo checks
-  it after it freezes (backlog).
+  unresolved and unsupported constructs are warnings. 0.2 also follows a queue through a factory's
+  return value and through **one** function parameter to that function's call sites: one real
+  Queue → `resolved-default`, citing the add site, the wiring call site and the construction;
+  several → one `dynamic` edge each; more than one hop → no edge, a warning. An inline Worker
+  processor that only calls one named function is labelled with it. Not frozen yet; Recall
+  shaped both versions, so an unseen third repo checks it after it freezes (backlog).
 - **Second repo, Recall** (`SunnyBagal/Recall` @ `5d2165a`, public, MIT since `9113ced`, which
   only adds LICENSE): config `configs/recall.tracehound.json`; snapshot in `snapshots/` as repo
-  `recall` of the multi-repo index (decision 039; `defaultRepo` and top-level `latest` stay on
-  CEX, so the viewer still shows CEX) → 7 components, 6 edges (API -produces->
+  `recall` of the multi-repo index (decision 039; it is the `defaultRepo`, so the viewer opens on
+  it) → 7 components, 6 edges (API -produces->
   `content-processing` queue -consumes-> worker, both proven), 2 orphan warnings.
 - **Recall on the repair harness (decision 041, checked 2026-10-02):** branch `testable-baseline`
   @ `57d920e` (backend `recall-backend/`, frontend `recall-frontend/`; `main` is `9113ced`). In
@@ -50,10 +55,11 @@ on a canvas. Later: a graph-guided repair agent.
   typecheck gate fails only on tsc errors not in the baseline (file + TS code + message, line and
   column ignored) and records whether the repo's own tsc or the image's ran. Smoke task
   `eval/tasks/recall-smoke-trending` (`kind: smoke`, never an evaluation task): five scripted
-  outcomes in `test/harness-recall.test.ts` (Docker + `TRACEHOUND_NETWORK_TESTS=1`). **At
-  `57d920e` the API -produces-> queue edge is missing** (the queue is injected through
-  `createApp`; only a `queue-unpaired` warning remains), so Recall runs are graph off and no
-  snapshot of `57d920e` is published; detector fix is in the backlog.
+  outcomes in `test/harness-recall.test.ts` (Docker + `TRACEHOUND_NETWORK_TESTS=1`). At
+  `57d920e` the queue is injected through `createApp`; since `bullmq-queues@0.2` (decision 042)
+  the API -produces-> queue edge is `resolved-default` with three evidence sites (it was missing
+  at 0.9.0). The `57d920e` snapshot is `eval/snapshots/57d920e…/0.10.0.json` (7 components, 6 edges,
+  2 orphan warnings; heuristic names, not published), which the smoke task names for `--graph on`.
 - **Impact (feature 4, CLI only):** `pnpm tracehound impact --repo <path> --diff <base>..<head>
   [--depth 2] [--json]` → changed/affected components with evidence chains (decision 023).
   Needs a current-version snapshot of `<base>` in `snapshots/` (the error prints the regenerate

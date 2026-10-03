@@ -108,9 +108,10 @@ export const ErrorMessageFact = z.object({
 export type ErrorMessageFact = z.infer<typeof ErrorMessageFact>;
 
 /**
- * A BullMQ construct (0.7.0+, detector bullmq-queues@0.1, decision 035): a queue definition
+ * A BullMQ construct (0.7.0+, detector bullmq-queues, decisions 035 and 042): a queue definition
  * `new Queue(name)`, a producer `<queue>.add(jobName, …)` whose queue was resolved through
- * symbols to its definition, a consumer `new Worker(name, handler)`, or a construct the detector
+ * symbols to its definition (directly, through a factory's return value, or through one function
+ * parameter and its call sites), a consumer `new Worker(name, handler)`, or a construct the detector
  * doesn't model (QueueEvents, FlowProducer, job-name filtering in a handler, …).
  */
 export const QueueOpFact = z.object({
@@ -124,6 +125,10 @@ export const QueueOpFact = z.object({
   variable: z.string().optional(), // define: the Queue variable; produce: the receiver
   handler: z.string().optional(), // consume: the processor function (or its source text)
   definedAt: z.string().optional(), // produce: "file:line" of the resolved `new Queue(...)`
+  /** produce through a parameter (0.10.0, decision 042): "file:line" of each call site that passes this queue in. */
+  wiredAt: z.array(z.string()).optional(),
+  /** produce through a parameter: evidence at the wiring call site(s) and at the Queue construction; cited by the edge. */
+  supportEvidenceIds: z.array(z.string()).optional(),
   connection: z.string().optional(), // the redis connection when it resolves to a known client
   construct: z.string().optional(), // unsupported: what was found
   evidenceId: z.string(),
@@ -483,7 +488,8 @@ export type ChangeWarning = z.infer<typeof ChangeWarning>;
 export const ChangeSet = z.object({
   schemaVersion: z.literal(CHANGESET_SCHEMA_VERSION),
   analyzerVersion: z.string(),
-  repo: z.object({ name: z.string(), path: z.string() }),
+  /** `path` was the checkout's absolute path before 0.10.0; it is no longer written. */
+  repo: z.object({ name: z.string(), path: z.string().optional() }),
   base: z.object({ ref: z.string(), sha: z.string() }),
   head: z.union([z.object({ ref: z.string(), sha: z.string() }), z.object({ run: z.object({ runId: z.string(), taskId: z.string(), patchSha256: z.string() }) })]),
   config: z.string().optional(),

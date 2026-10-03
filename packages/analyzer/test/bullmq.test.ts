@@ -1,4 +1,4 @@
-// BullMQ detector bullmq-queues@0.1 (decision 035): one fixture repo per case, analyzed for real.
+// BullMQ detector bullmq-queues@0.2 (decision 035): one fixture repo per case, analyzed for real.
 import { afterAll, describe, expect, it } from "vitest";
 import type { Snapshot } from "../src/schema.ts";
 import { makeFixtureRepo } from "./fixture-repo.ts";
@@ -25,7 +25,7 @@ const queueWarnings = (s: Snapshot) => s.warnings.filter((w) => w.kind.startsWit
 const evidence = (s: Snapshot, id: string) => s.evidence.find((e) => e.id === id)!;
 const WORKER = 'import { Worker } from "bullmq";\nasync function sendEmail(job: { data: unknown }) {\n  console.log(job.data);\n}\nnew Worker("emails", sendEmail, { concurrency: 2 });\n';
 
-describe("bullmq-queues@0.1: queue definitions, producers and consumers → produces/consumes through one node per queue name", () => {
+describe("bullmq-queues@0.2: queue definitions, producers and consumers → produces/consumes through one node per queue name", () => {
   it("literal names on both sides: proven edges, evidence at both ends, the job name in the producer's evidence", () => {
     const s = analyze({
       "src/api.ts": 'import { Queue } from "bullmq";\nconst emails = new Queue("emails");\nexport async function signup() {\n  await emails.add("welcome", { to: "a@b.c" });\n}\nawait signup();\n',
@@ -40,7 +40,7 @@ describe("bullmq-queues@0.1: queue definitions, producers and consumers → prod
     expect(s.components.find((c) => c.id === "bullmq:emails")).toMatchObject({ kind: "queue", files: [], resource: { tech: "bullmq", keys: ["emails"] }, subtitle: "BullMQ queue · emails · jobs: welcome" });
     const produced = evidence(s, s.edges.find((e) => e.kind === "produces")!.evidenceIds[0]!);
     expect(produced).toMatchObject({ file: "src/api.ts", range: { startLine: 4 }, extractor: "bullmq-queues", resolution: "proven" });
-    expect(produced.detail).toBe('emails.add("welcome") produces job "welcome" on queue "emails" (defined at src/api.ts:2) (bullmq-queues@0.1)');
+    expect(produced.detail).toBe('emails.add("welcome") produces job "welcome" on queue "emails" (defined at src/api.ts:2) (bullmq-queues@0.2)');
     const consumed = evidence(s, s.edges.find((e) => e.kind === "consumes")!.evidenceIds[0]!);
     expect(consumed).toMatchObject({ file: "src/worker.ts", range: { startLine: 5 }, extractor: "bullmq-queues", resolution: "proven" });
     expect(queueWarnings(s)).toEqual([]);
@@ -117,7 +117,183 @@ describe("bullmq-queues@0.1: queue definitions, producers and consumers → prod
   it("a queue receiver that only has a bullmq Queue type (no resolvable definition) is recorded and warned about", () => {
     const s = analyze({ "src/api.ts": 'import type { Queue } from "bullmq";\nexport async function enqueue(q: Queue) {\n  await q.add("welcome", {});\n}\n' });
     expect(queueEdges(s)).toEqual([]);
-    expect(queueWarnings(s)).toEqual([["queue-unresolved", "BullMQ produce at src/api.ts:3: q.add(…) on a Queue whose definition isn't resolvable is not static, so it can't be paired; no node, no edge"]]);
+    expect(queueWarnings(s)).toEqual([["queue-unresolved", "BullMQ produce at src/api.ts:3: q.add(…) on parameter q of enqueue, which no call site of enqueue wires to a Queue; its queue isn't known, so it can't be paired; no node, no edge"]]);
+  });
+});
+
+describe("bullmq-queues@0.2: a queue that reaches the producer through a parameter or a factory (decision 042)", () => {
+  // generic shapes: the queue is built in one module and handed to the code that adds to it
+  const QUEUES = 'import { Queue } from "bullmq";\nexport const emails = new Queue("emails");\n';
+  const APP = 'export interface Mailer {\n  add(name: string, data: unknown): Promise<unknown>;\n}\nexport function buildApp(deps: { mailer: Mailer; port: number }) {\n  const { mailer } = deps;\n  return async function signup(to: string) {\n    await mailer.add("welcome", { to });\n  };\n}\n';
+  const MAIN = 'import { buildApp } from "./app.ts";\nimport { emails } from "./queues.ts";\nconst signup = buildApp({ mailer: emails, port: 3000 });\nawait signup("a@b.c");\n';
+  const produces = (s: Snapshot) => s.edges.filter((e) => e.kind === "produces");
+  const sites = (s: Snapshot, ids: string[]) => ids.map((id) => evidence(s, id)).map((e) => [`${e.file}:${e.range.startLine}`, e.resolution]);
+
+  it("a. one parameter (object property, destructured), one call site: the edge cites the add site, the wiring call site and the Queue construction", () => {
+    const s = analyze({ "src/queues.ts": QUEUES, "src/app.ts": APP, "src/api.ts": MAIN, "src/worker.ts": WORKER });
+    expect(queueEdges(s)).toContainEqual(["produces", componentOf(s, "src/app.ts"), "bullmq:emails", "add welcome", "resolved-default"]);
+    const edge = produces(s)[0]!;
+    expect(sites(s, edge.evidenceIds)).toEqual([
+      ["src/api.ts:3", "resolved-default"], // the wiring call site
+      ["src/app.ts:7", "resolved-default"], // the add site
+      ["src/queues.ts:2", "resolved-default"], // the Queue construction
+    ]);
+    const fact = s.files.find((f) => f.path === "src/app.ts")!.queueOps![0]!;
+    expect(fact).toMatchObject({ role: "produce", queue: { value: "emails" }, resolution: "resolved-default", jobName: { value: "welcome" }, variable: "mailer", definedAt: "src/queues.ts:2", wiredAt: ["src/api.ts:3"] });
+    expect(evidence(s, fact.evidenceId).detail).toBe(
+      'mailer.add("welcome") produces job "welcome" on queue "emails": mailer is parameter deps.mailer of buildApp, wired at src/api.ts:3 to the Queue defined at src/queues.ts:2 (bullmq-queues@0.2)',
+    );
+    expect(fact.supportEvidenceIds!.map((id) => evidence(s, id).detail)).toEqual([
+      'buildApp(…) passes emails as deps.mailer: the Queue "emails" defined at src/queues.ts:2, which src/app.ts:7 adds to (bullmq-queues@0.2)',
+      'new Queue("emails") is the queue passed to buildApp at src/api.ts:3 and added to at src/app.ts:7 (bullmq-queues@0.2)',
+    ]);
+    expect(queueWarnings(s)).toEqual([]);
+  });
+
+  it("b. a second call site in a test file passes a fake: the same edge to the real queue; the fake creates no node, edge or warning", () => {
+    const s = analyze({
+      "src/queues.ts": QUEUES,
+      "src/app.ts": APP,
+      "src/api.ts": MAIN,
+      "src/worker.ts": WORKER,
+      "src/app.test.ts": 'import { buildApp } from "./app.ts";\nconst sent: unknown[] = [];\nconst fake = { add: async (_name: string, data: unknown) => void sent.push(data) };\nconst signup = buildApp({ mailer: fake, port: 0 });\nawait signup("t@t.t");\n',
+    });
+    expect(queueEdges(s)).toEqual([
+      ["consumes", "bullmq:emails", componentOf(s, "src/worker.ts"), "Worker sendEmail", "proven"],
+      ["produces", componentOf(s, "src/app.ts"), "bullmq:emails", "add welcome", "resolved-default"],
+    ]);
+    expect(s.components.filter((c) => c.kind === "queue").map((c) => c.id)).toEqual(["bullmq:emails"]);
+    const fact = s.files.find((f) => f.path === "src/app.ts")!.queueOps![0]!;
+    expect(fact.wiredAt).toEqual(["src/api.ts:3"]);
+    expect(evidence(s, fact.evidenceId).detail).toContain("wired at src/api.ts:3 to the Queue defined at src/queues.ts:2; 1 other call site passes something that is not a BullMQ Queue (src/app.test.ts:4)");
+    expect(s.files.find((f) => f.path === "src/app.test.ts")!.queueOps).toBeUndefined();
+    expect(queueWarnings(s)).toEqual([]);
+  });
+
+  it("c. two call sites wire two different real queues: one edge per queue, dynamic, never proven", () => {
+    const s = analyze({
+      "src/queues.ts": 'import { Queue } from "bullmq";\nexport const emails = new Queue("emails");\nexport const sms = new Queue("sms");\n',
+      "src/app.ts": APP,
+      "src/api.ts": 'import { buildApp } from "./app.ts";\nimport { emails, sms } from "./queues.ts";\nawait buildApp({ mailer: emails, port: 3000 })("a@b.c");\nawait buildApp({ mailer: sms, port: 3001 })("+1");\n',
+    });
+    const app = componentOf(s, "src/app.ts");
+    expect(queueEdges(s)).toEqual([
+      ["produces", app, "bullmq:emails", "add welcome", "dynamic"],
+      ["produces", app, "bullmq:sms", "add welcome", "dynamic"],
+    ]);
+    const [toEmails, toSms] = produces(s);
+    expect(sites(s, toEmails!.evidenceIds).map((x) => x[0])).toEqual(["src/api.ts:3", "src/app.ts:7", "src/queues.ts:2"]);
+    expect(sites(s, toSms!.evidenceIds).map((x) => x[0])).toEqual(["src/api.ts:4", "src/app.ts:7", "src/queues.ts:3"]);
+    expect(evidence(s, toSms!.evidenceIds.find((id) => id.startsWith("src/app.ts"))!).detail).toContain('one of 2 queues wired into buildApp ("emails", "sms"); which one a call reaches is decided at runtime');
+  });
+
+  it("d. no call site resolves to a Queue within one hop: no edge, and a warning naming the add site", () => {
+    // two parameter hops: main → start(deps) → register(deps.mailer) → mailer.add
+    const s = analyze({
+      "src/queues.ts": QUEUES,
+      "src/routes.ts": 'export function register(mailer: { add(name: string, data: unknown): Promise<unknown> }) {\n  return (to: string) => mailer.add("welcome", { to });\n}\n',
+      "src/app.ts": 'import { register } from "./routes.ts";\nexport function start(deps: { mailer: { add(name: string, data: unknown): Promise<unknown> } }) {\n  return register(deps.mailer);\n}\n',
+      "src/api.ts": 'import { start } from "./app.ts";\nimport { emails } from "./queues.ts";\nawait start({ mailer: emails })("a@b.c");\n',
+      "src/worker.ts": WORKER,
+    });
+    expect(produces(s)).toEqual([]);
+    expect(queueWarnings(s)).toEqual([
+      ["queue-unresolved", "BullMQ produce at src/routes.ts:2: mailer.add(…) on parameter mailer of register, which reaches a Queue only through more than one parameter hop (one is followed); its queue isn't known, so it can't be paired; no node, no edge"],
+      ["queue-unpaired", 'BullMQ Worker at src/worker.ts:5 consumes queue "emails", but nothing in this repo adds to "emails"'],
+    ]);
+    // an .add on a parameter that nothing ties to BullMQ stays what it was: not a fact
+    const plain = analyze({ "src/api.ts": "export function remember(seen: Set<string>, id: string) {\n  seen.add(id);\n}\nremember(new Set(), \"a\");\n" });
+    expect(plain.files[0]!.queueOps).toBeUndefined();
+    expect(queueWarnings(plain)).toEqual([]);
+  });
+
+  it("e. a Queue returned from a factory function and destructured from its result", () => {
+    const s = analyze({
+      "src/queues.ts": 'import { Queue } from "bullmq";\nexport function createQueues() {\n  const connection = { host: "localhost" };\n  const emails = new Queue("emails", { connection });\n  return { connection, emails };\n}\n',
+      "src/api.ts": 'import { createQueues } from "./queues.ts";\nconst { emails } = createQueues();\nawait emails.add("welcome", {});\n',
+      "src/worker.ts": WORKER,
+    });
+    expect(queueEdges(s)).toContainEqual(["produces", componentOf(s, "src/api.ts"), "bullmq:emails", "add welcome", "proven"]);
+    expect(s.files.find((f) => f.path === "src/api.ts")!.queueOps).toMatchObject([{ role: "produce", queue: { value: "emails" }, definedAt: "src/queues.ts:4", resolution: "proven" }]);
+    expect(queueWarnings(s)).toEqual([]);
+    // a factory whose returns disagree is not resolved
+    const two = analyze({
+      "src/api.ts": 'import { Queue } from "bullmq";\nfunction pick(fast: boolean) {\n  if (fast) return new Queue("fast");\n  return new Queue("slow");\n}\nconst q = pick(true);\nawait q.add("job", {});\n',
+    });
+    expect(produces(two)).toEqual([]);
+  });
+
+  it("a + e together: a factory-built queue passed through one parameter, with a test wiring a fake", () => {
+    const s = analyze({
+      "src/queues.ts": 'import { Queue } from "bullmq";\nexport function createQueues() {\n  const emails = new Queue("emails");\n  return { emails };\n}\n',
+      "src/app.ts": APP,
+      "src/api.ts": 'import { buildApp } from "./app.ts";\nimport { createQueues } from "./queues.ts";\nconst { emails } = createQueues();\nawait buildApp({ mailer: emails, port: 1 })("a@b.c");\n',
+      "src/worker.ts": WORKER,
+    });
+    expect(queueEdges(s)).toContainEqual(["produces", componentOf(s, "src/app.ts"), "bullmq:emails", "add welcome", "resolved-default"]);
+    expect(sites(s, produces(s)[0]!.evidenceIds).map((x) => x[0])).toEqual(["src/api.ts:4", "src/app.ts:7", "src/queues.ts:3"]);
+    expect(queueWarnings(s)).toEqual([]);
+  });
+
+  it("f. a Worker whose processor is an arrow function wrapping one named function: the label names that function", () => {
+    const s = analyze({
+      "src/api.ts": 'import { Queue } from "bullmq";\nconst q = new Queue("emails");\nawait q.add("welcome", {});\n',
+      "src/worker.ts": 'import { Worker } from "bullmq";\nasync function sendEmail(job: { data: unknown }, retries: number) {\n  console.log(job.data, retries);\n}\nnew Worker("emails", async (job) => sendEmail(job, 3));\n',
+      "src/worker2.ts": 'import { Worker } from "bullmq";\nasync function archive(job: { data: unknown }) {\n  console.log(job.data);\n}\nnew Worker("emails", async (job) => {\n  await archive(job);\n});\nnew Worker("emails", async (job) => {\n  console.log("start");\n  await archive(job);\n});\n',
+    });
+    const consumes = s.edges.filter((e) => e.kind === "consumes").map((e) => e.label);
+    expect(consumes).toContain("Worker sendEmail");
+    expect(consumes).toContain("Worker <inline function>, Worker archive"); // two statements: still inline
+    const fact = s.files.find((f) => f.path === "src/worker.ts")!.queueOps![0]!;
+    expect(fact.handler).toBe("sendEmail");
+    expect(evidence(s, fact.evidenceId).detail).toBe('new Worker("emails", sendEmail) consumes queue "emails"; the processor is an inline function that only calls sendEmail (bullmq-queues@0.2)');
+  });
+});
+
+describe("test support: non-test files under test/, tests/ or __tests__/ (decision 042)", () => {
+  const FILES = {
+    "src/api.ts": 'import { greet } from "./greet.ts";\nexport function buildApp() {\n  return { hello: () => greet("x") };\n}\nbuildApp();\n',
+    "src/greet.ts": "export const greet = (n: string) => `hi ${n}`;\n",
+    // a helper that imports the app entry, a preload nothing imports, and a real test using the helper
+    "test/helpers/app.ts": 'import { buildApp } from "../../src/api.ts";\nexport const makeApp = () => buildApp();\n',
+    "test/setup.ts": 'process.env.MODE = "test";\n',
+    "test/app.test.ts": 'import { makeApp } from "./helpers/app.ts";\nimport { greet } from "../src/greet.ts";\nmakeApp();\ngreet("t");\n',
+    "tests/fixtures/data.ts": "export const rows = [1, 2];\n",
+  };
+
+  it("they are in no component, draw no component edges and get no orphan warnings; their facts are kept", () => {
+    const s = analyze(FILES);
+    const support = ["test/helpers/app.ts", "test/setup.ts", "tests/fixtures/data.ts"];
+    expect(s.components.flatMap((c) => c.files).sort()).toEqual(["src/api.ts", "src/greet.ts"]);
+    for (const file of support) expect(s.components.some((c) => c.files.includes(file))).toBe(false);
+    expect(s.edges).toEqual([]); // one component: the helper's import of the entry draws nothing
+    expect(s.warnings).toEqual([]);
+    // facts stay: the helper's import is still recorded, with evidence
+    expect(s.files.find((f) => f.path === "test/helpers/app.ts")!.imports[0]).toMatchObject({ target: "src/api.ts" });
+    // TESTS links come from test files only, to components they import directly
+    expect(s.tests.map((t) => [t.file, t.componentId])).toEqual([["test/app.test.ts", componentOf(s, "src/greet.ts")]]);
+  });
+
+  it("without the rule's directories the same files are source (a control): src/helpers is grouped and an unimported file is an orphan", () => {
+    const s = analyze({ "src/api.ts": FILES["src/api.ts"], "src/greet.ts": FILES["src/greet.ts"], "src/helpers/app.ts": 'import { buildApp } from "../api.ts";\nexport const makeApp = () => buildApp();\n' });
+    expect(s.components.some((c) => c.files.includes("src/helpers/app.ts"))).toBe(true);
+    expect(s.warnings.map((w) => w.kind)).toEqual(["orphan-file"]);
+  });
+
+  it("a fake wired in from a test helper is still named in the add site's evidence, and creates nothing", () => {
+    const s = analyze({
+      "src/queues.ts": 'import { Queue } from "bullmq";\nexport const emails = new Queue("emails");\n',
+      "src/app.ts": 'export function buildApp(deps: { mailer: { add(name: string, data: unknown): Promise<unknown> } }) {\n  return (to: string) => deps.mailer.add("welcome", { to });\n}\n',
+      "src/api.ts": 'import { buildApp } from "./app.ts";\nimport { emails } from "./queues.ts";\nawait buildApp({ mailer: emails })("a@b.c");\n',
+      "src/worker.ts": WORKER,
+      "test/helpers/app.ts": 'import { buildApp } from "../../src/app.ts";\nexport const fakeApp = () => buildApp({ mailer: { add: async () => undefined } });\n',
+    });
+    const fact = s.files.find((f) => f.path === "src/app.ts")!.queueOps![0]!;
+    expect(fact).toMatchObject({ queue: { value: "emails" }, resolution: "resolved-default", wiredAt: ["src/api.ts:3"] });
+    expect(evidence(s, fact.evidenceId).detail).toContain("1 other call site passes something that is not a BullMQ Queue (test/helpers/app.ts:2)");
+    expect(s.components.some((c) => c.files.includes("test/helpers/app.ts"))).toBe(false);
+    expect(s.edges.filter((e) => e.evidenceIds.some((id) => id.startsWith("test/")))).toEqual([]);
+    expect(s.warnings).toEqual([]);
   });
 });
 

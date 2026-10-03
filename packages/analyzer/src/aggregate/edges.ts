@@ -47,7 +47,8 @@ export function aggregateEdges(files: FileFacts[], grouping: GroupingResult, evi
     for (const op of f.queueOps ?? []) {
       // BullMQ: through the queue's broker node, paired by name; no static name → no node, no edge (a warning instead)
       const queue = op.queue?.value !== undefined ? grouping.queueResourceByName.get(op.queue.value) : undefined;
-      if (op.role === "produce") add(from, queue, "produces", op.evidenceId, `add ${op.jobName?.value ?? op.jobName?.raw ?? ""}`.trim());
+      // a queue that arrived through a parameter: the edge also cites the wiring call site and the Queue construction
+      if (op.role === "produce") for (const id of [op.evidenceId, ...(op.supportEvidenceIds ?? [])]) add(from, queue, "produces", id, `add ${op.jobName?.value ?? op.jobName?.raw ?? ""}`.trim());
       else if (op.role === "consume") add(queue, from, "consumes", op.evidenceId, `Worker ${op.handler ?? ""}`.trim());
     }
     for (const op of f.prismaOps) {
