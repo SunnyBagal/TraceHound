@@ -3,5 +3,9 @@
   "workdir": "recall-backend",
   "install": "bun install --frozen-lockfile",
   "test": "bun test",
-  "typecheck": "$TSC --noEmit"
+  "typecheck": "$TSC --noEmit",
+  "testReport": {
+    "format": "junit",
+    "command": "bun test --reporter=junit --reporter-outfile=$REPORT"
+  }
 }
