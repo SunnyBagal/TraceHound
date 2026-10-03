@@ -1944,3 +1944,50 @@ target repos (its lines 72, 84–86 and 90–92). On the owner's instruction the
 file:line references at the study's pinned commits, using sampled ground-truth sites; nothing
 else changed. `new Queue(...)` stays: it names BullMQ's constructor in the description of the
 detector and isn't quoted from a target.
+
+## 044 · Four seeded dev tasks on Recall
+**Context:** the agent's prompts need tasks to be tuned on that are not evaluation tasks (prompt
+`docs/prompts/build-to-freeze.md`, Phase 2). Recall (`57d920e`, `testable-baseline`) is the
+evaluation repo. CLAUDE.md had the dev tasks as the user's, on CEX; this prompt has four seeded
+Recall tasks written here (build log, step 0, item 2), so the ids are `recall-dev-*` and
+`dev-01` / `dev-02` stay free.
+**Choice:**
+- **Task kind `"dev"`** (`TaskSpec.kind`, copied to `taskKind`): a task the prompts may be tuned
+  on. Like `smoke`, never an evaluation result.
+- **Four tasks**, each a one-line seed in a different backend file (none in `linkDetector.ts`),
+  an issue written as a user's bug report with no file or function names, a reproduction copied in
+  only while the harness reproduces and verifies (as for every task), and an oracle `fix.patch`.
+  Components are those of `eval/snapshots/57d920e…/0.10.0.json`.
+
+  | Task | Seeded fault (file) | Symptom seen in | Fault in |
+  |---|---|---|---|
+  | `recall-dev-short-summary` | not-enough-text threshold 20 → 200 (`worker.ts`, `processContent`) | API: a short saved page is listed as done with no summary or tags | worker, **across the `content-processing` queue** |
+  | `recall-dev-search-description` | `og_description` dropped from the generated `search_vector` (`db/schema.ts`) | API: keyword search misses a description-only match | shared library |
+  | `recall-dev-session-expiry` | `jwt.verify(…, { ignoreExpiration: true })` (`middleware/middleware.ts`) | API | API (same component) |
+  | `recall-dev-chat-recent` | chat's no-embedding fallback orders oldest first (`index.ts`) | API: Ask AI cites the oldest saves | API (same component) |
+
+  Two tasks have the symptom in one component and the fault in another; one of them crosses the
+  queue (the repro saves through `POST /api/v1/content`, processes the queued job with
+  `processContent`, and reads `GET /api/v1/content`).
+- **Every seed leaves Recall's own suite green** (62 of 62 at the seeded base), so the per-test
+  gate (decision 043) watches every existing test; the seeds were chosen against behaviour the
+  existing tests don't pin. Each seed and repro was first checked on a local clone (seeded suite
+  62 pass; repro fails on its assertion at the seed and passes with the fix), then in the sandbox.
+- **Validation** (scripted, no model, 2026-10-03, local Docker 29.8.0, image
+  `tracehound-sandbox:bun1.4.2-ts5.9.3-2`, about 50 s each). All four passed both checks, so none
+  was replaced:
+
+  | Task | `oracle` + `fix.patch` | `noop` |
+  |---|---|---|
+  | `recall-dev-short-summary` | RESOLVED (granularity `test`, 62/62 baseline tests still pass, tsc 5 → 5) | UNRESOLVED, repro still fails (exit 1) |
+  | `recall-dev-search-description` | RESOLVED (same) | UNRESOLVED, repro still fails (exit 1) |
+  | `recall-dev-session-expiry` | RESOLVED (same) | UNRESOLVED, repro still fails (exit 1) |
+  | `recall-dev-chat-recent` | RESOLVED (same) | UNRESOLVED, repro still fails (exit 1) |
+
+  The same eight runs are `test/harness-recall-dev.test.ts` (Docker + `TRACEHOUND_NETWORK_TESTS=1`).
+- **Kept out of this repo on purpose:** nothing about Recall's existing behaviour beyond what each
+  seed changes; no task is built on an existing bug.
+**Rejected:** (a) Seeds that make an existing test fail: the failing test points at the file, and
+the per-test gate would have one test fewer to watch. (b) Repro tests that call the faulty
+function directly for the cross-component tasks: the queue task's repro goes through the API, as
+the symptom does. (c) Replacing the CEX tasks' ids: they stay the user's.

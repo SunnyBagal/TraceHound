@@ -1,0 +1,28 @@
+{
+  "id": "recall-dev-search-description",
+  "kind": "dev",
+  "source": {
+    "gitUrl": "https://github.com/SunnyBagal/Recall.git"
+  },
+  "baseSha": "57d920e4c93b9185c8dbe7350d98633c4732c78e",
+  "profile": "../../../configs/recall.profile.json",
+  "snapshot": "../../snapshots/57d920e4c93b9185c8dbe7350d98633c4732c78e/0.10.0.json",
+  "seed": {
+    "patch": "seed.patch"
+  },
+  "setup": [],
+  "issue": "Search misses things I know I have saved. If the word I search for only appears in a saved link's description (the preview text shown under the title on its card), the link does not come up, even when it is the only match. Words in the title or in the summary are found fine. This is on our server, which runs without an OpenAI key.",
+  "repro": {
+    "testFile": "repro.test.ts",
+    "dest": "recall-backend/test/search-description.repro.test.ts",
+    "command": "cd recall-backend && bun test ./test/search-description.repro.test.ts"
+  },
+  "regression": [],
+  "limits": {
+    "steps": 40,
+    "wallClockMs": 900000,
+    "tokens": 300000,
+    "commandTimeoutMs": 300000,
+    "costUSD": 0.1
+  }
+}

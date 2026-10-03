@@ -1,0 +1,13 @@
+diff --git a/recall-backend/middleware/middleware.ts b/recall-backend/middleware/middleware.ts
+index 54a4699..cf4faca 100644
+--- a/recall-backend/middleware/middleware.ts
++++ b/recall-backend/middleware/middleware.ts
+@@ -11,7 +11,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction)
+   }
+ 
+   try {
+-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
++    const decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true }) as JwtPayload;
+     if (typeof decoded === "object" && decoded.userId) {
+       req.userId = decoded.userId;
+       return next();

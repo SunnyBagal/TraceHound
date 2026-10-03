@@ -1,0 +1,28 @@
+{
+  "id": "recall-dev-short-summary",
+  "kind": "dev",
+  "source": {
+    "gitUrl": "https://github.com/SunnyBagal/Recall.git"
+  },
+  "baseSha": "57d920e4c93b9185c8dbe7350d98633c4732c78e",
+  "profile": "../../../configs/recall.profile.json",
+  "snapshot": "../../snapshots/57d920e4c93b9185c8dbe7350d98633c4732c78e/0.10.0.json",
+  "seed": {
+    "patch": "seed.patch"
+  },
+  "setup": [],
+  "issue": "When I save a short page, for example a link whose preview is just a title and a one-line description, it shows up in my list as processed (\"done\") but it never gets a summary or any tags. Longer articles I save get both. Short pages should be summarized and tagged too.",
+  "repro": {
+    "testFile": "repro.test.ts",
+    "dest": "recall-backend/test/short-summary.repro.test.ts",
+    "command": "cd recall-backend && bun test ./test/short-summary.repro.test.ts"
+  },
+  "regression": [],
+  "limits": {
+    "steps": 40,
+    "wallClockMs": 900000,
+    "tokens": 300000,
+    "commandTimeoutMs": 300000,
+    "costUSD": 0.1
+  }
+}

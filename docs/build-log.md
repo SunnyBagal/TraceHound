@@ -44,3 +44,36 @@ None of these blocks a phase. Each is resolved as stated:
     scripted validation becomes a Docker test file too, which adds several minutes to CI.
 
 Spend in step 0: $0 (ledger $0.34212).
+
+## Phase 2 (decision 044): four seeded dev tasks on Recall
+
+Rules block and this log re-read at the start.
+
+**Done:**
+- `TaskSpec.kind` gains `"dev"` (`src/harness/task.ts`, `taskKind` in `src/harness/run.ts`).
+- Four tasks under `eval/tasks/`, each with `task.json` (kind `dev`, profile, snapshot, seed),
+  `seed.patch` (one line), `repro.test.ts`, `fix.patch` and a README:
+  `recall-dev-short-summary` (`worker.ts`, symptom in the API, crosses the queue),
+  `recall-dev-search-description` (`db/schema.ts`, symptom in the API, fault in shared),
+  `recall-dev-session-expiry` (`middleware/middleware.ts`), `recall-dev-chat-recent` (`index.ts`).
+  Seeds were made on a scratch clone of Recall at `57d920e` (outside this repo, never pushed).
+- `test/harness-recall-dev.test.ts`: the eight scripted validations as a Docker + network test.
+- Decision 044.
+
+**Validation** (CLI, scripted, no model; records in `runs/dev-validation/`, not committed):
+
+| Task | oracle + fix.patch | noop |
+|---|---|---|
+| recall-dev-short-summary | RESOLVED (granularity test, 62/62, tsc 5 → 5) | UNRESOLVED, repro still fails (exit 1) |
+| recall-dev-search-description | RESOLVED (same) | UNRESOLVED, repro still fails (exit 1) |
+| recall-dev-session-expiry | RESOLVED (same) | UNRESOLVED, repro still fails (exit 1) |
+| recall-dev-chat-recent | RESOLVED (same) | UNRESOLVED, repro still fails (exit 1) |
+
+No task was replaced.
+
+**Gates** (plain shell; GIT_* env check printed nothing): version guard exit 0;
+`TRACEHOUND_NETWORK_TESTS=1 pnpm test` exit 0, analyzer 326 passed (29 files, none skipped),
+viewer 88 passed (11 files), 515 s; `pnpm typecheck` exit 0; viewer build exit 0. CI: see the
+next phase's entry.
+
+**Spend:** $0 (ledger $0.34212).

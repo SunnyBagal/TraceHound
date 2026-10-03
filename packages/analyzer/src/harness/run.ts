@@ -75,8 +75,8 @@ export interface RunRecord {
   provider: string;
   agent: string;
   image: string;
-  /** "smoke" runs check the harness; they are never evaluation results (decision 041). */
-  taskKind?: "smoke" | "evaluation";
+  /** "smoke" runs check the harness, "dev" runs tune the agent; neither is an evaluation result (decisions 041, 044). */
+  taskKind?: "smoke" | "dev" | "evaluation";
   /** The repo profile the checks came from, and the commands as run from /work. */
   profile?: { id: string; workdir: string };
   plan?: CheckPlan;
