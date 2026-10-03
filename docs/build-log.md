@@ -823,3 +823,140 @@ what `01dc0f8` committed), `scratchpad/wt3` uncommitted drafts of Phase 3 plus `
 symlinks, `scratchpad/wtfreeze` (the `eval-freeze` control) only `node_modules` symlinks.
 `git branch -d wip/agent-v6-phase2` refused because that branch is checked out in `scratchpad/wt`.
 All four are left as they are.
+
+# Build log: reproduce stage
+
+Prompt: `docs/prompts/reproduce-stage.md` (verbatim, commit `ff069c1`). Branch `build/reproduce` off
+`origin/main` at `ba07667` (PR #9 merged). Decision 048. Ledger at the start: **$1.59137**; the
+prompt's cap is $3.00 of new spend, so the ledger must stay at or below **$4.59137**.
+
+## Step 0: contradictions with the prompt
+
+Read: CLAUDE.md, decisions 041, 043, 045–047, `docs/freeze.md`, `src/harness/{run,task,loop,evaluate}.ts`
+(and `agents.ts`, `tools.ts`, `profile.ts`, `junit.ts`, `cli.ts`, `run-metrics.ts`, `vitest.config.ts`,
+`test/test-config.test.ts`, which they depend on). None of the items below blocks a phase.
+
+1. **The loop has two repair-only messages.** The prompt says to use "the existing loop and tools"
+   and freezes the repair agent's behaviour. But the loop sends two repair-specific messages:
+   - At step 15 with no base file changed: "no file has been changed. If you have found the bug,
+     fix it now with edit_file."
+   - On the first `finish` with no base file changed: "not finished: no file that existed at the
+     start has been modified or deleted …".
+
+   A correct reproduce agent changes no existing file, so it gets both. **Resolution:** the loop is
+   unchanged. `repro-v1.md` tells the agent that these two messages are generic. It should not edit
+   an existing file in response, and it should call `finish` a second time to confirm.
+2. **Check 5d, "the decision 043 gate, unchanged", rejects every reproduction if applied
+   literally.** The 043 gate has two halves:
+   - per test: every test that passed at baseline must still pass;
+   - per command: a suite that exited 0 at baseline must still exit 0.
+
+   A reproducing test fails on purpose, so with it in the suite, the suite exits 1, and the second
+   half fails every REPRODUCED candidate. **Resolution:** the per-test half runs unchanged (the
+   same `compareRegression`). A suite exit 0 → non-zero is accepted only when every failing test in
+   the report is in the new file, which is the failure check 5b already required. Anything else is
+   still rejected: a baseline test that fails, is skipped or goes missing, or a failure outside the
+   new file.
+3. **Super as an evaluation model.** The Protocol block says "Models: Nano and Super … Both are
+   always reported together". `docs/freeze.md` and CLAUDE.md say Super is "not the evaluation's
+   model". Phase 1 writes the protocol verbatim, as asked. `docs/freeze.md` is **not** edited:
+   by its own rule, a change to a frozen item means a new freeze and a new tag, and this prompt
+   doesn't ask for one. The two documents disagree until the owner re-freezes or amends one of
+   them. The protocol's canary and void re-runs are also not features of the frozen runner, so they
+   are a manual procedure around it.
+4. **What "a type error" means.** bun runs TypeScript without typechecking. **Resolution:** a
+   test case that fails with anything other than an `AssertionError` (`TypeError`, `Error`,
+   `TimeoutError`, `UnreachableError`, …) disqualifies the file. So does a tsc error that the base
+   doesn't have: the decision 041 baseline-matched typecheck gate, run with the file added. Recall's
+   `tsconfig.json` has no `include`, so tsc checks test files there.
+5. **"The repo's test-file pattern".** Profiles have no pattern; tasks have `testFilePattern`,
+   which defaults to bun's discovery pattern. **Resolution:** bun's discovery pattern
+   (`BUN_TEST_FILE_PATTERN`), and the file must also be inside the profile's `workdir`, where the
+   suite runs. A claim may override the pattern.
+6. **The claim format needs more fields than listed.** A claim needs a repo and a commit to run
+   at, but a profile has neither. **Resolution:** claims also carry `source` and `baseSha`, as tasks
+   do.
+7. **Limits for reproduce runs.** Claims carry no limits. **Resolution:** the dev tasks' limits
+   (40 steps, 300,000 tokens, 900 s, 300 s per command), with the freeze's per-model cost limits:
+   Nano $0.10 and Super $0.60 per run. Each run reserves its cost limit against the prompt's $3.00
+   before it starts, so late Super runs can be NOT_RUN even though the ledger is below the cap.
+8. **Phase 4, "the frozen repair agent once on Nano", names no arm.** **Resolution:** graph off,
+   the `tracehound repair` default; the emitted task carries no snapshot.
+9. **FAILED versus agent errors.** In repair runs, a model request error is recorded as
+   `agentRun.error` and the run is still verified. The prompt makes model request timeouts FAILED
+   for reproduce runs. **Resolution:** in a reproduce run, any agent error that is not a budget or
+   stuck stop is FAILED.
+10. **The prompt-file parameter already exists.** `LoopOptions.promptFile` predates this prompt,
+    so no new parameter is added. A test still pins that a default repair run's first message is
+    byte-identical to `main`'s.
+
+**Graph tool calls, read only, from `docs/eval/agent-v6-dev-2026-10-04/`:** **0 in every run.**
+
+| Batch | Runs | Graph tool calls per run | Total |
+|---|---|---|---|
+| Nano: 4 tasks × 2 arms × 2 repeats | 16 (8 graph-on) | 0 in all 16 | 0 |
+| Super probe: 4 tasks × 2 arms × 1 | 8 (4 graph-on) | 0 in all 8 | 0 |
+
+Every run in both batches read a fault file (Nano 16 of 16, Super 8 of 8). That agrees with the
+Protocol block's stated expectation.
+
+**How bun's report separates the cases** (bun 1.4.2 in the sandbox image, network off, one probe
+file per case, checked before writing Phase 2):
+
+| Case | Exit | JUnit report |
+|---|---|---|
+| `expect(…).toBe/toEqual` fails, also `.resolves` | 1 | `<testcase>` with `<failure type="AssertionError">` |
+| `node:assert` fails | 1 | `<failure type="AssertionError">` |
+| runtime `TypeError` / thrown `Error` / `expect.unreachable` | 1 | `<failure type="TypeError">` / `"Error"` / `"UnreachableError"` |
+| bun per-test timeout | 1 | `<failure type="TimeoutError" message="test timed out">` |
+| import of a missing module, syntax error, top-level throw | 1 | **no report file written** ("Unhandled error between tests") |
+| file with zero `test(…)` calls | 0 | no report file written |
+| error thrown between tests | 1 | attributed to the next test as `<failure type="Error">` |
+
+So an assertion failure is a `<testcase>` whose `<failure>` has `type="AssertionError"`. A load
+error writes no `<testcase>` for the file. **The report does separate the two; Phase 2 is not
+blocked.**
+
+## Phase 1: evaluation protocol (docs only)
+
+Rules block re-read at the start. `docs/eval/protocol.md` written with exactly the Protocol
+block's text. Commit `4b9fe61`.
+
+**Gate** (GIT_* env check printed nothing; nothing else ran; the Phase 2 drafts were kept out of
+the tree during the gate):
+- version guard: exit 0;
+- `TRACEHOUND_NETWORK_TESTS=1 pnpm test`: exit 0; analyzer 360 passed (31 files, 827 s), viewer
+  88 passed (11 files);
+- `pnpm typecheck`: exit 0;
+- viewer build: exit 0.
+
+Pushed (`build/reproduce`). Spend: $0.
+
+## Phase 2 (decision 048): the reproduce stage
+
+Rules block re-read at the start. Paths touched: `src/harness/reproduce.ts` (new),
+`harness/prompts/repro-v1.md` (new), `test/reproduce.test.ts` and `test/harness-reproduce.test.ts`
+(new), the Docker test-file list in `vitest.config.ts` (one line added), `docs/`. No frozen file
+was changed: `loop.ts`, `run.ts`, `junit.ts`, `evaluate.ts`, `agent-v5.md` and `eval/tasks/` are
+untouched. No existing test was modified. The pin for a repair run's first request messages
+(`bc57c40b…`) was computed from the tree at `4b9fe61` before any reproduce-stage file was in it.
+
+**How an assertion failure is told apart from a load error:** from bun's JUnit report (step 0
+table):
+- an assertion failure is a `<testcase>` with `<failure type="AssertionError">`;
+- a file that fails to load (import, syntax, top-level error) writes no report when run alone;
+- zero tests also writes none, but exits 0;
+- a runtime error or timeout is a `<failure>` with another `type`.
+
+The prompt's STOP condition does not apply.
+
+**Scripted test results** (no model): the 8 Docker cases in decision 048's table all pass, as do
+the 15 unit tests in `test/reproduce.test.ts`. Recall, scripted, before any model run:
+- seeded claim + the task's repro → REPRODUCED;
+- control → NOT_REPRODUCED;
+- oracle-check → true reproduction;
+- emitted task + oracle → RESOLVED.
+
+One Docker test expectation was wrong at first: the edit-to-an-existing-file case's reason names
+both problems ("modified existing file(s): tests/cart.test.ts; added 0 files, not exactly one").
+The code was right; the expected string was corrected.
