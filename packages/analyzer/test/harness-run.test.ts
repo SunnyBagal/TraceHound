@@ -8,6 +8,7 @@ import { NoopAgent, OracleAgent, type Agent } from "../src/harness/agents.ts";
 import type { ExecResult, SandboxHandle, SandboxProvider } from "../src/harness/provider.ts";
 import { fakeClient } from "./helpers.ts";
 import { checkPlan, RepoProfile } from "../src/harness/profile.ts";
+import { run as runProcess } from "../src/harness/docker.ts";
 import { parseJunit } from "../src/harness/junit.ts";
 import { compareChecks, newTscErrors, parseTscErrors, PREPARE_SCRATCH, REPO_TSC, runRepair, splitChanges, SQUASH_HISTORY, type CheckResults } from "../src/harness/run.ts";
 import { loadTask, type LoadedTask, type TaskSpec } from "../src/harness/task.ts";
@@ -612,5 +613,16 @@ describe("per-test regression gate (decision 043)", () => {
     expect(() => RepoProfile.parse({ id: "x", testReport: { format: "junit", command: "bun test --reporter=junit --reporter-outfile=$REPORT" } })).toThrow(/testReport needs test/);
     expect(() => RepoProfile.parse({ id: "x", test: "bun test", testReport: { format: "junit", command: "bun test --reporter=junit" } })).toThrow(/must contain \$REPORT/);
     expect(checkPlan({ setup: [], regression: ["more"] }, profile())).toEqual({ setup: [], regression: [SUITE, "more"], typecheck: [], reports: { [SUITE]: { format: "junit", command: 'cd "pkg-a" && run-suite --junit $REPORT' } } });
+  });
+});
+
+describe("process runner: a child that exits before reading its stdin", () => {
+  it("is a failed result with the reason in stderr, never an unhandled EPIPE (seen on CI in harness-docker)", async () => {
+    // 8 MB is far more than a pipe buffers, so the write hits a closed pipe
+    const r = await runProcess("sh", ["-c", "exit 0"], { input: "x".repeat(8 * 1024 * 1024), timeoutMs: 10_000 });
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toMatch(/writing stdin failed: .*EPIPE/);
+    // a child that reads its input is unaffected
+    expect(await runProcess("sh", ["-c", "wc -c"], { input: "abc", timeoutMs: 10_000 })).toMatchObject({ exitCode: 0, stdout: expect.stringMatching(/^\s*3\s*$/) });
   });
 });

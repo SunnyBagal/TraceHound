@@ -59,9 +59,17 @@ export function run(cmd: string, args: string[], opts: { input?: string; timeout
         }, opts.timeoutMs)
       : undefined;
     child.on("error", (error) => (stderr += `\n${error.message}`));
+    // a child that exits before reading its input (EPIPE) must not become an unhandled error; input
+    // that wasn't delivered is a failure even if the child exited 0
+    let stdinFailed = false;
+    child.stdin.on("error", (error) => {
+      stdinFailed = true;
+      stderr += `\nwriting stdin failed: ${error.message}`;
+    });
     child.on("close", (code) => {
       if (timer) clearTimeout(timer);
-      resolve({ exitCode: code ?? (timedOut ? 124 : 1), stdout, stderr, durationMs: Math.round(performance.now() - started), timedOut });
+      const exitCode = code === 0 && stdinFailed && opts.input ? 1 : (code ?? (timedOut ? 124 : 1));
+      resolve({ exitCode, stdout, stderr, durationMs: Math.round(performance.now() - started), timedOut });
     });
     child.stdin.end(opts.input ?? "");
   });

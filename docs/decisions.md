@@ -1907,12 +1907,19 @@ UNRESOLVED (repro still fails), UNRESOLVED (regression), UNRESOLVED (new tsc err
 
 The toy tasks and the CEX infrastructure test have no profile, so they are unchanged
 (`granularity: "command"`). All Docker and network test files pass:
-`TRACEHOUND_NETWORK_TESTS=1 pnpm test`, 317 analyzer and 88 viewer tests.
+`TRACEHOUND_NETWORK_TESTS=1 pnpm test`, 317 analyzer and 88 viewer tests (318 after the CI fix below).
 **Rejected:** (a) Parsing bun's console output (`(pass)` / `(fail)` lines): it's a display format,
 and multi-line names and errors between tests make it ambiguous. (b) One command per test file:
 slower, and a file-level result still hides a test inside it. (c) Matching renamed tests by line
 or similarity: see above. (d) Keeping exit codes and requiring a passing baseline: seeds and real
 repos have failing tests, and the gate has to work there.
+**CI fix on the same branch:** CI failed on `main` at `72bc39f` (before this decision) and on this
+branch's first push, with every test file passing. The cause was an unhandled `write EPIPE` from
+the process runner (`src/harness/docker.ts`, `run`), raised while `harness-docker.test.ts` ran.
+`child.stdin` had no error listener, so a docker process that exited before reading its input
+crashed the test worker. Now a stdin error is appended to stderr, and a child that exits 0
+without taking non-empty input counts as exit 1. A unit test pipes 8 MB into `sh -c "exit 0"`;
+it fails without the fix and passes with it. It never reproduced locally in the full suite.
 
 ### Study S1: the BullMQ detector on ten unseen repos
 Study S1 (`tracehound-study` @ `75913ef`, read only) ran the analyzer on ten public BullMQ repos it
