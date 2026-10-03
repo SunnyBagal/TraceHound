@@ -1,0 +1,11 @@
+# Evaluation protocol (written before any held-out task exists in this repo)
+- Code: tag eval-freeze-2. Tasks: 8 held-out seeded tasks on Recall 57d920e, written outside this repo, each validated oracle → RESOLVED and noop → UNRESOLVED.
+- Arms: graph-on (context packet injected, graph tools offered) and graph-off.
+- Models: Nano and Super, with the cost limits in docs/freeze.md. Both are always reported together.
+- Repeats: 5 per task, arm and model, 160 runs. Concurrency 1, nothing else running on the machine.
+- Canary: the oracle patch for one task runs before and after each batch. If either is not RESOLVED, the batch is void.
+- Void runs: a run that ends in an infrastructure error (network, model request timeout, sandbox failure) or carries a baseline-anomaly flag is void and re-run once. Void runs are listed, not hidden.
+- Measures, per arm and model, with n beside every figure: resolved; end reason; steps; tokens; cost; step of first fault-file read; graph tool calls.
+- No significance claims. Dev results are never pooled with held-out results.
+- Expectation stated in advance: in the dev runs the agent found the fault file every time in both arms, so no difference in resolve rate is expected on this repo.
+- Run records are archived with the results after a secrets check.
