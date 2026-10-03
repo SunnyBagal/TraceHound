@@ -17,13 +17,18 @@ import { capOutput, confinePath, GRAPH_TOOLS, REPO_TOOLS, sandboxCommand, ToolIn
 
 const PROMPTS = path.resolve(import.meta.dirname, "../../../../harness/prompts");
 export const AGENT_PROMPT_FILE = path.join(PROMPTS, "agent-v5.md");
-/** Kept for reference and for reproducing earlier runs; agent-v5 is the default (decision 045). */
+/** Kept for reference and for reproducing earlier runs; agent-v5.md is the prompt of agent-v5 and agent-v6 (decisions 045, 047). */
 export const AGENT_PROMPT_V1_FILE = path.join(PROMPTS, "agent-v1.md");
 export const AGENT_PROMPT_V2_FILE = path.join(PROMPTS, "agent-v2.md");
 export const AGENT_PROMPT_V3_FILE = path.join(PROMPTS, "agent-v3.md");
 export const AGENT_PROMPT_V4_FILE = path.join(PROMPTS, "agent-v4.md");
-/** The loop's own behaviour (guards, edit fallback, finish check, cap, stops), recorded next to the prompt hashes. */
-export const LOOP_VERSION = "agent-v5";
+/**
+ * The loop's own behaviour (guards, edit fallback, finish check, cap, stops), recorded next to the prompt hashes.
+ * agent-v6 (decision 047): the str_replace_editor alias and the line-ending edit retry; the prompt is agent-v5's, unchanged.
+ */
+export const LOOP_VERSION = "agent-v6";
+/** agent-v6 (decision 047): the tool name the model kept calling; accepted, never offered in the tool schemas. */
+export const ALIASED_TOOL = "str_replace_editor";
 /** agent-v3: this many refused calls in a row end the run UNRESOLVED "stuck". */
 export const STUCK_AFTER_REFUSALS = 3;
 /** reasoning "on": thinking explicitly enabled (reasoning "off" sends enable_thinking: false). */
@@ -85,7 +90,8 @@ export interface LoopTurn {
   /** usage.completion_tokens_details.reasoning_tokens, only when the API reports it */
   reasoningTokens?: number;
   toolCalls: { id: string; name: string; arguments: string }[];
-  toolResults: { id: string; name: string; ok: boolean; result: string }[];
+  /** ranAs: agent-v6, the tool a str_replace_editor call was run as */
+  toolResults: { id: string; name: string; ok: boolean; result: string; ranAs?: string }[];
 }
 
 export interface LoopTrace {
@@ -118,7 +124,11 @@ export interface LoopTrace {
    */
   packet: { injected: false } | { injected: true; chars: number; tokensEstimated: number; sha256: string; decider: string; confidence?: string };
   toolCallCount: number;
-  guards: { repeatsBlocked: number; emptyFinishRejected: number; editWhitespaceFallbacks: number };
+  /**
+   * editLineEndRetries and aliasCalls: agent-v6 (decision 047); absent in earlier records.
+   * editWhitespaceFallbacks counts the agent-v2 indentation fallback only.
+   */
+  guards: { repeatsBlocked: number; emptyFinishRejected: number; editWhitespaceFallbacks: number; editLineEndRetries?: number; aliasCalls?: number };
   /** agent-v3: tool results cut to head + tail (and the characters omitted in total) */
   outputTruncations: { count: number; charsOmitted: number };
   /** agent-v3: the one no-edit nudge */
@@ -138,8 +148,42 @@ export interface LoopOptions {
   graph?: { snapshot: Snapshot; decider: "lexical" | "nemotron" };
 }
 
-/** refused: the loop declined to run the call (repeat guard); counts toward the stuck stop. */
-type ToolOutcome = { ok: boolean; content: string; finished?: boolean; refused?: boolean };
+/** refused: the loop declined to run the call (repeat guard); counts toward the stuck stop. ranAs: agent-v6 alias. */
+type ToolOutcome = { ok: boolean; content: string; finished?: boolean; refused?: boolean; ranAs?: string };
+
+/**
+ * agent-v6 (decision 047): a str_replace_editor call → the existing tool it meant, for exactly the
+ * argument shapes the 32 agent-v5 dev runs used (docs/build-log.md, agent-v6 Phase 1). Any other
+ * shape → undefined, answered with the unknown-tool line. Line numbers sent as digit strings become
+ * integers; everything else goes through the target tool's own argument check.
+ */
+export function aliasCall(name: string, args: Record<string, unknown>): { name: string; args: Record<string, unknown> } | undefined {
+  if (name !== ALIASED_TOOL || typeof args.path !== "string") return undefined;
+  const keys = Object.keys(args).sort().join(",");
+  const { command, path: file } = args;
+  const line = (v: unknown) => (typeof v === "string" && /^\d+$/.test(v) ? Number(v) : v);
+  if (command === "view" || command === "read") {
+    if (keys === "command,path") return { name: "read_file", args: { path: file } };
+    if (keys === "command,endLine,path,startLine") return { name: "read_file", args: { path: file, startLine: line(args.startLine), endLine: line(args.endLine) } };
+    return undefined;
+  }
+  if (command === "list" && keys === "command,path") return { name: "list_dir", args: { path: file } };
+  if (command === "edit_file" && keys === "command,newText,oldText,path") return { name: "edit_file", args: { path: file, oldText: args.oldText, newText: args.newText } };
+  if (keys === "path") return { name: "read_file", args: { path: file } };
+  if (keys === "path,view_range") {
+    let range: unknown = args.view_range;
+    if (typeof range === "string") {
+      try {
+        range = JSON.parse(range);
+      } catch {
+        return undefined;
+      }
+    }
+    if (!Array.isArray(range) || range.length !== 2 || !range.every((n) => Number.isInteger(n) && n >= 1)) return undefined;
+    return { name: "read_file", args: { path: file, startLine: range[0], endLine: range[1] } };
+  }
+  return undefined;
+}
 
 export class RepairLoopAgent implements Agent {
   readonly name = "nemotron";
@@ -181,7 +225,7 @@ export class RepairLoopAgent implements Agent {
       graphCalls: [],
       packet: { injected: false },
       toolCallCount: 0,
-      guards: { repeatsBlocked: 0, emptyFinishRejected: 0, editWhitespaceFallbacks: 0 },
+      guards: { repeatsBlocked: 0, emptyFinishRejected: 0, editWhitespaceFallbacks: 0, editLineEndRetries: 0, aliasCalls: 0 },
       outputTruncations: { count: 0, charsOmitted: 0 },
       noEditNudge: { fired: false },
       stuckStop: false,
@@ -254,7 +298,7 @@ export class RepairLoopAgent implements Agent {
           this.trace.outputTruncations.charsOmitted += capped.omitted;
         }
         messages.push({ role: "tool", tool_call_id: call.id, content: capped.text });
-        record.toolResults.push({ id: call.id, name: call.function.name, ok: outcome.ok, result: truncate(capped.text, RECORD_RESULT_CHARS) });
+        record.toolResults.push({ id: call.id, name: call.function.name, ok: outcome.ok, result: truncate(capped.text, RECORD_RESULT_CHARS), ...(outcome.ranAs && { ranAs: outcome.ranAs }) });
         this.#refusedInARow = outcome.refused ? this.#refusedInARow + 1 : 0;
         if (this.#refusedInARow >= STUCK_AFTER_REFUSALS) {
           this.trace.stuckStop = true;
@@ -275,8 +319,18 @@ export class RepairLoopAgent implements Agent {
   }
 
   async #execute(call: ToolCall, ctx: AgentContext, turn: number): Promise<ToolOutcome> {
-    const name = call.function.name;
-    const tool = this.#tools.find((t) => t.function.name === name);
+    const outcome = await this.#executeAs(call, ctx, turn);
+    const ranAs = this.#ranAs;
+    this.#ranAs = undefined;
+    return ranAs ? { ...outcome, ranAs } : outcome;
+  }
+
+  /** agent-v6: set by #executeAs when a str_replace_editor call is run as an existing tool. */
+  #ranAs: string | undefined;
+
+  async #executeAs(call: ToolCall, ctx: AgentContext, turn: number): Promise<ToolOutcome> {
+    let name = call.function.name;
+    let tool = this.#tools.find((t) => t.function.name === name);
     let args: Record<string, unknown>;
     try {
       const parsed: unknown = JSON.parse(call.function.arguments || "{}");
@@ -285,6 +339,14 @@ export class RepairLoopAgent implements Agent {
     } catch (error) {
       ctx.step(`malformed arguments for ${name}`);
       return { ok: false, content: `error: arguments are not valid JSON (${(error as Error).message}): ${truncate(call.function.arguments ?? "", 200)}` };
+    }
+    const alias = tool ? undefined : aliasCall(name, args);
+    if (alias) {
+      // the target tool's own path from here on: argument check, repeat guard, step, result
+      ({ name, args } = alias);
+      tool = this.#tools.find((t) => t.function.name === name);
+      this.#ranAs = name;
+      this.trace.guards.aliasCalls = (this.trace.guards.aliasCalls ?? 0) + 1;
     }
     if (!tool) {
       ctx.step(`unknown tool ${name}`);
@@ -341,6 +403,8 @@ export class RepairLoopAgent implements Agent {
     const r = await ctx.exec(cmd, { timeoutMs: ctx.limits.commandTimeoutMs }); // one provider op = one step
     if (MUTATING_TOOLS.has(name)) this.#state = await ctx.repoState(); // a harness probe, not a step
     if (name === "edit_file" && r.exitCode === 0 && r.stdout.includes("whitespace-normalized match")) this.trace.guards.editWhitespaceFallbacks++;
+    if (name === "edit_file" && r.exitCode === 0 && r.stdout.includes("ignoring trailing whitespace and line endings it matched once"))
+      this.trace.guards.editLineEndRetries = (this.trace.guards.editLineEndRetries ?? 0) + 1;
     const output = `${r.stdout}${r.stderr ? (r.stdout ? "\n" : "") + r.stderr : ""}`;
     if (name === "run") return { ok: r.exitCode === 0, content: `exit code ${r.exitCode}${r.timedOut ? " (timed out)" : ""}\n${output || "(no output)"}` };
     if (r.exitCode === 0) {

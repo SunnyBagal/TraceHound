@@ -1,6 +1,8 @@
 // Repair loop (decision 029) with a scripted fake model. Protocol/limit cases use the in-memory
 // provider; the end-to-end fix and the symlink escape use a real Docker sandbox (skipped without Docker).
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildToyRepo, TOY_BASE_SHA } from "../../../eval/fixtures/build-toy-repo.ts";
@@ -13,9 +15,12 @@ import {
   AGENT_PROMPT_V2_FILE,
   AGENT_PROMPT_V3_FILE,
   AGENT_PROMPT_V4_FILE,
+  aliasCall,
+  ALIASED_TOOL,
   checkArgs,
   EMPTY_FINISH_MESSAGE,
   formatTestCommands,
+  LOOP_VERSION,
   noEditNudge,
   PACKET_HEADING,
   RepairLoopAgent,
@@ -102,7 +107,7 @@ const fakeTask = (limits: Partial<TaskSpec["limits"]> = {}): LoadedTask => ({
 const trace = (r: { agentRun?: { trace?: unknown } }) => r.agentRun!.trace as LoopTrace;
 
 describe("prompt", () => {
-  it("agent-v5 is the default: one frozen file for both conditions; only the two GRAPH sentences differ; environment facts identical", () => {
+  it("agent-v5.md is the default prompt (of agent-v6): one frozen file for both conditions; only the two GRAPH sentences differ; environment facts identical", () => {
     const vars = { TEST_COMMANDS: formatTestCommands(["bun test ./tests", "tsc --noEmit"]) };
     const off = renderSystemPrompt(AGENT_PROMPT_FILE, false, vars);
     const on = renderSystemPrompt(AGENT_PROMPT_FILE, true, vars);
@@ -128,7 +133,7 @@ describe("prompt", () => {
     expect(at).toBe(v4.length);
     expect(new RepairLoopAgent().trace.reasoning).toBe("on"); // agent-v4 default, kept in v5
     const agent = new RepairLoopAgent({ reasoning: "off" });
-    expect(agent.trace).toMatchObject({ loopVersion: "agent-v5", promptFile: "agent-v5.md", promptSha256: off.fileSha256, graph: false, reasoning: "off", deciderVersion: "decider-v1" });
+    expect(agent.trace).toMatchObject({ loopVersion: "agent-v6", promptFile: "agent-v5.md", promptSha256: off.fileSha256, graph: false, reasoning: "off", deciderVersion: "decider-v1" });
     expect(agent.trace.tools).toEqual(["list_dir", "read_file", "search", "edit_file", "write_file", "run", "finish"]);
   });
 
@@ -294,7 +299,7 @@ describe("agent-v2 competence guards (fake provider, fake model; identical with 
       const refused = /^error: not run - this exact call \((run|read_file) with the same arguments\) was already made 2 times and the repository has not changed since, so the result won't change\. Do something different\.$/;
       expect(results.map((x) => refused.test(x))).toEqual([false, false, true, false, false, true, false, false, false, true, false]);
       expect(r.commands.filter((c) => c.actor === "agent" && c.cmd === "bun test ./tests")).toHaveLength(4); // 2 before the edit, 2 after
-      expect(t.guards).toEqual({ repeatsBlocked: 3, emptyFinishRejected: 0, editWhitespaceFallbacks: 0 });
+      expect(t.guards).toEqual({ repeatsBlocked: 3, emptyFinishRejected: 0, editWhitespaceFallbacks: 0, editLineEndRetries: 0, aliasCalls: 0 });
       expect(r.agentRun!.steps).toBe(11); // refused calls still cost a step
       expect(t.finishSummary).toBe("done"); // the repo changed, so the first finish is accepted
     });
@@ -312,7 +317,7 @@ describe("agent-v2 competence guards (fake provider, fake model; identical with 
 
     it(`unknown tools and unknown arguments (${label}): the error lists the valid names`, async () => {
       const { client } = fakeModel((turn) =>
-        turn === 1 ? [call("str_replace_editor", { command: "view", path: "src/cart.ts" }), call("edit_file", { path: "src/cart.ts", command: "edit", oldText: "a", newText: "b" })] : [call("finish", { summary: "x" })],
+        turn === 1 ? [call("str_replace_editor", { command: "create", path: "src/cart.ts", file_text: "x" }), call("edit_file", { path: "src/cart.ts", command: "edit", oldText: "a", newText: "b" })] : [call("finish", { summary: "x" })],
       );
       const agent = make();
       const r = await runRepair({ task: fakeTask(), agent, provider: new FakeProvider(), image: "img", llm: client });
@@ -427,6 +432,149 @@ describe("agent-v4: edit accounting and reads (fake provider, fake model; identi
   }
 });
 
+describe("agent-v6 (decision 047): the frozen prompt file and the str_replace_editor alias", () => {
+  it("the prompt file is byte-identical to agent-v5's frozen one; the loop label is agent-v6", () => {
+    expect(createHash("sha256").update(readFileSync(AGENT_PROMPT_FILE)).digest("hex")).toBe("556861d40ba86940a72c05d15b08cf07eea15a6d8a5508c6c7d3d352b92222b6");
+    expect(LOOP_VERSION).toBe("agent-v6");
+    expect(new RepairLoopAgent().trace).toMatchObject({ loopVersion: "agent-v6", promptFile: "agent-v5.md", promptSha256: "556861d40ba86940a72c05d15b08cf07eea15a6d8a5508c6c7d3d352b92222b6" });
+  });
+
+  it("maps exactly the argument shapes seen in the 32 dev runs", () => {
+    const p = "/work/recall-backend/index.ts";
+    expect(aliasCall(ALIASED_TOOL, { command: "view", path: p })).toEqual({ name: "read_file", args: { path: p } });
+    expect(aliasCall(ALIASED_TOOL, { command: "read", path: p })).toEqual({ name: "read_file", args: { path: p } });
+    expect(aliasCall(ALIASED_TOOL, { command: "view", path: p, startLine: "430", endLine: "460" })).toEqual({ name: "read_file", args: { path: p, startLine: 430, endLine: 460 } });
+    expect(aliasCall(ALIASED_TOOL, { path: p, command: "read", startLine: "38", endLine: "50" })).toEqual({ name: "read_file", args: { path: p, startLine: 38, endLine: 50 } });
+    expect(aliasCall(ALIASED_TOOL, { path: p })).toEqual({ name: "read_file", args: { path: p } });
+    expect(aliasCall(ALIASED_TOOL, { path: p, view_range: "[75, 90]" })).toEqual({ name: "read_file", args: { path: p, startLine: 75, endLine: 90 } });
+    expect(aliasCall(ALIASED_TOOL, { command: "list", path: "/work/recall-backend/test" })).toEqual({ name: "list_dir", args: { path: "/work/recall-backend/test" } });
+    expect(aliasCall(ALIASED_TOOL, { path: p, oldText: "a", newText: "b", command: "edit_file" })).toEqual({ name: "edit_file", args: { path: p, oldText: "a", newText: "b" } });
+  });
+
+  it("any other shape or name is not mapped", () => {
+    const p = "src/cart.ts";
+    for (const args of [
+      {},
+      { command: "view" },
+      { command: "create", path: p, file_text: "x" },
+      { command: "str_replace", path: p, old_str: "a", new_str: "b" },
+      { command: "view", path: p, view_range: [1, 5] },
+      { command: "view", path: p, startLine: "1" },
+      { command: "list", path: p, depth: 2 },
+      { path: p, view_range: "[1]" },
+      { path: p, view_range: "[0, 5]" },
+      { path: p, view_range: "[1, -1]" },
+      { path: p, view_range: "1-5" },
+      { path: p, oldText: "a", newText: "b" },
+    ])
+      expect(aliasCall(ALIASED_TOOL, args)).toBeUndefined();
+    expect(aliasCall("read", { path: p })).toBeUndefined();
+    expect(aliasCall("str_replace_based_edit_tool", { command: "view", path: p })).toBeUndefined();
+  });
+
+  const conditions = [
+    ["graph off", () => new RepairLoopAgent()],
+    ["graph on", () => new RepairLoopAgent({ graph: { snapshot: RECALL_SNAPSHOT, decider: "lexical" } })],
+  ] as const;
+  for (const [label, make] of conditions) {
+    it(`an aliased call runs as the real tool (${label}): one step, the repeat guard shared with it, never offered to the model`, async () => {
+      const provider = new FakeProvider();
+      const { client, requests } = fakeModel((turn) =>
+        turn === 1
+          ? [call("read_file", { path: "src/cart.ts" }), call("str_replace_editor", { command: "view", path: "src/cart.ts" }), call("str_replace_editor", { path: "src/cart.ts" })]
+          : turn === 2
+            ? [call("str_replace_editor", { command: "list", path: "src" }), call("str_replace_editor", { command: "view", path: "src/cart.ts", startLine: "x1", endLine: "2" })]
+            : turn === 3
+              ? [call("str_replace_editor", {}), call("str_replace_editor", { command: "create", path: "a.ts", file_text: "x" }), call("delete_everything", {})]
+              : [call("finish", { summary: "x" }), call("finish", { summary: "x" })],
+      );
+      const agent = make();
+      const r = await runRepair({ task: fakeTask(), agent, provider, image: "img", llm: client });
+      const t = trace(r);
+      for (const q of requests) expect(q.tools!.map((x) => x.function.name)).not.toContain("str_replace_editor");
+      const [read1, alias1, alias2] = t.turns[0]!.toolResults;
+      expect([read1!.ok, alias1!.ok]).toEqual([true, true]);
+      expect(alias1).toMatchObject({ name: "str_replace_editor", ranAs: "read_file" });
+      expect(alias2).toMatchObject({ name: "str_replace_editor", ranAs: "read_file", ok: false, result: expect.stringMatching(/^error: not run - this exact call \(read_file with the same arguments\) was already made 2 times/) });
+      expect(provider.execs.filter((c) => c.endsWith(" read_file"))).toHaveLength(2);
+      const [list, badLine] = t.turns[1]!.toolResults;
+      expect(list).toMatchObject({ ranAs: "list_dir", ok: true });
+      expect(badLine).toMatchObject({ ranAs: "read_file", ok: false, result: 'error: read_file: "startLine" must be an integer' });
+      const unknown = `error: unknown tool "str_replace_editor". Available: ${agent.trace.tools.join(", ")}`;
+      expect(t.turns[2]!.toolResults.map((x) => x.result)).toEqual([unknown, unknown, `error: unknown tool "delete_everything". Available: ${agent.trace.tools.join(", ")}`]);
+      expect(unknown).not.toContain("\n"); // one line
+      expect(t.turns[2]!.toolResults.some((x) => x.ranAs)).toBe(false);
+      expect(t.guards.aliasCalls).toBe(4); // turns 1 and 2; the two in turn 3 were not mapped
+      expect(t.baseFilesRead).toEqual(["src/cart.ts"]);
+      expect(r.agentRun!.steps).toBe(8 + 2); // every call is one step, aliased or not; 2 finishes (unchanged repo)
+    });
+  }
+});
+
+describe("agent-v6 (decision 047): edit_file retry with trailing whitespace and line endings ignored (the sandbox helper's JS, evaluated on the host)", () => {
+  type Edit = { ok: boolean; how: string; text?: string; message: string };
+  const { applyEdit } = new Function(`${EDIT_FALLBACK_JS}\nreturn { applyEdit };`)() as { applyEdit: (t: string, o: string, n: string, label: string) => Edit };
+
+  it("exact matches are unchanged: once → applied; more than once → the same error as before", () => {
+    expect(applyEdit("a\nb\n", "b", "c", "f.ts")).toEqual({ ok: true, how: "exact", text: "a\nc\n", message: "edited f.ts: replaced 1 occurrence starting at line 2" });
+    expect(applyEdit("b\nb\n", "b", "c", "f.ts")).toEqual({ ok: false, how: "exact-multiple", message: "oldText occurs 2 times in f.ts; include more surrounding lines so it matches exactly once." });
+  });
+
+  it("trailing whitespace in the file or in oldText: applied once, everything else untouched", () => {
+    const file = "  if (a) {   \n    x();\n  }\n";
+    const r = applyEdit(file, "if (a) {\n    x();", "if (b) {\n    y();", "f.ts");
+    expect(r).toEqual({
+      ok: true,
+      how: "line-ends",
+      text: "  if (b) {\n    y();\n  }\n",
+      message: "edited f.ts: oldText did not match exactly; ignoring trailing whitespace and line endings it matched once, at lines 1-2, and was replaced there. Read those lines back to check.",
+    });
+    expect(applyEdit("x = 1;\ny = 2;\n", "x = 1;\t \ny = 2;", "z", "f.ts")).toMatchObject({ ok: true, how: "line-ends", text: "z\n" });
+  });
+
+  it("line endings: a CRLF file takes LF oldText (newText gets CRLF); an LF file takes CRLF oldText", () => {
+    expect(applyEdit("a\r\nb\r\nc\r\n", "a\nb", "A\nB", "f.ts")).toMatchObject({ ok: true, how: "line-ends", text: "A\r\nB\r\nc\r\n" });
+    expect(applyEdit("a\nb\nc\n", "a\r\nb", "A\nB", "f.ts")).toMatchObject({ ok: true, how: "line-ends", text: "A\nB\nc\n" });
+  });
+
+  it("more than one location: nothing changes, the lines are listed and the closest region is shown", () => {
+    const r = applyEdit("x();  \ny();\nx(); \ny();\n", "x();\ny();", "z", "f.ts");
+    expect(r.ok).toBe(false);
+    expect(r.how).toBe("ambiguous-line-ends");
+    expect(r.message).toBe(
+      "oldText not found exactly in f.ts; ignoring trailing whitespace and line endings it matches 2 places (starting at lines 1, 3), so nothing was changed. Include more surrounding lines so it matches once.\nClosest region of the file as it is now (lines 1-2, similarity 1):\n1| x();  \n2| y();",
+    );
+  });
+
+  it("indentation differences still go to the agent-v2 fallback, after this retry", () => {
+    expect(applyEdit("  if (a) {\n    x();\n  }\n", "if (a) {\nx();", "if (b) {\ny();", "f.ts")).toMatchObject({ ok: true, how: "whitespace-normalized" });
+  });
+
+  it("not found: an error with the closest region of the current text, with line numbers, at most 40 lines", () => {
+    const file = Array.from({ length: 100 }, (_, i) => `const v${i} = ${i};`).join("\n") + "\n";
+    const old = Array.from({ length: 60 }, (_, i) => `const v${i + 20} = ${i + 1000};`).join("\n");
+    const r = applyEdit(file, old, "x", "f.ts");
+    expect(r.how).toBe("not-found");
+    const [head, region, ...lines] = r.message.split("\n");
+    expect(head).toBe("oldText not found in f.ts, even ignoring indentation, trailing whitespace and line endings. Copy it exactly from read_file output, without the '<n>| ' prefixes.");
+    const m = /^Closest region of the file as it is now \(lines (\d+)-(\d+), similarity ([\d.]+)\):$/.exec(region!)!;
+    expect(lines).toHaveLength(40);
+    expect(Number(m[2]) - Number(m[1]) + 1).toBe(40);
+    expect(lines[0]).toBe(`${m[1]}| const v${Number(m[1]) - 1} = ${Number(m[1]) - 1};`);
+  });
+
+  it("not found with nothing in common: the closest region is still shown (similarity 0)", () => {
+    expect(applyEdit("abc\n", "§", "x", "f.ts").message).toMatch(/\nClosest region of the file as it is now \(lines 1-1, similarity 0\):\n1\| abc$/);
+  });
+
+  it("the 12 failures in the dev runs are not whitespace failures: a dropped character or a missing whitespace-only line still fails", () => {
+    const sql = "    sql`setweight(to_tsvector('english', coalesce(title, '')), 'A')`,\n";
+    expect(applyEdit(sql, "sql`setweight(to_tsvector('english', coalesce(title, ''), 'A')`,", "x", "f.ts").how).toBe("not-found");
+    const block = "  if (!x) {\n    \n    log();\n    return;\n  }\n";
+    expect(applyEdit(block, "  if (!x) {\n    log();\n    return;\n  }", "x", "f.ts").how).toBe("not-found");
+  });
+});
+
 describe("edit_file whitespace fallback (the sandbox helper's JS, evaluated on the host)", () => {
   const { wsNormalizedEdit, closestRegion } = new Function(`${EDIT_FALLBACK_JS}\nreturn { wsNormalizedEdit, closestRegion };`)() as {
     wsNormalizedEdit: (t: string, o: string, n: string) => { ok: true; text: string; startLine: number; endLine: number; reindent: string } | { ok: false; lines: number[] };
@@ -512,7 +660,7 @@ if (!docker.ok) {
       expect(t.turns[1]!.toolResults[0]!.result).toBe(
         "edited src/cart.ts: oldText did not match exactly, so a whitespace-normalized match (indentation and trailing spaces ignored) was applied to lines 10-13; newText was inserted as given (its indentation was not adjusted). Read those lines back to check.\n",
       );
-      expect(t.guards).toEqual({ repeatsBlocked: 0, emptyFinishRejected: 1, editWhitespaceFallbacks: 1 });
+      expect(t.guards).toEqual({ repeatsBlocked: 0, emptyFinishRejected: 1, editWhitespaceFallbacks: 1, editLineEndRetries: 0, aliasCalls: 0 });
       expect(t.finishSummary).toBe("fixed");
       expect(r.finalState).toBe("RESOLVED");
       // the state probes ran as harness commands (not agent steps), once at the start and after each mutating call
@@ -555,20 +703,34 @@ if (!docker.ok) {
             call("edit_file", { path: "src/cart.ts", oldText: "return", newText: "x" }),
             call("write_file", { path: "src/cart.ts", content: "x" }),
             call("run", { cmd: "ln -s /etc etc-link" }),
+            // agent-v6: a CRLF file with a trailing space; oldText with LF line ends and no trailing space
+            call("write_file", { path: "notes/crlf.txt", content: "a = 1;  \r\nb = 2;\r\n" }),
+            call("edit_file", { path: "notes/crlf.txt", oldText: "a = 1;\nb = 2;", newText: "a = 10;\nb = 20;" }),
           ];
-        if (turn === 2) return [call("read_file", { path: "etc-link/passwd" }), call("list_dir", { path: "etc-link" })];
+        if (turn === 2) return [call("read_file", { path: "etc-link/passwd" }), call("list_dir", { path: "etc-link" }), call("str_replace_editor", { command: "view", path: "/work/notes/crlf.txt" })];
         return [call("finish", { summary: "probing" })];
       });
       const r = await runRepair({ task: loadTask(TASK), agent: new RepairLoopAgent(), provider: new LocalDockerProvider(), image: SANDBOX_IMAGE, llm: client });
       const [t1, t2] = trace(r).turns;
       expect(t1!.toolResults.map((x) => x.result)).toEqual([
-        expect.stringMatching(/^error: oldText not found in src\/cart\.ts, even ignoring indentation and trailing spaces\. Copy it exactly from read_file output, without the '<n>\| ' prefixes\.\nClosest region \(lines \d+-\d+, similarity [\d.]+\):\n\d+\| /),
+        expect.stringMatching(
+          /^error: oldText not found in src\/cart\.ts, even ignoring indentation, trailing whitespace and line endings\. Copy it exactly from read_file output, without the '<n>\| ' prefixes\.\nClosest region of the file as it is now \(lines \d+-\d+, similarity [\d.]+\):\n\d+\| /,
+        ),
         "error: oldText occurs 3 times in src/cart.ts; include more surrounding lines so it matches exactly once.",
         "error: src/cart.ts already exists; use edit_file to change it",
         "exit code 0\n(no output)",
+        "wrote notes/crlf.txt (18 bytes)\n",
+        "edited notes/crlf.txt: oldText did not match exactly; ignoring trailing whitespace and line endings it matched once, at lines 1-2, and was replaced there. Read those lines back to check.\n",
       ]);
-      expect(t2!.toolResults.map((x) => x.result)).toEqual(["error: path escapes the repository: etc-link/passwd", "error: path escapes the repository: etc-link"]);
-      expect(trace(r).filesRead).toEqual([]);
+      expect(t2!.toolResults.map((x) => x.result)).toEqual([
+        "error: path escapes the repository: etc-link/passwd",
+        "error: path escapes the repository: etc-link",
+        "[/work/notes/crlf.txt: lines 1-2 of 2]\n1| a = 10;\r\n2| b = 20;\r\n", // the alias ran read_file; newText got the file's CRLF line ends
+      ]);
+      expect(t2!.toolResults[2]!.ranAs).toBe("read_file");
+      expect(trace(r).guards).toMatchObject({ editLineEndRetries: 1, aliasCalls: 1 });
+      expect(trace(r).filesRead).toEqual(["notes/crlf.txt"]); // only the aliased read succeeded
+      expect(trace(r).agentFilesRead).toEqual(["notes/crlf.txt"]);
       // this run's container is gone (other test files may have live ones in parallel)
       expect(spawnSync("docker", ["ps", "-a", "-q", "--filter", `name=^/${r.sandbox.id}$`], { encoding: "utf8" }).stdout.trim()).toBe("");
     }, 180_000);

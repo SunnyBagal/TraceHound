@@ -437,3 +437,62 @@ None is a trailing-whitespace or line-ending difference.
 | `{}` | 3 | `{}` | none (names no file): the unknown-tool line |
 
 Analysis script: kept outside the repo (session scratchpad); the numbers above are its output.
+
+**Gates** (GIT_* env check printed nothing):
+- First run: version guard exit 0; `TRACEHOUND_NETWORK_TESTS=1 pnpm test` **exit 1**, 2 of 337
+  analyzer tests failed, both by the 300 s test timeout in `test/harness-recall.test.ts` (dev tasks:
+  session-expiry empty patch, 642 s; chat-recent oracle fix, 914 s). The file took 2,256 s against
+  about 600 s in the build-to-freeze gates; this phase changed no code. `pnpm typecheck` exit 0;
+  viewer build exit 0.
+- Diagnosis: the same test alone passed in 54 s right after; GitHub and the npm registry answered
+  in under 1 s. Transient slowness of the host or network during setup, not a code fault.
+- **Fix (the one attempt):** the test suite re-run unchanged: exit 0, analyzer 337 passed
+  (29 files), viewer 88 passed (11 files), 839 s. Recorded as a loss: one gate run was red.
+- Pushed; draft PR #9 opened (https://github.com/SunnyBagal/TraceHound/pull/9) so CI runs on
+  every phase (step 0, item 6).
+
+**Spend:** $0 (ledger $0.91718).
+
+## Phase 2 (decision 047): edit tool
+
+Rules block re-read at the start. CI for the Phase 1 commit `2b88f9e`: see the next phase's entry.
+
+**Done** (both arms identically; prompt file unchanged):
+- `str_replace_editor` alias (`aliasCall`, `ALIASED_TOOL`, `src/harness/loop.ts`) for the eight
+  shapes seen in Phase 1 (table in decision 047), not in the tool schemas. An aliased call runs
+  down the real tool's path (argument check, repeat guard, one step); the record keeps the model's
+  name plus `ranAs`; `guards.aliasCalls`. Unmapped shapes and other unknown names get the existing
+  one-line unknown-tool error.
+- `edit_file` (`applyEdit` in the sandbox helper's JS, `src/harness/tools.ts`): exact → **new retry
+  with trailing whitespace and line endings ignored, applied only at exactly one location** (CRLF
+  kept for `newText` in CRLF files; `guards.editLineEndRetries`) → the agent-v2 indentation fallback
+  (unchanged) → an error. Every error after the exact step ends with the closest region of the
+  current text, with line numbers, at most 40 lines (now also on ambiguous matches and at
+  similarity 0; its line range is the lines shown). The not-found message now says "even ignoring
+  indentation, trailing whitespace and line endings" and "Closest region of the file as it is now".
+- `LOOP_VERSION` = `agent-v6`. **Prompt file `harness/prompts/agent-v5.md` byte-identical:
+  sha256 `556861d40ba86940a72c05d15b08cf07eea15a6d8a5508c6c7d3d352b92222b6`** (checked with
+  `shasum -a 256`, by a unit test, and `git diff origin/main -- harness/prompts` is empty).
+- Tests (`test/harness-loop.test.ts`): the prompt hash and label; every seen shape mapped, 14
+  unseen shapes and names not mapped; an aliased call in a run, both arms (one step, shared repeat
+  guard, `ranAs`, never in a request's tools, bad line numbers rejected by `read_file`'s own check,
+  `{}` / `create` / an unknown name → the one-line error); `applyEdit`: exact unchanged, trailing
+  whitespace in file or `oldText`, CRLF file with LF `oldText` and the reverse, two locations →
+  error with lines and region, indentation still handled by the old fallback, not found → region
+  of 40 lines with line numbers, similarity 0 → region still shown, and the two Phase 1 failure
+  kinds (a dropped character, a missing whitespace-only line) still fail. The Docker test now also
+  edits a CRLF file with LF `oldText` and reads it back through the alias.
+- Decision 047.
+
+**Replay** (scratch clone of Recall `57d920e` + the four seeds, outside this repo; every `edit_file`
+call of the 32 runs, each run's successful edits applied in order), agent-v6 code as committed:
+
+| Recorded outcome | agent-v5 logic | agent-v6 logic |
+|---|---|---|
+| applied (19) | exact 7, whitespace fallback 12 | exact 7, whitespace fallback 12 |
+| failed: not found (12) | not found 12 | **not found 12** |
+| failed: exact ×3 (1) | exact ×3 | exact ×3 |
+| failed: run ended by the step budget before it ran (1) | whitespace fallback | whitespace fallback |
+
+The new retry changes none of the recorded edit outcomes. Only the alias changes what the 32 runs
+would have got (50 of 53 calls run as real tools).
