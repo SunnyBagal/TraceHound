@@ -564,3 +564,34 @@ Every one of the 16 read a fault file. Mean step of the first read: graph on 9.5
 (n = 8 each); mean tokens up to it: graph on 47,421, graph off 44,108 (n = 8 each; the graph-on
 first message carries the packet). Two runs per cell: a description of these records, not a
 measured effect of the graph.
+
+**Gates** (GIT_* env check printed nothing; nothing else ran during either run):
+- First run: version guard exit 0; `TRACEHOUND_NETWORK_TESTS=1 pnpm test` **exit 1**, 1 of 358
+  analyzer tests failed: `harness-recall.test.ts` test 1 ("correct patch → RESOLVED …"), whose
+  assertion that Recall's own `cd "recall-backend" && bun test` exits 0 **at baseline** got exit 1.
+  The baseline runs before any agent or patch. Typecheck exit 0; viewer build exit 0.
+- **Fix (the one attempt):** re-run unchanged (the Phase 2 gate's red run was the same test and
+  passed on re-run). **Still red:** the same test, the same assertion (exit 1 at baseline), 357 of
+  358 passed, 826 s. Typecheck exit 0; viewer build exit 0.
+- **STOPPED here** ("a gate is still red after one fix attempt"). Phase 4 (model runs), Phase 5
+  (re-freeze, tag) were not started. No model call was made in this prompt.
+
+**Diagnosis (no change made):**
+- The test alone (`vitest run test/harness-recall.test.ts -t "1. correct patch"`) passed in 52 s.
+- Control: the analyzer suite at the `eval-freeze` commit (`7b1c153`, a scratch worktree, same
+  machine, nothing else running) exited 1 with 2 other failures (`changes.test.ts` "a removed call"
+  by the 5 s timeout; `harness-docker.test.ts` "no host mounts, no host environment …", 190 ms,
+  possibly because of the worktree's path). Recall test 1 **passed** there.
+- Record of this test in full-suite runs this session: agent-v6 commits 3 failed of 4 (`01dc0f8`
+  first run, `3922559` twice), 1 passed (`01dc0f8` re-run); `2b88f9e` (no code change) passed in
+  its green re-run; `eval-freeze` control passed once. CI on `2b88f9e` and `01dc0f8`: success.
+- No agent-v6 code runs before or during a run's baseline: the changes are in the agent's tools
+  (used only by the model agent; this test uses the scripted oracle), the run record after the
+  agent stops, the runner and the CLI. The tests added in Phases 2 and 3 add one short Docker run
+  (two more commands) in `harness-loop.test.ts`, which runs in parallel with this file. The most
+  likely cause is decision 045's known weakness (Recall's suite under parallel Docker load; bun's
+  5 s default per-test timeout), but it is **not proven**, and the failure rate on these commits
+  (3 of 4) is higher than before.
+- Which Recall tests failed at baseline is not known: the test does not keep the run record.
+
+**Spend:** $0 (ledger $0.91718).
