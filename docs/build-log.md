@@ -1088,3 +1088,85 @@ Complete (6 of 16), Nano:
 
 Ledger $2.29505 → **$2.40769** (+$0.11264 in round 2, including the void run's calls). Spent
 against this prompt's $3.00: $0.81632.
+
+### Round 2, completed after the restart (same prompt, sha256 `f70e63c2…`)
+
+Resumed from `82ce226` on the owner's instruction:
+- `git worktree prune` was run once;
+- Docker Desktop was started (engine 29.8.0, the same image id `857f16d26f25`);
+- the Mac was on AC power with the lid open, and runs used `caffeinate -dimsu`.
+
+What ran:
+- On Nano: the 2 claims with no record (short-summary control and seeded), plus one re-run of
+  session-expiry seeded, which had FAILED on a model request timeout. The ledger was read
+  before each run.
+- On Super: all 8 claims.
+
+**A second interruption.** At 14:11 IST, during Super's first run, the main checkout was
+switched to `ui/canvas-polish`, then `ui/canvas-polish-2`, from outside this session (reflog).
+`eval/claims/` disappeared from the tree; the run in progress finished and wrote its record, but
+the batch then crashed reading the next claim file. No other Super run had started. On the
+owner's choice, the stage continued from a separate worktree, `../TraceHound-reproduce` on
+`build/reproduce`. Its `.env`, `.tracehound/` (the spend ledger) and `runs/` are symlinks to the
+main checkout's, so there is one ledger and one set of records. The 7 remaining Super claims ran
+there, one `run` per claim, with the ledger checked before each.
+
+Final round 2, per claim, Nano:
+
+| Claim | Case | State | Failed check | End | Steps | Cost |
+|---|---|---|---|---|---|---|
+| chat-recent | control | NOT_REPRODUCED (no file) | — | stopped: stuck | 20 | $0.00657 |
+| chat-recent | seeded | NOT_REPRODUCED (no file) | — | stopped: stuck | 35 | $0.01840 |
+| search-description | control | NOT_REPRODUCED (test passes) | — | budget: tokens | 30 | $0.02656 |
+| search-description | seeded | REJECTED | b (a tsc error) | budget: tokens | 29 | $0.02236 |
+| session-expiry | control | REJECTED | b (the file did not load) | budget: tokens | 34 | $0.02257 |
+| session-expiry | seeded | NOT_REPRODUCED (test passes) | — | budget: tokens | 34 | $0.02678 |
+| short-summary | control | REJECTED | b (a case failed with a query error, not an assertion) | budget: tokens | 32 | $0.02258 |
+| short-summary | seeded | REJECTED | b (a case failed with a TypeError) | budget: tokens | 32 | $0.02147 |
+
+The first attempt at session-expiry seeded was FAILED (a model request aborted on timeout, 12
+steps, $0.00414). The row above is its one re-run. The short-summary control run in flight at
+the restart is void and has no record.
+
+Super:
+
+| Claim | Case | State | Failed check | End | Steps | Cost |
+|---|---|---|---|---|---|---|
+| chat-recent | control | REJECTED | b (a case failed with a ReferenceError) | budget: tokens | 36 | $0.10356 |
+| chat-recent | seeded | **REPRODUCED** | — | finish | 29 | $0.08884 |
+| search-description | control | NOT_REPRODUCED (test passes) | — | finish | 21 | $0.04593 |
+| search-description | seeded | **REPRODUCED** | — | finish | 17 | $0.03189 |
+| session-expiry | control | NOT_REPRODUCED (test passes) | — | finish | 23 | $0.03920 |
+| session-expiry | seeded | **REPRODUCED** | — | finish | 20 | $0.03925 |
+| short-summary | control | **REPRODUCED (a control)** | — | finish | 22 | $0.06176 |
+| short-summary | seeded | REJECTED | b (a tsc error) | finish | 25 | $0.07439 |
+
+Totals:
+- Nano: seeded 0 REPRODUCED, 1 NOT_REPRODUCED, 3 REJECTED (n = 4); control 0 / 2 / 2 (n = 4).
+  $0.16729, not counting the FAILED attempt.
+- Super: seeded 3 REPRODUCED, 0 NOT_REPRODUCED, 1 REJECTED (n = 4); control 1 / 2 / 1 (n = 4).
+  $0.48482.
+
+**Oracle check, round 2** (each REPRODUCED seeded test, the task's `fix.patch`, run alone):
+- Super chat-recent: **true reproduction**;
+- Super search-description: **true reproduction** (both of its cases pass with the fix);
+- Super session-expiry: **true reproduction**;
+- false reproductions: 0.
+
+**Controls that came out REPRODUCED in round 2: 1 of 8** (Super short-summary control). Its test
+fails on an assertion at the unseeded base, the same way twice, and breaks no other test. The
+stage's checks cannot tell whether that test asserts more than the claim states, or whether it
+found real behaviour. Per the rules, this repo records only the state; nothing about Recall's
+behaviour.
+
+**Round 1 → round 2, one prompt change, one run per cell** (not a comparison anyone should draw
+conclusions from):
+- REPRODUCED on seeded claims: Nano 1 → 0, Super 1 → 3;
+- REJECTED for a tsc error: 3 (round 1) → 2 (Nano search-description seeded, Super
+  short-summary seeded);
+- runs that ran the typecheck command: round 1 0 of 16; round 2 Nano 3 of 8, Super 8 of 8 (the FAILED attempt not counted);
+- controls that came out REPRODUCED: 0 → 1.
+
+Ledger $2.40769 → **$2.96335**, so round 2 cost $0.55566 in all, including the void and FAILED
+runs. Spent against this prompt's $3.00: **$1.37198**. Phase 3 stops here, as written: no
+further change to `repro-v1.md`.
