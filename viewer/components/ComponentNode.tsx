@@ -22,7 +22,7 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
       data-panel-hover={data.panelHover || undefined}
       data-change={data.change ? "touched" : data.change === null ? "untouched" : undefined}
       className={[
-        "group relative flex flex-col rounded-xl border bg-card px-3.5 py-3 transition-[opacity,box-shadow,border-color,background-color] duration-200",
+        "group relative flex flex-col rounded-xl border bg-card px-[22px] pb-3 pt-4 transition-[opacity,box-shadow,border-color,background-color] duration-200",
         data.impact?.role === "changed"
           ? "border-2 border-solid border-impact-changed"
           : data.impact?.role === "affected"
@@ -41,27 +41,34 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
       <Handle type="target" position={Position.Left} />
       {data.impact && <ImpactChip role={data.impact} />}
       {data.change && <ChangeChip diff={data.change} />}
-      <div className="flex items-center gap-2.5">
-        <ComponentIcon kind={component.kind} tech={data.tech} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[13.5px] font-semibold leading-tight text-text" title={component.name}>
-            {component.name}
+      {/* Railway's header: the icon on the padding line, centred on the title line; title, kind
+          line and description share one left edge, one gap to the right of the icon */}
+      <div className="flex min-h-0 flex-1 gap-[11px] overflow-hidden">
+        <div className="flex h-[22px] shrink-0 items-center">
+          <ComponentIcon kind={component.kind} tech={data.tech} size="node" />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex h-[22px] items-center gap-2">
+            <div className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-text" title={component.name}>
+              {component.name}
+            </div>
+            {warnings.length > 0 && (
+              <span className="text-warn" title={warnings.map((w) => w.message).join("\n")} aria-label={`${warnings.length} warning(s)`}>
+                <TriangleAlert className="size-4" />
+              </span>
+            )}
           </div>
           <div className="truncate text-[10.5px] text-faint">
             <span className="uppercase tracking-wider">{data.changeSetOnly ? "change set only" : label}</span> · {component.counts.files} files
             {component.counts.routes > 0 && <> · {component.counts.routes} routes</>}
           </div>
+          <p className="mt-1.5 line-clamp-2 text-[11.5px] leading-snug text-muted" title={component.summary ?? component.subtitle}>
+            {component.summary ?? component.subtitle}
+          </p>
         </div>
-        {warnings.length > 0 && (
-          <span className="text-warn" title={warnings.map((w) => w.message).join("\n")} aria-label={`${warnings.length} warning(s)`}>
-            <TriangleAlert className="size-4" />
-          </span>
-        )}
       </div>
-      <p className="mt-2 line-clamp-2 text-[11.5px] leading-snug text-muted" title={component.summary ?? component.subtitle}>
-        {component.summary ?? component.subtitle}
-      </p>
-      <div className="mt-auto flex min-w-0 justify-end pt-1.5">
+      {/* right-aligned, so it may use the full card width (the model-written label wraps) */}
+      <div className="flex min-w-0 shrink-0 justify-end pt-1">
         <NameSourceBadge naming={component.naming} />
       </div>
       <Handle type="source" position={Position.Right} />

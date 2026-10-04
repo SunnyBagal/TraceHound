@@ -67,3 +67,36 @@ describe("GraphCanvas with the demo snapshot", () => {
     expect(screen.getAllByTestId("model-written")).toHaveLength(llm.length); // edges/labels carry none
   });
 });
+
+describe("canvas controls and node icons (Railway style)", () => {
+  it("zoom in, zoom out, fit view and reset layout sit bottom left, icon only, each named with a tooltip", async () => {
+    const view = within(renderCanvas().container); // this file renders without cleanup
+    await view.findAllByTestId("component-node", {}, { timeout: 5000 });
+    const panel = view.getByTestId("canvas-controls");
+    expect(panel.classList.contains("bottom")).toBe(true);
+    expect(panel.classList.contains("left")).toBe(true);
+    const buttons = within(panel).getAllByRole("button");
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual(["Zoom in", "Zoom out", "Fit view", "Reset layout"]);
+    for (const b of buttons) {
+      expect(b.textContent).toBe(""); // no text labels
+      expect(b.getAttribute("title")).toBeTruthy();
+    }
+    expect(view.queryByText("Fit view")).toBeNull(); // the old top-right text buttons are gone
+    expect(view.queryByText("Reset layout")).toBeNull();
+  });
+
+  it("node icons sit on the card without a tile; the Redis broker shows the Redis R", async () => {
+    const nodes = await within(renderCanvas().container).findAllByTestId("component-node", {}, { timeout: 5000 });
+    for (const n of nodes) {
+      const icon = within(n).getByTestId("component-icon");
+      expect(icon.className, n.dataset.componentId).not.toMatch(/\b(border|bg-panel)\b/);
+    }
+    // the demo's Redis node is kind "queue" (Redis lists), so it is a broker
+    const redis = within(nodes.find((n) => n.dataset.componentId === "redis:redis-url")!).getByTestId("component-icon");
+    expect(redis.dataset.use).toBe("broker");
+    expect(redis.querySelector("[data-logo]")?.getAttribute("data-logo")).toBe("redis-r.svg");
+    // the database keeps its brand logo, a plain component its kind icon
+    const db = within(nodes.find((n) => n.dataset.componentId === "db:backend")!).getByTestId("component-icon");
+    expect(db.querySelector("[data-logo]")?.getAttribute("data-logo")).toBe("postgresql.svg");
+  });
+});

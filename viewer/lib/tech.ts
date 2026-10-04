@@ -29,6 +29,39 @@ export interface TechFact {
   line?: number; // absent when the fact has no line (package.json scripts)
   /** what the fact is, in words */
   detail: string;
+  /** a Redis node only: what the snapshot says it is used for (picks its logo) */
+  use?: RedisUse;
+}
+
+/**
+ * What a Redis node is used for, from snapshot fields only (never its name or summary):
+ * "broker" when the analyzer gave it kind "queue" (list, pub/sub or stream ops on its
+ * connection) or a BullMQ queue's connection resolves to it; "store" otherwise (kind "cache",
+ * Redis key-value). A broker shows the Redis "R", a store the stacked-cube logo.
+ */
+export interface RedisUse {
+  kind: "store" | "broker";
+  /** the snapshot field(s) that decided it, in words */
+  reason: string;
+}
+
+export function redisUse(snapshot: Snapshot, component: Component): RedisUse | undefined {
+  if (component.resource?.tech !== "redis") return undefined;
+  const conn = component.resource.connection;
+  if (component.kind === "queue") return { kind: "broker", reason: `kind "queue": list, pub/sub or stream operations on ${conn}` };
+  // queueOps.connection is only set when the queue's connection resolves to a known Redis client
+  const queues = [...new Set(snapshot.files.flatMap((f) => f.queueOps ?? []).filter((o) => o.role !== "unsupported" && o.connection === conn).map((o) => o.queue?.value ?? o.queue?.raw ?? "?"))].sort();
+  if (queues.length) return { kind: "broker", reason: `BullMQ ${queues.length > 1 ? "queues" : "queue"} ${queues.join(", ")} on ${conn}` };
+  return { kind: "store", reason: `kind "${component.kind}": key-value use of ${conn}` };
+}
+
+/**
+ * The logo for a fact: the Redis "R" for a broker, the technology's own logo otherwise. `tint`
+ * marks a single-colour icon (Simple Icons ships paths without colour): it is drawn as a mask
+ * filled with that colour, so the vendored file stays unmodified.
+ */
+export function techLogo(fact: TechFact): { icon: string; tint?: string } {
+  return fact.use?.kind === "broker" ? { icon: "redis-r.svg", tint: "var(--logo-redis)" } : { icon: TECH_META[fact.tech].icon };
 }
 
 /** The fact behind the node/panel header icon: the first one that isn't a mere "uses". */
@@ -71,7 +104,7 @@ export function techFacts(snapshot: Snapshot, component: Component): TechFact[] 
     const conn = component.resource.connection;
     const client = snapshot.files.flatMap((f) => f.clients).find((c) => c.tech === "redis" && c.connection === conn);
     const clientAt = client && at(client.evidenceId);
-    if (clientAt) facts.push({ tech: "redis", role: "is", ...clientAt, detail: `Redis client ${client.variable} on ${conn}` });
+    if (clientAt) facts.push({ tech: "redis", role: "is", ...clientAt, detail: `Redis client ${client.variable} on ${conn}`, use: redisUse(snapshot, component) });
   }
 
   // Express: a route of this component, registered in a file that imports a value from "express".
