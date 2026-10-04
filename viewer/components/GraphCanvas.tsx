@@ -9,7 +9,7 @@ import {
   useReactFlow,
   type NodeMouseHandler,
 } from "@xyflow/react";
-import { Maximize, RotateCcw } from "lucide-react";
+import { Maximize, Minus, Plus, RotateCcw, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeModel } from "@/lib/changes";
 import { buildGraph, neighbours, NODE_HEIGHT, NODE_WIDTH, type ComponentNode as ComponentNodeType, type EvidenceEdge as EvidenceEdgeType } from "@/lib/graph";
@@ -69,7 +69,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [layoutRun, setLayoutRun] = useState(0);
   const [fitted, setFitted] = useState(0); // bumps when a layout's fitView lands
-  const { fitView, setCenter, getViewport, setViewport } = useReactFlow();
+  const { fitView, setCenter, getViewport, setViewport, zoomIn, zoomOut } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
   const minZoom = useMinZoom();
   const fit = fitOptions(minZoom);
@@ -233,29 +233,43 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
         colorMode="dark"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.4} color="var(--canvas-dot)" />
-        <Panel position="top-right" className="flex flex-col gap-2 transition-[right] duration-300 sm:flex-row" style={{ right: occludeRight }}>
-          <button
-            type="button"
-            onClick={() => fitView(occludeRight ? { ...fit, padding: { top: 0.12, bottom: 0.12, left: 0.06, right: `${occludeRight + MARGIN}px` } } : fit)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel/90 px-2.5 py-1.5 text-xs text-muted backdrop-blur hover:border-line-strong hover:text-text"
-            title="Fit every component in view (beside the inspector when it is open)"
-          >
-            <Maximize className="size-3.5" aria-hidden /> <span className="hidden sm:inline">Fit view</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              clearPositions(storageKey);
-              setLayoutRun((n) => n + 1);
-            }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel/90 px-2.5 py-1.5 text-xs text-muted backdrop-blur hover:border-line-strong hover:text-text"
-            title="Discard saved positions and re-run the ELK layout"
-          >
-            <RotateCcw className="size-3.5" aria-hidden /> <span className="hidden sm:inline">Reset layout</span>
-          </button>
+        {/* Railway-style controls: bottom left, stacked, icon only; the name is the aria-label */}
+        <Panel position="bottom-left" className="flex flex-col gap-2" style={{ margin: 12, marginBottom: "calc(12px + env(safe-area-inset-bottom))" }} data-testid="canvas-controls">
+          <div className={CONTROL_GROUP}>
+            <ControlButton label="Zoom in" title="Zoom in" icon={Plus} onClick={() => void zoomIn({ duration: 200 })} />
+            <ControlButton label="Zoom out" title="Zoom out" icon={Minus} onClick={() => void zoomOut({ duration: 200 })} />
+            <ControlButton
+              label="Fit view"
+              title="Fit every component in view (beside the inspector when it is open)"
+              icon={Maximize}
+              onClick={() => fitView(occludeRight ? { ...fit, padding: { top: 0.12, bottom: 0.12, left: 0.06, right: `${occludeRight + MARGIN}px` } } : fit)}
+            />
+          </div>
+          <div className={CONTROL_GROUP}>
+            <ControlButton
+              label="Reset layout"
+              title="Discard saved positions and re-run the ELK layout"
+              icon={RotateCcw}
+              onClick={() => {
+                clearPositions(storageKey);
+                setLayoutRun((n) => n + 1);
+              }}
+            />
+          </div>
         </Panel>
       </ReactFlow>
       {nodes.length === 0 && <div className="absolute inset-0 grid place-items-center text-sm text-faint">Laying out {base.nodes.length} components…</div>}
     </div>
+  );
+}
+
+const CONTROL_GROUP = "flex flex-col overflow-hidden rounded-lg border border-line bg-panel/90 shadow-lg backdrop-blur";
+
+/** One canvas control: icon only, with an accessible name and a tooltip. */
+function ControlButton({ label, title, icon: Icon, onClick }: { label: string; title: string; icon: LucideIcon; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-label={label} title={title} className="grid size-8 place-items-center text-muted hover:bg-card hover:text-text focus-visible:bg-card focus-visible:text-text">
+      <Icon className="size-4" aria-hidden />
+    </button>
   );
 }
