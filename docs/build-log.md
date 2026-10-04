@@ -1170,3 +1170,43 @@ conclusions from):
 Ledger $2.40769 → **$2.96335**, so round 2 cost $0.55566 in all, including the void and FAILED
 runs. Spent against this prompt's $3.00: **$1.37198**. Phase 3 stops here, as written: no
 further change to `repro-v1.md`.
+
+**Gate, Phase 3** (in the worktree; GIT_* env check printed nothing; nothing else ran):
+- version guard: exit 0;
+- `TRACEHOUND_NETWORK_TESTS=1 pnpm test`: exit 0; analyzer 370 passed and 1 file skipped
+  (33 files, 813 s); viewer 88 passed;
+- `pnpm typecheck`: exit 0;
+- viewer build: exit 0.
+
+The skipped file is `demo-repo.test.ts`, which skips itself when the gitignored
+`fixtures/demo-repo` is absent, and the new worktree didn't have it. `fixtures/` was then
+symlinked from the main checkout and that file run alone: 13 passed. So 370 + 13 = 383, Phase 2's
+count. Commit `83af568`, pushed. CI on PR #10: test-and-build pass (11 m 1 s), Vercel pass.
+
+## Phase 4: reproduced finding → repair task
+
+Rules block re-read at the start. The 3 true reproductions of the final batch (round 2) are all
+Super's: chat-recent, search-description and session-expiry, seeded (at most 4 are allowed).
+Each became a task with `reproduce.ts to-task`:
+- written to `runs/tasks-from-repro/<claim>-from-repro/` (`runs/` is gitignored; nothing went to
+  `eval/tasks/`);
+- issue = the claim text; repro = the agent's test at its own path; the seed copied in;
+  kind `dev`;
+- all three load with the repair harness's `loadTask`.
+
+The frozen repair agent then ran once on each, one at a time, with the ledger checked before
+each: agent-v6, prompt `agent-v5.md`, Nano, reasoning on, graph off, the task's limits.
+
+| Emitted task | State | End | Steps | Tokens | Cost | Fault file first read | Agent's repro after its patch |
+|---|---|---|---|---|---|---|---|
+| chat-recent (seeded) | UNRESOLVED | budget: steps 40 | 40 | 276,066 | $0.01910 | step 8 | passes (exit 0) |
+| search-description (seeded) | UNRESOLVED | budget: tokens 300,000 | 29 | 314,046 | $0.02949 | step 9 | still fails (exit 1); no base file changed |
+| session-expiry (seeded) | **RESOLVED** | finish | 33 | 176,874 | $0.01213 | step 12 | passes; 62 of 62 baseline tests still pass |
+
+- In every run, the agent-written test failed at the seeded base (`repro.atBase` exit 1), and
+  the baseline had 62 of 62 tests passing.
+- In the chat-recent run, the agent's patch made the agent-written test pass, but the run ended
+  on the step budget. By decision 026, the repair harness counts a run that ends on a budget as
+  UNRESOLVED whatever the tests say. That is a loss, recorded as one.
+
+Ledger $2.96335 → **$3.02408** (+$0.06072). Spent against this prompt's $3.00: **$1.43271**.
