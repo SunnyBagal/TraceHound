@@ -128,4 +128,36 @@ describe("inspector history in the viewer", () => {
     expect(crumbs()).toEqual([`${source} → ${target}`]);
     expect(screen.queryByTestId("panel-back")).toBeNull();
   });
+
+  it("the inspector carries what left the card: description, routes, name source and model labels beside model text", () => {
+    for (const c of snapshot.components) {
+      const { unmount } = renderAt(`?component=${encodeURIComponent(c.id)}`);
+      const panel = inspector();
+      expect(panel.getByRole("heading", { level: 2 }).textContent, c.id).toBe(c.name);
+      // the name: the full label right under it when model-written, else its source
+      if (c.naming.source === "llm") expect(panel.getByTestId("model-written").textContent, c.id).toBe("Model-written (Nemotron Nano), prose not verified");
+      else expect(panel.getByTitle(/Name source/).textContent, c.id).toBe(c.naming.source);
+      expect(panel.getByTestId("name-source").textContent, c.id).toMatch(c.naming.source === "llm" ? /^Name written by the model/ : c.naming.source === "override" ? /tracehound\.json override/ : /^Heuristic name/);
+      // the description: the model summary with its label beside it, and the fact-based subtitle
+      if (c.summary) {
+        const summary = within(panel.getByTestId("summary"));
+        expect(summary.getByText(c.summary)).toBeTruthy();
+        expect(summary.getByTestId("summary-model-written").textContent, c.id).toBe("Model-written (Nemotron Nano), prose not verified");
+      } else expect(panel.queryByTestId("summary"), c.id).toBeNull();
+      expect(panel.getByTestId("from-facts").textContent, c.id).toBe(`From facts: ${c.subtitle}`);
+      expect(Boolean(panel.queryByTestId("summary-dropped")), c.id).toBe(Boolean(c.naming.summaryDropped));
+      // every route, not just the count on the card
+      for (const r of c.routes) expect(panel.getAllByText(r.path).length, `${c.id} ${r.path}`).toBeGreaterThan(0);
+      unmount();
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("the edge inspector still states the edge's status and its file:line evidence", () => {
+    renderAt(`?edge=${encodeURIComponent(authEdge.id)}`);
+    expect(inspector().getAllByText(authEdge.confidenceLabel).length).toBeGreaterThan(0);
+    fireEvent.click(inspector().getByRole("tab", { name: /Evidence/ }));
+    const ev = snapshot.evidence.find((e) => e.id === authEdge.evidenceIds[0])!;
+    expect(inspector().getAllByRole("link").some((a) => a.textContent?.startsWith(`${ev.file}:${ev.range.startLine}`))).toBe(true);
+  });
 });

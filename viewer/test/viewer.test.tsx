@@ -3,7 +3,8 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { GraphCanvas } from "@/components/GraphCanvas";
 import { permalink } from "@/lib/github";
-import { EDGE_STYLES } from "@/lib/graph";
+import { EDGE_STYLES, NODE_HEIGHT } from "@/lib/graph";
+import { KIND_META } from "@/lib/kinds";
 import { repoSnapshot } from "./repo-snapshot";
 
 // The committed CEX demo snapshot, asked for by repo id (not the index's top-level `latest`).
@@ -45,26 +46,47 @@ describe("GraphCanvas with the demo snapshot", () => {
     expect(dashFor("resolved-default")).toEqual(new Set([EDGE_STYLES["resolved-default"].dash])); // dashed
     expect(dashFor("dynamic")).toEqual(new Set([EDGE_STYLES.dynamic.dash])); // dotted
 
+    // the label is the relation and the count only; the confidence is the line style (above),
+    // the legend and the edge inspector (navigation.test.tsx)
     const labels = screen.getAllByTestId("edge-label").map((l) => l.textContent ?? "");
-    for (const label of ["proven", "resolved-default", "dynamic"]) {
-      expect(labels.some((t) => t.includes(label))).toBe(true);
+    expect(labels.sort()).toEqual(snapshot.edges.map((e) => `${e.kind}${e.weight > 1 ? ` ×${e.weight}` : ""}`).sort());
+    for (const t of labels) expect(t).not.toMatch(/proven|resolved-default|dynamic/);
+  });
+
+  it("cards show the icon, the name and the kind line only; a model-written name gets one sparkle mark", async () => {
+    const view = within(renderCanvas().container);
+    const nodes = await view.findAllByTestId("component-node", {}, { timeout: 5000 });
+    for (const c of snapshot.components) {
+      const card = nodes.find((n) => n.dataset.componentId === c.id)!;
+      const kind = `${KIND_META[c.kind].label} · ${c.counts.files} files${c.counts.routes > 0 ? ` · ${c.counts.routes} routes` : ""}`;
+      expect(card.textContent, c.id).toBe(`${c.name}${kind}`);
+      expect(card.style.height).toBe(`${NODE_HEIGHT}px`); // every card the same height
+      const mark = within(card).queryByTestId("model-name-mark");
+      if (c.naming.source === "llm") expect(mark?.getAttribute("title"), c.id).toBe(`Name is model-written (Nemotron Nano), prose not verified; heuristic name: ${c.naming.heuristicName}`);
+      else expect(mark, c.id).toBeNull();
+      expect(within(card).queryByTestId("model-written")).toBeNull(); // no label box, no override pill
+      expect(within(card).queryByTitle(/Name source/)).toBeNull();
     }
   });
 
-  it('labels every model-written name/summary "Model-written (Nemotron Nano), prose not verified", and nothing else', async () => {
-    renderCanvas();
-    const nodes = await screen.findAllByTestId("component-node", {}, { timeout: 5000 });
-    const node = (id: string) => nodes.find((n) => n.dataset.componentId === id)!;
-    const llm = snapshot.components.filter((c) => c.naming.source === "llm");
-    expect(llm.length).toBeGreaterThan(0);
-    for (const c of llm) {
-      expect(within(node(c.id)).getByTestId("model-written").textContent).toBe("Model-written (Nemotron Nano), prose not verified");
+  it("no model-written prose anywhere on the canvas (both published repos)", async () => {
+    for (const s of [snapshot, repoSnapshot("recall")]) {
+      const { container, unmount } = render(
+        <div style={{ width: 1200, height: 800 }}>
+          <ReactFlowProvider>
+            <GraphCanvas snapshot={s} selection={null} onSelect={() => {}} />
+          </ReactFlowProvider>
+        </div>,
+      );
+      await within(container).findAllByTestId("component-node", {}, { timeout: 5000 });
+      await waitFor(() => expect(within(container).getAllByTestId("edge-label")).toHaveLength(s.edges.length), { timeout: 5000 });
+      const text = container.textContent ?? "";
+      const summaries = s.components.flatMap((c) => (c.summary ? [c.summary] : []));
+      expect(summaries.length, s.repo.name).toBeGreaterThan(0);
+      for (const summary of summaries) expect(text, s.repo.name).not.toContain(summary);
+      expect(text).not.toMatch(/Model-written|prose not verified/);
+      unmount();
     }
-    for (const c of snapshot.components.filter((c) => c.naming.source !== "llm")) {
-      expect(within(node(c.id)).queryByTestId("model-written")).toBeNull();
-      expect(within(node(c.id)).getByTitle(/Name source/).textContent).toBe(c.naming.source);
-    }
-    expect(screen.getAllByTestId("model-written")).toHaveLength(llm.length); // edges/labels carry none
   });
 });
 
