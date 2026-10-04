@@ -1210,3 +1210,28 @@ each: agent-v6, prompt `agent-v5.md`, Nano, reasoning on, graph off, the task's 
   UNRESOLVED whatever the tests say. That is a loss, recorded as one.
 
 Ledger $2.96335 → **$3.02408** (+$0.06072). Spent against this prompt's $3.00: **$1.43271**.
+
+**Gate, Phase 4** (GIT_* env check printed nothing; nothing else ran):
+- version guard: exit 0;
+- `TRACEHOUND_NETWORK_TESTS=1 pnpm test`: exit 0; analyzer 383 passed (33 files, 904 s), viewer
+  88 passed;
+- `pnpm typecheck`: exit 0;
+- viewer build: exit 0.
+
+Commit `ae775de`, pushed. CI on PR #10: success.
+
+## Phase 5: PR
+
+Rules block re-read at the start.
+- **Contradiction 3 settled by the owner:** `docs/eval/protocol.md` decides which models the
+  evaluation runs, and `docs/freeze.md` decides code, prompt and settings. One line saying so was
+  added at the top of `docs/freeze.md`. No retag: `eval-freeze-2` stays where it is.
+- CLAUDE.md: the Super line now follows that ruling. Also added: the protocol pointer, a
+  reproduce-stage entry, and the spend figure.
+- PR #10 (opened as a draft in Phase 2 so that CI would run) marked ready for review. Not merged.
+
+**Not done or not changed, on purpose:**
+- the frozen code, prompt and runner;
+- `eval/tasks/`;
+- held-out tasks (none created, read or looked for);
+- Recall (nothing changed or pushed).

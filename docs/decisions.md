@@ -2275,3 +2275,11 @@ seeded short-summary claim, with that task's own `repro.test.ts` as the agent's 
   behaviour is frozen, so the prompt explains both messages instead.
 - (f) Running the batch in one process: one client, one per-process cap and one failure domain for
   every run, which decision 046 rejected for the runner too.
+**Dev results** (2026-10-04; one run per cell; build log, reproduce stage, Phases 3–4):
+- after the one prompt change, Super reproduced 3 of 4 seeded claims, all 3 true by the oracle
+  check, and 1 of 4 controls; Nano reproduced 0 of 4;
+- round 1, before the change: 1 seeded claim per model, both true;
+- the 3 true reproductions became repair tasks, and the frozen repair agent on Nano resolved 1 of
+  3.
+
+These are dev claims, so prompt work was allowed on them. They are not evaluation results.
