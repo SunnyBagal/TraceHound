@@ -122,15 +122,9 @@ function EvidenceEdgeView({ id, source, target, data, selected }: EdgeProps<Evid
             </span>
           )}
           {edge.kind}
-          {data.extra ? (
-            <span className="text-faint"> · no snapshot evidence</span>
-          ) : (
-            <>
-              {" · "}
-              <span className={active ? "text-accent" : "text-text/80"}>{style.text}</span>
-              {edge.weight > 1 && <span className="text-faint"> ×{edge.weight}</span>}
-            </>
-          )}
+          {/* relation and count only: the line style and the legend carry the confidence, and the
+              edge inspector states it with its evidence */}
+          {data.extra ? <span className="text-faint"> · no snapshot evidence</span> : edge.weight > 1 && <span className="text-faint"> ×{edge.weight}</span>}
           {decl && (
             <span className="ml-1" data-testid="decl-edge-delta">
               {decl.added > 0 && <span className="text-diff-added">+{decl.added}</span>}
