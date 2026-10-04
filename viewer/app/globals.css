@@ -29,6 +29,9 @@
   --edge-active: var(--accent);
   /* inspector-row hover/focus on the canvas: distinct from the amber selection */
   --highlight: #c4b5fd;
+  /* the wolf mark: silver, 14.6:1 on the canvas and 13.8:1 on the panels; a neutral, so it never
+     reads as the amber selection, the yellow warnings or any diff/impact colour */
+  --logo: #dde3ee;
   --impact-changed: var(--accent);
   --impact-affected: #7cc4ff;
   /* change view (decision 040): standard diff convention, always paired with a word or +/- sign */
