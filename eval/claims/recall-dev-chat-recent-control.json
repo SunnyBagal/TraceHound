@@ -1,0 +1,10 @@
+{
+  "id": "recall-dev-chat-recent-control",
+  "profile": "../../configs/recall.profile.json",
+  "source": {
+    "gitUrl": "https://github.com/SunnyBagal/Recall.git"
+  },
+  "baseSha": "57d920e4c93b9185c8dbe7350d98633c4732c78e",
+  "title": "Ask AI falls back to the oldest saves instead of the newest",
+  "claim": "When Ask AI cannot find saved items that match my question (this always happens on our server, which runs without an OpenAI key), it falls back to some of my saves, but it cites the oldest things I ever saved instead of the latest ones. With many saved items, my last few saves never show up as sources. It should fall back to my five most recent saves, newest first."
+}

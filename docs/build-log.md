@@ -960,3 +960,131 @@ the 15 unit tests in `test/reproduce.test.ts`. Recall, scripted, before any mode
 One Docker test expectation was wrong at first: the edit-to-an-existing-file case's reason names
 both problems ("modified existing file(s): tests/cart.test.ts; added 0 files, not exactly one").
 The code was right; the expected string was corrected.
+
+**Gate** (GIT_* env check printed nothing; nothing else ran):
+- version guard: exit 0;
+- `TRACEHOUND_NETWORK_TESTS=1 pnpm test`: exit 0; analyzer 383 passed (33 files, 871 s), viewer
+  88 passed;
+- `pnpm typecheck`: exit 0;
+- viewer build: exit 0.
+
+Commit `76307cd`, pushed. **CI runs on pull requests only** (`ci.yml`: `push` to `main`,
+`pull_request`), so the one PR was opened as a draft now, **PR #10**, so that CI runs after each
+phase. It stays the only PR and is not merged. CI on `76307cd`: test-and-build pass (9 m 8 s),
+Vercel pass. Spend: $0.
+
+## Phase 3: measure on the dev seeds
+
+Rules block re-read at the start. `eval/claims/`: 8 claims, `recall-dev-<task>-{seeded,control}`.
+Each claim's text is its task's `issue`, verbatim; the title is a short paraphrase, the same for
+both cases. The seeded claims point at `../tasks/recall-dev-<task>/seed.patch`, read only. The
+controls have no seed. Profile `configs/recall.profile.json`. Batches run one at a time, with
+`--max-ledger-usd 4.59137` (the start ledger plus $3.00).
+
+**Void batch: round 1 on Nano, first attempt (listed, not used).** The Mac's lid was closed at
+04:49 IST, on battery. From then on, the machine went into Maintenance Sleep for about 15 minutes
+at a time and woke only for seconds (`pmset -g log`). The batch ran through it:
+- 5 of 8 runs FAILED: two model requests aborted on timeout; three setup commands passed their
+  300 s timeout (bun timed one install at 919 s while the harness measured 227 s, and a
+  `tsc --version` ran 900 s);
+- the other 3 ran into budgets (NOT_REPRODUCED ×2, REJECTED a ×1).
+
+The sleep was the machine's, not the stage's, so the whole batch is void. It was re-run once,
+under `caffeinate -dimsu`, with the lid open. Records are kept in
+`runs/repro-r1-nano-VOID-sleep/`. Spend in the void batch: **$0.07928** (ledger $1.59137 →
+$1.67065). It counts against the $3.00.
+
+### Round 1 (`repro-v1.md` sha256 `0e4d2ef8…`, as committed in `76307cd`)
+
+Mac on AC power, lid open, `caffeinate -dimsu`; Nano, then Super (`--cost-limit-usd 0.6`); one
+run at a time. Per claim, Nano:
+
+| Claim | Case | State | Failed check | End | Steps | Cost |
+|---|---|---|---|---|---|---|
+| chat-recent | control | NOT_REPRODUCED (no file) | — | budget: tokens | 38 | $0.02275 |
+| chat-recent | seeded | NOT_REPRODUCED (no file) | — | budget: tokens | 35 | $0.02119 |
+| search-description | control | NOT_REPRODUCED (test passes) | — | budget: tokens | 40 | $0.02344 |
+| search-description | seeded | REJECTED | b (a tsc error the base doesn't have) | finish | 27 | $0.01749 |
+| session-expiry | control | NOT_REPRODUCED (test passes) | — | finish | 23 | $0.01392 |
+| session-expiry | seeded | **REPRODUCED** | — | finish | 33 | $0.01853 |
+| short-summary | control | REJECTED | b (a case failed with TypeError) | budget: tokens | 31 | $0.02269 |
+| short-summary | seeded | REJECTED | a (file at `test/…`, outside `recall-backend/`) | budget: tokens | 29 | $0.02182 |
+
+Super:
+
+| Claim | Case | State | Failed check | End | Steps | Cost |
+|---|---|---|---|---|---|---|
+| chat-recent | control | REJECTED | b (a tsc error the base doesn't have) | finish | 29 | $0.07524 |
+| chat-recent | seeded | NOT_REPRODUCED (no file) | — | budget: tokens | 37 | $0.09853 |
+| search-description | control | NOT_REPRODUCED (test passes) | — | finish | 17 | $0.03423 |
+| search-description | seeded | NOT_REPRODUCED (test passes) | — | finish | 18 | $0.03403 |
+| session-expiry | control | NOT_REPRODUCED (test passes) | — | finish | 19 | $0.04414 |
+| session-expiry | seeded | **REPRODUCED** | — | finish | 13 | $0.01992 |
+| short-summary | control | NOT_REPRODUCED (test passes) | — | budget: tokens | 27 | $0.09755 |
+| short-summary | seeded | REJECTED | b (a tsc error the base doesn't have) | finish | 21 | $0.05893 |
+
+Totals:
+- Nano: seeded 1 REPRODUCED, 1 NOT_REPRODUCED, 2 REJECTED (n = 4); control 0 REPRODUCED,
+  3 NOT_REPRODUCED, 1 REJECTED (n = 4). $0.16184.
+- Super: seeded 1 / 2 / 1 (n = 4); control 0 / 3 / 1 (n = 4). $0.46256.
+- No FAILED and no NOT_RUN runs.
+
+**Oracle check** (each REPRODUCED seeded test, the task's `fix.patch`, run alone):
+- Nano session-expiry: **true reproduction**;
+- Super session-expiry: **true reproduction**;
+- false reproductions: 0.
+
+**Controls that came out REPRODUCED: 0 of 8.** Ledger $1.67065 → $2.29505.
+
+**What round 1 showed** (from the traces, all 16 runs):
+- **0 of 16 runs ran the typecheck command**, and 3 runs were REJECTED at check b for a tsc
+  error in a file that otherwise failed on an assertion. Those three are Nano search-description
+  seeded, Super chat-recent control and Super short-summary seeded.
+- Nano wrote its file late (first write at turn 16–36), and in 2 runs never wrote one; 5 of its 8
+  runs ended on the token budget.
+- The step-15 nudge fired in 15 of 16 runs, and no run edited an existing file after it.
+
+### The one change to `repro-v1.md`
+
+Chosen because it is the one loss mechanism that recurs in both models, and the check that
+decides it is deterministic. Step 5 is new, and the old step 5 is now step 6. Nothing else
+changed. sha256 `0e4d2ef8…` → `f70e63c2…`.
+
+Before:
+```
+   - It passes: the claim does not reproduce. That is a valid and wanted outcome. Do not change the test to make it fail. Stop.
+5. Call finish with one line: whether your test failed or passed, and on which assertion.
+```
+After:
+```
+   - It passes: the claim does not reproduce. That is a valid and wanted outcome. Do not change the test to make it fail. Stop.
+5. Before you finish, run the typecheck command above. It also reports errors in other files that were there before you started: ignore those, and fix every error it reports in your test file (use only matchers and types that exist), then run your file again. A type error in your file counts as no reproduction, even when the test fails on an assertion.
+6. Call finish with one line: whether your test failed or passed, and on which assertion.
+```
+
+### Round 2 (`repro-v1.md` sha256 `f70e63c2…`): interrupted by a restart, WIP
+
+Started with the Mac on AC power, lid open, `caffeinate -dimsu`; Nano first, then Super. **The
+batch was stopped part-way so the owner could restart the machine.** The batch and run processes
+were killed and the remaining sandbox containers removed. No Super run had started.
+
+Complete (6 of 16), Nano:
+
+| Claim | Case | State | Failed check | End | Steps | Cost |
+|---|---|---|---|---|---|---|
+| chat-recent | control | NOT_REPRODUCED (no file) | — | stopped: stuck | 20 | $0.00657 |
+| chat-recent | seeded | NOT_REPRODUCED (no file) | — | stopped: stuck | 35 | $0.01840 |
+| search-description | control | NOT_REPRODUCED (test passes) | — | budget: tokens | 30 | $0.02656 |
+| search-description | seeded | REJECTED | b (a tsc error the base doesn't have) | budget: tokens | 29 | $0.02236 |
+| session-expiry | control | REJECTED | b (the file did not load) | budget: tokens | 34 | $0.02257 |
+| session-expiry | seeded | FAILED | — | error: a model request aborted on timeout (machine awake, on AC; checked with `pmset`) | 12 | $0.00414 |
+
+- **Void:** Nano short-summary control was in flight when the batch was stopped. Its process was
+  killed while it waited on a model request, so it has no record, and it is void.
+- **Not started:** Nano short-summary seeded, and all 8 Super runs.
+- To finish round 2, after the restart: re-run the 2 Nano claims not done (short-summary control
+  and seeded), then all 8 on Super. Re-run session-expiry seeded once (FAILED, infrastructure)
+  and list both attempts.
+
+Ledger $2.29505 → **$2.40769** (+$0.11264 in round 2, including the void run's calls). Spent
+against this prompt's $3.00: $0.81632.

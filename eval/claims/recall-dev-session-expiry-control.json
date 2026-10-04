@@ -1,0 +1,10 @@
+{
+  "id": "recall-dev-session-expiry-control",
+  "profile": "../../configs/recall.profile.json",
+  "source": {
+    "gitUrl": "https://github.com/SunnyBagal/Recall.git"
+  },
+  "baseSha": "57d920e4c93b9185c8dbe7350d98633c4732c78e",
+  "title": "Sessions never expire",
+  "claim": "Signing in is supposed to keep me logged in for 24 hours, but sessions never expire: a token from a sign-in several days ago still loads my saved content. An expired session should be rejected so that I have to sign in again."
+}

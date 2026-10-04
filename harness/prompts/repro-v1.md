@@ -18,7 +18,8 @@ How to work:
    - It fails because of the test itself (it does not load, an import or syntax error, a wrong helper, a TypeError, a timeout): fix your test file with edit_file and run it again.
    - It fails on an assertion about the claimed behaviour: the claim reproduces. Stop.
    - It passes: the claim does not reproduce. That is a valid and wanted outcome. Do not change the test to make it fail. Stop.
-5. Call finish with one line: whether your test failed or passed, and on which assertion.
+5. Before you finish, run the typecheck command above. It also reports errors in other files that were there before you started: ignore those, and fix every error it reports in your test file (use only matchers and types that exist), then run your file again. A type error in your file counts as no reproduction, even when the test fails on an assertion.
+6. Call finish with one line: whether your test failed or passed, and on which assertion.
 
 Rules:
 - Add exactly one new file, a test file. Do not change, rename or delete any existing file, and add no other file to the repository. Scratch code goes in /scratch (outside the repository; write it with write_file and run it with `bun run /scratch/<file>.ts`).
