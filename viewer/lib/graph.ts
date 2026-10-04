@@ -5,9 +5,9 @@ import { techFacts, type TechFact } from "./tech";
 import type { Component, ComponentEdge, Resolution, Snapshot, Warning } from "./types";
 
 export const NODE_WIDTH = 272;
-export const NODE_HEIGHT = 140;
+export const NODE_HEIGHT = 72; // every card: icon, name, kind line
 
-/** Stroke style per confidence label. The label is always also rendered as text. */
+/** Stroke style per confidence label. The legend and the edge inspector name it in words; canvas labels don't. */
 export const EDGE_STYLES: Record<Resolution, { dash?: string; text: string; meaning: string }> = {
   proven: { dash: undefined, text: "proven", meaning: "literal or compiler-resolved" },
   "resolved-default": { dash: "7 5", text: "resolved-default", meaning: "value from an env ?? fallback" },
