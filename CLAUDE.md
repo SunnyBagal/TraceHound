@@ -122,7 +122,22 @@ on a canvas. Later: a graph-guided repair agent.
   `docs/freeze.md`, tag `eval-freeze-2`** (analyzer 0.10.0, agent-v6, prompt sha256 `556861d4…`,
   image `tracehound-sandbox:bun1.4.2-ts5.9.3-2`, Nano, reasoning on, temperature 0, per-test gate
   on Recall; per-run cost limit Nano $0.10, Super $0.60). `eval-freeze` (agent-v5) is superseded
-  and kept. Build log: `docs/build-log.md`.
+  and kept. Build log: `docs/build-log.md`. **Evaluation protocol: `docs/eval/protocol.md`**
+  (written before any held-out task exists here); it decides which models run, freeze.md decides
+  code, prompt and settings.
+- **Reproduce stage (decision 048, `repro-v1`):** `node packages/analyzer/src/harness/reproduce.ts
+  run --claim <json> | batch --claims <dir> [--model] [--cost-limit-usd] [--max-ledger-usd] |
+  oracle-check --record --patch | to-task --record`. A claim (`eval/claims/`: profile, source,
+  baseSha, title, claim text, optional evidence and seed) → the frozen loop with
+  `harness/prompts/repro-v1.md` writes one test → a check in a fresh sandbox, independent of the
+  agent: (a) exactly one new test file and nothing else, (b) it loads and fails on an
+  `AssertionError` (bun's JUnit `<failure type>`) with no new tsc error, (c) the same cases fail
+  twice, (d) decision 043's per-test rule with the file in the suite. States REPRODUCED /
+  NOT_REPRODUCED / REJECTED (check a–d) / FAILED (infrastructure, incl. model request errors).
+  Records in `runs/`; the test text stays there and docs get states and counts. Dev results
+  (2026-10-04, one run per cell, after one prompt change): Super reproduced 3 of 4 seeded claims
+  (all true by oracle check) and 1 of 4 controls; Nano 0 of 4. `to-task` turns a REPRODUCED
+  record into a repair task under `runs/`; the frozen repair agent on Nano resolved 1 of 3.
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**
@@ -142,7 +157,7 @@ on a canvas. Later: a graph-guided repair agent.
 - **Naming:** Nano with reasoning off (`chat_template_kwargs.enable_thinking=false`, decision
   020) plus deterministic checks (021). Nano beat Super on cost and tied on checks, so Nano
   stays the default. Naming spend was about $0.043; all-time spend is in `pnpm spend`
-  ($1.591 on 2026-10-04, mostly repair-agent runs). A wrong name is fixed with a
+  ($3.024 on 2026-10-04, mostly repair-agent and reproduce-stage runs). A wrong name is fixed with a
   `tracehound.json` name override (never labelled model-written); a wrong summary is dropped with
   `summary: false`, never replaced by hand. Audited by hand on 2026-10-01: Recall 5 of 7
   summaries wrong (3 names), CEX 2 of 7 summaries wrong (0 names); fixes are in
@@ -175,7 +190,7 @@ All model calls go through `src/llm/client.ts`: response cache → budget reserv
 `TRACEHOUND_BUDGET_RUN_USD`=1, total cap `TRACEHOUND_BUDGET_TOTAL_USD`=45) → request → ledger
 (`.tracehound/spend.jsonl`, `pnpm spend`). Nano is the default; Super/Ultra only via explicit
 `--model`. Super (`nvidia/nemotron-3-super-120b-a12b`) was probed on the dev tasks with
-`--cost-limit-usd 0.6` (agent-v6 amendment 1, $0.39 for 8 runs); it is not the evaluation's model. Tests must never hit the network or need
+`--cost-limit-usd 0.6` (agent-v6 amendment 1, $0.39 for 8 runs). The evaluation runs Nano and Super: `docs/eval/protocol.md` decides the models, `docs/freeze.md` the code, prompt and settings (owner's ruling, 2026-10-04). Tests must never hit the network or need
 `NEBIUS_API_KEY` (`test/setup.ts` enforces this). Keep `config/prices.json` placeholders until
 real catalog prices are filled in. Unresolved facts (e.g. an import of a generated file that isn't in the
 repo) are recorded as facts but never produce edges.

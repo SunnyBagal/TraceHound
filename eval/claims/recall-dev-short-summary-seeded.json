@@ -1,0 +1,13 @@
+{
+  "id": "recall-dev-short-summary-seeded",
+  "profile": "../../configs/recall.profile.json",
+  "source": {
+    "gitUrl": "https://github.com/SunnyBagal/Recall.git"
+  },
+  "baseSha": "57d920e4c93b9185c8dbe7350d98633c4732c78e",
+  "title": "Short saved pages get no summary or tags",
+  "claim": "When I save a short page, for example a link whose preview is just a title and a one-line description, it shows up in my list as processed (\"done\") but it never gets a summary or any tags. Longer articles I save get both. Short pages should be summarized and tagged too.",
+  "seed": {
+    "patch": "../tasks/recall-dev-short-summary/seed.patch"
+  }
+}

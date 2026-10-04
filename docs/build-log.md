@@ -823,3 +823,415 @@ what `01dc0f8` committed), `scratchpad/wt3` uncommitted drafts of Phase 3 plus `
 symlinks, `scratchpad/wtfreeze` (the `eval-freeze` control) only `node_modules` symlinks.
 `git branch -d wip/agent-v6-phase2` refused because that branch is checked out in `scratchpad/wt`.
 All four are left as they are.
+
+# Build log: reproduce stage
+
+Prompt: `docs/prompts/reproduce-stage.md` (verbatim, commit `ff069c1`). Branch `build/reproduce` off
+`origin/main` at `ba07667` (PR #9 merged). Decision 048. Ledger at the start: **$1.59137**; the
+prompt's cap is $3.00 of new spend, so the ledger must stay at or below **$4.59137**.
+
+## Step 0: contradictions with the prompt
+
+Read: CLAUDE.md, decisions 041, 043, 045–047, `docs/freeze.md`, `src/harness/{run,task,loop,evaluate}.ts`
+(and `agents.ts`, `tools.ts`, `profile.ts`, `junit.ts`, `cli.ts`, `run-metrics.ts`, `vitest.config.ts`,
+`test/test-config.test.ts`, which they depend on). None of the items below blocks a phase.
+
+1. **The loop has two repair-only messages.** The prompt says to use "the existing loop and tools"
+   and freezes the repair agent's behaviour. But the loop sends two repair-specific messages:
+   - At step 15 with no base file changed: "no file has been changed. If you have found the bug,
+     fix it now with edit_file."
+   - On the first `finish` with no base file changed: "not finished: no file that existed at the
+     start has been modified or deleted …".
+
+   A correct reproduce agent changes no existing file, so it gets both. **Resolution:** the loop is
+   unchanged. `repro-v1.md` tells the agent that these two messages are generic. It should not edit
+   an existing file in response, and it should call `finish` a second time to confirm.
+2. **Check 5d, "the decision 043 gate, unchanged", rejects every reproduction if applied
+   literally.** The 043 gate has two halves:
+   - per test: every test that passed at baseline must still pass;
+   - per command: a suite that exited 0 at baseline must still exit 0.
+
+   A reproducing test fails on purpose, so with it in the suite, the suite exits 1, and the second
+   half fails every REPRODUCED candidate. **Resolution:** the per-test half runs unchanged (the
+   same `compareRegression`). A suite exit 0 → non-zero is accepted only when every failing test in
+   the report is in the new file, which is the failure check 5b already required. Anything else is
+   still rejected: a baseline test that fails, is skipped or goes missing, or a failure outside the
+   new file.
+3. **Super as an evaluation model.** The Protocol block says "Models: Nano and Super … Both are
+   always reported together". `docs/freeze.md` and CLAUDE.md say Super is "not the evaluation's
+   model". Phase 1 writes the protocol verbatim, as asked. `docs/freeze.md` is **not** edited:
+   by its own rule, a change to a frozen item means a new freeze and a new tag, and this prompt
+   doesn't ask for one. The two documents disagree until the owner re-freezes or amends one of
+   them. The protocol's canary and void re-runs are also not features of the frozen runner, so they
+   are a manual procedure around it.
+4. **What "a type error" means.** bun runs TypeScript without typechecking. **Resolution:** a
+   test case that fails with anything other than an `AssertionError` (`TypeError`, `Error`,
+   `TimeoutError`, `UnreachableError`, …) disqualifies the file. So does a tsc error that the base
+   doesn't have: the decision 041 baseline-matched typecheck gate, run with the file added. Recall's
+   `tsconfig.json` has no `include`, so tsc checks test files there.
+5. **"The repo's test-file pattern".** Profiles have no pattern; tasks have `testFilePattern`,
+   which defaults to bun's discovery pattern. **Resolution:** bun's discovery pattern
+   (`BUN_TEST_FILE_PATTERN`), and the file must also be inside the profile's `workdir`, where the
+   suite runs. A claim may override the pattern.
+6. **The claim format needs more fields than listed.** A claim needs a repo and a commit to run
+   at, but a profile has neither. **Resolution:** claims also carry `source` and `baseSha`, as tasks
+   do.
+7. **Limits for reproduce runs.** Claims carry no limits. **Resolution:** the dev tasks' limits
+   (40 steps, 300,000 tokens, 900 s, 300 s per command), with the freeze's per-model cost limits:
+   Nano $0.10 and Super $0.60 per run. Each run reserves its cost limit against the prompt's $3.00
+   before it starts, so late Super runs can be NOT_RUN even though the ledger is below the cap.
+8. **Phase 4, "the frozen repair agent once on Nano", names no arm.** **Resolution:** graph off,
+   the `tracehound repair` default; the emitted task carries no snapshot.
+9. **FAILED versus agent errors.** In repair runs, a model request error is recorded as
+   `agentRun.error` and the run is still verified. The prompt makes model request timeouts FAILED
+   for reproduce runs. **Resolution:** in a reproduce run, any agent error that is not a budget or
+   stuck stop is FAILED.
+10. **The prompt-file parameter already exists.** `LoopOptions.promptFile` predates this prompt,
+    so no new parameter is added. A test still pins that a default repair run's first message is
+    byte-identical to `main`'s.
+
+**Graph tool calls, read only, from `docs/eval/agent-v6-dev-2026-10-04/`:** **0 in every run.**
+
+| Batch | Runs | Graph tool calls per run | Total |
+|---|---|---|---|
+| Nano: 4 tasks × 2 arms × 2 repeats | 16 (8 graph-on) | 0 in all 16 | 0 |
+| Super probe: 4 tasks × 2 arms × 1 | 8 (4 graph-on) | 0 in all 8 | 0 |
+
+Every run in both batches read a fault file (Nano 16 of 16, Super 8 of 8). That agrees with the
+Protocol block's stated expectation.
+
+**How bun's report separates the cases** (bun 1.4.2 in the sandbox image, network off, one probe
+file per case, checked before writing Phase 2):
+
+| Case | Exit | JUnit report |
+|---|---|---|
+| `expect(…).toBe/toEqual` fails, also `.resolves` | 1 | `<testcase>` with `<failure type="AssertionError">` |
+| `node:assert` fails | 1 | `<failure type="AssertionError">` |
+| runtime `TypeError` / thrown `Error` / `expect.unreachable` | 1 | `<failure type="TypeError">` / `"Error"` / `"UnreachableError"` |
+| bun per-test timeout | 1 | `<failure type="TimeoutError" message="test timed out">` |
+| import of a missing module, syntax error, top-level throw | 1 | **no report file written** ("Unhandled error between tests") |
+| file with zero `test(…)` calls | 0 | no report file written |
+| error thrown between tests | 1 | attributed to the next test as `<failure type="Error">` |
+
+So an assertion failure is a `<testcase>` whose `<failure>` has `type="AssertionError"`. A load
+error writes no `<testcase>` for the file. **The report does separate the two; Phase 2 is not
+blocked.**
+
+## Phase 1: evaluation protocol (docs only)
+
+Rules block re-read at the start. `docs/eval/protocol.md` written with exactly the Protocol
+block's text. Commit `4b9fe61`.
+
+**Gate** (GIT_* env check printed nothing; nothing else ran; the Phase 2 drafts were kept out of
+the tree during the gate):
+- version guard: exit 0;
+- `TRACEHOUND_NETWORK_TESTS=1 pnpm test`: exit 0; analyzer 360 passed (31 files, 827 s), viewer
+  88 passed (11 files);
+- `pnpm typecheck`: exit 0;
+- viewer build: exit 0.
+
+Pushed (`build/reproduce`). Spend: $0.
+
+## Phase 2 (decision 048): the reproduce stage
+
+Rules block re-read at the start. Paths touched: `src/harness/reproduce.ts` (new),
+`harness/prompts/repro-v1.md` (new), `test/reproduce.test.ts` and `test/harness-reproduce.test.ts`
+(new), the Docker test-file list in `vitest.config.ts` (one line added), `docs/`. No frozen file
+was changed: `loop.ts`, `run.ts`, `junit.ts`, `evaluate.ts`, `agent-v5.md` and `eval/tasks/` are
+untouched. No existing test was modified. The pin for a repair run's first request messages
+(`bc57c40b…`) was computed from the tree at `4b9fe61` before any reproduce-stage file was in it.
+
+**How an assertion failure is told apart from a load error:** from bun's JUnit report (step 0
+table):
+- an assertion failure is a `<testcase>` with `<failure type="AssertionError">`;
+- a file that fails to load (import, syntax, top-level error) writes no report when run alone;
+- zero tests also writes none, but exits 0;
+- a runtime error or timeout is a `<failure>` with another `type`.
+
+The prompt's STOP condition does not apply.
+
+**Scripted test results** (no model): the 8 Docker cases in decision 048's table all pass, as do
+the 15 unit tests in `test/reproduce.test.ts`. Recall, scripted, before any model run:
+- seeded claim + the task's repro → REPRODUCED;
+- control → NOT_REPRODUCED;
+- oracle-check → true reproduction;
+- emitted task + oracle → RESOLVED.
+
+One Docker test expectation was wrong at first: the edit-to-an-existing-file case's reason names
+both problems ("modified existing file(s): tests/cart.test.ts; added 0 files, not exactly one").
+The code was right; the expected string was corrected.
+
+**Gate** (GIT_* env check printed nothing; nothing else ran):
+- version guard: exit 0;
+- `TRACEHOUND_NETWORK_TESTS=1 pnpm test`: exit 0; analyzer 383 passed (33 files, 871 s), viewer
+  88 passed;
+- `pnpm typecheck`: exit 0;
+- viewer build: exit 0.
+
+Commit `76307cd`, pushed. **CI runs on pull requests only** (`ci.yml`: `push` to `main`,
+`pull_request`), so the one PR was opened as a draft now, **PR #10**, so that CI runs after each
+phase. It stays the only PR and is not merged. CI on `76307cd`: test-and-build pass (9 m 8 s),
+Vercel pass. Spend: $0.
+
+## Phase 3: measure on the dev seeds
+
+Rules block re-read at the start. `eval/claims/`: 8 claims, `recall-dev-<task>-{seeded,control}`.
+Each claim's text is its task's `issue`, verbatim; the title is a short paraphrase, the same for
+both cases. The seeded claims point at `../tasks/recall-dev-<task>/seed.patch`, read only. The
+controls have no seed. Profile `configs/recall.profile.json`. Batches run one at a time, with
+`--max-ledger-usd 4.59137` (the start ledger plus $3.00).
+
+**Void batch: round 1 on Nano, first attempt (listed, not used).** The Mac's lid was closed at
+04:49 IST, on battery. From then on, the machine went into Maintenance Sleep for about 15 minutes
+at a time and woke only for seconds (`pmset -g log`). The batch ran through it:
+- 5 of 8 runs FAILED: two model requests aborted on timeout; three setup commands passed their
+  300 s timeout (bun timed one install at 919 s while the harness measured 227 s, and a
+  `tsc --version` ran 900 s);
+- the other 3 ran into budgets (NOT_REPRODUCED ×2, REJECTED a ×1).
+
+The sleep was the machine's, not the stage's, so the whole batch is void. It was re-run once,
+under `caffeinate -dimsu`, with the lid open. Records are kept in
+`runs/repro-r1-nano-VOID-sleep/`. Spend in the void batch: **$0.07928** (ledger $1.59137 →
+$1.67065). It counts against the $3.00.
+
+### Round 1 (`repro-v1.md` sha256 `0e4d2ef8…`, as committed in `76307cd`)
+
+Mac on AC power, lid open, `caffeinate -dimsu`; Nano, then Super (`--cost-limit-usd 0.6`); one
+run at a time. Per claim, Nano:
+
+| Claim | Case | State | Failed check | End | Steps | Cost |
+|---|---|---|---|---|---|---|
+| chat-recent | control | NOT_REPRODUCED (no file) | — | budget: tokens | 38 | $0.02275 |
+| chat-recent | seeded | NOT_REPRODUCED (no file) | — | budget: tokens | 35 | $0.02119 |
+| search-description | control | NOT_REPRODUCED (test passes) | — | budget: tokens | 40 | $0.02344 |
+| search-description | seeded | REJECTED | b (a tsc error the base doesn't have) | finish | 27 | $0.01749 |
+| session-expiry | control | NOT_REPRODUCED (test passes) | — | finish | 23 | $0.01392 |
+| session-expiry | seeded | **REPRODUCED** | — | finish | 33 | $0.01853 |
+| short-summary | control | REJECTED | b (a case failed with TypeError) | budget: tokens | 31 | $0.02269 |
+| short-summary | seeded | REJECTED | a (file at `test/…`, outside `recall-backend/`) | budget: tokens | 29 | $0.02182 |
+
+Super:
+
+| Claim | Case | State | Failed check | End | Steps | Cost |
+|---|---|---|---|---|---|---|
+| chat-recent | control | REJECTED | b (a tsc error the base doesn't have) | finish | 29 | $0.07524 |
+| chat-recent | seeded | NOT_REPRODUCED (no file) | — | budget: tokens | 37 | $0.09853 |
+| search-description | control | NOT_REPRODUCED (test passes) | — | finish | 17 | $0.03423 |
+| search-description | seeded | NOT_REPRODUCED (test passes) | — | finish | 18 | $0.03403 |
+| session-expiry | control | NOT_REPRODUCED (test passes) | — | finish | 19 | $0.04414 |
+| session-expiry | seeded | **REPRODUCED** | — | finish | 13 | $0.01992 |
+| short-summary | control | NOT_REPRODUCED (test passes) | — | budget: tokens | 27 | $0.09755 |
+| short-summary | seeded | REJECTED | b (a tsc error the base doesn't have) | finish | 21 | $0.05893 |
+
+Totals:
+- Nano: seeded 1 REPRODUCED, 1 NOT_REPRODUCED, 2 REJECTED (n = 4); control 0 REPRODUCED,
+  3 NOT_REPRODUCED, 1 REJECTED (n = 4). $0.16184.
+- Super: seeded 1 / 2 / 1 (n = 4); control 0 / 3 / 1 (n = 4). $0.46256.
+- No FAILED and no NOT_RUN runs.
+
+**Oracle check** (each REPRODUCED seeded test, the task's `fix.patch`, run alone):
+- Nano session-expiry: **true reproduction**;
+- Super session-expiry: **true reproduction**;
+- false reproductions: 0.
+
+**Controls that came out REPRODUCED: 0 of 8.** Ledger $1.67065 → $2.29505.
+
+**What round 1 showed** (from the traces, all 16 runs):
+- **0 of 16 runs ran the typecheck command**, and 3 runs were REJECTED at check b for a tsc
+  error in a file that otherwise failed on an assertion. Those three are Nano search-description
+  seeded, Super chat-recent control and Super short-summary seeded.
+- Nano wrote its file late (first write at turn 16–36), and in 2 runs never wrote one; 5 of its 8
+  runs ended on the token budget.
+- The step-15 nudge fired in 15 of 16 runs, and no run edited an existing file after it.
+
+### The one change to `repro-v1.md`
+
+Chosen because it is the one loss mechanism that recurs in both models, and the check that
+decides it is deterministic. Step 5 is new, and the old step 5 is now step 6. Nothing else
+changed. sha256 `0e4d2ef8…` → `f70e63c2…`.
+
+Before:
+```
+   - It passes: the claim does not reproduce. That is a valid and wanted outcome. Do not change the test to make it fail. Stop.
+5. Call finish with one line: whether your test failed or passed, and on which assertion.
+```
+After:
+```
+   - It passes: the claim does not reproduce. That is a valid and wanted outcome. Do not change the test to make it fail. Stop.
+5. Before you finish, run the typecheck command above. It also reports errors in other files that were there before you started: ignore those, and fix every error it reports in your test file (use only matchers and types that exist), then run your file again. A type error in your file counts as no reproduction, even when the test fails on an assertion.
+6. Call finish with one line: whether your test failed or passed, and on which assertion.
+```
+
+### Round 2 (`repro-v1.md` sha256 `f70e63c2…`): interrupted by a restart, WIP
+
+Started with the Mac on AC power, lid open, `caffeinate -dimsu`; Nano first, then Super. **The
+batch was stopped part-way so the owner could restart the machine.** The batch and run processes
+were killed and the remaining sandbox containers removed. No Super run had started.
+
+Complete (6 of 16), Nano:
+
+| Claim | Case | State | Failed check | End | Steps | Cost |
+|---|---|---|---|---|---|---|
+| chat-recent | control | NOT_REPRODUCED (no file) | — | stopped: stuck | 20 | $0.00657 |
+| chat-recent | seeded | NOT_REPRODUCED (no file) | — | stopped: stuck | 35 | $0.01840 |
+| search-description | control | NOT_REPRODUCED (test passes) | — | budget: tokens | 30 | $0.02656 |
+| search-description | seeded | REJECTED | b (a tsc error the base doesn't have) | budget: tokens | 29 | $0.02236 |
+| session-expiry | control | REJECTED | b (the file did not load) | budget: tokens | 34 | $0.02257 |
+| session-expiry | seeded | FAILED | — | error: a model request aborted on timeout (machine awake, on AC; checked with `pmset`) | 12 | $0.00414 |
+
+- **Void:** Nano short-summary control was in flight when the batch was stopped. Its process was
+  killed while it waited on a model request, so it has no record, and it is void.
+- **Not started:** Nano short-summary seeded, and all 8 Super runs.
+- To finish round 2, after the restart: re-run the 2 Nano claims not done (short-summary control
+  and seeded), then all 8 on Super. Re-run session-expiry seeded once (FAILED, infrastructure)
+  and list both attempts.
+
+Ledger $2.29505 → **$2.40769** (+$0.11264 in round 2, including the void run's calls). Spent
+against this prompt's $3.00: $0.81632.
+
+### Round 2, completed after the restart (same prompt, sha256 `f70e63c2…`)
+
+Resumed from `82ce226` on the owner's instruction:
+- `git worktree prune` was run once;
+- Docker Desktop was started (engine 29.8.0, the same image id `857f16d26f25`);
+- the Mac was on AC power with the lid open, and runs used `caffeinate -dimsu`.
+
+What ran:
+- On Nano: the 2 claims with no record (short-summary control and seeded), plus one re-run of
+  session-expiry seeded, which had FAILED on a model request timeout. The ledger was read
+  before each run.
+- On Super: all 8 claims.
+
+**A second interruption.** At 14:11 IST, during Super's first run, the main checkout was
+switched to `ui/canvas-polish`, then `ui/canvas-polish-2`, from outside this session (reflog).
+`eval/claims/` disappeared from the tree; the run in progress finished and wrote its record, but
+the batch then crashed reading the next claim file. No other Super run had started. On the
+owner's choice, the stage continued from a separate worktree, `../TraceHound-reproduce` on
+`build/reproduce`. Its `.env`, `.tracehound/` (the spend ledger) and `runs/` are symlinks to the
+main checkout's, so there is one ledger and one set of records. The 7 remaining Super claims ran
+there, one `run` per claim, with the ledger checked before each.
+
+Final round 2, per claim, Nano:
+
+| Claim | Case | State | Failed check | End | Steps | Cost |
+|---|---|---|---|---|---|---|
+| chat-recent | control | NOT_REPRODUCED (no file) | — | stopped: stuck | 20 | $0.00657 |
+| chat-recent | seeded | NOT_REPRODUCED (no file) | — | stopped: stuck | 35 | $0.01840 |
+| search-description | control | NOT_REPRODUCED (test passes) | — | budget: tokens | 30 | $0.02656 |
+| search-description | seeded | REJECTED | b (a tsc error) | budget: tokens | 29 | $0.02236 |
+| session-expiry | control | REJECTED | b (the file did not load) | budget: tokens | 34 | $0.02257 |
+| session-expiry | seeded | NOT_REPRODUCED (test passes) | — | budget: tokens | 34 | $0.02678 |
+| short-summary | control | REJECTED | b (a case failed with a query error, not an assertion) | budget: tokens | 32 | $0.02258 |
+| short-summary | seeded | REJECTED | b (a case failed with a TypeError) | budget: tokens | 32 | $0.02147 |
+
+The first attempt at session-expiry seeded was FAILED (a model request aborted on timeout, 12
+steps, $0.00414). The row above is its one re-run. The short-summary control run in flight at
+the restart is void and has no record.
+
+Super:
+
+| Claim | Case | State | Failed check | End | Steps | Cost |
+|---|---|---|---|---|---|---|
+| chat-recent | control | REJECTED | b (a case failed with a ReferenceError) | budget: tokens | 36 | $0.10356 |
+| chat-recent | seeded | **REPRODUCED** | — | finish | 29 | $0.08884 |
+| search-description | control | NOT_REPRODUCED (test passes) | — | finish | 21 | $0.04593 |
+| search-description | seeded | **REPRODUCED** | — | finish | 17 | $0.03189 |
+| session-expiry | control | NOT_REPRODUCED (test passes) | — | finish | 23 | $0.03920 |
+| session-expiry | seeded | **REPRODUCED** | — | finish | 20 | $0.03925 |
+| short-summary | control | **REPRODUCED (a control)** | — | finish | 22 | $0.06176 |
+| short-summary | seeded | REJECTED | b (a tsc error) | finish | 25 | $0.07439 |
+
+Totals:
+- Nano: seeded 0 REPRODUCED, 1 NOT_REPRODUCED, 3 REJECTED (n = 4); control 0 / 2 / 2 (n = 4).
+  $0.16729, not counting the FAILED attempt.
+- Super: seeded 3 REPRODUCED, 0 NOT_REPRODUCED, 1 REJECTED (n = 4); control 1 / 2 / 1 (n = 4).
+  $0.48482.
+
+**Oracle check, round 2** (each REPRODUCED seeded test, the task's `fix.patch`, run alone):
+- Super chat-recent: **true reproduction**;
+- Super search-description: **true reproduction** (both of its cases pass with the fix);
+- Super session-expiry: **true reproduction**;
+- false reproductions: 0.
+
+**Controls that came out REPRODUCED in round 2: 1 of 8** (Super short-summary control). Its test
+fails on an assertion at the unseeded base, the same way twice, and breaks no other test. The
+stage's checks cannot tell whether that test asserts more than the claim states, or whether it
+found real behaviour. Per the rules, this repo records only the state; nothing about Recall's
+behaviour.
+
+**Round 1 → round 2, one prompt change, one run per cell** (not a comparison anyone should draw
+conclusions from):
+- REPRODUCED on seeded claims: Nano 1 → 0, Super 1 → 3;
+- REJECTED for a tsc error: 3 (round 1) → 2 (Nano search-description seeded, Super
+  short-summary seeded);
+- runs that ran the typecheck command: round 1 0 of 16; round 2 Nano 3 of 8, Super 8 of 8 (the FAILED attempt not counted);
+- controls that came out REPRODUCED: 0 → 1.
+
+Ledger $2.40769 → **$2.96335**, so round 2 cost $0.55566 in all, including the void and FAILED
+runs. Spent against this prompt's $3.00: **$1.37198**. Phase 3 stops here, as written: no
+further change to `repro-v1.md`.
+
+**Gate, Phase 3** (in the worktree; GIT_* env check printed nothing; nothing else ran):
+- version guard: exit 0;
+- `TRACEHOUND_NETWORK_TESTS=1 pnpm test`: exit 0; analyzer 370 passed and 1 file skipped
+  (33 files, 813 s); viewer 88 passed;
+- `pnpm typecheck`: exit 0;
+- viewer build: exit 0.
+
+The skipped file is `demo-repo.test.ts`, which skips itself when the gitignored
+`fixtures/demo-repo` is absent, and the new worktree didn't have it. `fixtures/` was then
+symlinked from the main checkout and that file run alone: 13 passed. So 370 + 13 = 383, Phase 2's
+count. Commit `83af568`, pushed. CI on PR #10: test-and-build pass (11 m 1 s), Vercel pass.
+
+## Phase 4: reproduced finding → repair task
+
+Rules block re-read at the start. The 3 true reproductions of the final batch (round 2) are all
+Super's: chat-recent, search-description and session-expiry, seeded (at most 4 are allowed).
+Each became a task with `reproduce.ts to-task`:
+- written to `runs/tasks-from-repro/<claim>-from-repro/` (`runs/` is gitignored; nothing went to
+  `eval/tasks/`);
+- issue = the claim text; repro = the agent's test at its own path; the seed copied in;
+  kind `dev`;
+- all three load with the repair harness's `loadTask`.
+
+The frozen repair agent then ran once on each, one at a time, with the ledger checked before
+each: agent-v6, prompt `agent-v5.md`, Nano, reasoning on, graph off, the task's limits.
+
+| Emitted task | State | End | Steps | Tokens | Cost | Fault file first read | Agent's repro after its patch |
+|---|---|---|---|---|---|---|---|
+| chat-recent (seeded) | UNRESOLVED | budget: steps 40 | 40 | 276,066 | $0.01910 | step 8 | passes (exit 0) |
+| search-description (seeded) | UNRESOLVED | budget: tokens 300,000 | 29 | 314,046 | $0.02949 | step 9 | still fails (exit 1); no base file changed |
+| session-expiry (seeded) | **RESOLVED** | finish | 33 | 176,874 | $0.01213 | step 12 | passes; 62 of 62 baseline tests still pass |
+
+- In every run, the agent-written test failed at the seeded base (`repro.atBase` exit 1), and
+  the baseline had 62 of 62 tests passing.
+- In the chat-recent run, the agent's patch made the agent-written test pass, but the run ended
+  on the step budget. By decision 026, the repair harness counts a run that ends on a budget as
+  UNRESOLVED whatever the tests say. That is a loss, recorded as one.
+
+Ledger $2.96335 → **$3.02408** (+$0.06072). Spent against this prompt's $3.00: **$1.43271**.
+
+**Gate, Phase 4** (GIT_* env check printed nothing; nothing else ran):
+- version guard: exit 0;
+- `TRACEHOUND_NETWORK_TESTS=1 pnpm test`: exit 0; analyzer 383 passed (33 files, 904 s), viewer
+  88 passed;
+- `pnpm typecheck`: exit 0;
+- viewer build: exit 0.
+
+Commit `ae775de`, pushed. CI on PR #10: success.
+
+## Phase 5: PR
+
+Rules block re-read at the start.
+- **Contradiction 3 settled by the owner:** `docs/eval/protocol.md` decides which models the
+  evaluation runs, and `docs/freeze.md` decides code, prompt and settings. One line saying so was
+  added at the top of `docs/freeze.md`. No retag: `eval-freeze-2` stays where it is.
+- CLAUDE.md: the Super line now follows that ruling. Also added: the protocol pointer, a
+  reproduce-stage entry, and the spend figure.
+- PR #10 (opened as a draft in Phase 2 so that CI would run) marked ready for review. Not merged.
+
+**Not done or not changed, on purpose:**
+- the frozen code, prompt and runner;
+- `eval/tasks/`;
+- held-out tasks (none created, read or looked for);
+- Recall (nothing changed or pushed).
