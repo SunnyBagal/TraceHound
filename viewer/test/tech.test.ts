@@ -1,6 +1,6 @@
 import type { Snapshot } from "@tracehound/analyzer/schema";
 import { describe, expect, it } from "vitest";
-import { headerFact, techFacts, techTitle } from "@/lib/tech";
+import { headerFact, techFacts, techLogo, techTitle } from "@/lib/tech";
 import { repoSnapshot } from "./repo-snapshot";
 
 const snapshot = repoSnapshot("cex-v2-boilercode");
@@ -64,5 +64,35 @@ describe("header icon rule", () => {
     }
     expect(titles("engine:engine-worker")).toContain("Redis · engine/src/index.ts:26");
     expect(titles("redis-rpc-bridge")).toContain("Redis · backend/src/utils/engine-client.ts:13");
+  });
+});
+
+describe("Redis logo by role", () => {
+  const recall = repoSnapshot("recall");
+  const use = (id: string, s = snapshot) => headerFact(techFacts(s, s.components.find((c) => c.id === id)!))?.use;
+
+  it("CEX's Redis is a broker: kind queue (lists)", () => {
+    expect(use("redis:redis-url")).toEqual({ kind: "broker", reason: 'kind "queue": list, pub/sub or stream operations on REDIS_URL' });
+    expect(techLogo(headerFact(techFacts(snapshot, snapshot.components.find((c) => c.id === "redis:redis-url")!))!).icon).toBe("redis-r.svg");
+  });
+
+  it("Recall's Redis is a broker: kind cache, but a BullMQ queue's connection resolves to it", () => {
+    expect(recall.components.find((c) => c.id === "redis:redis-url")!.kind).toBe("cache");
+    expect(use("redis:redis-url", recall)).toEqual({ kind: "broker", reason: "BullMQ queue content-processing on REDIS_URL" });
+  });
+
+  it("a Redis node with kind cache and no queue on its connection is a data store: the stacked-cube logo", () => {
+    const store: Snapshot = {
+      ...recall,
+      files: recall.files.map((f) => ({ ...f, queueOps: f.queueOps?.map((o) => ({ ...o, connection: undefined })) })),
+    };
+    const fact = headerFact(techFacts(store, store.components.find((c) => c.id === "redis:redis-url")!))!;
+    expect(fact.use?.kind).toBe("store");
+    expect(techLogo(fact)).toEqual({ icon: "redis.svg" });
+  });
+
+  it("never reads the name or summary", () => {
+    const named: Snapshot = { ...recall, components: recall.components.map((c) => ({ ...c, name: "Redis cache", summary: "A key-value cache." })) };
+    expect(use("redis:redis-url", named)?.kind).toBe("broker");
   });
 });

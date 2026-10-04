@@ -1,18 +1,19 @@
 "use client";
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { TriangleAlert } from "lucide-react";
+import { Sparkles, TriangleAlert } from "lucide-react";
 import { rollupBadges, type ComponentDiff } from "@/lib/changes";
 import type { ImpactRole } from "@/lib/impact";
 import { memo } from "react";
 import { NODE_HEIGHT, NODE_WIDTH, type ComponentNode as ComponentNodeType } from "@/lib/graph";
 import { KIND_META } from "@/lib/kinds";
+import { modelWrittenLabel } from "@/lib/naming";
 import { ComponentIcon } from "./ComponentIcon";
-import { NameSourceBadge } from "./NameSourceBadge";
 
 function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
   const { component, warnings } = data;
   const { label } = KIND_META[component.kind];
+  const modelName = modelWrittenLabel(component.naming); // set only when naming.source is "llm"
   return (
     <div
       data-testid="component-node"
@@ -22,7 +23,7 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
       data-panel-hover={data.panelHover || undefined}
       data-change={data.change ? "touched" : data.change === null ? "untouched" : undefined}
       className={[
-        "group relative flex flex-col rounded-xl border bg-card px-3.5 py-3 transition-[opacity,box-shadow,border-color,background-color] duration-200",
+        "group relative flex flex-col justify-center rounded-xl border bg-card px-[22px] transition-[opacity,box-shadow,border-color,background-color] duration-200",
         data.impact?.role === "changed"
           ? "border-2 border-solid border-impact-changed"
           : data.impact?.role === "affected"
@@ -41,28 +42,34 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
       <Handle type="target" position={Position.Left} />
       {data.impact && <ImpactChip role={data.impact} />}
       {data.change && <ChangeChip diff={data.change} />}
-      <div className="flex items-center gap-2.5">
-        <ComponentIcon kind={component.kind} tech={data.tech} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[13.5px] font-semibold leading-tight text-text" title={component.name}>
-            {component.name}
+      {/* Railway's header: the icon on the padding line, centred on the title line; the title and
+          kind line share one left edge. The card shows only these: description, routes, name
+          source and any model-written prose are in the inspector. */}
+      <div className="flex min-h-0 gap-[11px]">
+        <div className="flex h-[22px] shrink-0 items-center">
+          <ComponentIcon kind={component.kind} tech={data.tech} size="node" />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex h-[22px] items-center gap-1.5">
+            <div className="min-w-0 truncate text-[13.5px] font-semibold text-text" title={component.name}>
+              {component.name}
+            </div>
+            {modelName && (
+              <span data-testid="model-name-mark" className="shrink-0 text-accent" title={`Name is ${modelName.charAt(0).toLowerCase()}${modelName.slice(1)}; heuristic name: ${component.naming.heuristicName}`} aria-label={`Name is model-written; heuristic name: ${component.naming.heuristicName}`} role="img">
+                <Sparkles className="size-3" aria-hidden />
+              </span>
+            )}
+            {warnings.length > 0 && (
+              <span className="ml-auto shrink-0 pl-1 text-warn" title={warnings.map((w) => w.message).join("\n")} aria-label={`${warnings.length} warning(s)`}>
+                <TriangleAlert className="size-4" />
+              </span>
+            )}
           </div>
           <div className="truncate text-[10.5px] text-faint">
             <span className="uppercase tracking-wider">{data.changeSetOnly ? "change set only" : label}</span> · {component.counts.files} files
             {component.counts.routes > 0 && <> · {component.counts.routes} routes</>}
           </div>
         </div>
-        {warnings.length > 0 && (
-          <span className="text-warn" title={warnings.map((w) => w.message).join("\n")} aria-label={`${warnings.length} warning(s)`}>
-            <TriangleAlert className="size-4" />
-          </span>
-        )}
-      </div>
-      <p className="mt-2 line-clamp-2 text-[11.5px] leading-snug text-muted" title={component.summary ?? component.subtitle}>
-        {component.summary ?? component.subtitle}
-      </p>
-      <div className="mt-auto flex min-w-0 justify-end pt-1.5">
-        <NameSourceBadge naming={component.naming} />
       </div>
       <Handle type="source" position={Position.Right} />
     </div>
