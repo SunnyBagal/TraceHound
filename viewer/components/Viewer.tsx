@@ -101,7 +101,7 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
 
   return (
     <ReactFlowProvider>
-      <div className="flex h-dvh overflow-hidden">
+      <div className="flex h-dvh overflow-hidden bg-panel">
         <Rail />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar snapshot={snapshot} repos={repos} repoId={repoId} changeSets={changeSets} changes={changes} />
@@ -113,28 +113,33 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
               <>
                 {impact && <ImpactPanel name={impactName ?? "impact"} impact={impact} snapshot={snapshot} onSelect={nav.open} />}
                 {changes && <ChangeWarningsPanel model={changes} activeId={activeWarning} onToggle={toggleWarning} onOpen={(id) => nav.open({ type: "node", id })} />}
-                <div className="relative min-w-0 flex-1 overflow-hidden">
-                  <GraphCanvas
-                    snapshot={snapshot}
-                    selection={selection}
-                    onSelect={nav.open}
-                    focusIds={focus.ids}
-                    focusNonce={focus.nonce}
-                    impact={impact}
-                    changes={changes}
-                    occludeRight={occludeRight}
-                    highlight={highlight.active ?? warningHighlight}
-                  />
-                  {!changes && (
-                    <WarningsControl
+                {/* Railway's boxed canvas: a rounded, bordered panel inset in the chrome, so the
+                    chrome's colour shows around it; nodes, edges and the canvas buttons are
+                    clipped by its corners. At 640px+ the rail's own width is the left gutter. */}
+                <div className={`min-w-0 flex-1 pb-1.5 pr-1.5 ${impact || changes ? "pl-1.5" : "pl-1.5 sm:pl-0"}`}>
+                  <div className="relative size-full overflow-hidden rounded-xl border border-line bg-bg" data-testid="canvas-panel">
+                    <GraphCanvas
                       snapshot={snapshot}
-                      right={occludeRight}
-                      onFocus={(id) => {
-                        nav.open({ type: "node", id });
-                        setFocus((f) => ({ ids: [id], nonce: f.nonce + 1 }));
-                      }}
+                      selection={selection}
+                      onSelect={nav.open}
+                      focusIds={focus.ids}
+                      focusNonce={focus.nonce}
+                      impact={impact}
+                      changes={changes}
+                      occludeRight={occludeRight}
+                      highlight={highlight.active ?? warningHighlight}
                     />
-                  )}
+                    {!changes && (
+                      <WarningsControl
+                        snapshot={snapshot}
+                        right={occludeRight}
+                        onFocus={(id) => {
+                          nav.open({ type: "node", id });
+                          setFocus((f) => ({ ids: [id], nonce: f.nonce + 1 }));
+                        }}
+                      />
+                    )}
+                  </div>
                 </div>
               </>
             )}
