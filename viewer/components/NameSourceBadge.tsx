@@ -19,7 +19,7 @@ export function NameSourceBadge({ naming }: { naming: Component["naming"] }) {
   }
   const label = naming.source === "override" ? "override" : "heuristic";
   return (
-    <span className="inline-flex items-center rounded-full border border-line-strong px-2 py-0.5 text-[10px] font-medium text-muted" title={`Name source: ${label}`}>
+    <span className="inline-flex items-center rounded-full border border-line-strong px-2 py-0.5 text-[10px] font-medium text-muted" title={`Name source: ${label}${naming.source === "override" ? " (tracehound.json)" : ""}`}>
       {label}
     </span>
   );

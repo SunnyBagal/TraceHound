@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, ChevronRight, ExternalLink, Spline, TriangleAlert, X } from "lucide-react";
+import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, ChevronRight, ExternalLink, Sparkles, Spline, TriangleAlert, X } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { componentEdgeChanges, declStatus, endpointLabel, evidenceLink, type ChangeModel } from "@/lib/changes";
 import { EDGE_STYLES, redisKeys } from "@/lib/graph";
@@ -8,6 +8,7 @@ import { permalink } from "@/lib/github";
 import { edgesWithEvidenceIn, noHighlight, type BindHighlight } from "@/lib/highlight";
 import { KIND_META } from "@/lib/kinds";
 import { current, type Entry, type PanelNavigation, type Tab } from "@/lib/navigation";
+import { modelWrittenLabel } from "@/lib/naming";
 import { TECH_META, techFacts, type TechFact } from "@/lib/tech";
 import type { Component, ComponentEdge, Snapshot } from "@/lib/types";
 import { ComponentChanges, EvidenceRef, StatusPill } from "./ChangeParts";
@@ -109,20 +110,50 @@ function StackList({ snapshot, facts }: { snapshot: Snapshot; facts: TechFact[] 
   );
 }
 
+/** The model-written label, placed directly beside the text it qualifies. */
+function ModelWrittenLabel({ text, testId, className = "" }: { text: string; testId: string; className?: string }) {
+  return (
+    <span data-testid={testId} className={`inline-flex items-center gap-1 rounded-lg border border-accent/40 bg-accent-soft px-2 py-0.5 text-[11px] font-medium leading-tight text-accent ${className}`}>
+      <Sparkles className="size-3 shrink-0" aria-hidden />
+      {text}
+    </span>
+  );
+}
+
 function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot; component: Component; facts: TechFact[] }) {
   const keys = redisKeys(snapshot, component);
+  const modelLabel = modelWrittenLabel(component.naming);
   const warnings = snapshot.warnings.filter((w) => w.componentId === component.id);
   return (
     <>
       <Section title="Summary">
-        {component.summary && <p className="text-[15px] leading-normal text-text">{component.summary}</p>}
-        <p className={`${component.summary ? "mt-2" : ""} text-[14px] leading-normal text-muted`}>
+        {component.summary && (
+          // a summary only ever comes from the naming model: its label sits right beside it
+          <div data-testid="summary">
+            <p className="text-[15px] leading-normal text-text">{component.summary}</p>
+            {modelLabel && <ModelWrittenLabel text={modelLabel} testId="summary-model-written" className="mt-1.5" />}
+          </div>
+        )}
+        <p className={`${component.summary ? "mt-3" : ""} text-[14px] leading-normal text-muted`} data-testid="from-facts">
           <span className="text-faint">From facts: </span>
           {component.subtitle}
         </p>
-        {component.naming.source === "llm" && (
-          <p className="mt-1 text-[13px] text-faint">
-            Heuristic name: <span className="text-muted">{component.naming.heuristicName}</span>
+        <p className="mt-2 text-[13px] leading-normal text-faint" data-testid="name-source">
+          {component.naming.source === "llm" ? (
+            <>
+              Name written by the model; heuristic name: <span className="text-muted">{component.naming.heuristicName}</span>
+            </>
+          ) : component.naming.source === "override" ? (
+            <>
+              Name set by a <span className="font-mono text-muted">tracehound.json</span> override; heuristic name: <span className="text-muted">{component.naming.heuristicName}</span>
+            </>
+          ) : (
+            "Heuristic name (from the code, no model)"
+          )}
+        </p>
+        {component.naming.summaryDropped && (
+          <p className="mt-1 text-[13px] leading-normal text-faint" data-testid="summary-dropped">
+            The model&apos;s summary was wrong and is not shown (<span className="font-mono">summary: false</span> in tracehound.json).
           </p>
         )}
       </Section>
