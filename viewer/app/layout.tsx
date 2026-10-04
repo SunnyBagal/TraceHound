@@ -1,12 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { WOLF_PATH, WOLF_VIEWBOX } from "@/components/Logo";
 
 export const metadata: Metadata = {
   title: "TraceHound",
   description: "Evidence-backed architecture graph: every edge points back to a file, line and extractor.",
   icons: {
+    // the wolf mark alone (no tile): navy on light tab bars, silver (--logo) on dark ones
     icon: "data:image/svg+xml," + encodeURIComponent(
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="5" fill="#0a0a0c"/><circle cx="5" cy="18" r="1.6" fill="#f5a524" opacity=".4"/><circle cx="9" cy="14.5" r="1.8" fill="#f5a524" opacity=".65"/><circle cx="12.5" cy="11.5" r="2" fill="#f5a524"/><rect x="14.5" y="3.5" width="6.5" height="6.5" rx="1.8" fill="none" stroke="#f5a524" stroke-width="1.8"/></svg>',
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${WOLF_VIEWBOX}"><style>path{fill:#0b1120}@media (prefers-color-scheme:dark){path{fill:#dde3ee}}</style><path fill-rule="evenodd" d="${WOLF_PATH}"/></svg>`,
     ),
   },
 };

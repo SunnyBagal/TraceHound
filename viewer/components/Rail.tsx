@@ -10,7 +10,7 @@ const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 export function Rail() {
   return (
     <nav aria-label="TraceHound" data-testid="rail" className="hidden h-full w-14 shrink-0 flex-col items-center justify-between border-r border-line bg-panel py-3 sm:flex">
-      <LogoLink className="size-10 hover:bg-card" />
+      <LogoLink className="size-10" />
       <a
         href="https://github.com/SunnyBagal"
         target="_blank"
