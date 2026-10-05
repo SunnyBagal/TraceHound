@@ -2283,3 +2283,37 @@ seeded short-summary claim, with that task's own `repro.test.ts` as the agent's 
   3.
 
 These are dev claims, so prompt work was allowed on them. They are not evaluation results.
+
+## 049 · Evaluation protocol, amendment 1: "verified at stop", run order, canary per pass
+**Context:** the frozen harness (`eval-freeze-2`, `b5cafde`) scores a run UNRESOLVED when the agent
+stops on a budget, even if its final patch passes every gate (`run.ts:739-742`); a dev repair run on
+2026-10-04 did exactly that. The protocol was also silent on run order, and its canary covered
+only a whole batch (prompt `docs/prompts/protocol-amendment-1.md`).
+**Choice:** Amendment 1, appended verbatim to `docs/eval/protocol.md` before any held-out run:
+- a second measure, "verified at stop", reported beside "resolved" for every arm and model;
+- five passes per batch, each running every task in both arms once;
+- the oracle canary before the first pass and after every pass, voiding the pass before a failed
+  one;
+- Nano and Super as separate batches on the same machine and image;
+- the stated limit on the cross-component tasks;
+- the recorded deviation (held-out candidates and the task list were shown to the chat assistant
+  after the tag).
+No frozen artifact changes: the harness's own verdict stays the primary measure, and "verified at
+stop" is computed from fields every run record already has (`repro.afterPatch`,
+`comparison.newFailures`).
+**Dev recount** (`docs/eval/dev-verified-at-stop.md`, from records only, $0): every one of the 40
+records has the data.
+
+| Set | on: resolved / verified at stop | off: resolved / verified at stop |
+|---|---|---|
+| agent-v5 Nano | 4 / 5 of 8 | 4 / 4 of 8 |
+| agent-v6 Nano | 3 / 3 of 8 | 4 / 4 of 8 |
+| agent-v6 Super | 3 / 3 of 4 | 2 / 2 of 4 |
+
+The one difference is an agent-v5 search-description graph-on run that ran out of tokens.
+**Rejected:**
+- (a) Changing the harness so that a budget stop with a passing patch counts as RESOLVED: that
+  changes a frozen artifact after the tag.
+- (b) Replacing "resolved" with the new measure: the protocol was written with "resolved" as the
+  measure, so both are reported.
+- (c) Re-running the dev tasks to measure it: the records already hold the gates' results.
