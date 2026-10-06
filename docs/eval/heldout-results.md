@@ -36,9 +36,26 @@ test, the per-test regression gate and the typecheck gate, whatever ended the ru
 | Super | graph-on | 40 | 28 | 30 | 18.8 | 172,042 | $0.0555 | 5.0 (n = 39; 1 never read it) | 0 |
 | Super | graph-off | 40 | 26 | 31 | 20.0 | 147,738 | $0.0478 | 5.2 (n = 40) | 0 |
 
-Total cost of the counted runs: Nano on $0.77990, Nano off $0.80995, Super on $2.21993, Super off
-$1.91384. The ledger recorded $6.26774 for the whole evaluation, void runs and failed requests
-included.
+Total cost of the 160 counted runs: $5.72362 (Nano on $0.77990, Nano off $0.80995, Super on
+$2.21993, Super off $1.91384). The $6.27 quoted elsewhere is the ledger total for the whole
+evaluation, $6.26774: the counted runs, plus $0.04732 for the 5 void originals, $0.47886 for the
+16 Super pass-4 runs and $0.01794 for the 6 failed requests.
+
+The 181 run records, by kind (added 2026-10-06, from the records):
+
+| Kind | Records | Reached baseline (62 of 62) |
+| --- | --- | --- |
+| Counted | 160 | 160 |
+| Void originals (in valid passes, re-run once) | 5 | 5 |
+| Super pass-4 runs (whole pass void, outage) | 16 | 12 |
+| Canaries | 0 | – |
+| Anything else | 0 | – |
+| Total | 181 | 177 |
+
+The 160 counted runs are 155 from the valid passes plus 5 re-runs (Nano 76 + 4, Super 79 + 1).
+The 16 canary runs (Nano 7, Super 9; oracle patch, no model) have their own records and are not
+among the 181. The 4 records that did not reach baseline are the Super pass-4 runs on tasks 07
+and 08 whose clone failed in the outage.
 
 By task group, resolved / verified at stop, n = 20 each:
 
@@ -90,8 +107,12 @@ End reasons, n = 40 each (finish / token budget / stuck / step budget):
 
 - **Repeats are independent.** The response cache was write-only: 0 cache hits in 4,128 model
   calls across all 181 run records. The ledger has 4,134 lines from the first to the last run:
-  4,128 successful calls, matching the records call for call, and 6 failed requests, the six
-  model request timeouts that made runs void.
+  4,128 successful calls, matching the records call for call, and 6 failed requests, all model
+  request timeouts. Five of them made the five void originals void (Nano pass 2: 01 off, 04 on;
+  Nano pass 3: 08 on, 08 off; Super pass 5: 06 on). The sixth ended the Super pass-4 run on task
+  06 graph-on, 13 s before the first pass-4 run whose clone failed started; that run is void with the rest of
+  pass 4 and was not re-run on its own. (Corrected 2026-10-06: this line used to say all six
+  timeouts made runs void, which counts pass 4 as if it were a void run.)
 - No baseline-anomaly flags. Every run that reached its baseline had 62 of 62 (177 records); the
   4 that did not are the Super pass-4 runs that failed on the network outage before starting.
 - Canaries (oracle patch on task 01, no model): Nano 7 of 7 RESOLVED; Super 8 of 9, the one
@@ -117,22 +138,40 @@ End reasons, n = 40 each (finish / token budget / stuck / step budget):
 - Super pass 4 was voided by a network outage and replaced.
 - The graph-on arm is in practice "context packet injected"; the tools were offered and never
   called.
-- The evaluation session's driver scripts (`drive.sh`, `passes.sh`, `rerun.sh`, `aggregate.mjs`,
-  `check.mjs`) were to be archived after the evaluation as a third tarball. On 2026-10-06 none of
-  them was found under `~/Projects/TraceHound-eval` or `~/Projects/tracehound-heldout`, so no
-  third tarball exists.
-- The evaluation prompt's text was not found (`TraceHound-eval/docs/prompts/` holds only the
-  frozen tag's prompts, and `TraceHound_Handoff_Oct5.md` is not in the briefs folder), so it is
-  not in `docs/prompts/`.
+- The evaluation session's driver scripts were not under `~/Projects/TraceHound-eval` or
+  `~/Projects/tracehound-heldout` when decision 050 was written. They were in the evaluation
+  session's scratchpad under `/private/tmp`; Sunny copied them on 2026-10-06, timestamps kept, to
+  `~/Projects/tracehound-heldout/drivers-2026-10-06/`. All five are there, packed unchanged as the
+  third tarball (below); none contains an API key. Modification times (IST):
+
+  | File | Bytes | Modified |
+  | --- | --- | --- |
+  | `drive.sh` | 1,939 | 2026-10-05 20:34:21 |
+  | `aggregate.mjs` | 13,159 | 2026-10-05 20:36:36 |
+  | `passes.sh` | 1,987 | 2026-10-06 00:02:17 |
+  | `rerun.sh` | 1,907 | 2026-10-06 03:45:35 |
+  | `check.mjs` | 4,094 | 2026-10-06 10:50:50 |
+
+  The first held-out run started 2026-10-05 20:35:15 IST and the last ended 2026-10-06 10:36:38
+  IST, so `drive.sh` predates the runs, `aggregate.mjs` was last changed a minute after they
+  began, and `check.mjs` after they ended (the other two tarballs are dated 10:51). The tables on
+  this page come from `recompute.mjs`, not from these scripts.
+- The evaluation prompt is now in `docs/prompts/heldout-eval-run.md`, copied verbatim from the
+  appendix of `TraceHound_Handoff_Oct5.md` (briefs folder), where it was saved because the frozen
+  worktree takes no commits. It was not found when decision 050 was written.
 
 ## Archive
 
-Two tarballs in `~/Projects/tracehound-heldout/archive/`, attached to a draft GitHub release:
+Three tarballs in `~/Projects/tracehound-heldout/archive/`, attached to a draft GitHub release:
 
 | File | sha256 |
 | --- | --- |
 | `heldout-eval-runs-2026-10-06.tar.gz` | `4baead155c971df31e4e4bf859936f00725e21294b41c67a365261a5905ac40d` |
 | `heldout-eval-results-2026-10-06.tar.gz` | `83458ec1ae4f586df79009080a70f10115fba4e8f07f9b0429b23f212c9ae4dd` |
+| `heldout-eval-drivers-2026-10-06.tar.gz` | `69798c38d9fb26e156baf6d034d9118eb063e28566f44c49042d4611cbc021e8` |
+
+The drivers tarball was added on 2026-10-06 after decision 050; it holds the folder
+`drivers-2026-10-06/` with the five scripts above.
 
 ## Files in `docs/eval/heldout/`
 

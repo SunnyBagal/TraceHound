@@ -2339,3 +2339,13 @@ archive tarballs keep their recorded sha256 and go on a draft release.
 - (b) Redacting the one row in `b2-super/results.json` and committing the edited copy: a copy of
   an archived result should be byte-identical or absent.
 - (c) Pooling with the dev runs for a larger n: the protocol forbids it.
+
+**Note, 2026-10-06 (follow-up, no new decision; prompt `docs/prompts/050b-followup.md`):**
+- "$6.27" above is the ledger total for the whole evaluation; the 160 counted runs cost $5.72362.
+- Of the six model request timeouts, five voided the five void originals; the sixth was a Super
+  pass-4 run, void with its pass. The results page had said all six made runs void.
+- The page now breaks the 181 records down by kind: 160 counted, 5 void originals, 16 Super
+  pass-4 runs (12 reached baseline, 4 did not), 0 canaries (their 16 records are separate).
+- Both "not done" items are now done: the evaluation prompt is `docs/prompts/heldout-eval-run.md`
+  (from the appendix of `TraceHound_Handoff_Oct5.md`), and the five driver scripts, found in the
+  evaluation session's `/private/tmp` scratchpad, are a third tarball on the draft release.

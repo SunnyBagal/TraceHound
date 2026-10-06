@@ -1259,3 +1259,26 @@ Prompt: `docs/prompts/050-results-import.md` (verbatim). Branch `docs/050-heldou
 - **Step 7:** decision 050, this entry, CLAUDE.md (049, 050), README rewritten to state the result.
 - **Step 8:** draft release `heldout-eval-2026-10-06` with the two tarballs; GitHub's asset digests
   match the sha256 above. Not published.
+
+# Build log: decision 050 follow-up
+
+Prompt: `docs/prompts/050b-followup.md` (verbatim). Branch `docs/050b-followup` off `origin/main`
+at `273d842` (PR #14 merged). Docs only; no model calls ($0). No new decision number.
+
+- **Step 0:** on main, clean, level with `origin/main`; PR #14's merge is `273d842`.
+- **Step 2:** done. The evaluation prompt was in the appendix of
+  `~/Projects/tracehound-ops/briefs/TraceHound_Handoff_Oct5.md`; the fenced block is copied
+  byte-for-byte to `docs/prompts/heldout-eval-run.md`.
+- **Step 3:** all five drivers present in `~/Projects/tracehound-heldout/drivers-2026-10-06/`
+  (sizes and times in `docs/eval/heldout-results.md`). Key scan, matches not printed: one hit for a
+  long-token pattern in `aggregate.mjs`, six lowercase words joined by slashes, not a key; no other
+  hits. Packed unchanged (no xattrs, mtimes kept, extract diffed identical) into
+  `archive/heldout-eval-drivers-2026-10-06.tar.gz`, sha256 `69798c38…21e8`.
+- **Step 4:** from the records: 181 = 160 counted + 5 void originals + 16 Super pass-4; 177 reached
+  baseline = 160 + 5 + 12. The six ledger failures map by timestamp to the five void originals and
+  the Super pass-4 run on 06 graph-on; the page's "six timeouts that made runs void" was corrected.
+  Costs: counted $5.72362 + void originals $0.04732 + pass 4 $0.47886 = record total $6.24980;
+  + failed requests $0.01794 = ledger $6.26774.
+- **Step 5:** README ("before anything is reported" replaced; no cost wording there), CLAUDE.md
+  (cost wording, top line, drivers/prompt status), a dated note under decision 050, this entry.
+- **Step 6:** drivers tarball added to the draft release `heldout-eval-2026-10-06`; still a draft.
