@@ -93,7 +93,7 @@ export function ChangeSummaryBar({ model }: { model: ChangeModel }) {
   }, [limits]);
 
   return (
-    <div ref={ref} className="relative shrink-0 border-b border-line bg-panel" data-testid="change-summary">
+    <div ref={ref} className="relative shrink-0 border-b border-line bg-page" data-testid="change-summary">
       <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-[13px] text-muted md:px-4">
         <span className="inline-flex min-w-0 items-center gap-1.5 text-text">
           <GitCompareArrows className="size-4 shrink-0 text-accent" aria-hidden />

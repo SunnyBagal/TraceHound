@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeModel, ChangeSetEntry } from "@/lib/changes";
 import { useHighlight, type Highlight } from "@/lib/highlight";
 import { impactParam, type ImpactReport } from "@/lib/impact";
+import { inspectorOcclusion } from "@/lib/inspector";
 import { current, usePanelNavigation } from "@/lib/navigation";
 import type { RepoInfo } from "@/lib/repos";
 import type { Snapshot } from "@/lib/types";
@@ -18,11 +19,11 @@ import { Rail } from "./Rail";
 import { TopBar } from "./TopBar";
 import { WarningsControl } from "./WarningsControl";
 
-/** Inspector overlay width on desktop; mirrors md:w-[clamp(420px,34vw,600px)] in Inspector. 0 on phones. */
+/** px of the canvas the floating inspector covers on desktop (lib/inspector.ts); 0 on phones. */
 function useOverlayWidth(): number {
   const [width, setWidth] = useState(0);
   useEffect(() => {
-    const measure = () => setWidth(window.innerWidth >= 768 ? Math.min(600, Math.max(420, window.innerWidth * 0.34)) : 0);
+    const measure = () => setWidth(inspectorOcclusion(window.innerWidth));
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
@@ -101,7 +102,7 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
 
   return (
     <ReactFlowProvider>
-      <div className="flex h-dvh overflow-hidden bg-panel">
+      <div className="flex h-dvh overflow-hidden bg-page">
         <Rail />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar snapshot={snapshot} repos={repos} repoId={repoId} changeSets={changeSets} changes={changes} />

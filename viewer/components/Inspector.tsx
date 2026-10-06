@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, ChevronRight, ExternalLink, Sparkles, Spline, TriangleAlert, X } from "lucide-react";
+import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, ChevronRight, ExternalLink, Spline, TriangleAlert, X } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { componentEdgeChanges, declStatus, endpointLabel, evidenceLink, type ChangeModel } from "@/lib/changes";
 import { EDGE_STYLES, redisKeys } from "@/lib/graph";
@@ -8,13 +8,14 @@ import { permalink } from "@/lib/github";
 import { edgesWithEvidenceIn, noHighlight, type BindHighlight } from "@/lib/highlight";
 import { KIND_META } from "@/lib/kinds";
 import { current, type Entry, type PanelNavigation, type Tab } from "@/lib/navigation";
-import { modelWrittenLabel } from "@/lib/naming";
+import { modelDisplayName } from "@/lib/naming";
 import { TECH_META, techFacts, type TechFact } from "@/lib/tech";
 import type { Component, ComponentEdge, Snapshot } from "@/lib/types";
 import { ComponentChanges, EvidenceRef, StatusPill } from "./ChangeParts";
 import { CodeSnippet } from "./CodeSnippet";
 import { DIFF_EDGE } from "./EvidenceEdge";
 import { ComponentIcon, TechLogo } from "./ComponentIcon";
+import { ModelMark, NvidiaLogo } from "./ModelMark";
 import { NameSourceBadge } from "./NameSourceBadge";
 
 const CHANGES_TAB: { id: Tab; label: string } = { id: "changes", label: "Changes" };
@@ -22,6 +23,7 @@ const NODE_TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "files", label: "Files" },
   { id: "connections", label: "Connections" },
+  { id: "env", label: "Env vars" },
 ];
 const EDGE_TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -30,8 +32,8 @@ const EDGE_TABS: { id: Tab; label: string }[] = [
 
 function Section({ title, children, count }: { title: string; children: ReactNode; count?: number }) {
   return (
-    <section className="border-b border-line px-5 py-4 last:border-b-0">
-      <h3 className="mb-2.5 text-[12px] font-semibold uppercase tracking-wider text-faint">
+    <section className="border-b border-panel-line px-7 py-6 last:border-b-0">
+      <h3 className="mb-3.5 text-[12px] font-semibold uppercase tracking-wider text-faint">
         {title}
         {count !== undefined && <span className="ml-1.5 font-normal">{count}</span>}
       </h3>
@@ -66,7 +68,7 @@ function ConfidenceTag({ edge }: { edge: ComponentEdge }) {
 
 function Tabs({ tabs, active, onChange, counts }: { tabs: { id: Tab; label: string }[]; active: Tab; onChange: (t: Tab) => void; counts: Partial<Record<Tab, number>> }) {
   return (
-    <div role="tablist" aria-label="Inspector sections" className="flex gap-1 px-3">
+    <div role="tablist" aria-label="Inspector sections" className="flex gap-3 overflow-x-auto px-5">
       {tabs.map((t) => (
         <button
           key={t.id}
@@ -77,7 +79,7 @@ function Tabs({ tabs, active, onChange, counts }: { tabs: { id: Tab; label: stri
           aria-controls="inspector-tabpanel"
           onClick={() => onChange(t.id)}
           className={[
-            "-mb-px border-b-2 px-2.5 py-2 text-[14px] font-medium transition-colors",
+            "-mb-px shrink-0 whitespace-nowrap border-b-2 px-2 py-2.5 text-[14px] font-medium transition-colors",
             active === t.id ? "border-accent text-text" : "border-transparent text-muted hover:text-text",
           ].join(" ")}
         >
@@ -110,19 +112,18 @@ function StackList({ snapshot, facts }: { snapshot: Snapshot; facts: TechFact[] 
   );
 }
 
-/** The model-written label, placed directly beside the text it qualifies. */
-function ModelWrittenLabel({ text, testId, className = "" }: { text: string; testId: string; className?: string }) {
+/** Beside a model-written summary: which model wrote it, and "not verified", always visible. */
+function SummaryByModel({ model }: { model?: string }) {
   return (
-    <span data-testid={testId} className={`inline-flex items-center gap-1 rounded-lg border border-accent/40 bg-accent-soft px-2 py-0.5 text-[11px] font-medium leading-tight text-accent ${className}`}>
-      <Sparkles className="size-3 shrink-0" aria-hidden />
-      {text}
+    <span data-testid="summary-model-written" title="Summary written by the model from extracted facts; prose not verified" className="mt-2 inline-flex items-center gap-1.5 text-[13px] text-muted">
+      <NvidiaLogo className="h-3.5 w-4" />
+      Written by {modelDisplayName(model)} · not verified
     </span>
   );
 }
 
 function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot; component: Component; facts: TechFact[] }) {
   const keys = redisKeys(snapshot, component);
-  const modelLabel = modelWrittenLabel(component.naming);
   const warnings = snapshot.warnings.filter((w) => w.componentId === component.id);
   return (
     <>
@@ -131,7 +132,7 @@ function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot;
           // a summary only ever comes from the naming model: its label sits right beside it
           <div data-testid="summary">
             <p className="text-[15px] leading-normal text-text">{component.summary}</p>
-            {modelLabel && <ModelWrittenLabel text={modelLabel} testId="summary-model-written" className="mt-1.5" />}
+            {component.naming.source === "llm" && <SummaryByModel model={component.naming.model} />}
           </div>
         )}
         <p className={`${component.summary ? "mt-3" : ""} text-[14px] leading-normal text-muted`} data-testid="from-facts">
@@ -212,18 +213,36 @@ function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot;
         </Section>
       )}
 
-      {component.envVars.length > 0 && (
-        <Section title="Env vars" count={component.envVars.length}>
-          <ul className="flex flex-wrap gap-1.5">
-            {component.envVars.map((v) => (
-              <li key={v} className="rounded-md border border-line bg-card px-2 py-0.5 font-mono text-[12.5px] text-muted">
-                {v}
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
     </>
+  );
+}
+
+/** Env vars tab: each variable with every place the component reads it (env extractor evidence). */
+function ComponentEnv({ snapshot, component }: { snapshot: Snapshot; component: Component }) {
+  const files = new Set(component.files);
+  const reads = snapshot.files.filter((f) => files.has(f.path)).flatMap((f) => f.envReads);
+  return (
+    <Section title="Env vars" count={component.envVars.length}>
+      {component.envVars.length ? (
+        <ul className="divide-y divide-panel-line rounded-lg border border-panel-line" data-testid="env-vars">
+          {component.envVars.map((v) => {
+            const sites = reads.filter((r) => r.name === v).map((r) => snapshot.evidence.find((e) => e.id === r.evidenceId)).filter((e) => e !== undefined);
+            return (
+              <li key={v} data-testid="env-var" className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-3.5 py-2.5">
+                <span className="min-w-40 font-mono text-[13px] font-medium text-text">{v}</span>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  {sites.map((e) => (
+                    <FileLink key={e.id} snapshot={snapshot} file={e.file} start={e.range.startLine} />
+                  ))}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-[14px] text-muted">No environment variables are read in this component&apos;s files.</p>
+      )}
+    </Section>
   );
 }
 
@@ -248,7 +267,7 @@ function ComponentFiles({ snapshot, component, bind }: { snapshot: Snapshot; com
 }
 
 function ConnectionList({ snapshot, edges, direction, onOpen, bind }: { snapshot: Snapshot; edges: ComponentEdge[]; direction: "out" | "in"; onOpen: (e: ComponentEdge) => void; bind: BindHighlight }) {
-  const name = (id: string) => snapshot.components.find((c) => c.id === id)?.name ?? id;
+  const name = (id: string) => <ComponentLabel snapshot={snapshot} id={id} />;
   const Dir = direction === "out" ? ArrowUpRight : ArrowDownLeft;
   if (!edges.length) return <p className="text-[14px] text-faint">None</p>;
   return (
@@ -265,7 +284,7 @@ function ConnectionList({ snapshot, edges, direction, onOpen, bind }: { snapshot
           >
             <Dir className="size-4 shrink-0 text-faint" aria-label={direction === "out" ? "outgoing" : "incoming"} />
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[14px] font-medium text-text">{name(direction === "out" ? e.target : e.source)}</span>
+              <span className="flex min-w-0 items-center gap-1.5 text-[14px] font-medium text-text">{name(direction === "out" ? e.target : e.source)}</span>
               <span className="text-[13px] text-muted">
                 {e.kind}
                 {e.weight > 1 && <span className="text-faint"> · {e.weight} evidence</span>}
@@ -295,6 +314,17 @@ function ComponentConnections({ snapshot, component, onOpen, bind }: { snapshot:
   );
 }
 
+/** A component's name in a list, with the NVIDIA mark when the model wrote it. */
+function ComponentLabel({ snapshot, id }: { snapshot: Snapshot; id: string }) {
+  const component = snapshot.components.find((c) => c.id === id);
+  return (
+    <>
+      <span className="truncate">{component?.name ?? id}</span>
+      {component?.naming.source === "llm" && <ModelMark />}
+    </>
+  );
+}
+
 /* ───────────── edge ───────────── */
 
 function Endpoint({ snapshot, id, role, onOpen, bind }: { snapshot: Snapshot; id: string; role: string; onOpen: () => void; bind: BindHighlight }) {
@@ -311,7 +341,9 @@ function Endpoint({ snapshot, id, role, onOpen, bind }: { snapshot: Snapshot; id
       {component && <ComponentIcon kind={component.kind} tech={facts} />}
       <span className="min-w-0 flex-1">
         <span className="block text-[12px] uppercase tracking-wider text-faint">{role}</span>
-        <span className="block truncate text-[14px] font-medium text-text">{component?.name ?? id}</span>
+        <span className="flex min-w-0 items-center gap-1.5 text-[14px] font-medium text-text">
+          <ComponentLabel snapshot={snapshot} id={id} />
+        </span>
       </span>
       <ChevronRight className="size-4 shrink-0 text-faint" aria-hidden />
     </button>
@@ -447,8 +479,9 @@ function Breadcrumbs({ snapshot, nav }: { snapshot: Snapshot; nav: PanelNavigati
 }
 
 /**
- * Right overlay on desktop (Railway-style), full-screen sheet on phones. `bind` wires rows that
- * point at the canvas (connections, files, endpoints) to the transient hover highlight.
+ * Desktop: a panel floating over the canvas like Railway's, about half the viewport wide and inset
+ * from the canvas's edges (numbers in lib/inspector.ts). Phones: a full-screen sheet. `bind` wires
+ * rows that point at the canvas (connections, files, endpoints) to the transient hover highlight.
  */
 export function Inspector({ snapshot, nav, bind = noHighlight, changes }: { snapshot: Snapshot; nav: PanelNavigation; bind?: BindHighlight; changes?: ChangeModel }) {
   const entry = current(nav.stack);
@@ -466,32 +499,35 @@ export function Inspector({ snapshot, nav, bind = noHighlight, changes }: { snap
   let counts: Partial<Record<Tab, number>> = {};
   if (component) {
     const { label } = KIND_META[component.kind];
-    counts = { files: component.files.length, connections: snapshot.edges.filter((e) => e.source === component.id || e.target === component.id).length };
+    counts = { files: component.files.length, connections: snapshot.edges.filter((e) => e.source === component.id || e.target === component.id).length, env: component.envVars.length };
     if (changes) {
       const changed = changes.set.declarations.filter((d) => (d.componentId === component.id || d.baseComponentId === component.id) && !["unchanged", "formatting"].includes(declStatus(d))).length;
       counts.changes = changed + componentEdgeChanges(changes, component.id).length;
     }
+    // Railway's panel header: the icon without a tile, a large name, then the id line
     header = (
-      <div className="flex gap-3 px-5 pb-3 pt-2">
-        <ComponentIcon kind={component.kind} tech={facts} size="lg" />
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[18px] font-semibold leading-snug text-text">{component.name}</h2>
-          <div className="mt-0.5 text-[13px] text-muted">
-            {changes?.synthetic.has(component.id) ? "Change set only" : label} · <span className="break-all font-mono text-[12.5px]">{component.id}</span>
-          </div>
-          <div className="mt-2 flex">
-            <NameSourceBadge naming={component.naming} />
-          </div>
+      <div className="px-7 pb-4">
+        <div className="flex min-w-0 items-center gap-3.5 pr-10">
+          <ComponentIcon kind={component.kind} tech={facts} size="header" />
+          <h2 className="min-w-0 text-[22px] font-semibold leading-tight text-text">{component.name}</h2>
+        </div>
+        <div className="mt-2.5 text-[13px] text-muted">
+          {changes?.synthetic.has(component.id) ? "Change set only" : label} · <span className="break-all font-mono text-[12.5px]">{component.id}</span>
+        </div>
+        <div className="mt-2 flex">
+          <NameSourceBadge naming={component.naming} />
         </div>
       </div>
     );
     body =
       tab === "changes" && changes ? (
-        <section className="px-5 py-4">
+        <section className="px-7 py-6">
           <ComponentChanges model={changes} componentId={component.id} onOpen={openNode} bind={bind} />
         </section>
       ) : tab === "files" ? (
         <ComponentFiles snapshot={snapshot} component={component} bind={bind} />
+      ) : tab === "env" ? (
+        <ComponentEnv snapshot={snapshot} component={component} />
       ) : tab === "connections" ? (
         <ComponentConnections snapshot={snapshot} component={component} onOpen={(e) => nav.push({ type: "edge", id: e.id })} bind={bind} />
       ) : (
@@ -500,24 +536,24 @@ export function Inspector({ snapshot, nav, bind = noHighlight, changes }: { snap
   } else if (edge) {
     const name = (id: string) => snapshot.components.find((c) => c.id === id)?.name ?? id;
     counts = { evidence: edge.evidenceIds.length };
+    const end = (id: string) => (
+      <button type="button" className="inline-flex items-center gap-1.5 text-left text-text hover:text-accent" onClick={() => openNode(id)}>
+        {name(id)}
+        {snapshot.components.find((c) => c.id === id)?.naming.source === "llm" && <ModelMark />}
+      </button>
+    );
     header = (
-      <div className="flex gap-3 px-5 pb-3 pt-2">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-panel text-muted" aria-hidden>
-          <Spline className="size-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="flex flex-wrap items-center gap-x-1.5 text-[17px] font-semibold leading-snug">
-            <button type="button" className="text-left text-text hover:text-accent" onClick={() => openNode(edge.source)}>
-              {name(edge.source)}
-            </button>
-            <ArrowRight className="size-4 shrink-0 text-faint" aria-label="to" />
-            <button type="button" className="text-left text-text hover:text-accent" onClick={() => openNode(edge.target)}>
-              {name(edge.target)}
-            </button>
+      <div className="px-7 pb-4">
+        <div className="flex min-w-0 items-start gap-3.5 pr-10">
+          <Spline className="mt-0.5 size-7 shrink-0 text-muted" aria-hidden />
+          <h2 className="flex min-w-0 flex-wrap items-center gap-x-2 text-[20px] font-semibold leading-tight">
+            {end(edge.source)}
+            <ArrowRight className="size-4.5 shrink-0 text-faint" aria-label="to" />
+            {end(edge.target)}
           </h2>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-muted">
-            Edge · {edge.kind} <ConfidenceTag edge={edge} />
-          </div>
+        </div>
+        <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-muted">
+          Edge · {edge.kind} <ConfidenceTag edge={edge} />
         </div>
       </div>
     );
@@ -540,26 +576,29 @@ export function Inspector({ snapshot, nav, bind = noHighlight, changes }: { snap
       data-testid="inspector"
       className={[
         "fixed inset-0 z-30 flex flex-col bg-panel transition-transform duration-300 ease-out",
-        "md:absolute md:inset-y-0 md:left-auto md:right-0 md:z-20 md:w-[clamp(420px,34vw,600px)] md:border-l md:border-line md:shadow-[-16px_0_40px_-12px_var(--scrim)]",
-        open ? "translate-x-0 translate-y-0" : "translate-y-full md:translate-x-full md:translate-y-0",
+        // lib/inspector.ts: clamp(480px, 50vw, 760px) wide, 10px inside the canvas (whose box sits
+        // 6px in from main's right and bottom edges, so right/bottom are 16px here)
+        "md:absolute md:bottom-4 md:left-auto md:right-4 md:top-2.5 md:z-20 md:w-[clamp(480px,50vw,760px)] md:overflow-hidden md:rounded-xl md:border md:border-panel-line md:shadow-[0_16px_48px_-16px_var(--scrim)]",
+        open ? "translate-x-0 translate-y-0" : "translate-y-full md:translate-x-[calc(100%+2rem)] md:translate-y-0",
       ].join(" ")}
     >
       {open && (
         <>
-          <div className="shrink-0 border-b border-line bg-panel">
-            <div className="flex items-center gap-1.5 px-3 pt-3">
-              {nav.stack.length > 1 && (
+          <div className={`relative shrink-0 border-b border-panel-line bg-panel ${nav.stack.length > 1 ? "" : "pt-7"}`}>
+            {/* the title row only when there is a path to show: a one-item breadcrumb would just repeat the name */}
+            {nav.stack.length > 1 && (
+              <div className="flex items-center gap-1.5 px-4 pb-3 pr-14 pt-4">
                 <button type="button" onClick={nav.back} className="rounded-md p-1.5 text-muted hover:bg-card hover:text-text" aria-label="Back" data-testid="panel-back">
                   <ArrowLeft className="size-4.5" />
                 </button>
-              )}
-              <div className="flex min-w-0 flex-1 px-1.5">
-                <Breadcrumbs snapshot={snapshot} nav={nav} />
+                <div className="flex min-w-0 flex-1 px-1.5">
+                  <Breadcrumbs snapshot={snapshot} nav={nav} />
+                </div>
               </div>
-              <button type="button" onClick={nav.close} className="rounded-md p-1.5 text-muted hover:bg-card hover:text-text" aria-label="Close inspector" title="Close (Esc)">
-                <X className="size-4.5" />
-              </button>
-            </div>
+            )}
+            <button type="button" onClick={nav.close} className={`absolute right-4 rounded-md p-1.5 text-muted hover:bg-card hover:text-text ${nav.stack.length > 1 ? "top-4" : "top-6"}`} aria-label="Close inspector" title="Close (Esc)">
+              <X className="size-4.5" />
+            </button>
             {header}
             <Tabs tabs={tabs} active={tab} onChange={nav.setTab} counts={counts} />
           </div>

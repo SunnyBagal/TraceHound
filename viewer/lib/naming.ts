@@ -1,5 +1,3 @@
-import type { Component } from "./types";
-
 /** "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B" → "Nemotron Nano"; unknown ids pass through. */
 export function modelDisplayName(model: string | undefined): string {
   if (!model) return "model";
@@ -8,7 +6,3 @@ export function modelDisplayName(model: string | undefined): string {
   return model.split("/").pop()!;
 }
 
-/** Label for any model-produced name/summary; undefined for heuristic or override names. */
-export function modelWrittenLabel(naming: Component["naming"]): string | undefined {
-  return naming.source === "llm" ? `Model-written (${modelDisplayName(naming.model)}), prose not verified` : undefined;
-}

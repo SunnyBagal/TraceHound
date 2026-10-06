@@ -53,7 +53,7 @@ describe("GraphCanvas with the demo snapshot", () => {
     for (const t of labels) expect(t).not.toMatch(/proven|resolved-default|dynamic/);
   });
 
-  it("cards show the icon, the name and the kind line only; a model-written name gets one sparkle mark", async () => {
+  it("cards show the icon, the name and the kind line only; every model-written name gets the NVIDIA mark", async () => {
     const view = within(renderCanvas().container);
     const nodes = await view.findAllByTestId("component-node", {}, { timeout: 5000 });
     for (const c of snapshot.components) {
@@ -62,8 +62,10 @@ describe("GraphCanvas with the demo snapshot", () => {
       expect(card.textContent, c.id).toBe(`${c.name}${kind}`);
       expect(card.style.height).toBe(`${NODE_HEIGHT}px`); // every card the same height
       const mark = within(card).queryByTestId("model-name-mark");
-      if (c.naming.source === "llm") expect(mark?.getAttribute("title"), c.id).toBe(`Name is model-written (Nemotron Nano), prose not verified; heuristic name: ${c.naming.heuristicName}`);
-      else expect(mark, c.id).toBeNull();
+      if (c.naming.source === "llm") {
+        expect(mark?.getAttribute("title"), c.id).toBe("Name written by the model; prose not verified");
+        expect(mark?.querySelector('[data-logo="nvidia.svg"]'), c.id).toBeTruthy();
+      } else expect(mark, c.id).toBeNull();
       expect(within(card).queryByTestId("model-written")).toBeNull(); // no label box, no override pill
       expect(within(card).queryByTitle(/Name source/)).toBeNull();
     }

@@ -7,6 +7,7 @@ import { githubSlug, permalink } from "@/lib/github";
 import type { ImpactReport } from "@/lib/impact";
 import type { Snapshot } from "@/lib/types";
 import type { Selection } from "./GraphCanvas";
+import { MODEL_NAME_DISCLOSURE, ModelMark } from "./ModelMark";
 
 const STATUS: Record<ImpactReport["files"][number]["status"], string> = { added: "A", modified: "M", deleted: "D", renamed: "R", copied: "C", "type-changed": "T" };
 
@@ -41,7 +42,7 @@ export function ImpactPanel({ name, impact, snapshot, onSelect }: { name: string
     <button type="button" onClick={() => onSelect({ type: "node", id })} className="text-left hover:text-accent">
       <span className="font-medium text-text">
         {componentName(id)}
-        {modelNamed(id) && <span title="model-written name (Nemotron Nano), prose not verified">*</span>}
+        {modelNamed(id) && <ModelMark className="ml-1 align-[-1px]" />}
       </span>{" "}
       <span className="font-mono text-[11px] text-faint">{id}</span>
     </button>
@@ -162,7 +163,11 @@ export function ImpactPanel({ name, impact, snapshot, onSelect }: { name: string
           ))}
 
           <p className="mt-3 text-[11px] leading-snug text-faint">{impact.directionRule}</p>
-          {impact.affected.some((a) => modelNamed(a.id)) && <p className="mt-1 text-[11px] text-faint">* model-written name (Nemotron Nano), prose not verified</p>}
+          {impact.affected.some((a) => modelNamed(a.id)) && (
+            <p className="mt-1 flex items-center gap-1 text-[11px] text-faint">
+              <ModelMark /> {MODEL_NAME_DISCLOSURE}
+            </p>
+          )}
         </div>
       )}
     </aside>

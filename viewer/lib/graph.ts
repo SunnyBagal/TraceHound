@@ -4,8 +4,9 @@ import type { ImpactRole } from "./impact";
 import { techFacts, type TechFact } from "./tech";
 import type { Component, ComponentEdge, Resolution, Snapshot, Warning } from "./types";
 
+/** Every card is 2:1 like Railway's: icon and name on the top row, the kind line at the bottom. */
 export const NODE_WIDTH = 272;
-export const NODE_HEIGHT = 72; // every card: icon, name, kind line
+export const NODE_HEIGHT = NODE_WIDTH / 2;
 
 /** Stroke style per confidence label. The legend and the edge inspector name it in words; canvas labels don't. */
 export const EDGE_STYLES: Record<Resolution, { dash?: string; text: string; meaning: string }> = {
