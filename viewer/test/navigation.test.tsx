@@ -55,6 +55,8 @@ describe("inspector history in the viewer", () => {
   });
 
   const crumbs = () => screen.queryAllByTestId("crumb").map((c) => c.textContent);
+  // a one-item breadcrumb has no title row (it would repeat the name): the heading is the place
+  const heading = () => screen.queryByTestId("inspector") && within(screen.getByTestId("inspector")).queryByRole("heading", { level: 2 })?.textContent;
   const inspector = () => within(screen.getByTestId("inspector"));
   const param = (key: string) => new URLSearchParams(window.location.search).get(key);
 
@@ -67,12 +69,15 @@ describe("inspector history in the viewer", () => {
     );
   }
 
-  it("a fresh deep link opens with a one-item breadcrumb and no back arrow", () => {
+  it("a fresh deep link opens with a one-item breadcrumb: no title row, no back arrow", () => {
     renderAt(`?component=${AUTH}`);
-    expect(crumbs()).toEqual(["Authentication Service"]);
+    expect(crumbs()).toEqual([]);
     expect(screen.queryByTestId("panel-back")).toBeNull();
-    expect(inspector().getByRole("heading", { level: 2 }).textContent).toBe("Authentication Service");
-    expect(inspector().getByTestId("model-written").textContent).toBe("Model-written (Nemotron Nano), prose not verified");
+    expect(heading()).toBe("Authentication Service");
+    expect(inspector().getByLabelText("Close inspector")).toBeTruthy(); // the close button stays
+    const named = inspector().getByTestId("model-written");
+    expect(named.textContent).toBe("Named by Nemotron Nano");
+    expect(named.getAttribute("title")).toBe("Name written by the model; prose not verified");
   });
 
   it("push → back → crumb jump walk the browser history, restoring URL, breadcrumb and tab", async () => {
@@ -98,7 +103,8 @@ describe("inspector history in the viewer", () => {
 
     // crumb jump to the root → back on the component, Connections tab restored
     fireEvent.click(screen.getAllByTestId("crumb")[0]!);
-    await waitFor(() => expect(crumbs()).toEqual(["Authentication Service"]));
+    await waitFor(() => expect(crumbs()).toEqual([]));
+    expect(heading()).toBe("Authentication Service");
     expect(param("component")).toBe(AUTH);
     expect(inspector().getByRole("tab", { name: /Connections/ }).getAttribute("aria-selected")).toBe("true");
   });
@@ -108,24 +114,26 @@ describe("inspector history in the viewer", () => {
     fireEvent.click(inspector().getByRole("tab", { name: /Connections/ }));
     fireEvent.click(inspector().getAllByTestId("connection")[0]!);
     fireEvent.click(screen.getByTestId("panel-back"));
-    await waitFor(() => expect(crumbs()).toEqual(["Authentication Service"]));
+    await waitFor(() => expect(crumbs()).toEqual([]));
+    expect(heading()).toBe("Authentication Service");
     expect(param("component")).toBe(AUTH);
   });
 
   it("Esc closes the panel and drops ?component=; browser back reopens it", async () => {
     renderAt(`?component=${AUTH}`);
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(crumbs()).toEqual([]);
+    expect(heading()).toBeUndefined();
     expect(param("component")).toBeNull();
     act(() => window.history.back());
-    await waitFor(() => expect(crumbs()).toEqual(["Authentication Service"]));
+    await waitFor(() => expect(heading()).toBe("Authentication Service"));
   });
 
   it("a deep-linked edge starts its breadcrumb at the edge", () => {
     renderAt(`?edge=${encodeURIComponent(authEdge.id)}`);
     const source = snapshot.components.find((c) => c.id === authEdge.source)!.name;
     const target = snapshot.components.find((c) => c.id === authEdge.target)!.name;
-    expect(crumbs()).toEqual([`${source} → ${target}`]);
+    expect(crumbs()).toEqual([]);
+    expect(heading()).toBe(`${source}${target}`); // the arrow between them is an icon
     expect(screen.queryByTestId("panel-back")).toBeNull();
   });
 
@@ -135,14 +143,20 @@ describe("inspector history in the viewer", () => {
       const panel = inspector();
       expect(panel.getByRole("heading", { level: 2 }).textContent, c.id).toBe(c.name);
       // the name: the full label right under it when model-written, else its source
-      if (c.naming.source === "llm") expect(panel.getByTestId("model-written").textContent, c.id).toBe("Model-written (Nemotron Nano), prose not verified");
+      if (c.naming.source === "llm") {
+        const named = panel.getByTestId("model-written");
+        expect(named.textContent, c.id).toBe("Named by Nemotron Nano");
+        expect(named.getAttribute("title"), c.id).toBe("Name written by the model; prose not verified");
+        expect(named.querySelector('[data-logo="nvidia.svg"]'), c.id).toBeTruthy();
+      }
       else expect(panel.getByTitle(/Name source/).textContent, c.id).toBe(c.naming.source);
       expect(panel.getByTestId("name-source").textContent, c.id).toMatch(c.naming.source === "llm" ? /^Name written by the model/ : c.naming.source === "override" ? /tracehound\.json override/ : /^Heuristic name/);
       // the description: the model summary with its label beside it, and the fact-based subtitle
       if (c.summary) {
         const summary = within(panel.getByTestId("summary"));
         expect(summary.getByText(c.summary)).toBeTruthy();
-        expect(summary.getByTestId("summary-model-written").textContent, c.id).toBe("Model-written (Nemotron Nano), prose not verified");
+        // "not verified" stays visible beside a model summary, not only in a tooltip
+        expect(summary.getByTestId("summary-model-written").textContent, c.id).toBe("Written by Nemotron Nano · not verified");
       } else expect(panel.queryByTestId("summary"), c.id).toBeNull();
       expect(panel.getByTestId("from-facts").textContent, c.id).toBe(`From facts: ${c.subtitle}`);
       expect(Boolean(panel.queryByTestId("summary-dropped")), c.id).toBe(Boolean(c.naming.summaryDropped));

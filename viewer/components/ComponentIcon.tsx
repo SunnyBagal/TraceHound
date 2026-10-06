@@ -24,9 +24,10 @@ export function TechLogo({ fact, className }: { fact: TechFact; className?: stri
  *
  * "node" is the canvas card's icon: no tile, full-strength colour, a 22px slot. Lucide draws
  * inside a 2/24 margin, so line icons are rendered 26px and overhang the slot by 2px a side:
- * their strokes span the slot the way a logo does, and both look the same size.
+ * their strokes span the slot the way a logo does, and both look the same size. "header" is the
+ * same without a tile at 28px, beside the inspector's name (Railway's panel header).
  */
-export function ComponentIcon({ kind, tech, size = "md" }: { kind: ComponentKind; tech: TechFact[]; size?: "md" | "lg" | "node" }) {
+export function ComponentIcon({ kind, tech, size = "md" }: { kind: ComponentKind; tech: TechFact[]; size?: "md" | "lg" | "node" | "header" }) {
   const primary = headerFact(tech);
   const { icon: Icon, label } = KIND_META[kind];
   const title = primary ? `${techTitle(primary)}${primary.use ? ` · ${primary.use.kind === "broker" ? "broker" : "data store"}: ${primary.use.reason}` : ""}` : `${label} (no data-store, framework or runtime fact)`;
@@ -35,6 +36,13 @@ export function ComponentIcon({ kind, tech, size = "md" }: { kind: ComponentKind
     return (
       <span className="grid size-[22px] shrink-0 place-items-center" {...props}>
         {primary ? <TechLogo fact={primary} className="size-[22px]" /> : <Icon className="-m-[2px] size-[26px] text-text" aria-hidden />}
+      </span>
+    );
+  }
+  if (size === "header") {
+    return (
+      <span className="grid size-7 shrink-0 place-items-center" {...props}>
+        {primary ? <TechLogo fact={primary} className="size-7" /> : <Icon className="-m-[2.5px] size-[33px] text-text" aria-hidden />}
       </span>
     );
   }

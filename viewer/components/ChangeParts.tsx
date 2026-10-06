@@ -20,8 +20,8 @@ import {
   type FileGroup,
 } from "@/lib/changes";
 import { noHighlight, type BindHighlight } from "@/lib/highlight";
-import { modelWrittenLabel } from "@/lib/naming";
 import type { DeclarationKind } from "@tracehound/analyzer/schema";
+import { ModelMark } from "./ModelMark";
 
 export const DECL_ICON: Record<DeclarationKind, LucideIcon> = {
   function: SquareFunction,
@@ -83,15 +83,10 @@ export function EvidenceRef({ link, className = "" }: { link: EvidenceLink; clas
 /** A component's name as the snapshot has it; model-written names keep their label. */
 export function ComponentName({ model, id, onOpen }: { model: ChangeModel; id: string; onOpen?: (id: string) => void }) {
   const c = model.display.components.find((x) => x.id === id);
-  const label = c ? modelWrittenLabel(c.naming) : undefined;
   const text = (
     <>
       {c?.name ?? id}
-      {label && (
-        <span className="text-accent" title={label}>
-          *
-        </span>
-      )}
+      {c?.naming.source === "llm" && <ModelMark className="ml-1 align-[-1px]" />}
     </>
   );
   if (!onOpen) return <span className="font-medium text-text">{text}</span>;

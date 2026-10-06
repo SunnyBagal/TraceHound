@@ -25,7 +25,7 @@ export function TopBar({ snapshot, repos = [], repoId, changeSets = [], changes 
     }
   };
   return (
-    <header className="flex h-12 min-w-0 shrink-0 items-center gap-2 bg-panel px-3 sm:gap-3 md:px-4">
+    <header className="flex h-12 min-w-0 shrink-0 items-center gap-2 bg-page px-3 sm:gap-3 md:px-4">
       {/* the mark lives in the rail; below 640px the rail is hidden and it comes back here */}
       <LogoLink className="-ml-1 size-8 sm:hidden" />
       <RepoSwitcher repos={repos} repoId={repoId} label={snapshot.repo.name} changeSets={changeSets} changesId={changes?.entry.id} />

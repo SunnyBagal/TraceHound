@@ -9,7 +9,7 @@ const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
  */
 export function Rail() {
   return (
-    <nav aria-label="TraceHound" data-testid="rail" className="hidden h-full w-14 shrink-0 flex-col items-center justify-between bg-panel py-3 sm:flex">
+    <nav aria-label="TraceHound" data-testid="rail" className="hidden h-full w-14 shrink-0 flex-col items-center justify-between bg-page py-3 sm:flex">
       <LogoLink className="size-10" />
       <a
         href="https://github.com/SunnyBagal"
@@ -22,7 +22,7 @@ export function Rail() {
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- vendored static avatar */}
         <img src={`${base}/author/sunny-bagal.jpg`} alt="" width={28} height={28} className="size-7 rounded-full opacity-85 ring-1 ring-line group-hover:opacity-100" draggable={false} />
-        <span className="absolute bottom-0.5 right-0.5 grid size-3.5 place-items-center rounded-full border border-line bg-panel text-faint group-hover:text-text" aria-hidden>
+        <span className="absolute bottom-0.5 right-0.5 grid size-3.5 place-items-center rounded-full border border-line bg-page text-faint group-hover:text-text" aria-hidden>
           <ArrowUpRight className="size-2.5" />
         </span>
       </a>

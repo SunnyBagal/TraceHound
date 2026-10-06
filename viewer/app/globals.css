@@ -2,20 +2,27 @@
 @import "@xyflow/react/dist/style.css";
 
 /*
- * TraceHound palette: every colour lives here. Deep navy canvas with a dot grid (colours and
- * density inspired by Railway's project canvas), amber "scent trail" accent. Dark only.
- * Measured contrast (WCAG 2.x): text ≥ 13:1, muted ≥ 7.2:1, faint ≥ 5.2:1 on every surface below.
+ * TraceHound palette: every colour lives here. Surfaces are sampled from Railway's project canvas
+ * (a 1442×840 screenshot, the most common pixel of each region): page and canvas #13111b, node and
+ * panel fill #17161f, node border #24232c, panel border #282630, dot #292731 (the brightest dot
+ * pixels; the screenshot is downscaled, so the 1px dots are blended there). The hover fill, strong
+ * border and raised fill are derived steps between those, not sampled. The meaning colours are
+ * TraceHound's own and unchanged: amber selection, lavender hover highlight, the diff colours.
+ * Dark only. Measured contrast (WCAG 2.x) on every surface below: text ≥ 14.1:1, muted ≥ 7.8:1,
+ * faint ≥ 5.7:1, the edge grey ≥ 4.9:1.
  */
 :root {
   /* surfaces */
-  --canvas-bg: #0b1120;
-  --canvas-dot: #223052;
-  --node-bg: #131c31;
-  --node-bg-hover: #18233c;
-  --node-border: #26334f;
-  --node-border-strong: #364668;
-  --panel-bg: #101829;
-  --panel-raised: #16203a;
+  --page-bg: #13111b;
+  --canvas-bg: #13111b;
+  --canvas-dot: #292731;
+  --node-bg: #17161f;
+  --node-bg-hover: #1c1b25;
+  --node-border: #24232c;
+  --node-border-strong: #383641;
+  --panel-bg: #17161f;
+  --panel-border: #282630;
+  --panel-raised: #1d1c26;
   /* text */
   --text: #e6ebf5;
   --muted: #a6b1c8;
@@ -29,7 +36,7 @@
   --edge-active: var(--accent);
   /* inspector-row hover/focus on the canvas: distinct from the amber selection */
   --highlight: #c4b5fd;
-  /* the wolf mark: silver, 14.6:1 on the canvas and 13.8:1 on the panels; a neutral, so it never
+  /* the wolf mark: silver, 14.5:1 on the canvas and 13.9:1 on the panels; a neutral, so it never
      reads as the amber selection, the yellow warnings or any diff/impact colour */
   --logo: #dde3ee;
   /* the Redis "R" (a single-colour Simple Icons path): Redis's brand red, from Simple Icons' data */
@@ -41,20 +48,24 @@
   --diff-removed: #f87171;
   --diff-regrouped: #8a96b0;
   --diff-modified: var(--warn);
-  --scrim: rgba(5, 8, 16, 0.72);
+  --scrim: rgba(6, 5, 10, 0.72);
 
   /* aliases used by the utility classes */
   --bg: var(--canvas-bg);
+  --page: var(--page-bg);
   --panel: var(--panel-bg);
   --card: var(--node-bg);
   --card-hover: var(--node-bg-hover);
   --line: var(--node-border);
   --line-strong: var(--node-border-strong);
+  --panel-line: var(--panel-border);
   color-scheme: dark;
 }
 
 @theme inline {
   --color-bg: var(--bg);
+  --color-page: var(--page);
+  --color-panel-line: var(--panel-line);
   --color-panel: var(--panel);
   --color-card: var(--card);
   --color-card-hover: var(--card-hover);
@@ -68,6 +79,7 @@
   --color-panel-raised: var(--panel-raised);
   --color-warn: var(--warn);
   --color-highlight: var(--highlight);
+  --color-logo: var(--logo);
   --color-impact-changed: var(--impact-changed);
   --color-impact-affected: var(--impact-affected);
   --color-diff-added: var(--diff-added);
@@ -82,7 +94,7 @@ html,
 body {
   height: 100%;
   overflow: hidden; /* the canvas pans; the page itself never scrolls sideways */
-  background: var(--bg);
+  background: var(--page);
   color: var(--text);
 }
 body {

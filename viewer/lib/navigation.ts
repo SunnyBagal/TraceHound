@@ -8,7 +8,7 @@ import type { Snapshot } from "./types";
  * browser history entry (and ?component= / ?edge=), so the back button walks back through the
  * panel. The whole stack rides in history.state, so any history entry restores its breadcrumb.
  */
-export type Tab = "overview" | "files" | "connections" | "evidence" | "changes";
+export type Tab = "overview" | "files" | "connections" | "env" | "evidence" | "changes";
 export type Entry = { type: "node" | "edge"; id: string; tab?: Tab };
 export type Stack = Entry[];
 
