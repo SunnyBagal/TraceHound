@@ -2317,3 +2317,25 @@ The one difference is an agent-v5 search-description graph-on run that ran out o
 - (b) Replacing "resolved" with the new measure: the protocol was written with "resolved" as the
   measure, so both are reported.
 - (c) Re-running the dev tasks to measure it: the records already hold the gates' results.
+
+## 050 · Held-out results imported; the graph did not help the repair agent on Recall
+**Context:** the held-out evaluation (protocol plus Amendment 1, tag `eval-freeze-2`) finished on
+2026-10-06: 160 counted runs, $6.27, outside this repo (prompt `docs/prompts/050-results-import.md`).
+**Choice:** the results come into the repo as `docs/eval/heldout-results.md`, with every table
+recomputed from the 181 run records (`docs/eval/heldout/recompute.mjs`) rather than copied from
+the handoff, and the batch summaries copied unchanged into `docs/eval/heldout/`. Only files
+holding ids, counts and metrics come in; `b2-super/results.json` stays out because one row
+quotes an agent-written scratch test's typecheck error naming a Recall file and symbol. The two
+archive tarballs keep their recorded sha256 and go on a draft release.
+- Resolved, graph-on vs graph-off (n = 40 each): Nano 11 vs 13, Super 28 vs 26. Verified at
+  stop: Nano 11 vs 19, Super 30 vs 31. Graph tool calls: 0 in 80 graph-on runs.
+- The recompute matched the handoff except two mean costs it had rounded up: Nano graph-off
+  $0.020249 (handoff $0.0203) and Super graph-off $0.047846 (handoff $0.0479).
+- The README no longer implies the graph helps an agent repair code; it states this result.
+- Not done: the driver scripts were not found, so there is no third tarball; the evaluation
+  prompt's text was not found, so it is not in `docs/prompts/`.
+**Rejected:**
+- (a) Copying the handoff's tables as they were: the records are the source, and the repo wins.
+- (b) Redacting the one row in `b2-super/results.json` and committing the edited copy: a copy of
+  an archived result should be byte-identical or absent.
+- (c) Pooling with the dev runs for a larger n: the protocol forbids it.
