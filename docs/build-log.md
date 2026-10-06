@@ -1282,3 +1282,21 @@ at `273d842` (PR #14 merged). Docs only; no model calls ($0). No new decision nu
 - **Step 5:** README ("before anything is reported" replaced; no cost wording there), CLAUDE.md
   (cost wording, top line, drivers/prompt status), a dated note under decision 050, this entry.
 - **Step 6:** drivers tarball added to the draft release `heldout-eval-2026-10-06`; still a draft.
+
+# Build log: decision 051, finder phase 1 (graph rules → hypotheses, no model)
+
+Prompt: `docs/prompts/051-finder-rules.md` (verbatim). Branch `build/051-finder-rules` off `main`
+at `8ed9384` (PR #15 merged). No model calls ($0).
+
+- **Step 0:** on main, clean, level with `origin/main`; PR #15's merge is `8ed9384`.
+- **Steps 2–4:** decision 051; `packages/analyzer/src/finder/` and `tracehound find`;
+  `test/finder.test.ts` (14 tests on fixtures written for it).
+- **Step 5:** one run of `tracehound find` with `configs/recall.tracehound.json` on a temporary
+  clone of `SunnyBagal/Recall` at `5d2165a` (no dependencies installed; `~/Projects/Recall` not
+  touched). Output in `runs/finder/` (gitignored). Hypotheses per family:
+  route-without-auth 1, payload-field-missing 0, request-to-fetch 2.
+- **Step 6 (gates, plain shell; the `GIT_` check printed nothing before each):**
+  `TRACEHOUND_NETWORK_TESTS=1 pnpm test` exit 0, analyzer 397 passed (34 files, Docker project
+  included, 805 s), viewer 97 passed (11 files); `pnpm typecheck` exit 0; viewer build exit 0;
+  version guard OK (every repo's latest snapshot is 0.10.0; no bump needed, snapshot output
+  unchanged).

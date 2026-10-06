@@ -147,6 +147,14 @@ it (decision 050).
   (2026-10-04, one run per cell, after one prompt change): Super reproduced 3 of 4 seeded claims
   (all true by oracle check) and 1 of 4 controls; Nano 0 of 4. `to-task` turns a REPRODUCED
   record into a repair task under `runs/`; the frozen repair agent on Nano resolved 1 of 3.
+- **Finder phase 1 (decision 051, `finder-rules@1`, no model):** `pnpm tracehound find --repo
+  <path> [--config f] [--out f] [--json]` → `runs/finder/<repo id>-<sha7>.json` (gitignored).
+  Deterministic probes read the source only at the graph's route, mount and queue evidence; the
+  rules are a pure function of snapshot + probes. Families: `route-without-auth`,
+  `payload-field-missing`, `request-to-fetch`. Each hypothesis: one narrow question, the rule,
+  snapshot evidence ids, excerpts, a stated input. Rules find only rule-shaped bugs. Recall
+  `5d2165a`: 1 / 0 / 2. Sessions that build the finder never see Recall's real bug list; the
+  repo gets counts only, never hypothesis text.
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**
