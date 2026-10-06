@@ -278,3 +278,152 @@ extracted facts only (decisions 012, 020). Each was checked by hand against the 
   verified". None of the errors above were caught by the identifier checks.
 - **What we do:** wrong names are replaced with config overrides, and wrong summaries are
   dropped (`"summary": false`), never rewritten by hand (decision 035).
+
+---
+
+## 2026-10-07 · Backfill: held-out evaluation through the Token Factory API (2026-10-05/06)
+
+Backfilled on 2026-10-07 from records that already existed; no new calls were made. Sources:
+
+- **Run records:** `~/Projects/TraceHound-eval/runs/heldout-eval/` (197 JSON run records = 181
+  model runs + 16 oracle canaries that make no model call). Of the 181, 177 made model calls (84
+  Nano, 93 Super). The other 4 never started (see "Outage window").
+- **Spend ledger:** `.tracehound/spend.jsonl` (the path is set in
+  `packages/analyzer/src/harness/evaluate.ts:23` and `packages/analyzer/src/llm/setup.ts:16`;
+  `~/Projects/TraceHound-eval/.tracehound/spend.jsonl` is a symlink to it). Only lines between
+  the first record's `startedAt` (2026-10-05T15:05:15.726Z) and the last record's `endedAt`
+  (2026-10-06T05:06:38.472Z) are used: 4,134 lines.
+- **Driver log:** `~/Projects/TraceHound-eval/runs/heldout-eval/driver.log`.
+- **Endpoint:** `POST /chat/completions` on the client's default base URL
+  `https://api.tokenfactory.us-central1.nebius.com/v1` (`packages/analyzer/src/llm/client.ts:7`;
+  whether `NEBIUS_BASE_URL` overrode it during the evaluation is not recorded), one
+  request per agent turn, native `tools` with `tool_choice: "auto"`, temperature 0,
+  `max_tokens` 4096 (reasoning on; `packages/analyzer/src/harness/loop.ts:255`). Client timeout 60 s
+  (`AbortSignal.timeout`, default `timeoutMs` 60_000 in `packages/analyzer/src/llm/client.ts:95`),
+  no retries. Concurrency 1.
+- Percentiles are nearest-rank. Numbers were computed by a script kept under `runs/` (gitignored).
+
+### API reliability
+
+| | Nano (`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`) | Super (`nvidia/nemotron-3-super-120b-a12b`) |
+|---|---:|---:|
+| Requests (ledger lines in the window) | 2,365 | 1,769 |
+| Successful responses (ledger `ok: true`; same count in the records' `usage.calls`) | 2,361 | 1,767 |
+| Failed requests | 4 | 2 |
+| of which client timeouts at 60 s | 4 | 2 |
+| HTTP error responses (any non-2xx status) | 0 | 0 |
+| Rate-limit responses (HTTP 429) | 0 | 0 |
+| Responses served from our local cache | 0 | 0 |
+
+- **Exact error string** of all 6 failures, from the run records' `agentRun.error`:
+  `The operation was aborted due to timeout`. This is Node's message for our own 60 s
+  `AbortSignal.timeout`; Token Factory returned no error body. The ledger lines for these 6 have
+  `ok: false`, `usageReported: false` and `outputTokens` = 4096 (the client's upper-bound charge for
+  a request with no response; a 4xx would have been recorded with 0 tokens,
+  `packages/analyzer/src/llm/client.ts:183-206`). So none of the 6 got any HTTP response.
+- **When** (ledger timestamps, UTC): Nano 2026-10-05 17:01:58, 17:38:54, 20:18:18, 20:23:37;
+  Super 2026-10-06 01:41:58, 04:52:51. Each ended its run early; five of those runs were voided and
+  re-run once under the evaluation protocol (`docs/eval/heldout-results.md`, "Validity checks").
+- **How long the timed-out requests would have taken:** not recorded (the client aborts at 60 s).
+- **Outage window:** no Token Factory outage is recorded. The one outage in the evaluation was on
+  the evaluation machine's side: 4 Super runs failed before any model call with
+  `harness error: git clone https://github.com/SunnyBagal/Recall.git failed: fatal: unable to access 'https://github.com/SunnyBagal/Recall.git/': Could not resolve host: github.com`
+  (record `startedAt` 2026-10-06T01:42:11.988Z to 01:42:13.341Z), and a canary failed the same way
+  at 2026-10-06 07:12:13 IST (01:42:13Z) (`driver.log`). The next canary passed at 09:34:09 IST
+  (04:04:09Z). The Super timeout at 01:41:58Z came 13 s before the first failed clone; the records
+  can't tell whether it was the same local network failure. Whether the Token Factory API was
+  reachable during that window: not recorded (no model request was sent in it).
+
+### Latency per call (successful calls)
+
+`latencyMs` per call, measured by our client from request start to parsed response
+(`usage.calls[].latencyMs` in the run records). Failed (timed-out) requests are not included, so
+the Nano tail is cut off at 60 s.
+
+| Model | n | min | median | p95 | max |
+|---|---:|---:|---:|---:|---:|
+| Nano | 2,361 | 1,293 ms | 6,674 ms | 40,724 ms | 57,379 ms |
+| Super | 1,767 | 602 ms | 1,645 ms | 7,166 ms | 38,062 ms |
+
+Time to first token: not recorded (requests are not streamed).
+
+### Tokens and cost per call
+
+Token counts are the API's `usage.prompt_tokens` / `usage.completion_tokens`. Cost is computed by
+our client from those counts and the rates in `config/prices.json` (Nano $0.06 / $0.24, Super
+$0.30 / $0.90 per 1M input / output tokens, taken from third-party trackers and not verified in the
+Nebius console). The amount Nebius actually billed for these calls: not recorded.
+
+| Model | Input tok / call: median · p95 · max | Output tok / call: median · p95 · max | Input total | Output total | Cost / call: median · max | Cost total (successful calls) |
+|---|---|---|---:|---:|---|---:|
+| Nano | 7,532 · 13,432 · 17,852 | 515 · 4,096 · 4,096 | 17,813,913 | 2,363,080 | $0.00062 · $0.00191 | $1.63597 |
+| Super | 7,455 · 15,003 · 19,599 | 153 · 1,036 · 4,096 | 13,748,273 | 543,716 | $0.00253 · $0.00914 | $4.61383 |
+
+- **Ledger vs per-call figures: they agree.** For each model, the multiset of (input tokens,
+  output tokens) over the ledger's `ok: true` lines equals the multiset over the records'
+  `usage.calls`, call for call (Nano 2,361, Super 1,767), and the cost sums match ($1.63597,
+  $4.61383). The ledger has 6 lines more than the records: the 6 timeouts, charged at the upper
+  bound, $0.00654 (Nano) + $0.01140 (Super) = $0.01794. Ledger total in the window: $6.26774.
+- **Reasoning tokens:** Super reported `usage.completion_tokens_details.reasoning_tokens` on every
+  recorded turn (1,752 of 1,752; median 98, max 4,096, total 434,333; median share of completion
+  tokens 0.67). Nano reported it on none (0 of 2,313). For Nano, the share of completion tokens
+  spent on reasoning is not recorded.
+
+### Model behaviour through the API (reasoning on, all 177 model runs)
+
+Turn-level data covers 2,313 of 2,361 Nano calls and 1,752 of 1,767 Super calls: the last call of
+a run that hit the 300,000-token budget is billed but not stored as a turn (48 Nano runs, 15
+Super runs). For those 63 calls, finish reason and tool calls are not recorded.
+
+| | Nano | Super |
+|---|---:|---:|
+| Turns with `finish_reason` `tool_calls` | 1,919 | 1,751 |
+| `finish_reason` `length` (all at exactly 4,096 output tokens = `max_tokens`) | 149 | 1 |
+| `finish_reason` `stop` | 245 | 0 |
+| Turns with no tool call | 394 | 1 |
+| of which also empty `content` (reasoning only) | 387 | 1 |
+| Turns at 4,096 output tokens that still returned tool calls (`finish_reason` `tool_calls`) | 3 | 0 |
+| Tool calls returned | 1,919 | 1,751 |
+| Calls to tools that were not offered | 410 | 1 |
+| Tool-call `arguments` that were not valid JSON | 0 | 0 |
+
+- **Tools that do not exist:** Nano called `str_replace_editor` 405 times and `execute_bash` 5
+  times. Neither was offered. 341 of the `str_replace_editor` calls matched one of the argument
+  shapes our harness maps to a real tool (decision 047); the other 64, and the 5 `execute_bash`
+  calls, got our unknown-tool error. Super called `find_first` once (not offered).
+- **Malformed arguments:** every `function.arguments` string in both models' tool calls parsed as
+  a JSON object. Calls with well-formed JSON whose arguments failed our schema check were not
+  counted in this backfill.
+- **Reasoning on:** every recorded turn carried a non-empty `message.reasoning` (Nano median 2,069
+  characters, max 20,468; Super median 426, max 17,495). On Nano, 16.7% of turns (387 of 2,313)
+  returned reasoning only, with neither a tool call nor content: 147 because the 4,096-token limit
+  was reached, 240 with `finish_reason: "stop"`.
+- Opinion: a Nano reply that stops with only reasoning text and no tool call or content looks like
+  a turn that ended inside the thinking phase. Neither the response nor the docs we read says
+  whether that is expected.
+
+---
+
+## 2026-10-07 · Sandboxes (Contree): what the project record says about the spike and why it was cut
+
+Quoted from `docs/decisions.md`; `docs/build-log.md` has no entry about the Contree spike. Nothing
+was re-run.
+
+- Decision 022 (the plan): "Sandboxes (Contree) have a documented REST API with a published OpenAPI
+  3 spec (`https://eu-north.nebius.computer/static/api.yaml`, base
+  `https://api.tokenfactory.nebius.com/sandboxes/v1`)" … "Auth is `Authorization: Bearer
+  <NEBIUS_API_KEY>` plus a `Project: <project id>` header." … "*(Parked by decision 036: the script
+  now lives in `scripts/parked/`; Sandboxes aren't available on this account, and Docker is the
+  sandbox of record.)*"
+- Decision 026, rejected alternative (e): "Building the Contree provider now: its API permissions
+  are unverified (FEEDBACK 2026-09-30), so an untested second provider would just be guesswork."
+- Decision 036 (why it was cut): "Nebius support (case **AISTUDIOSUP-1966**) replied that Token
+  Factory Sandboxes are not yet ready to be used on this account. Since 2026-09-30 the beta request
+  had left `/whoami` with every permission `false` and list/spawn returning 403 (FEEDBACK.md). There
+  is no date to plan around, so the local Docker provider becomes the sandbox for development,
+  evaluation, and for judges reproducing runs." Rejected: "(a) Waiting for Sandboxes: no date, and
+  the evaluation needs a sandbox now."
+- Decision 036 (what stays): "A Token Factory Sandboxes provider can be added later behind the same
+  interface, once access exists, with the parked spike as its starting point."
+- So no Nebius sandbox ever ran a command for this project. Spawn latency, in-sandbox behaviour,
+  network reachability and sandbox cost: not recorded.

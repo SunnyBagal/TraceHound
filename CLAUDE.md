@@ -219,6 +219,15 @@ All model calls go through `src/llm/client.ts`: response cache → budget reserv
 real catalog prices are filled in. Unresolved facts (e.g. an import of a generated file that isn't in the
 repo) are recorded as facts but never produce edges.
 
+## Nebius feedback (standing rule)
+Every session that makes a Nebius call (any model, any endpoint) or uses a Nebius sandbox ends by
+appending a dated entry to `FEEDBACK.md`, below the existing content. The entry gives: what was
+called (model, endpoint or sandbox); counts (requests, successes, failures); failures with their
+exact error strings; latency if measured; anything in Nebius's docs or console that was wrong or
+missing; and what would have helped. Facts and counts first; opinions labelled as opinions. No API
+key, task text, patch text, test names, or Recall source details / file names. Sessions with no
+Nebius use add nothing.
+
 ## Stack (fixed — ask before adding dependencies)
 - pnpm workspaces, Node >= 24. TS runs via Node's native type stripping: use `.ts` import
   extensions and erasable-only syntax (no enums, no parameter properties, no namespaces).
