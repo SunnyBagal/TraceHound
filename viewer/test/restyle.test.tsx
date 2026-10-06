@@ -1,8 +1,8 @@
 import { ReactFlowProvider } from "@xyflow/react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GraphCanvas } from "@/components/GraphCanvas";
-import { HOWL_MS, LogoLink, WOLF_PATH } from "@/components/Logo";
+import { ease, HEAD_LIFT, HOLD_MS, HOWL_MS, HOWL_PATH, LIFT_MS, LogoLink, MOUTH_ORIGIN, MOUTH_POINTS, MOUTH_START, RETURN_MS, WOLF_PATH } from "@/components/Logo";
 import { Viewer } from "@/components/Viewer";
 import { NODE_HEIGHT, NODE_WIDTH } from "@/lib/graph";
 import { inspectorOcclusion, inspectorWidth } from "@/lib/inspector";
@@ -193,50 +193,166 @@ describe("inspector width", () => {
   });
 });
 
-describe("the howling logo", () => {
+describe("the howling logo (tracehound-logo-howl.html)", () => {
+  const NUM = /-?\d+(?:\.\d+)?/g;
+  const nums = (d: string | null) => (d ?? "").match(NUM)!.map(Number);
+  const REST = nums(WOLF_PATH);
+  const HOWL = nums(HOWL_PATH);
+  const between = (progress: number) => REST.map((r, i) => r + (HOWL[i]! - r) * progress);
+  const ORIGIN_MOUTH = MOUTH_POINTS.map(() => MOUTH_ORIGIN).flat();
+  const OPEN_MOUTH = MOUTH_POINTS.flat();
+
   function stubMotion(reduce: boolean) {
     vi.stubGlobal("matchMedia", (query: string) => ({ matches: reduce && query.includes("prefers-reduced-motion: reduce"), media: query, addEventListener() {}, removeEventListener() {} }));
     const frames: FrameRequestCallback[] = [];
     vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
     vi.stubGlobal("cancelAnimationFrame", () => {});
+    vi.spyOn(performance, "now").mockReturnValue(1000); // the howl's start time
     return frames;
   }
-  const mark = () => screen.getByTestId("logo-mark");
-  const d = () => mark().querySelector("path")!.getAttribute("d");
-
-  it("still links to the default canvas view", () => {
-    render(<LogoLink />);
-    expect(screen.getByTestId("home-link").getAttribute("href")).toBe("/");
-    expect(mark().querySelector("path")!.getAttribute("fill")).toBe("currentColor");
+  // the link goes to "/": keep jsdom from attempting the navigation on click
+  const noNavigation = (e: Event) => e.preventDefault();
+  beforeEach(() => document.addEventListener("click", noNavigation));
+  afterEach(() => {
+    document.removeEventListener("click", noNavigation);
+    vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
-  it("howls on hover, once at a time, then comes back to rest", () => {
+  const link = () => screen.getByTestId("home-link");
+  const mark = () => screen.getByTestId("logo-mark");
+  const face = () => nums(mark().querySelector("[data-wolf-face]")!.getAttribute("d"));
+  const mouth = () => mark().querySelector("[data-wolf-mouth]")!;
+  const lift = () => Number(/translate\(0 (-?[\d.e-]+)\)/.exec(mark().querySelector("[data-wolf-head]")!.getAttribute("transform")!)![1]);
+  const expectClose = (actual: number[], expected: number[]) => {
+    expect(actual).toHaveLength(expected.length);
+    actual.forEach((v, i) => expect(v, `#${i}`).toBeCloseTo(expected[i]!, 2));
+  };
+
+  it("still links to the default canvas view, in currentColor, at rest with the mouth shut", () => {
+    render(<LogoLink />);
+    expect(link().getAttribute("href")).toBe("/");
+    for (const path of mark().querySelectorAll("path")) expect(path.getAttribute("fill")).toBe("currentColor");
+    expect(face()).toEqual(REST);
+    expect(mouth().getAttribute("opacity")).toBe("0");
+    expectClose(nums(mouth().getAttribute("d")), ORIGIN_MOUTH); // every mouth point at (355, 559)
+    expect(lift()).toBe(0);
+  });
+
+  it("lift: 680 ms of the file's easing up to the howl pose; the mouth opens from (355, 559) only past 0.22", () => {
     const frames = stubMotion(false);
     render(<LogoLink />);
-    fireEvent.pointerEnter(screen.getByTestId("home-link"));
-    fireEvent.focus(screen.getByTestId("home-link")); // a second trigger mid-howl starts nothing
-    fireEvent.pointerDown(screen.getByTestId("home-link"));
-    expect(frames).toHaveLength(1);
+    fireEvent.pointerEnter(link(), { pointerType: "mouse" });
+    const at = (ms: number) => act(() => frames.shift()!(1000 + ms));
+
+    at(100); // ease(100 / 680) ≈ 0.017: the muzzle moves, the mouth is still shut
+    expectClose(face(), between(ease(100 / LIFT_MS)));
+    expect(Number(mouth().getAttribute("opacity"))).toBe(0);
+    expectClose(nums(mouth().getAttribute("d")), ORIGIN_MOUTH);
+
+    at(340); // half-way through the lift: progress 0.5, head up 7 units, the mouth part open
+    expect(ease(0.5)).toBe(0.5);
+    expectClose(face(), between(0.5));
+    expect(lift()).toBeCloseTo(-7, 6);
+    const jaw = ease((0.5 - MOUTH_START) / (1 - MOUTH_START));
+    expect(Number(mouth().getAttribute("opacity"))).toBeCloseTo(jaw, 6);
+    expectClose(
+      nums(mouth().getAttribute("d")),
+      OPEN_MOUTH.map((v, i) => ORIGIN_MOUTH[i]! + (v - ORIGIN_MOUTH[i]!) * jaw),
+    );
+
+    at(679); // still lifting
+    expect(lift()).toBeGreaterThan(-HEAD_LIFT);
+    at(680); // the hold starts: the full howl pose, head up 14, mouth fully open
+    expectClose(face(), HOWL);
+    expect(lift()).toBe(-HEAD_LIFT);
+    expect(mouth().getAttribute("opacity")).toBe("1");
+    expectClose(nums(mouth().getAttribute("d")), OPEN_MOUTH);
+  });
+
+  it("hold: 650 ms in the howl pose, trembling at most 0.8 units", () => {
+    const frames = stubMotion(false);
+    render(<LogoLink />);
+    fireEvent.click(link());
+    const at = (ms: number) => act(() => frames.shift()!(1000 + ms));
+    at(LIFT_MS + 325); // mid-hold: the tremble is at its widest envelope
+    expectClose(face(), HOWL);
+    const tremble = lift() + HEAD_LIFT;
+    expect(tremble).toBeCloseTo(Math.sin(325 / 58) * 0.8, 6);
+    expect(Math.abs(tremble)).toBeGreaterThan(0.1);
+    at(LIFT_MS + HOLD_MS - 1); // still holding
+    expectClose(face(), HOWL);
+    expect(Math.abs(lift() + HEAD_LIFT)).toBeLessThanOrEqual(0.8);
+    expect(LIFT_MS + HOLD_MS + RETURN_MS).toBe(HOWL_MS);
+    expect([LIFT_MS, HOLD_MS, RETURN_MS]).toEqual([680, 650, 440]);
+  });
+
+  it("return: 440 ms back to the exact resting pose, then no more frames", () => {
+    const frames = stubMotion(false);
+    render(<LogoLink />);
+    fireEvent.pointerEnter(link(), { pointerType: "pen" });
     expect(mark().dataset.howling).toBe("true");
-    const run = (t: number) => act(() => frames.shift()!(t));
-    run(1000);
-    run(1000 + 300); // past the rise: the howl pose
-    expect(d()).not.toBe(WOLF_PATH);
-    run(1000 + HOWL_MS + 1);
-    expect(d()).toBe(WOLF_PATH);
+    const at = (ms: number) => act(() => frames.shift()!(1000 + ms));
+    at(LIFT_MS + HOLD_MS + 220); // half-way back
+    expectClose(face(), between(0.5));
+    expect(lift()).toBeCloseTo(-7, 6);
+    at(LIFT_MS + HOLD_MS + 400); // nearly at rest, not yet
+    expectClose(face(), between(1 - ease(400 / RETURN_MS)));
+    expect(face()).not.toEqual(REST);
+    at(HOWL_MS);
+    expect(face()).toEqual(REST);
+    expect(mouth().getAttribute("opacity")).toBe("0");
+    expect(lift()).toBe(0);
     expect(mark().dataset.howling).toBeUndefined();
     expect(frames).toHaveLength(0);
   });
 
-  it("with prefers-reduced-motion it never animates: hover, press and focus leave it at rest", () => {
-    const frames = stubMotion(true);
+  it("a howl always finishes and never overlaps: triggers and pointer leave mid-howl change nothing", () => {
+    const frames = stubMotion(false);
     render(<LogoLink />);
-    const link = screen.getByTestId("home-link");
-    fireEvent.pointerEnter(link);
-    fireEvent.pointerDown(link);
-    fireEvent.focus(link);
+    fireEvent.pointerEnter(link(), { pointerType: "mouse" });
+    fireEvent.click(link());
+    fireEvent.pointerLeave(link(), { pointerType: "mouse" });
+    expect(frames).toHaveLength(1); // one animation, one frame queued
+    act(() => frames.shift()!(1000 + LIFT_MS + 10));
+    fireEvent.pointerLeave(link(), { pointerType: "mouse" });
+    expectClose(face(), HOWL); // still howling after the pointer left
+    expect(frames).toHaveLength(1);
+  });
+
+  it("triggers: pointer enter but not by touch, click, and keyboard focus only", () => {
+    const frames = stubMotion(false);
+    render(<LogoLink />);
+    fireEvent.pointerEnter(link(), { pointerType: "touch" });
     expect(frames).toHaveLength(0);
+    const original = Element.prototype.matches;
+    let keyboard = false;
+    vi.spyOn(Element.prototype, "matches").mockImplementation(function (this: Element, selector: string) {
+      return selector === ":focus-visible" ? keyboard : original.call(this, selector);
+    });
+    fireEvent.focus(link()); // focus from a mouse press: not :focus-visible
+    expect(frames).toHaveLength(0);
+    keyboard = true;
+    fireEvent.focus(link()); // keyboard focus
+    expect(frames).toHaveLength(1);
+  });
+
+  it("reduced motion: jumps to the howl pose, holds 650 ms, jumps back, with no animation frames", () => {
+    const frames = stubMotion(true);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    render(<LogoLink />);
+    fireEvent.click(link());
+    expectClose(face(), HOWL);
+    expect(mouth().getAttribute("opacity")).toBe("1");
+    expect(lift()).toBe(-HEAD_LIFT); // no tremble
+    act(() => vi.advanceTimersByTime(HOLD_MS - 1));
+    fireEvent.pointerEnter(link(), { pointerType: "mouse" }); // ignored: the hold is still running
+    expectClose(face(), HOWL);
+    act(() => vi.advanceTimersByTime(1));
+    expect(face()).toEqual(REST);
+    expect(mouth().getAttribute("opacity")).toBe("0");
+    expect(lift()).toBe(0);
     expect(mark().dataset.howling).toBeUndefined();
-    expect(d()).toBe(WOLF_PATH);
+    expect(frames).toHaveLength(0);
   });
 });
