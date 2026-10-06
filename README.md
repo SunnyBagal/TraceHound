@@ -6,7 +6,7 @@ found it and how confidently the value was resolved (`proven` · `resolved-defau
 
 It also has a repair loop on open NVIDIA Nemotron models whose fixes are verified independently
 of the agent in a sandbox, and a reproduce stage that writes one failing test for a bug claim
-before anything is reported. **The graph did not help the repair agent.** In a pre-registered
+and checks it in a fresh sandbox, independently of the agent. **The graph did not help the repair agent.** In a pre-registered
 held-out evaluation (8 seeded tasks on one repo, 160 runs), the agent resolved about as many
 tasks with the graph as without it, and never called a graph tool. See
 [Held-out evaluation](#held-out-evaluation).
