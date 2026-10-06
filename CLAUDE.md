@@ -3,7 +3,7 @@
 Analyzes a TypeScript repo and renders it as an interactive, evidence-backed component graph
 on a canvas. Later: a graph-guided repair agent.
 
-## Current state (2026-10-04)
+## Current state (2026-10-06)
 - **Live:** https://tracehound-tau.vercel.app (Vercel, Root Directory `viewer`, auto-deploys
   from `main`; leave Output Directory unset). CI (`.github/workflows/ci.yml`) runs the snapshot
   version guard, tests, typecheck, and the viewer build, and checks that `out/snapshots/index.json`
@@ -125,6 +125,14 @@ on a canvas. Later: a graph-guided repair agent.
   and kept. Build log: `docs/build-log.md`. **Evaluation protocol: `docs/eval/protocol.md`**
   (written before any held-out task exists here); it decides which models run, freeze.md decides
   code, prompt and settings.
+- **Held-out evaluation (decisions 049, 050):** Amendment 1 (049) added "verified at stop" (final
+  patch passes repro, per-test and typecheck gates, whatever ended the run), five passes per batch
+  with arms spread, and a canary after every pass. Ran 2026-10-05/06 from `eval-freeze-2`: 160
+  counted runs, $6.27. Results in `docs/eval/heldout-results.md` (050, recomputed from the run
+  records by `docs/eval/heldout/recompute.mjs`). **The graph did not help:** resolved graph-on vs
+  off, n = 40 each, Nano 11 vs 13, Super 28 vs 26; 0 graph tool calls in 80 graph-on runs; Nano
+  verified at stop 11 vs 19. Tarballs (runs, results) are on a draft release; the driver scripts
+  and the evaluation prompt were not found. Held-out task files are not in the repo yet.
 - **Reproduce stage (decision 048, `repro-v1`):** `node packages/analyzer/src/harness/reproduce.ts
   run --claim <json> | batch --claims <dir> [--model] [--cost-limit-usd] [--max-ledger-usd] |
   oracle-check --record --patch | to-task --record`. A claim (`eval/claims/`: profile, source,

@@ -1235,3 +1235,27 @@ Rules block re-read at the start.
 - `eval/tasks/`;
 - held-out tasks (none created, read or looked for);
 - Recall (nothing changed or pushed).
+
+# Build log: held-out results import (decision 050)
+
+Prompt: `docs/prompts/050-results-import.md` (verbatim). Branch `docs/050-heldout-results` off
+`origin/main` at `5a504e4` (PR #13 merged). Docs only; no model calls ($0).
+
+- **Step 0:** on main, clean, level with `origin/main`; PR #13's merge is `5a504e4`.
+- **Step 2:** both tarballs in `~/Projects/tracehound-heldout/archive/` match the handoff's sha256
+  (runs `4baead15…`, results `83458ec1…`).
+- **Step 3:** `drive.sh`, `passes.sh`, `rerun.sh`, `aggregate.mjs` and `check.mjs` were not found
+  under `~/Projects/TraceHound-eval` or `~/Projects/tracehound-heldout`. No third tarball was made.
+- **Step 4:** seven files copied byte-identical into `docs/eval/heldout/`; `b2-super/results.json`
+  left out (one row quotes an agent-written scratch test's typecheck error naming a Recall file
+  and symbol). Run records and task files stay out.
+- **Step 5:** `docs/eval/heldout/recompute.mjs` over the 181 run records reproduces every count in
+  the handoff's section 4. Two mean costs differ in the fourth decimal (the handoff rounded up):
+  Nano graph-off $0.0202 (exact $0.020249; handoff $0.0203), Super graph-off $0.0478 (exact
+  $0.047846; handoff $0.0479). The ledger check was refined: 4,134 lines in the evaluation window,
+  4,128 successful calls matching the records and 6 failed requests (the six model timeouts).
+- **Step 6:** not done. `TraceHound-eval/docs/prompts/` holds only the frozen tag's prompts, and
+  `TraceHound_Handoff_Oct5.md` is not in the briefs folder.
+- **Step 7:** decision 050, this entry, CLAUDE.md (049, 050), README rewritten to state the result.
+- **Step 8:** draft release `heldout-eval-2026-10-06` with the two tarballs; GitHub's asset digests
+  match the sha256 above. Not published.

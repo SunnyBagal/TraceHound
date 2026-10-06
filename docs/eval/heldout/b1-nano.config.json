@@ -1,0 +1,143 @@
+{
+  "batch": "b1-nano",
+  "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B (default)",
+  "costLimitUSD": 0.1,
+  "frozen": "eval-freeze-2 (b5cafde03e2ff377277333871eef19f264d5c0b5), image sha256:857f16d26f2573f1a42e90e35242f773ddb82caa4802aa5d93bbcfedd7d77eed",
+  "protocol": "docs/eval/protocol.md with Amendment 1, commit 1ec1fcea2d146ccea3ba120d413942a5aeb06dd0 (2026-10-05 20:00:59 +0530) on origin/docs/protocol-amendment-1 (tip 4b8079f, same time, adds decision 049 only)",
+  "runsRoot": "/Users/sunny/Projects/TraceHound-eval/runs/heldout-eval",
+  "resultsDir": "/Users/sunny/Projects/tracehound-heldout/results",
+  "passes": [
+    {
+      "label": "pass-1",
+      "arms": "on,off",
+      "status": "valid",
+      "reason": "canary-1-after-pass-1 RESOLVED; no FAILED/error runs; baselines 62/62"
+    },
+    {
+      "label": "pass-2",
+      "arms": "off,on",
+      "status": "valid",
+      "reason": "canary-after-pass-2 RESOLVED; 2 void runs (model request timeout); baselines 62/62"
+    },
+    {
+      "label": "pass-3",
+      "arms": "on,off",
+      "status": "valid",
+      "reason": "canary-after-pass-3 RESOLVED; 2 void runs (model request timeout); baselines 62/62"
+    },
+    {
+      "label": "pass-4",
+      "arms": "off,on",
+      "status": "valid",
+      "reason": "canary-after-pass-4 RESOLVED; no void runs; baselines 62/62"
+    },
+    {
+      "label": "pass-5",
+      "arms": "on,off",
+      "status": "valid",
+      "reason": "canary-after-pass-5 RESOLVED; no void runs; baselines 62/62"
+    }
+  ],
+  "canaries": [
+    {
+      "label": "canary-0-before",
+      "state": "RESOLVED"
+    },
+    {
+      "label": "canary-1-after-pass-1",
+      "state": "RESOLVED"
+    },
+    {
+      "label": "canary-after-pass-2",
+      "state": "RESOLVED"
+    },
+    {
+      "label": "canary-after-pass-3",
+      "state": "RESOLVED"
+    },
+    {
+      "label": "canary-after-pass-4",
+      "state": "RESOLVED"
+    },
+    {
+      "label": "canary-after-pass-5",
+      "state": "RESOLVED"
+    },
+    {
+      "label": "canary-after-reruns",
+      "state": "RESOLVED"
+    }
+  ],
+  "voidRuns": [
+    {
+      "pass": "pass-2",
+      "taskId": "recall-heldout-01",
+      "arm": "off",
+      "reason": "infrastructure: model request timeout (\"The operation was aborted due to timeout\", 60 s client timeout) at step 26; recorded verdict UNRESOLVED",
+      "rerun": "rerun-pass-2-01-off"
+    },
+    {
+      "pass": "pass-2",
+      "taskId": "recall-heldout-04",
+      "arm": "on",
+      "reason": "infrastructure: model request timeout (\"The operation was aborted due to timeout\", 60 s client timeout) at step 13; recorded verdict RESOLVED",
+      "rerun": "rerun-pass-2-04-on"
+    },
+    {
+      "pass": "pass-3",
+      "taskId": "recall-heldout-08",
+      "arm": "on",
+      "reason": "infrastructure: model request timeout (\"The operation was aborted due to timeout\", 60 s client timeout); recorded verdict UNRESOLVED",
+      "rerun": "rerun-pass-3-08-on"
+    },
+    {
+      "pass": "pass-3",
+      "taskId": "recall-heldout-08",
+      "arm": "off",
+      "reason": "infrastructure: model request timeout (\"The operation was aborted due to timeout\", 60 s client timeout); recorded verdict UNRESOLVED",
+      "rerun": "rerun-pass-3-08-off"
+    }
+  ],
+  "reruns": [
+    {
+      "label": "rerun-pass-2-01-off",
+      "taskId": "recall-heldout-01",
+      "arm": "off",
+      "replaces": "pass-2|recall-heldout-01|off"
+    },
+    {
+      "label": "rerun-pass-2-04-on",
+      "taskId": "recall-heldout-04",
+      "arm": "on",
+      "replaces": "pass-2|recall-heldout-04|on"
+    },
+    {
+      "label": "rerun-pass-3-08-on",
+      "taskId": "recall-heldout-08",
+      "arm": "on",
+      "replaces": "pass-3|recall-heldout-08|on"
+    },
+    {
+      "label": "rerun-pass-3-08-off",
+      "taskId": "recall-heldout-08",
+      "arm": "off",
+      "replaces": "pass-3|recall-heldout-08|off"
+    }
+  ],
+  "ledger": {
+    "sessionStartUSD": 3.02408,
+    "batchStartUSD": 3.02408,
+    "afterPass1USD": 3.31889,
+    "afterPass2USD": 3.62141,
+    "afterPass3USD": 3.93131,
+    "afterPass4USD": 4.27164,
+    "afterPass5USD": 4.60629,
+    "endUSD": 4.66659,
+    "batchSpentUSD": 1.64251
+  },
+  "notes": [
+    "2026-10-06 00:00: passes 3-5 paused: two model request timeouts in pass 2 (same failure twice?) - reported to the user",
+    "2026-10-06 ~01:40: user chose \"Continue, void + re-run\" for the pass-2 timeouts; stop rule from then: a void re-run times out again, 3+ timeouts in one pass, or any FAILED run. The user later said they pressed Enter without reading the question; told what it did, they chose to keep running.",
+    "Re-runs 2026-10-06 05:12-05:30 IST: none void (no model timeout, no FAILED, baselines 62/62)."
+  ]
+}

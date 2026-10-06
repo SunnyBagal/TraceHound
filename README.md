@@ -1,9 +1,15 @@
 # TraceHound
 
-Persistent repository intelligence for humans and AI agents. TraceHound maps TypeScript
-codebases into evidence-backed architecture graphs: every edge on the canvas points back to a
-file, symbol and line range in the analyzed code, with the extractor that found it and how
-confidently the value was resolved (`proven` · `resolved-default` · `dynamic`).
+TraceHound maps TypeScript codebases into evidence-backed component graphs: every edge on the
+canvas points back to a file, symbol and line range in the analyzed code, with the extractor that
+found it and how confidently the value was resolved (`proven` · `resolved-default` · `dynamic`).
+
+It also has a repair loop on open NVIDIA Nemotron models whose fixes are verified independently
+of the agent in a sandbox, and a reproduce stage that writes one failing test for a bug claim
+before anything is reported. **The graph did not help the repair agent.** In a pre-registered
+held-out evaluation (8 seeded tasks on one repo, 160 runs), the agent resolved about as many
+tasks with the graph as without it, and never called a graph tool. See
+[Held-out evaluation](#held-out-evaluation).
 
 - **Analyzer** (`packages/analyzer`) — ts-morph + Zod. Deterministic extraction of imports,
   routes, Redis and Prisma usage and env reads. It groups files into responsibility-based
@@ -54,7 +60,8 @@ pnpm tracehound repair --task eval/tasks/toy-discount/task.json --agent nemotron
   setup.
 - `--agent nemotron` needs `NEBIUS_API_KEY`; `pnpm tracehound` loads the workspace `.env` itself.
   It runs agent-v6 (decision 047; prompt `harness/prompts/agent-v5.md`) on Nemotron Nano with reasoning on (`--reasoning off` to disable); `--graph on`
-  adds the architecture-graph tools.
+  puts a context packet from the graph in the first message and offers the graph tools. In the
+  held-out evaluation this did not improve repair (below).
 - Each run writes `runs/<runId>.json` with the state, the diff, every command, tokens and cost,
   and the sandbox it ran in (image id, Docker version, provider version, graph snapshot or
   `none`).
@@ -110,6 +117,25 @@ npx vercel deploy viewer/out --prod              # first run: `npx vercel login`
 ```
 
 To serve it under a sub-path, build with `NEXT_PUBLIC_BASE_PATH=/tracehound`.
+
+## Held-out evaluation
+
+Pre-registered in [`docs/eval/protocol.md`](docs/eval/protocol.md) (with Amendment 1) before any
+held-out run; code frozen at tag `eval-freeze-2`. 8 seeded bug tasks on one repo (Recall), graph
+on and off, Nemotron Nano and Super, 5 repeats each: 160 runs. Full tables, validity checks and
+disclosures: [`docs/eval/heldout-results.md`](docs/eval/heldout-results.md).
+
+| Model | Resolved, graph on | Resolved, graph off | Verified at stop, on | Verified at stop, off |
+|---|---|---|---|---|
+| Nano | 11 of 40 | 13 of 40 | 11 of 40 | 19 of 40 |
+| Super | 28 of 40 | 26 of 40 | 30 of 40 | 31 of 40 |
+
+- No difference in resolve rate between arms, as predicted in advance. No significance test was
+  run; these results are not pooled with dev runs.
+- The agent never called a graph tool in 80 graph-on runs, so the graph arm amounts to a context
+  packet in the first message. It reached the fault file at about the same step in both arms.
+- On Nano, fewer graph-on runs ended with a passing patch (11 against 19), a secondary measure.
+- The model mattered far more than the graph: Super resolved 54 of 80, Nano 24 of 80.
 
 ## Known limits
 - BullMQ queue pairing works when queues are constructed with literal names in plain variables.

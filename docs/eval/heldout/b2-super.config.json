@@ -1,0 +1,121 @@
+{
+  "batch": "b2-super",
+  "model": "nvidia/nemotron-3-super-120b-a12b (--model)",
+  "costLimitUSD": 0.6,
+  "frozen": "eval-freeze-2 (b5cafde03e2ff377277333871eef19f264d5c0b5), image sha256:857f16d26f2573f1a42e90e35242f773ddb82caa4802aa5d93bbcfedd7d77eed",
+  "protocol": "docs/eval/protocol.md with Amendment 1, commit 1ec1fcea2d146ccea3ba120d413942a5aeb06dd0 (2026-10-05 20:00:59 +0530) on origin/docs/protocol-amendment-1 (tip 4b8079f, same time, adds decision 049 only)",
+  "runsRoot": "/Users/sunny/Projects/TraceHound-eval/runs/heldout-eval",
+  "resultsDir": "/Users/sunny/Projects/tracehound-heldout/results",
+  "passes": [
+    {
+      "label": "pass-1",
+      "arms": "on,off",
+      "status": "valid",
+      "reason": "canary-after-pass-1 RESOLVED; no void runs; baselines 62/62"
+    },
+    {
+      "label": "pass-2",
+      "arms": "off,on",
+      "status": "valid",
+      "reason": "canary-after-pass-2 RESOLVED; no void runs; baselines 62/62"
+    },
+    {
+      "label": "pass-3",
+      "arms": "on,off",
+      "status": "valid",
+      "reason": "canary-after-pass-3 RESOLVED; no void runs; baselines 62/62"
+    },
+    {
+      "label": "pass-4",
+      "arms": "off,on",
+      "status": "void",
+      "reason": "host network outage from about 07:05 IST: canary-after-pass-4 FAILED (DNS, git clone); 4 runs FAILED (07 on/off, 08 on/off, same cause) and 06 graph-on ended in a model request timeout. Records kept."
+    },
+    {
+      "label": "pass-4-replacement-1",
+      "arms": "off,on",
+      "status": "valid",
+      "reason": "replacement 1 of 2 for void pass-4; canaries before and after RESOLVED; no void runs; baselines 62/62"
+    },
+    {
+      "label": "pass-5",
+      "arms": "on,off",
+      "status": "valid",
+      "reason": "canary-after-pass-5 RESOLVED; 1 void run (model request timeout); baselines 62/62"
+    }
+  ],
+  "canaries": [
+    {
+      "label": "canary-0-before",
+      "state": "RESOLVED"
+    },
+    {
+      "label": "canary-after-pass-1",
+      "state": "RESOLVED"
+    },
+    {
+      "label": "canary-after-pass-2",
+      "state": "RESOLVED"
+    },
+    {
+      "label": "canary-after-pass-3",
+      "state": "RESOLVED"
+    },
+    {
+      "label": "canary-after-pass-4",
+      "state": "FAILED (harness error: git clone failed, Could not resolve host: github.com)"
+    },
+    {
+      "label": "canary-before-pass-4-replacement-1",
+      "state": "RESOLVED"
+    },
+    {
+      "label": "canary-after-pass-4-replacement-1",
+      "state": "RESOLVED"
+    },
+    {
+      "label": "canary-after-pass-5",
+      "state": "RESOLVED"
+    },
+    {
+      "label": "canary-after-reruns",
+      "state": "RESOLVED"
+    }
+  ],
+  "voidRuns": [
+    {
+      "pass": "pass-5",
+      "taskId": "recall-heldout-06",
+      "arm": "on",
+      "reason": "infrastructure: model request timeout (\"The operation was aborted due to timeout\", 60 s client timeout); recorded verdict UNRESOLVED",
+      "rerun": "rerun-pass-5-06-on"
+    }
+  ],
+  "reruns": [
+    {
+      "label": "rerun-pass-5-06-on",
+      "taskId": "recall-heldout-06",
+      "arm": "on",
+      "replaces": "pass-5|recall-heldout-06|on"
+    }
+  ],
+  "ledger": {
+    "sessionStartUSD": 3.02408,
+    "capRule": "Batch 2 stops when new spend since session start reaches $7.00 (conservative reading of 'stop Batch 2 at $7.00')",
+    "batchStartUSD": 4.66659,
+    "afterPass1USD": 5.45799,
+    "afterPass2USD": 6.1396,
+    "afterPass3USD": 6.91435,
+    "afterPass4USD": 7.39967,
+    "afterPass4Replacement1USD": 8.34343,
+    "afterPass5USD": 9.25574,
+    "endUSD": 9.29182,
+    "batchSpentUSD": 4.62523,
+    "sessionNewSpendUSD": 6.26774
+  },
+  "notes": [
+    "Stop rule carried over from the user's decision in Batch 1: a void re-run that times out again, 3+ model timeouts in one pass, or any FAILED run.",
+    "2026-10-06 09:3x IST: user chose to replace pass 4 (replacement 1 of 2) and then run pass 5.",
+    "Re-run 2026-10-06 ~10:35-10:40 IST: not void (no timeout, no FAILED, baseline 62/62)."
+  ]
+}
