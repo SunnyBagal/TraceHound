@@ -9,3 +9,11 @@
 - No significance claims. Dev results are never pooled with held-out results.
 - Expectation stated in advance: in the dev runs the agent found the fault file every time in both arms, so no difference in resolve rate is expected on this repo.
 - Run records are archived with the results after a secrets check.
+
+## Amendment 1, 5 October 2026 (written before any held-out run)
+- Second measure, "verified at stop": a run counts if its final patch passes the reproduction test, the per-test regression gate and the typecheck gate, whatever ended the run. It is reported beside "resolved" for every arm and model. Reason: the frozen harness scores a run UNRESOLVED when the agent runs out of budget even if its patch passes every gate, as seen in a dev repair run on 4 October.
+- Run order: each batch is five passes; each pass runs every task in both arms once, so the arms are spread across the session.
+- Canary: the oracle patch for one task runs before the first pass and after every pass. A canary that is not RESOLVED voids the pass before it.
+- Batches: Nano and Super are separate batches on the same machine with the same sandbox image.
+- Limit: all four cross-component tasks have their fault in one file, because Recall's worker component is two files.
+- Deviation: on 4 October 2026 at 19:56 IST and 5 October at 19:50 IST, the held-out candidates and the final task list were shown to the chat assistant that writes the main lane's prompts. Both were after eval-freeze-2 (b5cafde) was tagged. The evaluation runs from that tag, and no frozen artifact has changed since.
