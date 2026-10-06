@@ -155,6 +155,13 @@ it (decision 050).
   snapshot evidence ids, excerpts, a stated input. Rules find only rule-shaped bugs. Recall
   `5d2165a`: 1 / 0 / 2. Sessions that build the finder never see Recall's real bug list; the
   repo gets counts only, never hypothesis text.
+- **Finder → claims (decision 052, no model):** `tracehound find … --claims <dir under runs/>
+  --profile <profile.json> [--git-url <url>]` also writes, per hypothesis, a Form A claim
+  (question + stated input, `file:line` evidence) and a Form B claim (the same plus `excerpts`) in
+  `form-a/` / `form-b/`, same id, baseSha = the commit the finder read. `ClaimSpec` has an optional
+  `excerpts` field; without it the agent's prompt is byte-identical (pinned in
+  `test/claim-excerpts.test.ts`). Claims target Recall `testable-baseline` @ `57d920e` (the
+  profile's commit): 1 / 0 / 1 hypotheses, 4 claim files. The reproduce stage has not run on them.
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**
