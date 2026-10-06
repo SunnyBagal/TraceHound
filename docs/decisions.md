@@ -2349,3 +2349,69 @@ archive tarballs keep their recorded sha256 and go on a draft release.
 - Both "not done" items are now done: the evaluation prompt is `docs/prompts/heldout-eval-run.md`
   (from the appendix of `TraceHound_Handoff_Oct5.md`), and the five driver scripts, found in the
   evaluation session's `/private/tmp` scratchpad, are a third tarball on the draft release.
+
+## 051 · Finder phase 1: graph rules that emit hypotheses, no model
+**Context:** the held-out evaluation (050) found that the graph did not help the repair agent. The
+graph's remaining job is choosing what to check. Phase 1 of the findings pipeline is rules over
+the graph, each emitting narrow questions that the reproduce stage (048) can try to turn into one
+failing test (prompt `docs/prompts/051-finder-rules.md`).
+**Limits, stated first:**
+- Rules find only rule-shaped bugs: a bug that doesn't match one of the three shapes below is
+  invisible to them, so coverage of a repo's real bugs will be low.
+- Study S1 (043) says the graph is good on configured repos, not on unseen ones. The rules stand on
+  the graph's routes, mounts and queue facts, so they inherit that limit.
+- A hypothesis is a question, not a finding. Nothing in this phase says "this is a bug"; only a
+  reproduced test, checked independently of the agent, will.
+**Choice** (`packages/analyzer/src/finder/`, `finder-rules@1`; `tracehound find --repo <path>
+[--config f] [--out f] [--json]`, default output `runs/finder/<repo id>-<sha7>.json`, gitignored):
+- **Hypothesis format** (`finder/hypothesis.ts`, zod): `id` (family + anchor evidence id),
+  `family`, `rule` (id and the rule in words), `question` (one narrow yes/no question a single test
+  can answer), `statedInput` (the input that test would send; the approval step shows it beside the
+  test's own input), `graph` (`evidenceIds`, at least one, all from the snapshot; `edgeIds` of
+  edges citing them; `componentIds`), `excerpts` (file, start and end line, why, the lines; capped
+  at 20 lines, `truncated` says so). The report adds `counts` per family and `notes` (why a rule
+  stayed silent as a whole).
+- **Pure rules, deterministic probes.** The snapshot doesn't hold auth middleware, payload fields
+  or fetch calls, so the finder has two layers. **Probes** (`probe.ts`) read the source with
+  ts-morph, read-only, and only at places the graph names: each route's evidence, the mounts, and
+  each BullMQ produce and consume evidence; they return plain data. **Rules** (`rules.ts`,
+  `applyRules`) are a pure function of the snapshot and the probes: no I/O, no model, same inputs
+  give the same report. The finder runs `analyzeRepo` itself (heuristic names, no naming pass),
+  so it needs no published snapshot and makes no model call.
+- **Rule families:**
+  - `route-without-auth@1`: a route with no auth signal on some mount chain. Signals: middleware on
+    the route, `use()` / `register()` / `addHook()` on its router or on a parent before the route or
+    mount (express order), auth middleware in the mount call itself, or the handler body (an
+    auth-named identifier, `req.user` / `session` / `cookies` / `auth`, an `authorization`,
+    `cookie` or `x-api-key` header) including one repo function the handler passes `req` to.
+    Auth-named means `AUTH_NAME` in `probe.ts` (`auth` but not `author`, `jwt`, `passport`,
+    `requireUser`, `guard`, …). It fires only when at least one other route in the repo has a
+    signal (it compares routes with each other; otherwise a note says it was silent). OPTIONS,
+    HEAD and public-looking paths (`/`, health, login, signup, webhooks, auth, docs, …) are skipped.
+  - `payload-field-missing@1`: a BullMQ processor reads `job.data.<field>` without a fallback
+    (`??`, `||`, a destructuring default, a `!` / `typeof` / condition test), and a producer of
+    the same queue name adds a payload whose type has no such property. Reads are followed through
+    `const d = job.data`, destructuring, and up to two calls that receive the job or its data.
+    Producers whose payload type is `any`, `unknown`, not an object or an index signature are
+    skipped. When the processor branches on `job.name` (the detector's job-name-filtering fact), it
+    fires only if no producer sends the field.
+  - `request-to-fetch@1`: a value from `req.body`, `req.query` or `req.params` reaches the first
+    argument of an outbound HTTP call (global `fetch` that isn't a repo function, axios, got, ky,
+    undici, node-fetch, superagent, `http(s).get/request`). Taint follows local variables,
+    destructuring, object literals and reassignment (flow-insensitive), up to two repo function
+    calls, and at most one BullMQ queue whose produce evidence is in the path (the payload's
+    tainted fields become `job.data.<field>` in the processor, then up to two more calls). Headers
+    are not a source; a request value only in the fetch's options is not a sink.
+- **Tests:** `test/finder.test.ts`, fixtures written for it (no Recall): 5 for route-without-auth,
+  4 for payload-field-missing, 4 for request-to-fetch, each family with positive and negative
+  cases, and 1 for the report (counts, determinism).
+- No extractor, grouping or snapshot output changed, so `ANALYZER_VERSION` stays 0.10.0.
+**Rejected:**
+- (a) New extractors that put middleware, payload keys and fetch calls into the snapshot: that
+  changes snapshot output (version bump, regenerated published snapshots) for facts only the finder
+  reads, and this phase may touch only the finder and its CLI wiring. They can move into the
+  snapshot later if the viewer needs them.
+- (b) Firing route-without-auth on every route of a repo with no auth anywhere: one hypothesis per
+  route says nothing a reader didn't know, and buries the narrow ones.
+- (c) Asking a model to propose hypotheses: this phase makes no model call, and a model never
+  creates a proven edge.
