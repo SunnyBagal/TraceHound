@@ -57,6 +57,11 @@ export const REPRO_STAGE_VERSION = "repro-v1";
 
 // ── Claim ────────────────────────────────────────────────────────────────────────────────────
 const Sha = z.string().regex(/^[0-9a-f]{40}$/, "full 40-char commit SHA");
+const ClaimExcerpt = z
+  .object({ file: z.string().min(1), startLine: z.number().int().positive(), endLine: z.number().int().positive(), lines: z.array(z.string()).min(1) })
+  .strict()
+  .refine((e) => e.lines.length === e.endLine - e.startLine + 1, { message: "lines must cover startLine..endLine exactly" });
+export type ClaimExcerpt = z.infer<typeof ClaimExcerpt>;
 export const ClaimSpec = z
   .object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
@@ -70,6 +75,8 @@ export const ClaimSpec = z
     claim: z.string().min(1),
     /** Optional pointers ("file:line"), shown to the agent. */
     evidence: z.array(z.string().min(1)).optional(),
+    /** Optional code excerpts (decision 052), shown to the agent after the evidence; absent → the issue text is unchanged. */
+    excerpts: z.array(ClaimExcerpt).min(1).optional(),
     /** For testing the stage only: a patch applied before the base commit is made, as a task's seed. */
     seed: z.object({ patch: z.string() }).strict().optional(),
     /** Regex over repo-relative paths; default bun's discovery. The file must also be inside the profile's workdir. */
@@ -108,8 +115,11 @@ export function loadClaim(file: string): LoadedClaim {
   return { spec, file: abs, dir, profile, profilePath, ...(localPath && { localPath }), ...(seedPatch !== undefined && { seedPatch, seedPatchPath }) };
 }
 
-/** What the agent is given as its "issue": the claim's title, text and evidence. */
-export const claimText = (c: ClaimSpec) => [c.title, "", c.claim, ...(c.evidence?.length ? ["", `Evidence: ${c.evidence.join(", ")}`] : [])].join("\n");
+/** What the agent is given as its "issue": the claim's title, text and evidence, then any excerpts. */
+export const claimText = (c: ClaimSpec) =>
+  [c.title, "", c.claim, ...(c.evidence?.length ? ["", `Evidence: ${c.evidence.join(", ")}`] : []), ...(c.excerpts ? excerptLines(c.excerpts) : [])].join("\n");
+
+const excerptLines = (excerpts: ClaimExcerpt[]) => ["", "Code excerpts:", ...excerpts.flatMap((e) => ["", `${e.file}:${e.startLine}-${e.endLine}`, "```ts", ...e.lines, "```"])];
 
 /** The dev tasks' limits (decision 044); cost per run as in docs/freeze.md (Nano $0.10, Super $0.60 via --cost-limit-usd). */
 export const REPRO_LIMITS: TaskSpec["limits"] = { steps: 40, wallClockMs: 900_000, tokens: 300_000, commandTimeoutMs: 300_000, costUSD: 0.1 };

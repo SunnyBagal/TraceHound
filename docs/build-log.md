@@ -1300,3 +1300,26 @@ at `8ed9384` (PR #15 merged). No model calls ($0).
   included, 805 s), viewer 97 passed (11 files); `pnpm typecheck` exit 0; viewer build exit 0;
   version guard OK (every repo's latest snapshot is 0.10.0; no bump needed, snapshot output
   unchanged).
+
+# Build log: decision 052, finder phase 2a (hypotheses → reproduce claims, no model)
+
+Prompt: `docs/prompts/052-finder-claims.md` (verbatim). Branch `build/052-finder-claims` off `main`
+at `075d645` (PR #16 merged). No model calls ($0); the reproduce stage was not run.
+
+- **Step 0:** `git status --porcelain` empty; fetch, checkout main, fast-forward pull
+  `8ed9384..075d645`; on main, clean, HEAD = `origin/main` = `075d645`, PR #16's merge in the log.
+- **Steps 2–5:** decision 052; `finder/claims.ts`, `find --claims`; `excerpts` in `ClaimSpec`;
+  `test/claim-excerpts.test.ts` (3; its pins were taken before `reproduce.ts` changed and still
+  pass after), `test/finder-claims.test.ts` (8).
+- **Step 6:** one run of `tracehound find --config configs/recall.tracehound.json --claims
+  runs/finder/claims/recall-57d920e --profile configs/recall.profile.json` on a temporary clone of
+  `SunnyBagal/Recall` at `57d920e4c93b9185c8dbe7350d98633c4732c78e` (testable-baseline; no
+  dependencies installed; `~/Projects/Recall` not touched; clone deleted afterwards). Hypotheses
+  per family: route-without-auth 1, payload-field-missing 0, request-to-fetch 1. Claim files
+  written: 4 (2 Form A, 2 Form B); all 4 load with `loadClaim` (baseSha `57d920e…`, profile
+  `recall`). Hypothesis and claim text were not opened.
+
+- **Step 7 (gates, plain shell; the `GIT_` check printed nothing before each):**
+  `TRACEHOUND_NETWORK_TESTS=1 pnpm test` exit 0, analyzer 408 passed (36 files, Docker project
+  included, 856 s), viewer 97 passed (11 files); `pnpm typecheck` exit 0; viewer build exit 0;
+  version guard OK (every repo's latest snapshot is 0.10.0; snapshot output unchanged, no bump).

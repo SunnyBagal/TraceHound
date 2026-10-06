@@ -7,7 +7,7 @@
 //   mcp      the query tools as a stdio MCP server
 //   repair   run a repair task in a sandbox with a (scripted) agent and verify the result
 //   changes  declaration-level change set of a diff or a run's patch (decision 038)
-//   find     hypotheses from graph rules, no model (decision 051)
+//   find     hypotheses from graph rules, no model (decision 051); --claims: reproduce claims (052)
 const [command, ...rest] = process.argv.slice(2);
 
 if (command === "changes") {
@@ -45,7 +45,7 @@ if (command === "changes") {
 } else {
   console.error(
     "usage: tracehound <analyze|impact|changes|find|context|query|mcp|repair> [...args]\n" +
-      "  tracehound find --repo <path> [--config <tracehound.json>] [--out <file.json>] [--json]\n" +
+      "  tracehound find --repo <path> [--config <tracehound.json>] [--out <file.json>] [--json] [--claims <dir> --profile <profile.json> [--git-url <url>]]\n" +
       "  tracehound impact --repo <path> --diff <base>..<head> [--depth 2] [--json] [--out <file>]\n" +
       '  tracehound context --issue "<text>" [--decider lexical|nemotron] [--k 3] [--snapshot <path>] [--budget <tokens>] [--json]\n' +
       "  tracehound query <search_components|get_neighbors|get_edge_evidence|get_related_tests> ... [--json]\n" +

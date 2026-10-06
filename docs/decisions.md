@@ -2415,3 +2415,65 @@ failing test (prompt `docs/prompts/051-finder-rules.md`).
   route says nothing a reader didn't know, and buries the narrow ones.
 - (c) Asking a model to propose hypotheses: this phase makes no model call, and a model never
   creates a proven edge.
+
+## 052 · Finder phase 2a: hypotheses become reproduce claims, no model
+**Context:** the finder (051) writes hypotheses; the reproduce stage (048) takes claims. Phase 2a
+joins them without a model, so that a later phase can run the reproduce stage on finder output
+(prompt `docs/prompts/052-finder-claims.md`). Nothing here runs the reproduce stage.
+**Choice** (`packages/analyzer/src/finder/claims.ts`; CLI `tracehound find --repo <path> [--config f]
+--claims <dir under runs/> --profile <profile.json> [--git-url <url>]`):
+- **Command:** a flag on `find`, not a sibling command. The claims need the finder's commit, which
+  only the run that analyzed the checkout knows for sure, so converting in the same run removes any
+  chance of pairing a report with the wrong commit. `--claims` must resolve under `runs/`
+  (gitignored), since claims hold hypothesis text. `--git-url` defaults to the checkout's `origin`
+  remote (the claims' `source`; a temporary clone's path would not outlive it).
+- **One hypothesis → two claims**, `<dir>/form-a/<id>.json` and `<dir>/form-b/<id>.json`, each
+  parsed by `ClaimSpec` before it is written:
+  - `id`: `<family>-<first 10 hex of sha256(hypothesis id)>`. Hypothesis ids hold `:`, `#`, `/`
+    and `.`, which a claim id can't; the hash keeps it derived from the id and stable for one
+    commit. Both forms share it, so they differ only by `excerpts`; the folder says the form, and a
+    reproduce record keeps it in `claimFile`. Two hypotheses with one claim id → an error.
+  - `baseSha`: the snapshot's full commit SHA. `profile`: the given profile, stored relative to the
+    claim's folder (Recall: `configs/recall.profile.json`). `source.gitUrl` as above.
+  - **Form A:** `title` "Question from rule `<rule id>`"; `claim` "Question: `<question>`" and
+    "Input: `<stated input>`"; `evidence` the excerpts' `file:line` (or `file:start-end`) pointers,
+    deduplicated. Nothing else from the hypothesis: not the rule's prose, the excerpts' `why`
+    notes or the graph ids, and no words about impact.
+  - **Form B:** Form A plus `excerpts`: each hypothesis excerpt's file, start line, end line and
+    lines (`why` and `truncated` dropped; a truncated excerpt's end line is already the last line
+    shown, so the lines cover the range exactly).
+- **ClaimSpec gains one optional field**, `excerpts` (≥ 1 of `{file, startLine, endLine, lines}`,
+  strict, lines must cover the range). `claimText` appends, only when it is present, a blank line,
+  "Code excerpts:", and per excerpt `file:start-end` with its lines in a fenced block. Without it
+  the text is the same expression as before. `harness/prompts/repro-v1.md` is unchanged: the claim
+  reaches the agent as the "Issue", so the excerpts need no prompt change. `to-task` still uses the
+  `claim` field alone as the repair issue.
+- **Target commit: Recall `testable-baseline` @ `57d920e`**, not `5d2165a`. The reproduce stage
+  needs `configs/recall.profile.json` (decision 041), whose install and tests were checked on
+  `57d920e`; `5d2165a` (the phase-1 run) has no checked profile. Excerpts and line pointers are
+  only true at the commit the finder read, so the claims come from a finder run on `57d920e`
+  itself, never from the `5d2165a` report.
+**Tests:**
+- `test/claim-excerpts.test.ts` (3): an existing claim, `eval/claims/recall-dev-chat-recent-control.json`,
+  through a reproduce run on a fake sandbox and a scripted model: the issue text, the first request's
+  messages and the rest of that request are pinned to sha256 values taken on `main` (`075d645`)
+  before `reproduce.ts` changed, and the run still ends NOT_REPRODUCED the same way; a claim with
+  excerpts shows them after the unchanged text; malformed excerpts are rejected.
+- `test/finder-claims.test.ts` (8), on the finder's positive fixtures (now shared from
+  `test/finder-fixtures.ts` with `finder.test.ts`, which is otherwise unchanged): per family, both
+  files parse and load with their profile at the finder's commit, and Form B minus `excerpts`
+  equals Form A; ids are stable; no rule prose, `why` note or graph id leaks into a claim.
+**Limits:**
+- `repro-v1.md` tells the agent the claim states observed and expected behaviour. A finder claim is
+  a question with an input and states neither, so the agent has to read the question as the
+  expected behaviour. Changing the prompt was out of scope; whether the agent copes is for the run
+  that uses these claims.
+- The claim text is the hypothesis text. Its wording was written for a reader, not tuned for the
+  agent.
+**Rejected:**
+- (a) A sibling command that converts a saved report: it would have to trust the report's commit
+  matches the checkout the claims will name. Possible later if reports need re-converting.
+- (b) Form B as excerpts pasted into `claim`: Form A and B would then differ in `claim`, and the
+  excerpts would also flow into `to-task`'s repair issue.
+- (c) Ids with a `-a` / `-b` suffix: the forms would then differ by more than `excerpts`.
+- (d) Editing `repro-v1.md` to introduce excerpts: frozen for this phase, and not needed.

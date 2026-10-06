@@ -4,6 +4,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { findHypotheses } from "../src/finder/index.ts";
 import { FinderReport, type RuleFamily } from "../src/finder/hypothesis.ts";
 import { makeFixtureRepo } from "./fixture-repo.ts";
+import { AUTH, PAYLOAD_FIELD_MISSING, QUEUE, REQUEST_TO_FETCH, ROUTE_WITHOUT_AUTH } from "./finder-fixtures.ts";
 
 const cleanups: (() => void)[] = [];
 afterAll(() => cleanups.forEach((c) => c()));
@@ -17,18 +18,9 @@ function find(files: Record<string, string>): FinderReport {
 const of = (r: FinderReport, family: RuleFamily) => r.hypotheses.filter((h) => h.family === family);
 
 // ── route-without-auth ──
-const AUTH = 'import type { Request, Response, NextFunction } from "express";\nexport function requireAuth(req: Request, res: Response, next: NextFunction) {\n  if (!req.headers.authorization) return res.status(401).end();\n  next();\n}\n';
-
 describe("route-without-auth@1", () => {
   it("fires on a route with no auth signal when a sibling route has route middleware", () => {
-    const r = find({
-      "src/auth.ts": AUTH,
-      "src/server.ts":
-        'import express from "express";\nimport { requireAuth } from "./auth.ts";\nconst app = express();\n' +
-        'app.get("/notes", requireAuth, (req, res) => res.json([]));\n' +
-        'app.delete("/notes/:id", (req, res) => res.json({ id: req.params.id }));\n' +
-        "app.listen(3000);\n",
-    });
+    const r = find(ROUTE_WITHOUT_AUTH);
     const hs = of(r, "route-without-auth");
     expect(hs.map((h) => h.question)).toEqual(["Does DELETE /notes/:id respond with data or perform its action for a caller who sends no credentials?"]);
     expect(hs[0]).toMatchObject({
@@ -89,16 +81,9 @@ describe("route-without-auth@1", () => {
 });
 
 // ── payload-field-missing ──
-const QUEUE = 'import { Queue } from "bullmq";\nexport const emails = new Queue("emails");\n';
-
 describe("payload-field-missing@1", () => {
   it("fires when the processor reads a field the producer's payload type lacks", () => {
-    const r = find({
-      "src/queue.ts": QUEUE,
-      "src/server.ts": 'import { emails } from "./queue.ts";\nexport async function signup(email: string) {\n  await emails.add("welcome", { to: email });\n}\nawait signup("a@b.c");\n',
-      "src/worker.ts":
-        'import { Worker, type Job } from "bullmq";\nasync function send(job: Job) {\n  const to = job.data.to;\n  const name = job.data.name;\n  console.log(to.trim(), name.trim());\n}\nnew Worker("emails", send);\n',
-    });
+    const r = find(PAYLOAD_FIELD_MISSING);
     const hs = of(r, "payload-field-missing");
     expect(hs).toHaveLength(1);
     expect(hs[0]).toMatchObject({
@@ -146,12 +131,7 @@ describe("payload-field-missing@1", () => {
 // ── request-to-fetch ──
 describe("request-to-fetch@1", () => {
   it("fires when a body value reaches fetch() through a variable and a service function", () => {
-    const r = find({
-      "src/preview.ts": "export async function preview(target: string) {\n  const res = await fetch(target);\n  return res.text();\n}\n",
-      "src/server.ts":
-        'import express from "express";\nimport { preview } from "./preview.ts";\nconst app = express();\n' +
-        'app.post("/preview", async (req, res) => {\n  const { url } = req.body;\n  res.send(await preview(url));\n});\napp.listen(3000);\n',
-    });
+    const r = find(REQUEST_TO_FETCH);
     const hs = of(r, "request-to-fetch");
     expect(hs).toHaveLength(1);
     expect(hs[0]).toMatchObject({
