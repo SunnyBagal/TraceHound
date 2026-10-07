@@ -2477,3 +2477,52 @@ joins them without a model, so that a later phase can run the reproduce stage on
   excerpts would also flow into `to-task`'s repair issue.
 - (c) Ids with a `-a` / `-b` suffix: the forms would then differ by more than `excerpts`.
 - (d) Editing `repro-v1.md` to introduce excerpts: frozen for this phase, and not needed.
+
+## 053 · Disclosure: who saw Recall's real bugs, and what finder results on Recall may claim
+**Context:** a disclosure was parked outside this repo until Recall's known bugs were fixed in
+production. They are fixed, so it comes in here, with what happened on 2026-10-07 (prompt
+`docs/prompts/053-disclosure.md`). The bugs are referred to only as "the three bugs fixed in
+Recall PR #1 (merge 3e39129) and PR #2 (merge 20ac149)". This entry records who saw what and
+when; it does not describe any of them.
+- **From the parked note** (written before PR #2; it counts two bugs):
+  - The finder's three rule families (051) were chosen by a chat session that knew of the bugs
+    (then two, unpublished). When: not recorded.
+  - The phase-1 builder session (051) read a one-line description of them. When: not recorded.
+  - So a finder hit on any of the three bugs is not a blind discovery.
+- **Supplied by the owner's chat, not checkable from this repo:**
+  - There were three live bugs, not two. PR #1 fixed two and PR #2 fixed the third. All three
+    fixes are deployed, and the owner confirmed production himself.
+  - Both Recall PRs were written by a separate cloud session, with neutral titles and commit
+    messages.
+  - The chat assistant session that wrote the main lane's prompts until 2026-10-07 16:50 IST saw
+    the descriptions of all three bugs and both fix diffs. No prompt written by that session, or
+    from its handoff files, is blind to them.
+  - The chat session that started on 2026-10-07 at 16:54 IST and wrote this entry's prompt read a
+    handoff that gives away the area of one bug and lists follow-up items from the fixes. It did
+    not open either Recall PR. It read Recall commit hashes and dates only. It is not blind either.
+  - Recall commit facts, from hashes and dates only: PR #1's first commit is `ed5fd0e`
+    (2026-10-06 20:22 UTC, 2026-10-07 01:52 IST); merge `3e39129` is 2026-10-07 02:09 IST; merge
+    `20ac149` is 2026-10-07 03:08 IST; Recall `main` is `20ac149`. `testable-baseline` is still
+    `57d920e` (2026-10-02). Neither merge is an ancestor of `57d920e`. `57d920e` is not an
+    ancestor of `main`; their merge base is `9113ced`.
+- **From this repo, checked with `git log`:** finder-rules@1 (051) merged in `075d645` at
+  2026-10-06 19:01:11 +05:30 (13:31 UTC); the claims code (052) merged in `5aa1070` at
+  2026-10-06 19:57:50 +05:30 (14:27 UTC). Both are earlier than Recall `ed5fd0e`. That orders
+  the code before the fixes; it does not make the code blind, since the families were chosen by a
+  session that knew of the bugs.
+- The session that wrote this entry read the parked note and nothing else about the bugs; it
+  opened no Recall checkout, PR, diff or commit.
+**Choice:**
+- Every finder, reproduce or repair result on Recall's real bugs is reported with a pointer to
+  decision 053.
+- Any change to the finder's rules, the claim text or the reproduce prompt made after 2026-10-07
+  counts as made with knowledge of the bugs, whoever writes it.
+- Results on the three bugs are reported as counts ("N of 3"), never as bug descriptions.
+**Limits:**
+- The claim that all three bugs exist at `57d920e` comes from the owner and has not been checked
+  in this repo.
+- The fixes were written on Recall `main`, not on `testable-baseline`.
+**Rejected:**
+- (a) Leaving the disclosure outside the repo, where readers of the results cannot see it.
+- (b) Describing the bugs in the entry, which would end blindness for every later session that
+  reads this repo.
