@@ -15,7 +15,8 @@
   /* surfaces */
   --page-bg: #13111b;
   --canvas-bg: #13111b;
-  --canvas-dot: #292731;
+  /* brighter than the sampled dot (#292731), by the owner's request */
+  --canvas-dot: #5c5968;
   --node-bg: #17161f;
   --node-bg-hover: #1c1b25;
   --node-border: #24232c;
@@ -49,6 +50,22 @@
   --diff-regrouped: #8a96b0;
   --diff-modified: var(--warn);
   --scrim: rgba(6, 5, 10, 0.72);
+  /* landing page (app/page.tsx). Ink: the hero's headline, mark and nav text on the hero image.
+     Veil: the light panel behind the hero's text block and nav. Measured on the hero image
+     (WCAG 2.x, every pixel of the region behind the text at 1440×900, 1920×1080 and 390×844):
+     ink on the bare image is 2.21:1 at worst, so the veil is required; through the veil the worst
+     pixel is 7.87:1, and even a pure-black pixel behind the veil would give 4.93:1. */
+  --ink: #0b0a10;
+  --veil: rgba(255, 255, 255, 0.5);
+  /* Glass: the dark panel every section below the hero sits on, over the fixed sky. 90% of
+     --page-bg: over the brightest possible pixel (white) it is #2b2932 at worst, where --text is
+     12.0:1, --muted 6.7:1, --faint 4.8:1 and --accent 7.0:1 (the blur only darkens it further). */
+  --glass: rgba(19, 17, 27, 0.9);
+  --glass-line: rgba(255, 255, 255, 0.09);
+  /* the text on an ink button: 16.5:1 on --ink */
+  --on-ink: var(--text);
+  /* the landing column's side gutter (max-width 1200px between them) */
+  --landing-gutter: clamp(20px, 5vw, 64px);
 
   /* aliases used by the utility classes */
   --bg: var(--canvas-bg);
@@ -86,6 +103,11 @@
   --color-diff-removed: var(--diff-removed);
   --color-diff-regrouped: var(--diff-regrouped);
   --color-diff-modified: var(--diff-modified);
+  --color-ink: var(--ink);
+  --color-veil: var(--veil);
+  --color-on-ink: var(--on-ink);
+  --color-glass: var(--glass);
+  --color-glass-line: var(--glass-line);
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -127,3 +149,154 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .pulse-ring { animation: none; }
 }
+
+/* ---------- landing page (app/page.tsx) ---------- */
+
+/* the viewer pins html/body for the canvas; the landing page scrolls */
+html:has(.landing) {
+  height: auto;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+html:has(.landing) body {
+  height: auto;
+  overflow: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:has(.landing) { scroll-behavior: auto; }
+}
+.landing {
+  font-family: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  overflow-x: clip; /* only the hero image is wider than the column, and it is clipped to the page */
+}
+.landing .mono {
+  font-family: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+/* the one content column: nav, hero content and every section share these edges */
+.lp-col {
+  width: min(1200px, 100% - 2 * var(--landing-gutter));
+  margin-inline: auto;
+}
+.lp-anchor {
+  scroll-margin-top: 24px;
+}
+
+/* the strike through "2,040": drawn left to right once the line scrolls into view */
+.lp-strike {
+  position: relative;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.lp-strike::after {
+  content: "";
+  position: absolute;
+  left: -0.04em;
+  right: -0.04em;
+  top: 52%;
+  height: 0.085em;
+  border-radius: 999px;
+  background: var(--diff-removed);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 700ms cubic-bezier(0.65, 0, 0.35, 1) 150ms;
+}
+.lp-strike[data-drawn]::after {
+  transform: scaleX(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-strike::after { transform: scaleX(1); transition: none; }
+}
+
+/*
+ * The SVG animations (components/landing/). Each animated element's resting style is its final
+ * frame; its keyframes run from the first frame to that, with fill "both", so before the start
+ * (and while the figure is paused off screen) it shows the first frame. data-state on the figure:
+ * idle = paused at the first frame, play = running, static = no animation (reduced motion), i.e.
+ * the final frame.
+ */
+.lp-anim [data-anim] {
+  animation-duration: var(--d, 450ms);
+  animation-delay: var(--t, 0ms);
+  animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+  animation-fill-mode: both;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.lp-anim[data-state="idle"] [data-anim] { animation-play-state: paused; }
+.lp-anim[data-state="static"] [data-anim] { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .lp-anim [data-anim] { animation: none !important; }
+}
+.lp-anim [data-anim="in"] { animation-name: lp-in; }
+.lp-anim [data-anim="fade"] { animation-name: lp-fade; }
+.lp-anim [data-anim="out"] { animation-name: lp-out; }
+.lp-anim [data-anim="collapse"] { animation-name: lp-collapse; }
+.lp-anim [data-anim="draw"] { animation-name: lp-draw; }
+.lp-anim [data-anim="grow"] { animation-name: lp-grow; transform-origin: left center; }
+.lp-anim [data-anim="light"] { animation-name: lp-light; }
+.lp-anim [data-anim="dim"] { animation-name: lp-dim; }
+.lp-anim [data-anim="move"] { animation-name: lp-move; }
+.lp-anim [data-anim="scan"] { animation-name: lp-scan; animation-timing-function: linear; transform-box: view-box; }
+.lp-anim [data-anim="packet"] { animation-name: lp-packet; animation-timing-function: ease-in-out; transform-box: view-box; }
+.lp-anim [data-anim="step"] { animation-name: lp-step; transform-box: border-box; }
+.lp-anim [data-anim="growy"] { animation-name: lp-growy; transform-origin: top center; transform-box: border-box; }
+.lp-anim span[data-anim="grow"] { transform-origin: left center; transform-box: border-box; }
+.lp-gone { opacity: 0; }
+.lp-dimmed { opacity: 0.22; }
+.lp-path { stroke-dasharray: 1; stroke-dashoffset: 0; }
+@keyframes lp-in { from { opacity: 0; transform: translateY(5px); } }
+@keyframes lp-fade { from { opacity: 0; } }
+@keyframes lp-out { from { opacity: 1; } 60% { opacity: 1; } to { opacity: 0; } }
+@keyframes lp-collapse {
+  from { opacity: 1; transform: none; }
+  60% { opacity: 1; transform: translateY(var(--dy, 0px)) scaleY(0.4); }
+  to { opacity: 0; transform: translateY(var(--dy, 0px)) scaleY(0.2); }
+}
+@keyframes lp-draw { from { stroke-dashoffset: 1; } }
+@keyframes lp-grow { from { transform: scaleX(0); } }
+@keyframes lp-growy { from { transform: scaleY(0); } }
+@keyframes lp-dim { from { opacity: 1; } }
+@keyframes lp-move { from { transform: translateY(var(--from, 0px)); } }
+@keyframes lp-scan {
+  from { opacity: 1; transform: translateY(0); }
+  92% { opacity: 1; transform: translateY(var(--dist, 0px)); }
+  to { opacity: 0; transform: translateY(var(--dist, 0px)); }
+}
+/* the job's path in RepoToGraphWide: API (x 490) → queue (585–775) → worker (880) */
+@keyframes lp-packet {
+  from { opacity: 0; transform: translateX(0); }
+  8% { opacity: 1; }
+  30% { transform: translateX(95px); }
+  60% { transform: translateX(285px); }
+  90% { opacity: 1; transform: translateX(390px); }
+  to { opacity: 0; transform: translateX(390px); }
+}
+/* a caption step lights up when its beat starts */
+@keyframes lp-step { from { opacity: 0.35; } }
+@keyframes lp-light { from { stroke: var(--line-strong); fill: var(--card); } }
+
+/* ---------- landing page: scroll animations ---------- */
+/* Scroll-driven, where the browser supports it (elsewhere everything simply shows). None with
+   reduced motion. Sections rise in as they enter; the hero card drifts up and fades as the page
+   scrolls past it; the sky behind the page zooms in a little. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .lp-reveal {
+      animation: lp-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 55%;
+    }
+    .lp-hero-drift {
+      animation: lp-hero-drift linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 90vh;
+    }
+    .lp-sky {
+      animation: lp-sky linear both;
+      animation-timeline: scroll(root);
+    }
+  }
+}
+@keyframes lp-reveal { from { opacity: 0; transform: translateY(56px) scale(0.98); } }
+@keyframes lp-hero-drift { to { opacity: 0.15; transform: translateY(-90px) scale(0.97); } }
+@keyframes lp-sky { to { transform: scale(1.12); } }

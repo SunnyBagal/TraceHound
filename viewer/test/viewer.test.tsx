@@ -64,7 +64,7 @@ describe("GraphCanvas with the demo snapshot", () => {
       const mark = within(card).queryByTestId("model-name-mark");
       if (c.naming.source === "llm") {
         expect(mark?.getAttribute("title"), c.id).toBe("Name written by the model; prose not verified");
-        expect(mark?.querySelector('[data-logo="nvidia.svg"]'), c.id).toBeTruthy();
+        expect(mark?.querySelector('[data-logo="nvidia-color-eye.svg"]'), c.id).toBeTruthy();
       } else expect(mark, c.id).toBeNull();
       expect(within(card).queryByTestId("model-written")).toBeNull(); // no label box, no override pill
       expect(within(card).queryByTitle(/Name source/)).toBeNull();

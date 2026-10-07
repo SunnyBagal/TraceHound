@@ -147,7 +147,7 @@ describe("inspector history in the viewer", () => {
         const named = panel.getByTestId("model-written");
         expect(named.textContent, c.id).toBe("Named by Nemotron Nano");
         expect(named.getAttribute("title"), c.id).toBe("Name written by the model; prose not verified");
-        expect(named.querySelector('[data-logo="nvidia.svg"]'), c.id).toBeTruthy();
+        expect(named.querySelector('[data-logo="nvidia-color-eye.svg"]'), c.id).toBeTruthy();
       }
       else expect(panel.getByTitle(/Name source/).textContent, c.id).toBe(c.naming.source);
       expect(panel.getByTestId("name-source").textContent, c.id).toMatch(c.naming.source === "llm" ? /^Name written by the model/ : c.naming.source === "override" ? /tracehound\.json override/ : /^Heuristic name/);
