@@ -48,7 +48,8 @@ it (decision 050).
   it) → 7 components, 6 edges (API -produces->
   `content-processing` queue -consumes-> worker, both proven), 2 orphan warnings.
 - **Recall on the repair harness (decision 041, checked 2026-10-02):** branch `testable-baseline`
-  @ `57d920e` (backend `recall-backend/`, frontend `recall-frontend/`; `main` is `9113ced`). In
+  @ `57d920e` (backend `recall-backend/`, frontend `recall-frontend/`; `main` was `9113ced`
+  when these checks were made and is `20ac149` since 2026-10-07). In
   the sandbox image: `bun install --frozen-lockfile` 210 packages, `bun test` 62 pass with the
   network off, `tsc --noEmit` 5 pre-existing errors. Repo profile `configs/recall.profile.json`
   (workdir, install, test, typecheck; a task names it with `"profile"`); a task can seed a bug
@@ -154,7 +155,8 @@ it (decision 050).
   `payload-field-missing`, `request-to-fetch`. Each hypothesis: one narrow question, the rule,
   snapshot evidence ids, excerpts, a stated input. Rules find only rule-shaped bugs. Recall
   `5d2165a`: 1 / 0 / 2. Sessions that build the finder never see Recall's real bug list; the
-  repo gets counts only, never hypothesis text.
+  repo gets counts only, never hypothesis text. Who did see them, and how results on them are
+  reported, is decision 053.
 - **Finder → claims (decision 052, no model):** `tracehound find … --claims <dir under runs/>
   --profile <profile.json> [--git-url <url>]` also writes, per hypothesis, a Form A claim
   (question + stated input, `file:line` evidence) and a Form B claim (the same plus `excerpts`) in
