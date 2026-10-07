@@ -99,7 +99,7 @@ describe("model-written names carry the NVIDIA mark", () => {
           continue;
         }
         expect(mark?.getAttribute("title"), c.id).toBe("Name written by the model; prose not verified");
-        expect(mark?.querySelector('[data-logo="nvidia.svg"]'), c.id).toBeTruthy();
+        expect(mark?.querySelector('[data-logo="nvidia-color-eye.svg"]'), c.id).toBeTruthy();
       }
       expect(container.querySelector(".lucide-sparkles"), s.repo.name).toBeNull(); // the sparkle is gone
       unmount();
@@ -118,7 +118,7 @@ describe("model-written names carry the NVIDIA mark", () => {
     const named = panel.getByTestId("model-written");
     expect(named.textContent).toBe("Named by Nemotron Nano");
     expect(named.getAttribute("title")).toBe("Name written by the model; prose not verified");
-    expect(named.querySelector('[data-logo="nvidia.svg"]')).toBeTruthy();
+    expect(named.querySelector('[data-logo="nvidia-color-eye.svg"]')).toBeTruthy();
     expect(screen.getByTestId("inspector").querySelector(".lucide-sparkles")).toBeNull();
 
     fireEvent.click(panel.getByRole("tab", { name: /Connections/ }));
@@ -210,7 +210,7 @@ describe("the howling logo (tracehound-logo-howl.html)", () => {
     vi.spyOn(performance, "now").mockReturnValue(1000); // the howl's start time
     return frames;
   }
-  // the link goes to "/": keep jsdom from attempting the navigation on click
+  // the link goes to "/graph": keep jsdom from attempting the navigation on click
   const noNavigation = (e: Event) => e.preventDefault();
   beforeEach(() => document.addEventListener("click", noNavigation));
   afterEach(() => {
@@ -229,9 +229,9 @@ describe("the howling logo (tracehound-logo-howl.html)", () => {
     actual.forEach((v, i) => expect(v, `#${i}`).toBeCloseTo(expected[i]!, 2));
   };
 
-  it("still links to the default canvas view, in currentColor, at rest with the mouth shut", () => {
+  it("links to the default canvas view at /graph, in currentColor, at rest with the mouth shut", () => {
     render(<LogoLink />);
-    expect(link().getAttribute("href")).toBe("/");
+    expect(link().getAttribute("href")).toBe("/graph");
     for (const path of mark().querySelectorAll("path")) expect(path.getAttribute("fill")).toBe("currentColor");
     expect(face()).toEqual(REST);
     expect(mouth().getAttribute("opacity")).toBe("0");

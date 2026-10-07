@@ -9,7 +9,7 @@ import { loadChanges, loadImpact, loadRepo, type Loaded } from "@/lib/load";
 
 type State = { status: "loading" } | { status: "error"; message: string } | ({ status: "ready" } & Loaded);
 
-export default function Page() {
+export default function GraphPage() {
   const [state, setState] = useState<State>({ status: "loading" });
 
   useEffect(() => {

@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { WOLF_PATH } from "@/lib/wolf";
+
+export { WOLF_PATH, WOLF_VIEWBOX } from "@/lib/wolf";
 
 /**
  * The wolf head, ported from tracehound-logo-howl.html (paths, mouth, timings, easing and the
@@ -9,8 +12,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * count, so the howl morphs it point by point; a separate mouth layer opens from (355, 559) once
  * the morph passes 0.22, and the whole head lifts 14 units and trembles during the hold.
  */
-export const WOLF_PATH =
-  "M474.8,372 L430.2,387.1 L408.2,430 L456.1,415.5 Z M235.2,372 L253.9,415.5 L301.8,430 L279.8,387.1 Z M188.7,60.4 L157.4,253.1 L80.6,407.4 L293.1,650.1 L416.9,650.1 L629.4,407.4 L552.6,253.1 L521.3,60.4 L370.2,165.8 L355,167 L339.8,165.8 Z M126.8,400.9 L143.4,362 L247.6,298 L337.4,381.6 L355,420 L372.6,381.6 L462.4,298 L566.6,362 L583.2,400.9 L521.5,473.8 L488.8,437.6 L472.9,524.8 L402,606.1 L366.5,617.2 L366.8,605.1 L402.2,562 L375.8,550.2 L334.2,550.2 L307.8,562 L343.2,605.1 L343.5,617.2 L308,606.1 L237.2,524.8 L221.2,437.6 L188.5,473.8 Z M494.2,127.8 L515,254 L442,220.9 Z M215.8,127.8 L268,220.9 L195,254 Z";
 export const HOWL_PATH =
   "M474.8,337 L433,350 L408.2,355 L453,348 Z M235.2,337 L257,348 L301.8,355 L277,350 Z M197,99 L158,259 L84,395 L300,666 L410,666 L626,395 L552,259 L513,99 L370.2,178 L355,180 L339.8,178 Z M130,388 L146,350 L247.6,281 L337.4,345 L355,380 L372.6,345 L462.4,281 L564,350 L580,388 L518,453 L483,425 L463,536 L393,622 L355,638 L355,465 L405,426 L379,407 L331,407 L305,426 L355,465 L355,638 L317,622 L247,536 L227,425 L192,453 Z M488,161 L513,257 L445,230 Z M222,161 L265,230 L197,257 Z";
 export const MOUTH_POINTS: readonly (readonly [number, number])[] = [
@@ -27,8 +28,6 @@ export const MOUTH_ORIGIN = [355, 559] as const;
 /** The mouth starts opening once the morph passes this. */
 export const MOUTH_START = 0.22;
 export const HEAD_LIFT = 14;
-/** The resting path's bounds (80.6–629.4 × 60.4–650.1) in a square with a small margin: the favicon's crop. */
-export const WOLF_VIEWBOX = "55 55 600 600";
 /** The animation's box (as in the HTML): room for the howl, whose chin drops to y 666. */
 export const HOWL_VIEWBOX = "0 0 710 710";
 
@@ -162,29 +161,87 @@ function focusVisible(el: Element): boolean {
 
 const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
+type Howl = ReturnType<typeof useHowl>;
+
+/** The animated drawing: the head (face + mouth) at rest, moved by `useHowl`. */
+function HowlMark({ head, face, mouth, howling, className }: Pick<Howl, "head" | "face" | "mouth" | "howling"> & { className: string }) {
+  return (
+    <svg viewBox={HOWL_VIEWBOX} className={`overflow-visible ${className}`} aria-hidden data-testid="logo-mark" data-howling={howling || undefined}>
+      <g ref={head} data-wolf-head transform={REST_POSE.transform}>
+        <path ref={face} data-wolf-face fill="currentColor" fillRule="evenodd" d={REST_POSE.face} />
+        <path ref={mouth} data-wolf-mouth fill="currentColor" opacity={REST_POSE.mouthOpacity} d={REST_POSE.mouth} />
+      </g>
+    </svg>
+  );
+}
+
 /**
- * The mark as a link to the default canvas view (no selection, no impact report). It howls on
- * pointer enter (not touch), click and keyboard focus; there is no pointer-leave handler.
+ * The mark as a link, by default to the default canvas view (no selection, no impact report). It
+ * howls on pointer enter (not touch), click and keyboard focus; there is no pointer-leave handler.
+ * The landing page's nav passes its own href, label and colour, and the wordmark as children.
  */
-export function LogoLink({ className = "" }: { className?: string }) {
+export function LogoLink({
+  className = "",
+  markClassName = "size-8",
+  href = `${base}/graph`,
+  label = "TraceHound: the full canvas",
+  title = "TraceHound: back to the full canvas",
+  testId = "home-link",
+  children,
+}: {
+  className?: string;
+  markClassName?: string;
+  href?: string;
+  label?: string;
+  title?: string;
+  testId?: string;
+  children?: React.ReactNode;
+}) {
   const { head, face, mouth, howl, howling } = useHowl();
   return (
     <a
-      href={`${base}/`}
-      title="TraceHound: back to the full canvas"
-      aria-label="TraceHound home"
-      data-testid="home-link"
+      href={href}
+      title={title}
+      aria-label={label}
+      data-testid={testId}
       onPointerEnter={(e) => e.pointerType !== "touch" && howl()}
       onClick={howl}
       onFocus={(e) => focusVisible(e.currentTarget) && howl()}
-      className={`grid shrink-0 place-items-center rounded-lg text-logo focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-logo ${className}`}
+      className={`${children ? "inline-flex items-center gap-2" : "grid place-items-center"} shrink-0 rounded-lg text-logo focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-logo ${className}`}
     >
-      <svg viewBox={HOWL_VIEWBOX} className="size-8 overflow-visible" aria-hidden data-testid="logo-mark" data-howling={howling || undefined}>
-        <g ref={head} data-wolf-head transform={REST_POSE.transform}>
-          <path ref={face} data-wolf-face fill="currentColor" fillRule="evenodd" d={REST_POSE.face} />
-          <path ref={mouth} data-wolf-mouth fill="currentColor" opacity={REST_POSE.mouthOpacity} d={REST_POSE.mouth} />
-        </g>
-      </svg>
+      <HowlMark head={head} face={face} mouth={mouth} howling={howling} className={markClassName} />
+      {children}
     </a>
+  );
+}
+
+/**
+ * The landing page's mark: a button that howls once after mount, then on pointer enter (not
+ * touch), click and keyboard focus. With prefers-reduced-motion it never howls (LogoLink's
+ * reduced-motion pose jump included). Colour comes from `className` via currentColor.
+ */
+export function LogoButton({ className = "", markClassName = "size-24" }: { className?: string; markClassName?: string }) {
+  const { head, face, mouth, howl, howling } = useHowl();
+  const trigger = useCallback(() => {
+    if (!prefersReducedMotion()) howl();
+  }, [howl]);
+  // after mount, on a timer: an effect that howled directly would be cancelled by StrictMode's
+  // simulated unmount (useHowl's cleanup) and leave the howl marked as playing
+  useEffect(() => {
+    const timer = setTimeout(trigger, 250);
+    return () => clearTimeout(timer);
+  }, [trigger]);
+  return (
+    <button
+      type="button"
+      aria-label="Play the TraceHound howl"
+      data-testid="hero-logo"
+      onPointerEnter={(e) => e.pointerType !== "touch" && trigger()}
+      onClick={trigger}
+      onFocus={(e) => focusVisible(e.currentTarget) && trigger()}
+      className={`grid shrink-0 place-items-center rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-current ${className}`}
+    >
+      <HowlMark head={head} face={face} mouth={mouth} howling={howling} className={markClassName} />
+    </button>
   );
 }

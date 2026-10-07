@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { WOLF_PATH, WOLF_VIEWBOX } from "@/components/Logo";
+import { WOLF_PATH, WOLF_VIEWBOX } from "@/lib/wolf";
 
 export const metadata: Metadata = {
   title: "TraceHound",

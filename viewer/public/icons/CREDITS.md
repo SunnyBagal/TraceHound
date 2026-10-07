@@ -35,3 +35,18 @@ to say that a component's name was written by an NVIDIA Nemotron model (the nami
 file is a single path with no colour, so the viewer draws it as a CSS mask in the surrounding
 muted text colour (`viewer/components/ModelMark.tsx`), not in NVIDIA green, which would read as
 the change view's "added".
+
+## NVIDIA logo in colour (model-written names, landing page)
+
+`nvidia-color.svg` is svgl.app's NVIDIA icon, dark-theme variant
+(https://svgl.app/library/nvidia-icon-dark.svg, found via `https://api.svgl.app?search=nvidia`),
+vendored unmodified on 2026-10-07 (sha256
+`c0ba24515aa21f07119e15914abbde64dd17b42fd95518a15df208a615c3810e`). Brand guidelines:
+https://www.nvidia.com/en-us/about-nvidia/legal-info/logo-brand-usage. The landing page shows it
+in the Models section.
+
+`nvidia-color-eye.svg` is derived from it: the green (`#77B900`) path alone, with the viewBox
+cropped to that path (`56.5 31.2 249.5 166`; sha256 `3d0ff94ca476e49e5e94cf00a011b7f3362f8a54c5b69db7001e38aa8be3468e`), because the full icon's wordmark is unreadable at
+badge size. The viewer uses it, in colour at the owner's request, for every model-written
+name (`viewer/components/ModelMark.tsx`), always beside the disclosure text or with it as the
+tooltip. It replaces the single-colour `nvidia.svg` above, which stays vendored but unused.

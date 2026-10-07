@@ -48,7 +48,7 @@ export function TopBar({ snapshot, repos = [], repoId, changeSets = [], changes 
       </button>
       {changes && (
         <a
-          href={repoId ? `${base}/?repo=${repoId}` : `${base}/`}
+          href={repoId ? `${base}/graph?repo=${repoId}` : `${base}/graph`}
           className="inline-flex shrink-0 items-center gap-1 rounded-full border border-accent/50 bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent hover:border-accent"
           title="Leave the change view"
           data-testid="exit-changes"

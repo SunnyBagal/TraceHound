@@ -6,12 +6,14 @@ const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 export const MODEL_NAME_DISCLOSURE = "Name written by the model; prose not verified";
 
 /**
- * The NVIDIA logo (public/icons/nvidia.svg, see CREDITS.md), drawn as a mask in currentColor: a
- * single-colour path, kept neutral so it never reads as the change view's green.
+ * The NVIDIA logo in its colours: the eye from svgl.app's NVIDIA icon (public/icons/
+ * nvidia-color-eye.svg, the green path of nvidia-color.svg with the viewBox cropped to it; see
+ * public/icons/CREDITS.md). The owner asked for the colour logo; it is always paired with the
+ * disclosure text or tooltip, so its green is not read as the change view's "added".
  */
 export function NvidiaLogo({ className = "" }: { className?: string }) {
-  const mask = `url("${base}/icons/nvidia.svg") center / contain no-repeat`;
-  return <span aria-hidden data-logo="nvidia.svg" className={`block shrink-0 bg-current ${className}`} style={{ mask, WebkitMask: mask }} />;
+  // eslint-disable-next-line @next/next/no-img-element -- a vendored static icon
+  return <img src={`${base}/icons/nvidia-color-eye.svg`} alt="" aria-hidden data-logo="nvidia-color-eye.svg" className={`block shrink-0 object-contain ${className}`} draggable={false} />;
 }
 
 /** Marks a model-written name on nodes and in lists: the small NVIDIA mark, with the disclosure as its tooltip. */
