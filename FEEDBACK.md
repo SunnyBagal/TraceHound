@@ -1,6 +1,6 @@
 # Feedback: Nebius Token Factory + NVIDIA Nemotron
 
-Observations from building TraceHound. Facts only; newest entries at the bottom.
+Observations from building TraceHound. Facts and counts first; opinions labelled as opinions; newest entries at the bottom.
 
 ---
 
