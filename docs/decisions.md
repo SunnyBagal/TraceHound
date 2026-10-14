@@ -2526,3 +2526,69 @@ when; it does not describe any of them.
 - (a) Leaving the disclosure outside the repo, where readers of the results cannot see it.
 - (b) Describing the bugs in the entry, which would end blindness for every later session that
   reads this repo.
+
+## 054 · Review benchmark: golden comments, recorded tool reviews, and our own judge
+**Context:** the owner has decided that TraceHound becomes a pull-request reviewer measured on a
+public benchmark (plan `docs/reviewer-plan.md`). Before any reviewer exists we need the data and a
+scorer whose numbers can be read beside the published ones (prompt
+`docs/prompts/054-bench-scorer.md`). No reviewer is built here.
+**Choice:**
+- **Dataset:** `ai-code-review-evaluations/golden_comments` @
+  `3f2c8ab794b4ed71c099cbf0a7670555e90906dc`, `code_review_benchmarks/{sentry,cal_dot_com,grafana,
+  keycloak,discourse}.json`: 5 repos × 10 pull requests, 137 golden comments, 97 of them Medium or
+  higher (sentry 21, cal_dot_com 23, grafana 16, keycloak 18, discourse 19). Recorded reviews of
+  five tools (greptile, coderabbit, augment, cursor, copilot) from the forks
+  `ai-code-review-evaluations/<tool>-<repo>`, fetched with `gh api --paginate`
+  (`scripts/bench/fetch-recorded.ts`). Fork pull requests map to golden entries by title after
+  trimming; unmatched ones on either side are left out and counted (here: every golden entry
+  mapped in all 25 forks; 5 extra pull requests in each sentry fork and 1 in two grafana forks
+  matched nothing).
+- **Cal.com is the test set; the other four repos are dev.** Sessions that build or tune the
+  reviewer never read Cal.com's golden comments, its recorded tool comments, or its per-comment
+  score detail; scripts may read them and report counts (CLAUDE.md).
+- **Our own judge** (`packages/analyzer/src/bench/`, `tracehound bench convert|score`): the
+  published numbers for this benchmark disagree with each other from one write-up to another (not
+  re-checked in this session), and the judge behind Augment's table is not stated, so a number we report must come from a judge
+  we run and can rerun. `bench-judge-v1`: Nemotron Super, temperature 0, reasoning on, through
+  `src/llm/client.ts` (cache, budget, ledger). One request per pull request lists golden comments
+  (G1…, without severities) and tool comments (T1…, path:line and body cut at 4,000 characters);
+  the reply maps each T id to a G id or null. Ids are validated, an invalid reply is retried once,
+  then the pull request is JUDGE_FAILED: left out of the totals and counted, never scored as zero.
+  The interface takes a list of judges and votes by strict majority (a pull request needs more
+  than half of the judges to answer); this decision runs one. The prompt was written before the
+  first scoring run and not changed (sha256 `23de4e9e…058460`).
+- **Counted tool comments:** top-level line-level review comments (no `in_reply_to_id`) by a bot
+  or the tool's own account. Summaries, review bodies, issue comments, replies and human comments
+  don't count. In every fork each tool had exactly one such login.
+- **Scoring rules (the dataset README):** a match to a Medium/High/Critical golden comment is a
+  TP, each golden credited once, further matches are duplicates (neither TP nor FP); a match to a
+  Low golden counts as nothing and a missed Low counts as nothing; no match is an FP; an unmatched
+  Medium-or-higher golden is an FN. Precision, recall and F from counts summed over pull
+  requests, per repo and overall, with n beside every figure.
+- **Output:** counts on stdout; per-comment detail only in `--detail`, which must be outside the
+  repo (`~/Projects/tracehound-bench/scores/`).
+- **Validation run** (`docs/bench/scorer-validation.md`): 212 judge calls, 0 retries, 0
+  JUDGE_FAILED, $0.22921 by the ledger. Overall P / R / F, ours vs published (Augment's write-up,
+  18 June 2026): Greptile 52.9 / 46.4 / 49.5 vs 45 / 45 / 45; CodeRabbit 38.0 / 42.3 / 40.0 vs
+  36 / 43 / 39; Augment 77.8 / 57.7 / 66.3 vs 65 / 55 / 59; Cursor 71.2 / 43.3 / 53.8 vs
+  60 / 41 / 49; Copilot 29.3 / 44.3 / 35.2 vs 20 / 34 / 25. Ours is higher on F for all five (by
+  1.0 to 10.2 points) and on precision for all five; the order by F is the same. The differences
+  were not investigated or tuned towards.
+- **The data stays out of the repo**, in `~/Projects/tracehound-bench/`: the golden repo has no
+  licence file, and Cal.com is AGPL. The repo holds the scripts, the scorer and counts only.
+**Limits:**
+- One judge, one run: its errors are not measured. A second judge (another model) is what the
+  majority vote is for; until then a difference of a few points between tools is within what one
+  judge can move.
+- n is small: 97 counted golden comments overall, 16 to 23 per repo, 23 in the test set.
+- The judge sees the tool comment's body, path and line, not the diff; the golden comments carry
+  no location at all.
+- Golden comments were extended by Augment using the tools' own comments (README), which can
+  favour tools whose findings were added.
+**Rejected:**
+- (a) Trusting any vendor's table: they disagree, their judges aren't all stated, and we can't
+  rerun them on our own reviewer's output.
+- (b) Matching by file and line: golden comments have no location, and the README notes that
+  issues span lines and files.
+- (c) Committing the dataset: no licence file, Cal.com is AGPL, and copies of the test set in the
+  repo would end its blindness for every later session.
