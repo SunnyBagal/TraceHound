@@ -1,0 +1,42 @@
+name: TraceHound review
+description: Review a pull request with TraceHound and post unverified findings as line comments.
+inputs:
+  nebius-api-key:
+    description: Nebius Token Factory API key
+    required: true
+  model:
+    description: Nemotron model ID (empty uses the reviewer's default)
+    required: false
+    default: ''
+  max-comments:
+    description: Maximum findings to include, including findings in the review body
+    required: false
+    default: '15'
+  dry-run:
+    description: Print the review JSON without posting (still runs the reviewer)
+    required: false
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+      with:
+        package_json_file: ${{ github.action_path }}/../../../package.json
+        run_install: false
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+    - name: Install TraceHound reviewer dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: pnpm install --frozen-lockfile --ignore-scripts --filter @tracehound/analyzer...
+    - name: Review and post findings
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        NEBIUS_API_KEY: ${{ inputs.nebius-api-key }}
+        GITHUB_TOKEN: ${{ github.token }}
+        TRACEHOUND_MODEL: ${{ inputs.model }}
+        TRACEHOUND_MAX_COMMENTS: ${{ inputs.max-comments }}
+        TRACEHOUND_DRY_RUN: ${{ inputs.dry-run }}
+      run: node packages/action/src/cli.ts
