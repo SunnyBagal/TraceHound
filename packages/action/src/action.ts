@@ -171,14 +171,22 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     deps.log(JSON.stringify(payload, null, 2));
     return;
   }
+  const canPost = async (): Promise<boolean> => {
+    const current = await github(endpoint, options, deps, { accept: "application/vnd.github+json" });
+    const metadata = await current.json() as { head?: { sha?: string } };
+    if (metadata.head?.sha === event.pull_request.head.sha) return true;
+    deps.log("TraceHound: pull request head changed during review; nothing posted.");
+    return false;
+  };
+  if (!await canPost()) return;
   try {
     await github(`${endpoint}/reviews`, options, deps, { payload });
   } catch (error) {
     if (!(error instanceof GitHubError) || error.status !== 422 || !payload.comments.length) throw error;
     deps.log("TraceHound: GitHub rejected inline comments; retrying as a body-only review.");
-    await github(`${endpoint}/reviews`, options, deps, {
-      payload: buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, true),
-    });
+    const fallback = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, true);
+    if (!await canPost()) return;
+    await github(`${endpoint}/reviews`, options, deps, { payload: fallback });
   }
   deps.log(`TraceHound: posted review with ${Math.min(output.comments.length, options.maxComments)} findings.`);
 }
