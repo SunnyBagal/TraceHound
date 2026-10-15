@@ -10,6 +10,7 @@
 //   find     hypotheses from graph rules, no model (decision 051); --claims: reproduce claims (052)
 //   bench    convert recorded reviews; score reviews against a golden file with an LLM judge (054)
 //   review   diff-only pull request reviewer, review-diff-v1 (055)
+//   verify   confidence for each finding of a review, verify-v1, and filtering at a threshold (056)
 const [command, ...rest] = process.argv.slice(2);
 
 if (command === "bench") {
@@ -25,6 +26,13 @@ if (command === "bench") {
   const envFile = new URL("../../../.env", import.meta.url).pathname;
   if (existsSync(envFile) && !process.env.NEBIUS_API_KEY) process.loadEnvFile(envFile);
   const { main } = await import("./review/cli.ts");
+  process.exitCode = await main(rest);
+} else if (command === "verify") {
+  // verify run needs NEBIUS_API_KEY: load the workspace .env for this command only
+  const { existsSync } = await import("node:fs");
+  const envFile = new URL("../../../.env", import.meta.url).pathname;
+  if (existsSync(envFile) && !process.env.NEBIUS_API_KEY) process.loadEnvFile(envFile);
+  const { main } = await import("./review/verify-cli.ts");
   process.exitCode = await main(rest);
 } else if (command === "changes") {
   const { main } = await import("./changes/cli.ts");

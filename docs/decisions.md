@@ -2652,3 +2652,61 @@ is not read, fetched or reviewed. Nothing here was tuned towards a score.
   untuned.
 - (c) Retrying a CHUNK_FAILED chunk or re-running a pull request after seeing output: one run as
   it happened is the baseline.
+
+## 056 · Verification pass on review findings, verify-v1
+**Context:** 055's diff-only reviewer on Super reached recall 43.2% (32/74) on the dev repos but
+precision 25.6% (32/125), with 93 false positives. This job adds one change and measures it alone:
+a second model pass that checks each finding the reviewer already wrote and gives it a confidence
+(prompt `docs/prompts/056-verify-pass.md`). No reviewer was rerun; the input is the 40 existing
+review-diff-v1 Super review files (143 findings). Dev repos only; Cal.com was not read, fetched,
+verified or scored.
+**Choice:**
+- **What the verifier sees** (`packages/analyzer/src/review/verify.ts`, `tracehound verify run|filter`):
+  one call per finding with the pull request's title, its description (cut at 8,000 characters
+  as in 055), the finding (path, line, body) and the diff of that finding's file, rendered with
+  new-version line numbers exactly as review-diff-v1 renders it. A file diff over 60,000
+  characters would be cut at hunk boundaries as 055 cuts it and the part holding the line shown
+  (none was). It never sees the other findings, the golden comments or anything outside the diff.
+- **Prompt:** `src/review/verify-prompt.ts`: a sceptical maintainer checks whether the defect is
+  real in the code shown, introduced or exposed by this change, and would cause wrong behaviour,
+  a crash, a security problem or data loss; a finding that depends on code outside the diff is
+  not wrong for that reason alone (judge plausibility from what is visible); confidence 1 (not a
+  real defect, or not supported by the code shown) to 5 (certainly a real defect introduced by
+  this change); JSON only, `{"confidence": n, "reason": "one sentence"}`. Written once before the
+  first benchmark run and not changed after: system prompt sha256
+  `ab2d61057b7b5adb7a35329876dbc7ce9003d4d170506fdd957d433f3fac6586` (pinned in
+  `test/verify.test.ts`).
+- **Calls and failures:** Super, temperature 0, reasoning on, purpose `verify`, `max_tokens`
+  16,000, through `src/llm/client.ts`. An invalid reply is retried once; after that, or after a
+  failed request, the finding is VERIFY_FAILED with confidence `null`, counted and kept at every
+  threshold. A budget refusal stops the run. Output: every finding with confidence, reason and
+  status (054's neutral format plus fields the scorer ignores), and the same filtered at a
+  threshold (`tracehound verify filter`, no model call).
+- **Threshold rule** (written in the prompt before any result): the threshold with the highest
+  overall dev F-score; on a tie, the higher threshold. **It chose 1**, which keeps every finding:
+  F 32.2% at 1 against 32.1% at 2, 31.2% at 3, 29.2% at 4, 29.1% at 5. `VERIFY_THRESHOLD = 1` in
+  `verify.ts`; it is used unchanged on Cal.com later.
+- **Results** (`docs/bench/verify-pass.md`; judge `bench-judge-v1` unchanged, 0 JUDGE_FAILED,
+  n = 74): threshold 1 reproduced 055's Super row exactly (143 comments, TP 32, FP 93, dup 8, low
+  10, FN 42; all 37 judge requests were cache hits). Raising the threshold raised precision
+  (25.6% → 29.5%, 30.0%, 31.7%, 44.4% at 2 to 5) and lowered recall (43.2% → 35.1%, 32.4%,
+  27.0%, 21.6%) by about as much, so F did not rise. Confidence 1 held 6 of the 32 true
+  positives; confidence 5 held 16 TP against 19 FP. 143 calls, 0 VERIFY_FAILED, 0 retries,
+  $0.19024.
+**Limits:**
+- The threshold is chosen on the same 40 dev pull requests it is measured on, so the dev F at that
+  threshold is optimistic; only the Cal.com run will say how it carries over.
+- One run at temperature 0; run-to-run variance is not measured. One judge, whose own errors are
+  not measured. n = 74 dev golden comments of Medium or higher.
+- Thresholds above 1 are scored by re-judging the remaining comments (one request per pull
+  request, as 054 does); a pull request whose comments did not change is a cache hit. A re-judged
+  pull request can match differently than in the full set. Reusing the threshold-1 matches
+  instead (no re-judging; `scripts/bench/score-verify.ts` prints both) gives TP 27 / 26 / 22 / 17
+  at 2 to 5 instead of 26 / 24 / 20 / 16, and F 33.3% / 34.2% / 32.1% / 30.9%: on those numbers
+  thresholds 2 and 3 would beat 1. The rule was applied, as written, to the scored rows; the
+  margins on either reading (0.1 to 2 points of F, one or two TP) are within one judge's noise.
+**Rejected:**
+- (a) Asking the reviewer itself for a severity or confidence: it would change review-diff-v1 and
+  mix two changes.
+- (b) Dropping findings that depend on code outside the diff: that is the next job's context, not
+  this one's.
