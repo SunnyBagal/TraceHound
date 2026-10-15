@@ -1,0 +1,25 @@
+name: TraceHound review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+concurrency:
+  group: tracehound-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      # Pin to a reviewed commit SHA before enabling this in your repository.
+      - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@codex/github-action
+        with:
+          nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
+          max-comments: '15'
+          dry-run: 'false'
