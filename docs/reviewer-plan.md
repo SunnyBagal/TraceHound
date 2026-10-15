@@ -34,24 +34,25 @@ Models: Nemotron on Nebius is the product's engine. Other models are judges and 
 - Benchmark data lives outside the repo, in `~/Projects/tracehound-bench`. The dataset has no licence file, and Cal.com is AGPL, so neither is copied into this repo.
 - The reviewer is frozen (tag) before its one run on the Cal.com PRs.
 
-## Schedule (working days from 8 October)
+## Schedule (revised 14 October)
 
-| Days | Work | Gate |
+Work started on 15 October, not 8 October, so the plan has 12 build days instead of 20. Submission and video take 27 to 30 October.
+
+| Date | Work | Gate |
 | --- | --- | --- |
-| 1 | Benchmark data and scorer; score the recorded reviews of five tools | Our numbers are reported beside the published ones; the judge prompt is not tuned to close the gap |
-| 2 | Diff-only baseline reviewer on the dev set | A first precision and recall for Nemotron with no graph |
-| 3–5 | Analyzer on Cal.com and Grafana's TypeScript: symbol-level index, usage lookup | Indexes the monorepo; 20 sampled lookups correct |
-| 6–9 | Review pipeline v1 on the dev set | Context-on beats diff-only on dev |
-| 10–12 | Refuter pass and the proven tier | Precision up without recall collapsing |
-| 13–14 | GitHub Action, PR comments, per-PR graph view | Works on a fresh fork |
-| 15–17 | Freeze, one run on the Cal.com PRs, results document | None: whatever it scores is reported |
-| 18–20 | Buffer, landing page, README | |
+| 15 Oct | Benchmark data and scorer; score the recorded reviews of five tools | Our numbers are reported beside the published ones; the judge prompt is not tuned to close the gap |
+| 16 Oct | Diff-only baseline reviewer on the dev set | A first precision and recall for Nemotron with no extra context |
+| 17–19 Oct | Context for large TypeScript repos: on-demand definitions and references for each changed declaration, through the TypeScript language service. The full graph is used only where it already works | 20 sampled lookups on a large repo are correct |
+| 20–22 Oct | Review pipeline v1 and the refuter pass, on the dev set | Context-on beats diff-only on dev; precision up without recall collapsing |
+| 23 Oct | GitHub Action posting line comments; the existing change view as the per-PR picture | Works on a fresh fork |
+| 24–25 Oct | Freeze, one run on the Cal.com PRs, results document | None: whatever it scores is reported |
+| 26 Oct | Buffer, landing page, README | |
 
 ## Fallbacks
 
-- Day 5 gate fails: drop the full graph for large repos and use on-demand TypeScript lookups (definitions, references) per changed declaration.
-- Day 9 gate fails: ship diff plus on-demand lookups and report that the graph did not help, as decision 050 did.
-- The proven tier cannot install and test Cal.com offline in the sandbox: demonstrate it on Recall and say so.
+- 19 October gate fails: the reviewer ships with diff-only context, and the results say so.
+- 22 October gate fails (context does not beat diff-only): ship whichever does better on dev and report that the context did not help, as decision 050 did.
+- The proven tier (reproduce stage on findings) is cut from the benchmark run. Demonstrate it on Recall only if 26 October has time.
 
 ## Cut
 

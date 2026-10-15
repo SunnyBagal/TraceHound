@@ -2592,3 +2592,63 @@ scorer whose numbers can be read beside the published ones (prompt
   issues span lines and files.
 - (c) Committing the dataset: no licence file, Cal.com is AGPL, and copies of the test set in the
   repo would end its blindness for every later session.
+
+## 055 · Diff-only baseline reviewer, review-diff-v1
+**Context:** decision 054 built the benchmark scorer. Before any reviewer uses the graph, we need
+the number every later version has to beat: a reviewer that reads only the pull request (prompt
+`docs/prompts/055-diff-baseline.md`). Dev repos only (sentry, grafana, keycloak, discourse); Cal.com
+is not read, fetched or reviewed. Nothing here was tuned towards a score.
+**Choice:**
+- **What it sees:** the pull request's title, its description (cut at 8,000 characters) and its
+  unified diff, nothing else from the repo: no files outside the diff, no graph, no history.
+  Inputs (`scripts/bench/fetch-prs.ts`, outside the repo in `~/Projects/tracehound-bench/prs/`):
+  for each golden entry, the pull request with that title in `greptile-<repo>` (054's mapping),
+  `gh pr diff`. All 40 diffs were byte-identical (sha256) to the same pull requests in
+  `coderabbit-<repo>`. Diff sizes 1,193 to 252,079 characters, median 21,406.5.
+- **What it does** (`packages/analyzer/src/review/`, `tracehound review --pr|--prs … --out …`):
+  one model call per chunk. The whole diff is one chunk if it fits in 60,000 characters (counted
+  on the raw diff); otherwise whole files are packed in diff order into chunks of at most 60,000,
+  and a single file over the limit is cut at hunk boundaries with its header repeated (a single
+  hunk over the limit would stay whole and be marked `overLimit`; none was). Every call gets the
+  title and description. In the prompt every added and context line carries its line number in
+  the new version, so the model names a line without counting. 40 pull requests → 48 chunks.
+- **Prompt:** `src/review/prompt.ts`, asks for defects a careful senior reviewer would block the
+  merge for (wrong behaviour, crashes, security, data loss, broken contracts with callers as far as
+  the diff shows them), not style, naming, formatting, missing tests or documentation; JSON only,
+  `{"findings": [{path, line, body}]}`. Written once before the first benchmark run and not
+  changed after: system prompt sha256
+  `f77c203105111e02222d8f1c985a4629d9ac8cdd07b465fdb526cf1dddea4849` (pinned in
+  `test/review.test.ts`).
+- **Validation (deterministic):** a finding is dropped and counted by reason if it is malformed,
+  its path is not in the diff (a leading `./`, `/`, `a/` or `b/` is tolerated), the file is
+  deleted, or its line is not an added or context line of that file in the new version. A reply
+  that is not `{"findings": [...]}` JSON is retried once; then the chunk is CHUNK_FAILED. A failed
+  request is CHUNK_FAILED without a retry; a budget refusal stops the run. Each review file records
+  chunks, attempts, failures, drops and usage, so no pull request is silently empty. Output is
+  054's neutral format, scored unchanged by `bench-judge-v1`.
+- **Calls:** through `src/llm/client.ts`, temperature 0, purpose `review`, reasoning on
+  (`enable_thinking: true`), `max_tokens` 32,000, client timeout 600 s.
+- **Models and results** (`docs/bench/baseline-diff.md`; dev only, n = 74 golden comments of Medium
+  or higher, 0 JUDGE_FAILED):
+  - Nemotron Super `nvidia/nemotron-3-super-120b-a12b`: 143 comments, TP 32, FP 93 → precision
+    25.6% (32/125), recall 43.2% (32/74), F 32.2%. 0 CHUNK_FAILED; $0.4988.
+  - Nemotron Nano `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`: 66 comments, TP 16, FP 47 → precision
+    25.4% (16/63), recall 21.6% (16/74), F 23.4%. 1 CHUNK_FAILED (a request ended in
+    `fetch failed`); $0.1270 by the ledger.
+  - The five recorded tools on the same dev pull requests, from 054's per-repo rows: F 31.3%
+    (Copilot) to 64.1% (Augment). Super is above Copilot's F and below the other four; Nano is
+    below all five.
+**Limits:**
+- One run per model at temperature 0: run-to-run variance is not measured.
+- n = 74 dev golden comments of Medium or higher (the brief said 77; the golden files give
+  21 + 16 + 18 + 19 = 74, as in 054). One judge, whose own errors are not measured.
+- The dev pull requests are the ones the five tools' dev rows were computed on. Nothing was tuned
+  on them: the prompt, chunking and validation were fixed before the first run.
+- The judge sees comment bodies, not the diff; tools that leave fewer, sharper comments gain
+  precision under these rules.
+**Rejected:**
+- (a) Whole-repo context in this version: that is what later versions are measured against.
+- (b) Asking the model for a severity and filtering on it: not in v1, so the baseline stays
+  untuned.
+- (c) Retrying a CHUNK_FAILED chunk or re-running a pull request after seeing output: one run as
+  it happened is the baseline.

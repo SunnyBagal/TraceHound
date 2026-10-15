@@ -445,3 +445,32 @@ was re-run.
   confirmed against the console (same as earlier entries).
 - Opinion: for a matching task with a strict JSON reply, Super with thinking on was reliable here;
   one batch of 212 is not enough to say how often it fails.
+
+---
+
+## 2026-10-15 · Nemotron Super and Nano as a diff-only code reviewer; Super as judge (decision 055)
+
+- **Called:** `POST /v1/chat/completions` on `api.tokenfactory.us-central1.nebius.com`.
+  Reviewer: `nvidia/nemotron-3-super-120b-a12b` and `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`,
+  temperature 0, `chat_template_kwargs.enable_thinking: true`, `max_tokens` 32,000, client
+  timeout 600 s, four requests in parallel, prompts up to about 23,000 input tokens. Judge:
+  Super, as in the 2026-10-14 entry.
+- **Counts:** Super reviewer 51 requests, 51 HTTP OK with usage reported, 0 failures. Nano reviewer
+  53 requests: 50 HTTP OK with usage reported, 2 HTTP OK with no `usage` object in the body, 1
+  failure. Judge 73 requests, 73 HTTP OK with usage, 0 failures, 0 retries.
+- **Failure, exact string:** `fetch failed` (Node's fetch, Nano, no HTTP status or body received;
+  it came at most about 72 s after the request was sent: the pull request's 620 s wall time minus
+  549 s spent in its successful requests).
+- **Replies:** 3 of 51 Super and 5 of 52 answered Nano chunk replies needed a retry because the
+  content was not the requested JSON; every retry was accepted. 2 Super and 3 Nano responses
+  reported exactly 32,000 completion tokens (the `max_tokens` limit).
+- **Tokens and cost (our ledger, third-party prices in `config/prices.json`):** Super reviewer
+  511,657 in / 383,720 out, $0.49885; Nano reviewer 552,996 in / 391,041 out, $0.12703 (includes
+  the failed request at our upper bound and the 2 usage-less responses at our estimate); judge
+  41,897 in / 37,138 out, $0.04599.
+- **Latency:** per pull request (its chunks in sequence), median / max: Super 31.5 s / 213.9 s,
+  Nano 25.6 s / 620.1 s. Not measured per request.
+- **Docs:** missing: whether a 200 response can omit `usage` and how such a call is billed. The
+  per-token prices are still not confirmed against the console.
+- What would have helped: an error body or status instead of a dropped connection on a long Nano
+  request, and `usage` on every 200 response.
