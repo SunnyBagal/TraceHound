@@ -197,6 +197,16 @@ it (decision 050).
   `VERIFY_THRESHOLD = 1`, which keeps everything; reusing the threshold-1 judge matches instead of
   re-judging would favour 3 (F 34.2%) — within noise (`docs/bench/verify-pass.md`). Scoring:
   `node scripts/bench/score-verify.ts`.
+- **Repository context (decision 057, `review-ctx-v1`):** `pnpm tracehound review-ctx (--pr f --head
+  sha | --prs d --heads f) --repo <git dir> --out … [--context-only]`. This is review-diff-v1 plus a
+  context block per chunk, built without a model at the pull request's head (`src/review/context.ts`,
+  `names.ts`): the changed files (cut to ±60-line hunk windows over 12,000 characters), then
+  `git grep -w` references to changed function/class names outside them (8 per name, 30 per
+  chunk, tests last), capped at 40,000 characters. The prompt is 055's plus three sentences, sha256
+  `0c4dcdcf…`. Repos: `node scripts/bench/fetch-repos.ts` (bare clones in the bench folder, diffs
+  checked 40/40). Super on the 40 dev PRs (one run, one judge, n = 74): P 36.2% / R 28.4% / F
+  31.8% against 055's 25.6% / 43.2% / 32.2%, so F did not move. The budget left references in only
+  12 of 48 chunks (`docs/bench/context.md`; tables: `node scripts/bench/compare-ctx.ts`).
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**

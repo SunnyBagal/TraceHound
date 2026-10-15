@@ -2710,3 +2710,71 @@ verified or scored.
   mix two changes.
 - (b) Dropping findings that depend on code outside the diff: that is the next job's context, not
   this one's.
+
+## 057 · Repository context for the reviewer, review-ctx-v1
+**Context:** review-diff-v1 (055) sees only the diff. On Super it reached recall 43.2% (32/74) and
+precision 25.6% (32/125), and a verifier that also saw only the diff did not help (056). This job
+tests one change: the reviewer also sees context from the repository at the pull request's head,
+built deterministically and for every language. The dev repos are Python, Go, Java and Ruby; the
+test repo is TypeScript. Prompt: `docs/prompts/057-context.md`. Dev repos only: Cal.com was not
+read, fetched, cloned, reviewed or scored. No verifier.
+**Choice:**
+- **Repositories** (`scripts/bench/fetch-repos.ts`): a bare clone of each dev repo's greptile fork
+  outside the repo, plus `refs/pull/<n>/head`. Each head's diff against the merge base matched
+  055's saved diff in 40 of 40 cases, once `index` lines and hunk-header function context (git and
+  GitHub label hunks differently) were dropped; 0 of 40 matched by exact sha256.
+- **Context per chunk** (`src/review/context.ts`, `names.ts`; no model; review-diff-v1's chunks):
+  (a) each changed file at the head with new-version line numbers. A file over 12,000 characters
+  is cut to windows of 60 lines either side of each of the chunk's hunks, merged where they
+  overlap; deleted files are skipped. (b) Changed names: definitions for functions, methods and
+  classes, matched by per-language line patterns (Python, Go, Java, Ruby, TypeScript/JavaScript,
+  chosen by extension; documented in `names.ts`). Names come from the hunk header's function
+  context, from added or removed definition lines, and from the nearest definition above a
+  changed line. Names under 4 characters and names on a documented stoplist are skipped.
+  (c) References: `git grep -n -w -F` for each name at the head, outside the chunk's files. Order:
+  non-test files first, then path, then line. At most 8 per name and 30 per chunk, each shown with
+  3 lines either side; a line already shown is skipped, and shown lines are cut at 300 characters.
+  (d) Budget: at most 40,000 characters per block. When over, references are dropped last first,
+  then changed files are cut to hunk windows, last file first. If the block is still over, whole
+  changed files are dropped, last first. This last step was added so the cap always holds; it is
+  not in the job's text. Each review file records, per chunk, the names, references found /
+  selected / shown, each file's status and character count, and every cut.
+- **Prompt:** review-diff-v1's system prompt byte for byte, plus one paragraph of three sentences.
+  The paragraph says what the context block is, says to use it to check whether a problem is real
+  and how callers use the changed code, and says to comment only on diff lines. The user message is
+  055's plus the block, delimited by `<<<REPOSITORY CONTEXT` / `REPOSITORY CONTEXT>>>`. The prompt
+  was written once before the first benchmark run and not changed after. System prompt sha256
+  `0c4dcdcf4d764919b87c581278943e1c6d7b0714aa72b0f3cf60aa0f728089e0`, pinned in
+  `test/review-ctx.test.ts`; the text diff is in `docs/bench/context.md`. Chunking, validation
+  (findings only on added or context lines of the diff), the one retry, CHUNK_FAILED and the
+  output format are 055's (`src/review/review-ctx.ts`; review-diff-v1's code is unchanged).
+  Purpose `review`, temperature 0, through `src/llm/client.ts`.
+- **Results** (`docs/bench/context.md`; Super, reasoning on, one run; judge `bench-judge-v1`
+  unchanged; 0 JUDGE_FAILED; n = 74):
+
+  | run | comments | TP | FP | dup | low | FN | precision (n) | recall (n) | F |
+  |---|---|---|---|---|---|---|---|---|---|
+  | review-diff-v1 | 143 | 32 | 93 | 8 | 10 | 42 | 25.6% (32/125) | 43.2% (32/74) | 32.2% |
+  | review-ctx-v1 | 133 | 21 | 37 | 4 | 71 | 53 | 36.2% (21/58) | 28.4% (21/74) | 31.8% |
+
+  Precision went up and recall went down by about as much, so F did not rise. 71 of the 133
+  comments matched Low golden comments; 64 of them came from one discourse pull request (golden
+  index 6: 66 comments, 2 FP, no Medium-or-higher golden comment). Context: 48
+  chunks, median 35,919 characters (max 39,838). The budget cut something in 38 chunks; only 12
+  chunks kept any reference (147 shown of 1,088 selected), and whole files were dropped in 33
+  chunks. 51 reviewer calls, 0 CHUNK_FAILED, 12 findings dropped (line not in the new version);
+  1,112,462 in / 552,847 out tokens, $0.8313. Wall time per pull request median 47.7 s, max
+  330.9 s. Judge 33 calls, $0.0260.
+**Limits:**
+- One run at temperature 0; run-to-run variance is not measured. One judge, whose own errors are
+  not measured. n = 74 dev golden comments of Medium or higher.
+- Name extraction is heuristic (line patterns, no parser). References are textual whole-word
+  matches, not resolved symbols, so some are wrong and some are missed.
+- At a 40,000-character budget the changed files crowd out references in most chunks, so this run
+  mostly measured "changed files near the hunks" rather than "callers". The cut order was set by
+  the job before any run and was not tuned.
+**Rejected:**
+- (a) TypeScript-only lookups (compiler-resolved symbols): most dev pull requests are not
+  TypeScript and would not count.
+- (b) Letting the model search the repository with tools: in 050 the repair agent made 0 graph
+  tool calls in 80 graph-on runs.
