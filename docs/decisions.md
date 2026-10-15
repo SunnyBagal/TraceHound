@@ -2778,3 +2778,83 @@ read, fetched, cloned, reviewed or scored. No verifier.
   TypeScript and would not count.
 - (b) Letting the model search the repository with tools: in 050 the repair agent made 0 graph
   tool calls in 80 graph-on runs.
+
+## 058 · Context-aware verifier, verify-ctx-v1
+**Context:** review-diff-v1 (055), Super, has the best dev recall, 43.2% (32/74), at precision
+25.6% (32/125), F 32.2%. A verifier that saw only the diff and gave a 1–5 confidence did not
+separate true from false findings (056). review-ctx-v1 (057) reported far fewer false positives
+(93 → 37) but also fewer real defects (32 → 21), so F did not move (31.8%). This job tests one
+change: review-diff-v1 stays the generator, and a verifier that sees repository context around
+each finding answers keep or drop. Generation stays diff-only; context is used only to judge.
+review-diff-v1, review-ctx-v1, verify-v1 and the judge are unchanged. Prompt:
+`docs/prompts/058-ctx-verify.md`. Dev repos only: Cal.com was not read, fetched, cloned, reviewed
+or scored.
+**Choice:**
+- **Pre-registered rules** (written before any model call in this job and not changed after the
+  first verifier call; committed in the freeze commit "verify-ctx-v1: pre-registered rules and
+  frozen prompt (058)"):
+  - Verdict rule: a finding is kept if and only if the verifier's valid reply says keep. An invalid reply gets one retry; if the retry is also invalid, the finding is kept and counted as VERIFY_FAILED.
+  - Adoption rule: verify-ctx-v1 joins the pipeline only if, on the 40 dev pull requests, its F-score is at least 35.0% (about 3 points over review-diff-v1's 32.2%). Otherwise it is recorded as a loss and is not used.
+  - Agreement table rule (step 6, reported only, never adopted in this job): a review-diff-v1 Super finding is "agreed" if review-ctx-v1 Super has a finding on the same path whose line is within 3 lines of it in the new version.
+- **Per-finding context** (`src/review/verify-context.ts`; no model; at the pull request's head
+  from the bare clone of 057; `context.ts` and `names.ts` reused unchanged): (a) the finding's
+  file with new-version line numbers, 80 lines either side of the finding's line, clipped to the
+  file; (b) the diff of that file only, rendered as review-diff-v1 renders it, hunks nearest the
+  finding's line taken first up to 12,000 characters and shown in file order (a nearest hunk alone
+  over the limit is cut at a line); (c) names: the nearest definition at or above the finding's
+  line (names.ts patterns), a name defined on the line, and names called on the line (an
+  identifier followed by `(`, one regex in verify-context.ts, since names.ts extracts definitions
+  only), all through names.ts's length and stoplist rule; (d) references: `git grep -n -w -F` per
+  name at the head outside the finding's file, non-test files first, then path, then line, at most
+  6 per name and 15 per finding (a line already shown is skipped), 3 lines either side, lines cut
+  at 300 characters; (e) budget: at most 24,000 characters for the whole block (markers and
+  section headings included). When over: references dropped last first; then the window shrinks
+  one line a side at a time toward 40; then diff hunks dropped farthest from the finding's line
+  first. The window at 40 lines either side is never dropped. Each verdict file records per
+  finding the names, window range, hunks shown, references found / selected / shown, character
+  counts and every cut. A finding without a line would be anchored at its file's first hunk (none
+  of the 143 lacks one).
+- **Verifier** (`src/review/verify-ctx.ts`, `verify-ctx-prompt.ts`; `tracehound verify-ctx`): one
+  call per finding with the pull request's title and description, the finding (path, line, text)
+  and the block between `<<<REPOSITORY CONTEXT` and `REPOSITORY CONTEXT>>>`. The prompt asks one
+  question (is this a real defect in the changed code that a careful reviewer would block the
+  merge for, given the context?), lists the drop cases (speculative, style, already handled
+  elsewhere in the shown code, code the diff did not change) and asks for strict JSON
+  `{"verdict": "keep" | "drop", "reason": "<one sentence>"}`, no confidence. Written once before
+  the first verifier call; system prompt sha256
+  `75703fc6b34910f5bdebf29703023d6ec8e8cbbbfbc35574bfbf60830a383e70`, pinned in
+  `test/verify-ctx.test.ts`. Super (`nvidia/nemotron-3-super-120b-a12b`), reasoning on,
+  temperature 0, purpose `review`, through `src/llm/client.ts`.
+- **Results** (`docs/bench/ctx-verify.md`; Super, reasoning on, one run; judge `bench-judge-v1`
+  unchanged, a judge request per pull request for each new comment set; 0 JUDGE_FAILED; n = 74):
+
+  | run | comments | TP | FP | dup | low | FN | precision (n) | recall (n) | F |
+  |---|---|---|---|---|---|---|---|---|---|
+  | review-diff-v1 | 143 | 32 | 93 | 8 | 10 | 42 | 25.6% (32/125) | 43.2% (32/74) | 32.2% |
+  | review-ctx-v1 | 133 | 21 | 37 | 4 | 71 | 53 | 36.2% (21/58) | 28.4% (21/74) | 31.8% |
+  | verify-ctx-v1 | 63 | 21 | 33 | 3 | 6 | 53 | 38.9% (21/54) | 28.4% (21/74) | 32.8% |
+  | agree-diff-ctx (report only) | 33 | 15 | 11 | 2 | 5 | 59 | 57.7% (15/26) | 20.3% (15/74) | 30.0% |
+
+  **The adoption rule was not met: verify-ctx-v1's F is 32.8%, under 35.0%. It is recorded as a
+  loss and is not used.** The verifier kept 63 of 143 findings and dropped 80; 0 VERIFY_FAILED,
+  3 findings needed the one retry. By 055's judge matches it kept 22 of the 32 TPs (dropped 10)
+  and 31 of the 93 FPs (dropped 62): it removes false positives at a higher rate than true ones,
+  but loses about a third of the true ones, so precision and recall moved by similar amounts, as
+  in 057. Re-judged as its own set, the kept set scores 21 TP, one fewer than the 22
+  kept findings that 055's judge had matched. The agreement table has the highest precision in the table
+  (57.7%) and the lowest recall. Context: median 12,329 characters per finding (max 23,815);
+  references shown in 97 of 143 findings, median 6 (max 15, total 794); the reference cut fired
+  in 5 findings, the window and hunk cuts never, the 12,000-character diff limit omitted hunks in
+  3 and cut a single hunk in 9. Verifier 146 requests, 681,007 in / 131,377 out tokens, $0.3225;
+  latency per finding median 4.6 s, max 23.8 s. Judge 21 uncached requests, $0.0109 (30 more
+  were byte-identical to earlier requests and came from the response cache). Ledger $11.2687 →
+  $11.6021.
+**Limits:**
+- One run at temperature 0; run-to-run variance is not measured. One judge, whose own errors are
+  not measured. n = 74 dev golden comments of Medium or higher.
+- The threshold of 35.0% was set before the run, but it is still a single dev-set comparison.
+- Enclosing-name extraction is heuristic (nearest definition line by pattern, no parser); call
+  names come from one regex; references are textual whole-word matches, not resolved symbols.
+**Rejected:**
+- (a) Reusing 057's per-chunk block: references reached the model in only 12 of 48 chunks.
+- (b) Repeated-run voting: costs N reviewer runs; the agreement table gives a first, free signal.

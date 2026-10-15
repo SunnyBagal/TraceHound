@@ -516,3 +516,24 @@ was re-run.
   confirmed against the console (same as earlier entries).
 - Opinion: long prompts with thinking on were reliable in this batch; 51 requests are not enough
   to give a failure rate.
+
+---
+
+## 2026-10-15 · Nemotron Super as a keep-or-drop verifier with repository context, and as judge (decision 058)
+
+- **Called:** `POST /v1/chat/completions` on `api.tokenfactory.us-central1.nebius.com`.
+  Verifier: `nvidia/nemotron-3-super-120b-a12b`, temperature 0,
+  `chat_template_kwargs.enable_thinking: true`, `max_tokens` 16,000, client timeout 600 s, four
+  requests in parallel, prompts up to about 26,000 characters (about 4,700 input tokens per
+  request on average). Judge: Super, as in the 2026-10-14 entry.
+- **Counts:** verifier 146 requests, 146 HTTP OK with usage reported, 0 failures, 0 timeouts. 3
+  replies were not the requested JSON on the first try and were valid after one retry (146
+  requests for 143 findings). Judge 21 requests, 21 HTTP OK with usage reported, 0 failures (30
+  more were served from our local response cache and did not reach the API).
+- **Tokens and cost (our ledger, third-party prices in `config/prices.json`):** verifier 681,007
+  in / 131,377 out, $0.32254; judge 11,918 in / 8,152 out, $0.01091.
+- **Latency (client-measured, per finding):** median 4.6 s, max 23.8 s.
+- **Docs:** nothing new found wrong or missing this session. The per-token prices are still not
+  confirmed against the console (same as earlier entries).
+- Opinion: short strict-JSON replies with thinking on were fast and reliable in this batch; 146
+  requests are not enough to give a failure rate.
