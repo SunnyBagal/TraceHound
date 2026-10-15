@@ -2778,3 +2778,51 @@ read, fetched, cloned, reviewed or scored. No verifier.
   TypeScript and would not count.
 - (b) Letting the model search the repository with tools: in 050 the repair agent made 0 graph
   tool calls in 80 graph-on runs.
+
+## 058 · Context-aware verifier, verify-ctx-v1
+**Context:** review-diff-v1 (055), Super, has the best dev recall, 43.2% (32/74), at precision
+25.6% (32/125), F 32.2%. A verifier that saw only the diff and gave a 1–5 confidence did not
+separate true from false findings (056). review-ctx-v1 (057) reported far fewer false positives
+(93 → 37) but also fewer real defects (32 → 21), so F did not move (31.8%). This job tests one
+change: review-diff-v1 stays the generator, and a verifier that sees repository context around
+each finding answers keep or drop. Generation stays diff-only; context is used only to judge.
+review-diff-v1, review-ctx-v1, verify-v1 and the judge are unchanged. Prompt:
+`docs/prompts/058-ctx-verify.md`. Dev repos only: Cal.com was not read, fetched, cloned, reviewed
+or scored.
+**Choice:**
+- **Pre-registered rules** (written before any model call in this job and not changed after the
+  first verifier call; committed in the freeze commit "verify-ctx-v1: pre-registered rules and
+  frozen prompt (058)"):
+  - Verdict rule: a finding is kept if and only if the verifier's valid reply says keep. An invalid reply gets one retry; if the retry is also invalid, the finding is kept and counted as VERIFY_FAILED.
+  - Adoption rule: verify-ctx-v1 joins the pipeline only if, on the 40 dev pull requests, its F-score is at least 35.0% (about 3 points over review-diff-v1's 32.2%). Otherwise it is recorded as a loss and is not used.
+  - Agreement table rule (step 6, reported only, never adopted in this job): a review-diff-v1 Super finding is "agreed" if review-ctx-v1 Super has a finding on the same path whose line is within 3 lines of it in the new version.
+- **Per-finding context** (`src/review/verify-context.ts`; no model; at the pull request's head
+  from the bare clone of 057; `context.ts` and `names.ts` reused unchanged): (a) the finding's
+  file with new-version line numbers, 80 lines either side of the finding's line, clipped to the
+  file; (b) the diff of that file only, rendered as review-diff-v1 renders it, hunks nearest the
+  finding's line taken first up to 12,000 characters and shown in file order (a nearest hunk alone
+  over the limit is cut at a line); (c) names: the nearest definition at or above the finding's
+  line (names.ts patterns), a name defined on the line, and names called on the line (an
+  identifier followed by `(`, one regex in verify-context.ts, since names.ts extracts definitions
+  only), all through names.ts's length and stoplist rule; (d) references: `git grep -n -w -F` per
+  name at the head outside the finding's file, non-test files first, then path, then line, at most
+  6 per name and 15 per finding (a line already shown is skipped), 3 lines either side, lines cut
+  at 300 characters; (e) budget: at most 24,000 characters for the whole block (markers and
+  section headings included). When over: references dropped last first; then the window shrinks
+  one line a side at a time toward 40; then diff hunks dropped farthest from the finding's line
+  first. The window at 40 lines either side is never dropped. Each verdict file records per
+  finding the names, window range, hunks shown, references found / selected / shown, character
+  counts and every cut. A finding without a line would be anchored at its file's first hunk (none
+  of the 143 lacks one).
+- **Verifier** (`src/review/verify-ctx.ts`, `verify-ctx-prompt.ts`; `tracehound verify-ctx`): one
+  call per finding with the pull request's title and description, the finding (path, line, text)
+  and the block between `<<<REPOSITORY CONTEXT` and `REPOSITORY CONTEXT>>>`. The prompt asks one
+  question (is this a real defect in the changed code that a careful reviewer would block the
+  merge for, given the context?), lists the drop cases (speculative, style, already handled
+  elsewhere in the shown code, code the diff did not change) and asks for strict JSON
+  `{"verdict": "keep" | "drop", "reason": "<one sentence>"}`, no confidence. Written once before
+  the first verifier call; system prompt sha256
+  `75703fc6b34910f5bdebf29703023d6ec8e8cbbbfbc35574bfbf60830a383e70`, pinned in
+  `test/verify-ctx.test.ts`. Super (`nvidia/nemotron-3-super-120b-a12b`), reasoning on,
+  temperature 0, purpose `review`, through `src/llm/client.ts`.
+- **Results:** pending; added after the run.

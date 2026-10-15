@@ -12,6 +12,7 @@
 //   review   diff-only pull request reviewer, review-diff-v1 (055)
 //   review-ctx  the reviewer plus repository context at the pull request head, review-ctx-v1 (057)
 //   verify   confidence for each finding of a review, verify-v1, and filtering at a threshold (056)
+//   verify-ctx  keep or drop each finding of a review, seeing repository context, verify-ctx-v1 (058)
 const [command, ...rest] = process.argv.slice(2);
 
 if (command === "bench") {
@@ -41,6 +42,13 @@ if (command === "bench") {
   const envFile = new URL("../../../.env", import.meta.url).pathname;
   if (existsSync(envFile) && !process.env.NEBIUS_API_KEY) process.loadEnvFile(envFile);
   const { main } = await import("./review/verify-cli.ts");
+  process.exitCode = await main(rest);
+} else if (command === "verify-ctx") {
+  // verify-ctx needs NEBIUS_API_KEY (not with --context-only): load the workspace .env for this command only
+  const { existsSync } = await import("node:fs");
+  const envFile = new URL("../../../.env", import.meta.url).pathname;
+  if (existsSync(envFile) && !process.env.NEBIUS_API_KEY) process.loadEnvFile(envFile);
+  const { main } = await import("./review/verify-ctx-cli.ts");
   process.exitCode = await main(rest);
 } else if (command === "changes") {
   const { main } = await import("./changes/cli.ts");
