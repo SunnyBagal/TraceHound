@@ -474,3 +474,23 @@ was re-run.
   per-token prices are still not confirmed against the console.
 - What would have helped: an error body or status instead of a dropped connection on a long Nano
   request, and `usage` on every 200 response.
+
+---
+
+## 2026-10-15 · Nemotron Super as a finding verifier and as judge (decision 056)
+
+- **Called:** `POST /v1/chat/completions` on `api.tokenfactory.us-central1.nebius.com`.
+  Verifier: `nvidia/nemotron-3-super-120b-a12b`, temperature 0,
+  `chat_template_kwargs.enable_thinking: true`, `max_tokens` 16,000, client timeout 600 s, up to
+  six requests in parallel, one short prompt per request (about 2,300 input tokens on average).
+  Judge: Super, as in the 2026-10-14 entry.
+- **Counts:** verifier 143 requests, 143 HTTP OK with usage reported, 0 failures, 0 timeouts;
+  every reply was the requested JSON on the first try (0 retries). Judge 46 requests, 46 HTTP OK
+  with usage reported, 0 failures, 0 retries.
+- **Tokens and cost (our ledger, third-party prices in `config/prices.json`):** verifier 327,242
+  in / 102,295 out, $0.19024; judge 26,982 in / 22,400 out, $0.02825.
+- **Latency (client-measured, per verifier request):** median 4.0 s, max 9.8 s.
+- **Docs:** nothing new found wrong or missing this session. The per-token prices are still not
+  confirmed against the console (same as earlier entries).
+- Opinion: short, strict-JSON requests to Super with thinking on were fast and reliable in this
+  batch; 143 requests are not enough to give a failure rate.

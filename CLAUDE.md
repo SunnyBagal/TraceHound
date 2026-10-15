@@ -187,6 +187,16 @@ it (decision 050).
   `node scripts/bench/score-review.ts --run review-diff-v1/<model>`. Baseline on the 40 dev PRs
   (n = 74, one run, one judge): Super P 25.6% / R 43.2% / F 32.2%, Nano 25.4% / 21.6% / 23.4%;
   the five recorded tools' dev F is 31.3% to 64.1% (`docs/bench/baseline-diff.md`).
+- **Verification pass (decision 056, `verify-v1`):** `pnpm tracehound verify run (--review f --pr f
+  | --reviews d --prs d) --out … --filtered … [--threshold n]` and `verify filter --verified …
+  --threshold n --out …` (no model): one Super call per existing finding (title, description, the
+  finding, its file's diff only) → confidence 1–5 and a reason; failures are VERIFY_FAILED and
+  always kept. Prompt frozen, sha256 `ab2d6105…`. On the 143 review-diff-v1 Super dev findings
+  (0 VERIFY_FAILED, $0.19): thresholds 1→5 move precision 25.6% → 44.4% and recall 43.2% → 21.6%;
+  F 32.2 / 32.1 / 31.2 / 29.2 / 29.1%. The rule (highest dev F, ties to the higher) chose
+  `VERIFY_THRESHOLD = 1`, which keeps everything; reusing the threshold-1 judge matches instead of
+  re-judging would favour 3 (F 34.2%) — within noise (`docs/bench/verify-pass.md`). Scoring:
+  `node scripts/bench/score-verify.ts`.
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**
