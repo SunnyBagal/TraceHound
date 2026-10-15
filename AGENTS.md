@@ -36,3 +36,27 @@ This file is for agents that are not Claude Code (Codex, Grok Build, others). Cl
 ## Reporting
 
 End every task with: PR number and head sha, test and typecheck results with counts, files changed, and anything not done. No claims beyond what ran.
+
+## Code Review Rules
+
+Treat every rule below as P1 when it is broken.
+
+### Blindness
+- Any text that looks copied from benchmark golden comments or from another tool's review comments, in code, tests, fixtures or docs.
+- Any code path that could read, fetch, clone, review or score Cal.com pull requests or data (for example a repo list or fetch script that does not refuse calcom/cal.com).
+- Any reference to `~/Projects/tracehound-bench`, `tracehound-ops`, `TraceHound-eval`, `tracehound-heldout` or `Recall` paths from product code under `packages/action/`, `.github/actions/` or `docs/action/`.
+
+### Lanes
+- A PR from a `codex/*` branch that changes files outside `.github/actions/`, `packages/action/`, `docs/action/`, `docs/demo/` and `AGENTS.md`.
+- A PR from a `build/*` or `docs/*` branch that changes files under `.github/actions/`, `packages/action/`, `docs/action/`, `docs/demo/` or `AGENTS.md`.
+
+### Benchmark integrity
+- A change to a frozen prompt or to the judge `bench-judge-v1` (prompt text, model, temperature, matching rules) without a new decision entry in `docs/decisions.md`.
+- In `docs/bench/*.md` and `docs/decisions.md`: a precision, recall or F value that does not follow from the counts in the same row (precision = TP/(TP+FP), recall = TP/(TP+FN), F = harmonic mean).
+- A results claim that calls a difference of a few points on one run with n under 100 an improvement or a win without saying it is within noise.
+
+### Build and safety
+- A new dependency in any package.json.
+- Product code that calls a model provider other than Nebius Token Factory.
+- A secret (`NEBIUS_API_KEY`, `GITHUB_TOKEN` or any token) that can reach a log, an error message, a file or a commit.
+- A test that can reach the network.
