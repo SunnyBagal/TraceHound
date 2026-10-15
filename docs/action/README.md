@@ -10,7 +10,7 @@ model, counts the findings, and labels the comments as model-generated and unver
 
 1. Add a repository Actions secret named `NEBIUS_API_KEY` with your Nebius Token Factory key.
 2. Copy [example-workflow.yml](example-workflow.yml) to `.github/workflows/tracehound-review.yml`
-   in that repository. Replace `@codex/github-action` with a reviewed TraceHound commit SHA
+   in that repository. Replace `@main` with a reviewed TraceHound commit SHA
    containing this action before enabling it.
 3. Keep `contents: read` and `pull-requests: write` permissions and the same-repository job
    condition. Repository or organization policy must permit the workflow token to write reviews.
