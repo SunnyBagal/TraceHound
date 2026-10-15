@@ -207,6 +207,16 @@ it (decision 050).
   checked 40/40). Super on the 40 dev PRs (one run, one judge, n = 74): P 36.2% / R 28.4% / F
   31.8% against 055's 25.6% / 43.2% / 32.2%, so F did not move. The budget left references in only
   12 of 48 chunks (`docs/bench/context.md`; tables: `node scripts/bench/compare-ctx.ts`).
+- **Context-aware verifier (decision 058, `verify-ctx-v1`): a loss, not used.** `pnpm tracehound
+  verify-ctx (--review f --pr f --head sha | --reviews d --prs d --heads f) --repo <git dir> --out …
+  --kept … [--context-only]`: review-diff-v1 stays the generator; one Super call per finding sees
+  up to 24,000 characters of context built without a model (`src/review/verify-context.ts`: the
+  file ±80 lines, that file's hunks, `git grep` references to the enclosing and called names) and
+  answers keep or drop. Prompt frozen, sha256 `75703fc6…`. On the 143 dev findings: 63 kept, 0
+  VERIFY_FAILED, $0.32; P 38.9% / R 28.4% / F 32.8% (n = 74), under the pre-registered 35.0%
+  adoption bar. It dropped 62 of 93 FPs but also 10 of 32 TPs. Agreement of review-diff-v1 and
+  review-ctx-v1 (report only): P 57.7% / R 20.3% / F 30.0% (`docs/bench/ctx-verify.md`; scoring:
+  `node scripts/bench/score-ctx-verify.ts`).
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**

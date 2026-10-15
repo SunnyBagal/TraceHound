@@ -2825,4 +2825,36 @@ or scored.
   `75703fc6b34910f5bdebf29703023d6ec8e8cbbbfbc35574bfbf60830a383e70`, pinned in
   `test/verify-ctx.test.ts`. Super (`nvidia/nemotron-3-super-120b-a12b`), reasoning on,
   temperature 0, purpose `review`, through `src/llm/client.ts`.
-- **Results:** pending; added after the run.
+- **Results** (`docs/bench/ctx-verify.md`; Super, reasoning on, one run; judge `bench-judge-v1`
+  unchanged, a judge request per pull request for each new comment set; 0 JUDGE_FAILED; n = 74):
+
+  | run | comments | TP | FP | dup | low | FN | precision (n) | recall (n) | F |
+  |---|---|---|---|---|---|---|---|---|---|
+  | review-diff-v1 | 143 | 32 | 93 | 8 | 10 | 42 | 25.6% (32/125) | 43.2% (32/74) | 32.2% |
+  | review-ctx-v1 | 133 | 21 | 37 | 4 | 71 | 53 | 36.2% (21/58) | 28.4% (21/74) | 31.8% |
+  | verify-ctx-v1 | 63 | 21 | 33 | 3 | 6 | 53 | 38.9% (21/54) | 28.4% (21/74) | 32.8% |
+  | agree-diff-ctx (report only) | 33 | 15 | 11 | 2 | 5 | 59 | 57.7% (15/26) | 20.3% (15/74) | 30.0% |
+
+  **The adoption rule was not met: verify-ctx-v1's F is 32.8%, under 35.0%. It is recorded as a
+  loss and is not used.** The verifier kept 63 of 143 findings and dropped 80; 0 VERIFY_FAILED,
+  3 findings needed the one retry. By 055's judge matches it kept 22 of the 32 TPs (dropped 10)
+  and 31 of the 93 FPs (dropped 62): it removes false positives at a higher rate than true ones,
+  but loses about a third of the true ones, so precision and recall moved by similar amounts, as
+  in 057. Re-judged as its own set, the kept set scores 21 TP, one fewer than the 22
+  kept findings that 055's judge had matched. The agreement table has the highest precision in the table
+  (57.7%) and the lowest recall. Context: median 12,329 characters per finding (max 23,815);
+  references shown in 97 of 143 findings, median 6 (max 15, total 794); the reference cut fired
+  in 5 findings, the window and hunk cuts never, the 12,000-character diff limit omitted hunks in
+  3 and cut a single hunk in 9. Verifier 146 requests, 681,007 in / 131,377 out tokens, $0.3225;
+  latency per finding median 4.6 s, max 23.8 s. Judge 21 uncached requests, $0.0109 (30 more
+  were byte-identical to earlier requests and came from the response cache). Ledger $11.2687 →
+  $11.6021.
+**Limits:**
+- One run at temperature 0; run-to-run variance is not measured. One judge, whose own errors are
+  not measured. n = 74 dev golden comments of Medium or higher.
+- The threshold of 35.0% was set before the run, but it is still a single dev-set comparison.
+- Enclosing-name extraction is heuristic (nearest definition line by pattern, no parser); call
+  names come from one regex; references are textual whole-word matches, not resolved symbols.
+**Rejected:**
+- (a) Reusing 057's per-chunk block: references reached the model in only 12 of 48 chunks.
+- (b) Repeated-run voting: costs N reviewer runs; the agreement table gives a first, free signal.
