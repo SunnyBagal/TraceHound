@@ -8,9 +8,17 @@
 //   repair   run a repair task in a sandbox with a (scripted) agent and verify the result
 //   changes  declaration-level change set of a diff or a run's patch (decision 038)
 //   find     hypotheses from graph rules, no model (decision 051); --claims: reproduce claims (052)
+//   bench    convert recorded reviews; score reviews against a golden file with an LLM judge (054)
 const [command, ...rest] = process.argv.slice(2);
 
-if (command === "changes") {
+if (command === "bench") {
+  // score needs NEBIUS_API_KEY: load the workspace .env for this command only
+  const { existsSync } = await import("node:fs");
+  const envFile = new URL("../../../.env", import.meta.url).pathname;
+  if (existsSync(envFile) && !process.env.NEBIUS_API_KEY) process.loadEnvFile(envFile);
+  const { main } = await import("./bench/cli.ts");
+  process.exitCode = await main(rest);
+} else if (command === "changes") {
   const { main } = await import("./changes/cli.ts");
   main(rest);
 } else if (command === "find") {
@@ -44,7 +52,9 @@ if (command === "changes") {
   await import("./cli.ts");
 } else {
   console.error(
-    "usage: tracehound <analyze|impact|changes|find|context|query|mcp|repair> [...args]\n" +
+    "usage: tracehound <analyze|impact|changes|find|context|query|mcp|repair|bench> [...args]\n" +
+      "  tracehound bench convert --recorded <dir> --tool <name> --out <dir>\n" +
+      "  tracehound bench score --golden <file> --reviews <dir> --detail <file outside the repo> [--summary <file>] [--model <id>] [--concurrency <n>]\n" +
       "  tracehound find --repo <path> [--config <tracehound.json>] [--out <file.json>] [--json] [--claims <dir> --profile <profile.json> [--git-url <url>]]\n" +
       "  tracehound impact --repo <path> --diff <base>..<head> [--depth 2] [--json] [--out <file>]\n" +
       '  tracehound context --issue "<text>" [--decider lexical|nemotron] [--k 3] [--snapshot <path>] [--budget <tokens>] [--json]\n' +

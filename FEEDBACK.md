@@ -427,3 +427,21 @@ was re-run.
   interface, once access exists, with the parked spike as its starting point."
 - So no Nebius sandbox ever ran a command for this project. Spawn latency, in-sandbox behaviour,
   network reachability and sandbox cost: not recorded.
+
+---
+
+## 2026-10-14 · Nemotron Super as a benchmark judge (decision 054)
+
+- **Called:** `nvidia/nemotron-3-super-120b-a12b`, `POST /v1/chat/completions` on
+  `api.tokenfactory.us-central1.nebius.com`, temperature 0, `chat_template_kwargs.enable_thinking:
+  true`, `max_tokens` 16,000, client timeout 300 s.
+- **Counts:** 212 requests, 212 successes (HTTP OK, usage reported), 0 failures, 0 timeouts.
+  Every reply was a JSON object that passed our id validation on the first try (0 retries).
+- **Tokens and cost (our ledger, third-party prices in `config/prices.json`):** 350,532 input,
+  137,836 output, $0.22921.
+- **Latency:** not measured per call. The 212 calls, four in parallel, ran between 17:32 and
+  17:52 UTC, including the time spent between tools.
+- **Docs:** nothing new found wrong or missing this session. The per-token prices are still not
+  confirmed against the console (same as earlier entries).
+- Opinion: for a matching task with a strict JSON reply, Super with thinking on was reliable here;
+  one batch of 212 is not enough to say how often it fails.

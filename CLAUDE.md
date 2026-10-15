@@ -164,6 +164,20 @@ it (decision 050).
   `excerpts` field; without it the agent's prompt is byte-identical (pinned in
   `test/claim-excerpts.test.ts`). Claims target Recall `testable-baseline` @ `57d920e` (the
   profile's commit): 1 / 0 / 1 hypotheses, 4 claim files. The reproduce stage has not run on them.
+- **Review benchmark and scorer (decision 054; plan `docs/reviewer-plan.md`):** TraceHound is to
+  become a pull-request reviewer measured on `ai-code-review-evaluations/golden_comments` @
+  `3f2c8ab` (5 repos × 10 PRs). The data lives in `~/Projects/tracehound-bench/` (golden, recorded
+  tool reviews, neutral reviews, scores) and never enters this repo (no licence file; Cal.com is
+  AGPL). Fetch: `node scripts/bench/fetch-recorded.ts`; per tool: `node scripts/bench/score-tool.ts
+  --tool <name>`. Scorer: `pnpm tracehound bench convert --recorded <dir> --tool <name> --out <dir>`
+  and `pnpm tracehound bench score --golden <file> --reviews <dir> --detail <file outside the repo>
+  [--summary f]`: an LLM judge (`bench-judge-v1`, Super, temperature 0, one request per PR) maps
+  each tool comment to a golden comment or none; README rules (Low counts as nothing, duplicates
+  neither TP nor FP), JUDGE_FAILED PRs left out and counted. stdout is counts only; per-comment
+  detail goes only to `--detail`. Validation on five recorded tools: `docs/bench/scorer-validation.md`.
+  **Cal.com is the test set; everything else in the dataset is dev. Sessions that build or tune the
+  reviewer never read Cal.com's golden comments, the recorded tool comments for Cal.com, or
+  per-comment score detail for Cal.com** (scripts may read them and report counts).
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**
