@@ -178,6 +178,15 @@ it (decision 050).
   **Cal.com is the test set; everything else in the dataset is dev. Sessions that build or tune the
   reviewer never read Cal.com's golden comments, the recorded tool comments for Cal.com, or
   per-comment score detail for Cal.com** (scripts may read them and report counts).
+- **Diff-only baseline reviewer (decision 055, `review-diff-v1`):** `pnpm tracehound review
+  (--pr <file> | --prs <dir>) --out <file|dir> [--model id] [--reasoning on|off]` reads only a
+  pull request's title, description and unified diff (`src/review/`): one call per chunk of at most
+  60,000 diff characters, findings checked against the diff's added/context lines (drops counted),
+  invalid reply retried once then CHUNK_FAILED; output is 054's neutral format. Prompt frozen,
+  sha256 `f77c2031…`. Inputs: `node scripts/bench/fetch-prs.ts` (dev repos only); scoring:
+  `node scripts/bench/score-review.ts --run review-diff-v1/<model>`. Baseline on the 40 dev PRs
+  (n = 74, one run, one judge): Super P 25.6% / R 43.2% / F 32.2%, Nano 25.4% / 21.6% / 23.4%;
+  the five recorded tools' dev F is 31.3% to 64.1% (`docs/bench/baseline-diff.md`).
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**
