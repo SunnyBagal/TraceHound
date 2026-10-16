@@ -27,6 +27,7 @@ const output = (comments = [finding]) => ({
 
 function fake(outputValue: unknown = output(), statuses = [201]) {
   const posts: unknown[] = [];
+  const head = { sha: "abc123" };
   const api = vi.fn<typeof fetch>(async (url, init) => {
     const endpoint = String(url);
     expect(endpoint).toMatch(/^https:\/\/api\.example\.invalid\/repos\/example\/widget\/pulls\/42(?:\/reviews)?$/);
@@ -41,12 +42,15 @@ function fake(outputValue: unknown = output(), statuses = [201]) {
     const accept = new Headers(init?.headers).get("Accept");
     if (accept === "application/vnd.github.diff") return new Response(diff);
     expect(accept).toBe("application/vnd.github+json");
-    return Response.json({ head: { sha: "abc123" } });
+    return Response.json({ head });
   });
   const reviewer = vi.fn<Dependencies["runReviewer"]>().mockResolvedValue(outputValue);
   const log = vi.fn();
-  return { deps: { fetch: api, runReviewer: reviewer, log }, posts, api, reviewer, log };
+  return { deps: { fetch: api, runReviewer: reviewer, log }, posts, api, reviewer, log, head };
 }
+
+const requests = (api: ReturnType<typeof fake>["api"]) => api.mock.calls.map(([, init]) =>
+  `${init?.method} ${new Headers(init?.headers).get("Accept")}`);
 
 describe("review input and mapping", () => {
   it("builds neutral input from the event and the exact diff", () => {
@@ -63,6 +67,10 @@ describe("review input and mapping", () => {
       body: "TraceHound · fake-nemotron · 1 findings\n\nThese comments are model-generated and unverified.",
       comments: [{ ...finding, side: "RIGHT" }],
     }]);
+    expect(requests(f.api)).toEqual([
+      "GET application/vnd.github.diff", "GET application/vnd.github+json",
+      "GET application/vnd.github+json", "POST application/vnd.github+json",
+    ]);
   });
 
   it("moves an off-diff line into the body with its location and text", async () => {
@@ -124,10 +132,30 @@ describe("review input and mapping", () => {
 describe("no-post paths and failures", () => {
   it("dry-run prints the exact proposed JSON and posts nothing", async () => {
     const f = fake();
+    f.reviewer.mockImplementation(async () => {
+      f.head.sha = "new-head";
+      return output();
+    });
     await runAction(event, { ...options, dryRun: true }, f.deps);
     expect(f.posts).toEqual([]);
     expect(JSON.parse(f.log.mock.calls[0]![0])).toEqual(buildReview([finding], diff, "abc123", "fake-nemotron", 15));
     expect(f.reviewer).toHaveBeenCalledOnce();
+    expect(requests(f.api)).toEqual(["GET application/vnd.github.diff", "GET application/vnd.github+json"]);
+  });
+
+  it("posts nothing when the head changes while the reviewer runs", async () => {
+    const f = fake();
+    f.reviewer.mockImplementation(async () => {
+      f.head.sha = "new-head";
+      return output();
+    });
+    await runAction(event, options, f.deps);
+    expect(f.reviewer).toHaveBeenCalledOnce();
+    expect(f.posts).toEqual([]);
+    expect(requests(f.api)).toEqual([
+      "GET application/vnd.github.diff", "GET application/vnd.github+json", "GET application/vnd.github+json",
+    ]);
+    expect(f.log).toHaveBeenLastCalledWith("TraceHound: pull request head changed during review; nothing posted.");
   });
 
   it("reviewer rejection is non-fatal, posts nothing, and does not echo its error", async () => {
@@ -201,6 +229,27 @@ describe("no-post paths and failures", () => {
     expect(f.posts[1]).toMatchObject({ event: "COMMENT", comments: [] });
     expect((f.posts[1] as { body: string }).body).toContain(`src/widget.ts:9\n${finding.body}`);
     expect(f.reviewer).toHaveBeenCalledOnce();
+    expect(requests(f.api)).toEqual([
+      "GET application/vnd.github.diff", "GET application/vnd.github+json",
+      "GET application/vnd.github+json", "POST application/vnd.github+json",
+      "GET application/vnd.github+json", "POST application/vnd.github+json",
+    ]);
+  });
+
+  it("does not retry POST when the head changes after a 422", async () => {
+    const f = fake(output(), [422, 201]);
+    f.deps.fetch = vi.fn<typeof fetch>(async (url, init) => {
+      const response = await f.api(url, init);
+      if (init?.method === "POST" && response.status === 422) f.head.sha = "new-head";
+      return response;
+    });
+    await runAction(event, options, f.deps);
+    expect(f.posts).toHaveLength(1);
+    expect(requests(f.api)).toEqual([
+      "GET application/vnd.github.diff", "GET application/vnd.github+json",
+      "GET application/vnd.github+json", "POST application/vnd.github+json", "GET application/vnd.github+json",
+    ]);
+    expect(f.log).toHaveBeenLastCalledWith("TraceHound: pull request head changed during review; nothing posted.");
   });
 
   it("reports authorization failures without retrying or exposing response text", async () => {
