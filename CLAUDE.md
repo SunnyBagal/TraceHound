@@ -217,6 +217,15 @@ it (decision 050).
   adoption bar. It dropped 62 of 93 FPs but also 10 of 32 TPs. Agreement of review-diff-v1 and
   review-ctx-v1 (report only): P 57.7% / R 20.3% / F 30.0% (`docs/bench/ctx-verify.md`; scoring:
   `node scripts/bench/score-ctx-verify.ts`).
+- **Pooled candidates, verified (decision 059, `pool-verify-v1`): adopted.** The pool is
+  review-diff-v1's findings plus review-ctx-v1's findings that agree with none of them (058's rule,
+  `scripts/bench/agree-rule.ts`), filtered by verify-ctx-v1 unchanged; review-diff-v1 findings
+  reuse their 058 verdicts. `node scripts/bench/pool-verify.ts build|merge` (no model) around
+  `tracehound verify-ctx` on the ctx-only findings; scoring `node scripts/bench/score-pool-verify.ts`.
+  On the 40 dev PRs (one run, one judge, n = 74): pool 243 (100 ctx-only), 83 kept; P 36.1% / R
+  35.1% / F 35.6%, at least the pre-registered 35.0%, so it is the reviewer for the freeze and the
+  product; margin 0.6 points, fourth variant on the same dev set, only Cal.com can confirm it.
+  Pipeline cost per PR median $0.032, max $0.23 (`docs/bench/pool-verify.md`).
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**
