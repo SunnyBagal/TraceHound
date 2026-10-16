@@ -1,7 +1,9 @@
 // tracehound bench convert --recorded <dir> --tool <name> --out <dir>
 // tracehound bench score --golden <file> --reviews <dir> --detail <file outside the repo>
 //                        [--summary <file>] [--model <id>] [--concurrency 4] [--label <text>]
-// Decision 054. stdout gets counts only; per-comment detail (comment text, which tool comment
+//                        [--reasoning on|off]
+// tracehound bench validity --fps <file> --prs <dir> --model <id> --reasoning on|off --out <file outside the repo>
+// Decision 054; --reasoning off (no reasoning field, bench-judge-x1) and `validity` are decision 060. stdout gets counts only; per-comment detail (comment text, which tool comment
 // matched which golden comment) goes only to --detail, which must be outside this repo.
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -13,6 +15,7 @@ import { TokenFactoryClient } from "../llm/client.ts";
 import { SpendLedger } from "../llm/ledger.ts";
 import { loadPriceTable } from "../llm/prices.ts";
 import { convertRecorded } from "./convert.ts";
+import { validityMain } from "./validity-cli.ts";
 import { JUDGE_SYSTEM_PROMPT, JUDGE_VERSION, LlmJudge, SUPER_MODEL } from "./judge.ts";
 import { formatCounts, loadReviews, metrics, scoreRepo } from "./score.ts";
 import { GoldenFile } from "./types.ts";
@@ -21,7 +24,8 @@ const WORKSPACE_ROOT = path.resolve(import.meta.dirname, "../../../..");
 const STATE_DIR = path.join(WORKSPACE_ROOT, ".tracehound");
 const USAGE =
   "usage: tracehound bench convert --recorded <dir> --tool <name> --out <dir>\n" +
-  "       tracehound bench score --golden <file> --reviews <dir> --detail <file outside the repo> [--summary <file>] [--model <id>] [--concurrency <n>] [--label <text>]";
+  "       tracehound bench score --golden <file> --reviews <dir> --detail <file outside the repo> [--summary <file>] [--model <id>] [--concurrency <n>] [--label <text>] [--reasoning on|off]\n" +
+  "       tracehound bench validity --fps <file> --prs <dir> --model <id> --reasoning on|off --out <file outside the repo> [--concurrency <n>]";
 
 const insideRepo = (p: string) => !path.relative(WORKSPACE_ROOT, path.resolve(p)).startsWith("..");
 
@@ -29,6 +33,7 @@ export async function main(argv: string[]): Promise<number> {
   const [sub, ...rest] = argv;
   if (sub === "convert") return convert(rest);
   if (sub === "score") return score(rest);
+  if (sub === "validity") return validityMain(rest, { workspaceRoot: WORKSPACE_ROOT, stateDir: STATE_DIR });
   console.error(USAGE);
   return 1;
 }
@@ -55,9 +60,10 @@ async function score(argv: string[]): Promise<number> {
       model: { type: "string", default: SUPER_MODEL },
       concurrency: { type: "string", default: "4" },
       label: { type: "string" },
+      reasoning: { type: "string", default: "on" },
     },
   });
-  if (!values.golden || !values.reviews || !values.detail) {
+  if (!values.golden || !values.reviews || !values.detail || !["on", "off"].includes(values.reasoning!)) {
     console.error(USAGE);
     return 1;
   }
@@ -81,7 +87,8 @@ async function score(argv: string[]): Promise<number> {
     cache: new ResponseCache(path.join(STATE_DIR, "cache")),
     timeoutMs: 300_000, // a reasoning judge over ten long comments can take minutes
   });
-  const judges = [new LlmJudge(client, { model: values.model })];
+  const reasoning = values.reasoning as "on" | "off";
+  const judges = [new LlmJudge(client, { model: values.model, reasoning })];
   const golden = GoldenFile.parse(JSON.parse(readFileSync(values.golden, "utf8")));
   const reviews = loadReviews(values.reviews);
   const label = values.label ?? path.basename(values.reviews);
@@ -94,7 +101,7 @@ async function score(argv: string[]): Promise<number> {
   });
 
   const promptSha256 = createHash("sha256").update(JUDGE_SYSTEM_PROMPT).digest("hex");
-  const meta = { label, judgeVersion: JUDGE_VERSION, judges: judges.map((j) => j.name), promptSha256, ledgerBeforeUSD: budget.spentBeforeRun, runSpentUSD: budget.runSpent };
+  const meta = { label, judgeVersion: JUDGE_VERSION, judges: judges.map((j) => j.name), reasoning, promptSha256, ledgerBeforeUSD: budget.spentBeforeRun, runSpentUSD: budget.runSpent };
   mkdirSync(path.dirname(path.resolve(values.detail)), { recursive: true });
   writeFileSync(values.detail, JSON.stringify({ ...meta, ...result }, null, 1) + "\n");
   const { detail: _detail, ...countsOnly } = result;

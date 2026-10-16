@@ -2927,3 +2927,46 @@ or scored.
 - (a) Running review-diff-v1 again N times and pooling: costs N reviewer runs per pull request.
 - (b) Re-verifying review-diff-v1's findings: 058's verdicts already exist from the same frozen
   verifier.
+
+## 060 · Scorer checks: a second judge, bench-judge-x1, and augmented precision, validity-v1
+**Context:** every benchmark result so far (054 to 059) was scored by one judge, `bench-judge-v1`
+(Nemotron Super, temperature 0, reasoning on, prompt sha256 `23de4e9e…058460`). The reviewer is
+also Nemotron Super, so the judge may favour outputs of its own model, and its error is not
+measured. Separately, Augment extended the golden comments using the five recorded tools' own
+comments, so a valid finding that none of those tools made counts as a false positive, which
+biases precision against any new reviewer. This job measures both. **Report only:
+bench-judge-v1 stays the scorer of record, no adoption changes, no headline number changes.**
+Prompt: `docs/prompts/060-scorer-checks.md`. Dev repos only (sentry, grafana, keycloak,
+discourse; 40 pull requests, n = 74): Cal.com was not read, fetched, cloned, reviewed or scored.
+**Choice:**
+- **Pre-registered rules** (written before any completion call in this job and not changed after
+  the first one; committed in the freeze commit "060: pre-registered scorer checks, judge-x1 and
+  validity-v1 frozen"). Runs: the five recorded tools (greptile, coderabbit, augment, cursor,
+  copilot) and the six TraceHound runs, all Super (review-diff-v1, review-ctx-v1, verify-ctx-v1
+  kept, agree-diff-ctx, pool-raw, pool-verify-v1).
+  - **Second judge, bench-judge-x1:**
+    - model `Qwen/Qwen3-235B-A22B-Instruct-2507`, temperature 0, no reasoning field in the request;
+    - system prompt byte-identical to bench-judge-v1's (same sha256), the same per-pull-request request shape, and the same rules (Low neutral, duplicates neutral, micro-averaged);
+    - only the model and the reasoning field differ.
+  - **Agreement measures** (judge-v1 against judge-x1), over every comment of every run judged by both:
+    - the share of comments where both judges give the same label (the same golden id, or none);
+    - Cohen's kappa on the outcome class (TP, FP, low, dup);
+    - P, R and F per run under each judge, with n;
+    - Kendall's tau between the two judges' F-rankings of all runs.
+  - **Self-preference measure:** for each run, the precision gap (v1 minus x1). Report the mean gap over TraceHound runs and the mean over the five tools. Report the numbers; draw no conclusion beyond them.
+  - **Validity check, for augmented precision:**
+    - Take every comment that bench-judge-v1 labelled FP (matched no golden comment), in every run listed in step 0. Deduplicate identical comments (same pull request, path, line and body) and judge each once.
+    - Each comment is judged by two validity judges: Super (`nvidia/nemotron-3-super-120b-a12b`, reasoning on, temperature 0) and Qwen (as above, no reasoning field).
+    - Both use one new prompt, validity-v1. It sees the pull request's title, its description (cut at 8,000 characters, as in 055), the comment (path, line, body), and the diff of the comment's file only. The diff is rendered with new-version line numbers as review-diff-v1 renders it. No repository context, so the check is the same for every reviewer.
+    - The prompt asks one question: is this comment a real defect in the changed code that a careful reviewer would want fixed? The reply is strict JSON, `{"verdict": "valid" | "invalid" | "unsure", "reason": "<one sentence>"}`. An invalid reply gets one retry; after that the comment counts as unsure.
+  - **Augmented precision per run:** (TP + FPs judged valid) / (TP + FP), under each validity judge separately, plus under "both say valid". Report the validity judges' agreement (share and kappa on valid / invalid / unsure).
+  - **Order and partial results:** the second judge runs first, then the validity check. If the cap stops the validity check before every deduplicated FP has both verdicts, no augmented precision is reported for any run. The job says "validity check not completed" and reports the counts done.
+  - **Details fixed with the rules (same freeze):**
+    - Agreement is computed over comments in pull requests that both judges scored; comments in a pull request that either judge left JUDGE_FAILED are left out of the share and kappa and counted. Pull requests with no tool comments (or no golden comments) get no request under either judge and are scored as in 054.
+    - Kappa is Cohen's unweighted kappa, (p_o − p_e) / (1 − p_e), with p_e from each judge's marginal shares of the four classes; the validity kappa is the same over valid / invalid / unsure. Kendall's tau is tau-b (ties corrected) over the eleven runs' overall F under each judge.
+    - The self-preference means are unweighted means of the per-run gaps (six TraceHound runs; five tools).
+    - In augmented precision, TP and FP are bench-judge-v1's counts for the run, and "FPs judged valid" counts the run's own v1-FP comments whose deduplicated verdict is valid; each run's comments are counted in that run even when a duplicate was judged once for another run.
+    - A comment whose path is not in the pull request's diff gets no validity request and counts as unsure under both judges (reported separately as "no diff"). A request that fails after the client's own handling counts as unsure (reported as failed). Stopping on the cap is not a verdict.
+    - The comment body is cut at 4,000 characters, as in bench-judge-v1. A file diff over review-diff-v1's chunk limit is cut at hunk boundaries and the part holding the comment's line is shown, as verify-v1 does (056).
+    - bench-judge-x1 and validity-v1 Super/Qwen requests are fresh: earlier bench-judge-v1 matches are never reused for x1. Byte-identical repeats within this job may come from the response cache.
+    - validity-v1's prompt is `packages/analyzer/src/bench/validity-prompt.ts`, sha256 `c11d8fb63ff56c9e41f510715e0b33494fd42780e632746518dbf4a0a48721c6` (pinned in `test/scorer-checks.test.ts`); bench-judge-v1's default request body is pinned there too (sha256 of the body on an invented input, unchanged from the 059 merge). Code: `bench score --reasoning on|off` (off sends no reasoning field), `tracehound bench validity`; driver `scripts/bench/scorer-checks.ts judge|fps|validity|tables`.

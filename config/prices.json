@@ -1,10 +1,11 @@
 {
-  "_readme": "USD per 1M tokens for Nebius Token Factory models. Nano and Super prices are taken from third-party trackers listing Nebius rates (OpenRouter, Bifrost, DeepInfra, Sep 2026), not yet verified against the Nebius console. Entries with \"placeholder\": true are NOT real prices; until filled, the budget uses placeholderFallback, a deliberately high estimate, so guardrails err toward refusing.",
+  "_readme": "USD per 1M tokens for Nebius Token Factory models. Nano and Super prices are taken from third-party trackers listing Nebius rates (OpenRouter, Bifrost, DeepInfra, Sep 2026), not yet verified against the Nebius console. Entries with \"placeholder\": true are NOT real prices; until filled, the budget uses placeholderFallback, a deliberately high estimate, so guardrails err toward refusing. Qwen/Qwen3-235B-A22B-Instruct-2507 comes from a third-party listing (models.dev via mastra.ai, 2026-10-16), not verified in the Nebius console.",
   "placeholderFallback": { "inputPer1M": 5.0, "outputPer1M": 15.0 },
   "models": {
     "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": { "inputPer1M": 0.06, "outputPer1M": 0.24, "placeholder": false },
     "nvidia/nemotron-3-super-120b-a12b": { "inputPer1M": 0.30, "outputPer1M": 0.90, "placeholder": false },
     "nvidia/Nemotron-3-Ultra-550b-a55b": { "inputPer1M": null, "outputPer1M": null, "placeholder": true },
-    "nvidia/Nemotron-3_5-Lightning": { "inputPer1M": null, "outputPer1M": null, "placeholder": true }
+    "nvidia/Nemotron-3_5-Lightning": { "inputPer1M": null, "outputPer1M": null, "placeholder": true },
+    "Qwen/Qwen3-235B-A22B-Instruct-2507": { "inputPer1M": 0.20, "outputPer1M": 0.60, "placeholder": false }
   }
 }
