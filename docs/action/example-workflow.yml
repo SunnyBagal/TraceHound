@@ -16,7 +16,12 @@ jobs:
   review:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
       # Pin to a reviewed commit SHA before enabling this in your repository.
       - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@main
         with:

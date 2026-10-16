@@ -1,4 +1,7 @@
 import { newSideLines, parseDiff } from "../../analyzer/src/review/diff.ts";
+import type { PipelineCounts, PipelineOutput } from "./pipeline.ts";
+
+export type Reviewer = "pool-verify-v1" | "review-diff-v1";
 
 export interface PullEvent {
   repository: { full_name: string };
@@ -17,9 +20,9 @@ export interface ReviewerInput {
   diff: string;
 }
 
-interface Finding {
+export interface Finding {
   path: string;
-  line: number;
+  line: number | null;
   body: string;
 }
 
@@ -27,7 +30,7 @@ export interface ReviewPayload {
   commit_id: string;
   event: "COMMENT";
   body: string;
-  comments: (Finding & { side: "RIGHT" })[];
+  comments: (Finding & { line: number; side: "RIGHT" })[];
 }
 
 export interface Options {
@@ -36,11 +39,15 @@ export interface Options {
   model: string;
   maxComments: number;
   dryRun: boolean;
+  reviewer?: Reviewer;
+  repoDir?: string;
 }
 
 export interface Dependencies {
   fetch: typeof fetch;
   runReviewer: (input: ReviewerInput, model: string) => Promise<unknown>;
+  runPipeline: (input: ReviewerInput, model: string, repo: string, head: string) => Promise<PipelineOutput | null>;
+  checkRepoHead: (repo: string, head: string) => Promise<void>;
   log: (message: string) => void;
 }
 
@@ -91,15 +98,18 @@ export function buildReview(
   model: string,
   maxComments: number,
   bodyOnly = false,
+  reviewer: Reviewer = "review-diff-v1",
+  pipeline?: PipelineCounts,
 ): ReviewPayload {
   const lines = new Map(parseDiff(diff).filter((file) => file.newPath !== null)
     .map((file) => [file.newPath!, newSideLines(file)]));
   const comments: ReviewPayload["comments"] = [];
-  const body = [`TraceHound · ${model.replace(/\s+/g, " ")} · ${findings.length} findings`];
+  const body = [`TraceHound · ${reviewer} · ${model.replace(/\s+/g, " ")} · ${findings.length} findings`
+    + (pipeline ? ` (pool ${pipeline.pool}, kept ${pipeline.kept})` : "")];
   for (const finding of findings.slice(0, maxComments)) {
-    if (!bodyOnly && finding.body.trim() && Number.isSafeInteger(finding.line)
+    if (!bodyOnly && finding.body.trim() && finding.line !== null && Number.isSafeInteger(finding.line)
       && lines.get(finding.path)?.has(finding.line)) {
-      comments.push({ ...finding, side: "RIGHT" });
+      comments.push({ ...finding, line: finding.line, side: "RIGHT" });
     } else {
       body.push(location(finding));
     }
@@ -117,7 +127,7 @@ function readOutput(output: unknown): { comments: Finding[]; model?: string; fai
   const comments = record.comments.filter((item): item is Finding => {
     if (!item || typeof item !== "object") return false;
     const f = item as Partial<Finding>;
-    return typeof f.path === "string" && typeof f.line === "number"
+    return typeof f.path === "string" && (typeof f.line === "number" || f.line === null)
       && typeof f.body === "string" && !!f.body.trim();
   }).map(({ path, line, body }) => ({ path, line, body }));
   return {
@@ -129,6 +139,10 @@ function readOutput(output: unknown): { comments: Finding[]; model?: string; fai
 
 /** All effects are injected: tests never run the real reviewer or GitHub API. */
 export async function runAction(event: PullEvent, options: Options, deps: Dependencies): Promise<void> {
+  const reviewer = options.reviewer ?? "pool-verify-v1";
+  if (reviewer !== "pool-verify-v1" && reviewer !== "review-diff-v1") {
+    throw new Error("Invalid reviewer");
+  }
   if (event.pull_request.head.repo?.full_name !== event.repository.full_name) {
     deps.log("TraceHound: fork pull request skipped.");
     return;
@@ -140,6 +154,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     deps.log("TraceHound: max-comments is 0; nothing to post.");
     return;
   }
+  if (reviewer === "pool-verify-v1") await deps.checkRepoHead(options.repoDir ?? "", event.pull_request.head.sha);
   const repo = event.repository.full_name.split("/").map(encodeURIComponent).join("/");
   const endpoint = `/repos/${repo}/pulls/${event.pull_request.number}`;
   // Bind the fetched diff to the triggering head, even if another push arrived before this job.
@@ -151,8 +166,16 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     return;
   }
   let output: ReturnType<typeof readOutput>;
+  let pipeline: PipelineCounts | undefined;
   try {
-    output = readOutput(await deps.runReviewer(buildInput(event, diff), options.model));
+    if (reviewer === "pool-verify-v1") {
+      const result = await deps.runPipeline(buildInput(event, diff), options.model, options.repoDir ?? "", event.pull_request.head.sha);
+      if (!result) return;
+      pipeline = result.pipeline;
+      output = readOutput(result);
+    } else {
+      output = readOutput(await deps.runReviewer(buildInput(event, diff), options.model));
+    }
   } catch {
     deps.log("TraceHound: reviewer failed or returned invalid output; nothing posted.");
     return;
@@ -166,7 +189,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     return;
   }
   const model = output.model || options.model || "reviewer default";
-  const payload = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments);
+  const payload = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, false, reviewer, pipeline);
   if (options.dryRun) {
     deps.log(JSON.stringify(payload, null, 2));
     return;
@@ -184,7 +207,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
   } catch (error) {
     if (!(error instanceof GitHubError) || error.status !== 422 || !payload.comments.length) throw error;
     deps.log("TraceHound: GitHub rejected inline comments; retrying as a body-only review.");
-    const fallback = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, true);
+    const fallback = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, true, reviewer, pipeline);
     if (!await canPost()) return;
     await github(`${endpoint}/reviews`, options, deps, { payload: fallback });
   }

@@ -4,12 +4,14 @@ import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { main } from "../src/cli.ts";
 import type { Dependencies } from "../src/action.ts";
+import { MissingHeadError } from "../src/pipeline.ts";
 
 const directories: string[] = [];
 afterEach(async () => {
   await Promise.all(directories.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
 });
-const deps = (): Dependencies => ({ fetch: vi.fn(() => { throw new Error("Unexpected API call"); }), runReviewer: vi.fn(), log: vi.fn() });
+const deps = (): Dependencies => ({ fetch: vi.fn(() => { throw new Error("Unexpected API call"); }),
+  runReviewer: vi.fn(), runPipeline: vi.fn(), checkRepoHead: vi.fn(), log: vi.fn() });
 
 it("missing Nebius input exits 1 with a clear message and no effects", async () => {
   const d = deps();
@@ -25,7 +27,7 @@ it("skips unsupported events without using the fake key", async () => {
   expect(d.fetch).not.toHaveBeenCalled();
 });
 
-it("passes CLI defaults and an event file through to the orchestration", async () => {
+it.each(["review-diff-v1", undefined])("passes reviewer %s and an event file through to the orchestration", async reviewer => {
   const dir = await mkdtemp(path.join(tmpdir(), "tracehound-action-test-"));
   directories.push(dir);
   const eventPath = path.join(dir, "event.json");
@@ -40,12 +42,54 @@ it("passes CLI defaults and an event file through to the orchestration", async (
       ? new Response("") : Response.json({ head: { sha: "abc" } });
   });
   d.runReviewer = vi.fn().mockResolvedValue({ comments: [{ path: "missing.ts", line: 1, body: "A finding" }], review: { model: "fake" } });
+  d.runPipeline = vi.fn().mockResolvedValue({
+    comments: [{ path: "missing.ts", line: 1, body: "A finding" }], review: { model: "fake", chunkFailed: 0 },
+    pipeline: { pool: 2, kept: 1 },
+  });
   expect(await main({
     NEBIUS_API_KEY: "fake-unused", GITHUB_EVENT_NAME: "pull_request", GITHUB_TOKEN: "fake-github",
     GITHUB_EVENT_PATH: eventPath, TRACEHOUND_DRY_RUN: "true",
+    TRACEHOUND_REVIEWER: reviewer, TRACEHOUND_REPO_DIR: "/fake/repo",
   }, d)).toBe(0);
-  expect(d.runReviewer).toHaveBeenCalledWith({ title: "Title", body: "", number: 1, diff: "" }, "");
+  const input = { title: "Title", body: "", number: 1, diff: "" };
+  if (reviewer === "review-diff-v1") {
+    expect(d.runReviewer).toHaveBeenCalledWith(input, "");
+    expect(d.runPipeline).not.toHaveBeenCalled();
+    expect(d.checkRepoHead).not.toHaveBeenCalled();
+  } else {
+    expect(d.runPipeline).toHaveBeenCalledWith(input, "", "/fake/repo", "abc");
+    expect(d.checkRepoHead).toHaveBeenCalledWith("/fake/repo", "abc");
+    expect(d.runReviewer).not.toHaveBeenCalled();
+  }
   expect(JSON.parse(vi.mocked(d.log).mock.calls[0]![0])).toMatchObject({ comments: [], event: "COMMENT" });
+});
+
+it.each(["unknown", "", "review-ctx-v1"])("invalid reviewer %j fails before any effects", async reviewer => {
+  const d = deps();
+  expect(await main({ TRACEHOUND_REVIEWER: reviewer }, d)).toBe(1);
+  expect(d.log).toHaveBeenCalledWith("TraceHound: reviewer must be pool-verify-v1 or review-diff-v1.");
+  expect(d.fetch).not.toHaveBeenCalled();
+  expect(d.runReviewer).not.toHaveBeenCalled();
+  expect(d.runPipeline).not.toHaveBeenCalled();
+  expect(d.checkRepoHead).not.toHaveBeenCalled();
+});
+
+it("missing head commit exits 1 with the checkout message before model or API calls", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "tracehound-action-test-"));
+  directories.push(dir);
+  const eventPath = path.join(dir, "event.json");
+  await writeFile(eventPath, JSON.stringify({
+    repository: { full_name: "example/widget" },
+    pull_request: { title: "Title", body: null, number: 1, head: { sha: "abc", repo: { full_name: "example/widget" } } },
+  }));
+  const d = deps();
+  d.checkRepoHead = vi.fn().mockRejectedValue(new MissingHeadError());
+  expect(await main({ NEBIUS_API_KEY: "fake-unused", GITHUB_EVENT_NAME: "pull_request", GITHUB_TOKEN: "fake-unused",
+    GITHUB_EVENT_PATH: eventPath, TRACEHOUND_REPO_DIR: "/fake/repo" }, d)).toBe(1);
+  expect(d.log).toHaveBeenCalledExactlyOnceWith(new MissingHeadError().message);
+  expect(d.fetch).not.toHaveBeenCalled();
+  expect(d.runReviewer).not.toHaveBeenCalled();
+  expect(d.runPipeline).not.toHaveBeenCalled();
 });
 
 it("rejects malformed boolean input", async () => {
