@@ -8,9 +8,10 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { PullReview } from "../../packages/analyzer/src/bench/types.ts";
+import { AGREE_LINES, agrees } from "./agree-rule.ts";
 
 const DEV_REPOS = ["sentry", "grafana", "keycloak", "discourse"];
-export const AGREE_LINES = 3;
+export { AGREE_LINES };
 const arg = (name: string) => {
   const i = process.argv.indexOf(name);
   return i >= 0 ? process.argv[i + 1] : undefined;
@@ -18,10 +19,6 @@ const arg = (name: string) => {
 const bench = arg("--bench") ?? join(homedir(), "Projects/tracehound-bench");
 const model = arg("--model") ?? "nemotron-3-super-120b-a12b";
 const outModel = arg("--out-model") ?? "super";
-
-const norm = (p: string) => p.trim().replace(/^\.?\//, "").replace(/^[ab]\//, "");
-const agrees = (a: { path: string; line: number | null }, b: { path: string; line: number | null }) =>
-  norm(a.path) === norm(b.path) && a.line !== null && b.line !== null && Math.abs(a.line - b.line) <= AGREE_LINES;
 
 const totals: Record<string, { pulls: number; diff: number; ctx: number; agreed: number }> = {};
 for (const repo of DEV_REPOS) {

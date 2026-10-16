@@ -2858,3 +2858,31 @@ or scored.
 **Rejected:**
 - (a) Reusing 057's per-chunk block: references reached the model in only 12 of 48 chunks.
 - (b) Repeated-run voting: costs N reviewer runs; the agreement table gives a first, free signal.
+
+## 059 · Pooled candidates filtered by the context verifier, pool-verify-v1
+**Context:** on the 40 dev pull requests (n = 74), review-diff-v1 Super (055) has the best recall,
+43.2% (32/74), at precision 25.6%, F 32.2%. verify-ctx-v1 (058) kept 22 of its 32 TPs and 31 of
+its 93 FPs, so it separates true from false findings, but starting from 32 TPs it reached only
+F 32.8%. review-ctx-v1 (057) finds some defects review-diff-v1 misses. This job tests one change:
+widen the candidate pool to review-diff-v1's findings plus review-ctx-v1's findings that
+review-diff-v1 did not already make, then filter the pool with verify-ctx-v1, unchanged. No new
+prompt, no new reviewer run, no change to any reviewer, verifier or the judge. Prompt:
+`docs/prompts/059-pool-verify.md`. Dev repos only: Cal.com was not read, fetched, cloned, reviewed
+or scored.
+**Choice:**
+- **Pre-registered rules** (written before any model call in this job and not changed after the
+  first verifier call; committed in the freeze commit "pool-verify-v1: pre-registered rules and
+  pool builder (059)"):
+  - Pool rule: for each pull request, the pool is every review-diff-v1 Super finding, plus every review-ctx-v1 Super finding that does not agree with any review-diff-v1 finding of the same pull request. "Agree" is 058's rule, unchanged: same path (normalised as in scripts/bench/agree-diff-ctx.ts), both lines non-null, lines within 3 of each other. A review-ctx-v1 finding with a null line is added to the pool. These added findings are the "ctx-only" findings.
+  - Verdict rule: verify-ctx-v1 unchanged (code, prompt sha256 75703fc6…, model, reasoning on, temperature 0, per-finding context and budget). A finding is kept if and only if its valid verdict is keep. An invalid reply after one retry is kept and counted as VERIFY_FAILED.
+  - Reuse rule: review-diff-v1 findings keep their 058 verdicts; they are not sent to the verifier again. Before reuse, each 058 verdict must match its review-diff-v1 finding by path, line and body, for all 143 findings. If any does not match, STOP. Only ctx-only findings get new verifier calls.
+  - Adoption rule: pool-verify-v1 is adopted as the reviewer for the freeze and the product only if its F-score on the 40 dev pull requests is at least 35.0% (the same bar as 058). Otherwise it is recorded as a loss and review-diff-v1 stays the default.
+- **Pool builder** (`scripts/bench/pool-verify.ts`; no model; deterministic; stdout counts only).
+  058's agreement rule moved unchanged into `scripts/bench/agree-rule.ts`, which
+  `agree-diff-ctx.ts` and the builder both import (re-running `agree-diff-ctx.ts` reproduced 058's
+  agreement files byte for byte). `build` checks the reuse rule for every pull request before
+  writing anything, then writes the ctx-only findings (`reviews/pool-ctx-only/super/<repo>/`) and
+  the full pool (`reviews/pool-raw/super/<repo>/`) in the bench folder. `merge` writes the kept
+  pool (`reviews/pool-verify-v1/super/<repo>/`): review-diff-v1 findings kept by their 058 verdict,
+  then ctx-only findings kept by theirs, each in original order; it re-checks both verdict sets
+  against their findings. Tests: `test/pool-verify.test.ts`.
