@@ -2970,3 +2970,36 @@ discourse; 40 pull requests, n = 74): Cal.com was not read, fetched, cloned, rev
     - The comment body is cut at 4,000 characters, as in bench-judge-v1. A file diff over review-diff-v1's chunk limit is cut at hunk boundaries and the part holding the comment's line is shown, as verify-v1 does (056).
     - bench-judge-x1 and validity-v1 Super/Qwen requests are fresh: earlier bench-judge-v1 matches are never reused for x1. Byte-identical repeats within this job may come from the response cache.
     - validity-v1's prompt is `packages/analyzer/src/bench/validity-prompt.ts`, sha256 `c11d8fb63ff56c9e41f510715e0b33494fd42780e632746518dbf4a0a48721c6` (pinned in `test/scorer-checks.test.ts`); bench-judge-v1's default request body is pinned there too (sha256 of the body on an invented input, unchanged from the 059 merge). Code: `bench score --reasoning on|off` (off sends no reasoning field), `tracehound bench validity`; driver `scripts/bench/scorer-checks.ts judge|fps|validity|tables`.
+- **Run** (2026-10-16, from freeze commit `b98f014`; tables in `docs/bench/scorer-checks.md`):
+  bench-judge-x1 on 11 runs × 4 dev repos (44 scorings, 0 JUDGE_FAILED, 1 retry), then validity-v1
+  on Super and Qwen (both completed). Spend $0.635 by the ledger (x1 $0.076, validity Super $0.398,
+  validity Qwen $0.161); 939 uncached requests, 0 failed.
+- **Results:**
+  - Agreement v1 against x1 over 1,130 comments (0 left out): same label 888 (78.6%); kappa on the
+    outcome class 0.809 (observed 0.872, expected 0.327). Of 524 v1 FPs, x1 called 46 TP; of 318 v1
+    TPs, x1 called 12 FP.
+  - Kendall's tau-b between the two F-rankings of the 11 runs: 0.891. The top five (Augment,
+    Cursor, Greptile, CodeRabbit, pool-verify-v1) hold the same ranks under both judges.
+  - F under x1 is higher than under v1 for 9 of 11 runs (lower for Augment and
+    agree-diff-ctx). Precision gap v1 minus x1: mean −4.5 points over the six TraceHound runs, −6.6
+    points over the five tools (per run: −12.6 to +1.7).
+  - pool-verify-v1 under x1: P 47.7% (31/65), R 41.9% (31/74), F 44.6%, at or above 35.0%. This
+    changes nothing.
+  - Validity: 324 deduplicated FPs (from 524 v1-FP comments). Super valid 187 / invalid 82 / unsure
+    55; Qwen 265 / 49 / 10 (8 "no diff" each; 0 failed; Qwen 1 invalid reply after retry). Same
+    verdict 229/324 (70.7%), kappa 0.395.
+  - Augmented precision (Super / Qwen / both): pool-verify-v1 88.9% / 100.0% / 88.9%;
+    review-diff-v1 64.0% / 86.4% / 62.4%; tools from 51.4% / 71.4% / 47.6% (Copilot) to 92.6% /
+    100.0% / 92.6% (Augment). Every run is in the scorer-checks tables.
+**Limits:**
+- The second judge is one other model, not ground truth.
+- The validity judges see only the diff.
+- Super is both reviewer and one validity judge (and verify-ctx-v1, a Super filter, already chose
+  which findings pool-verify-v1 and verify-ctx-v1 keep; Super judged none of their FPs invalid).
+- Augmented precision has no matching recall (unlisted valid defects can't be counted as found or
+  missed).
+- n = 74; one run per judge.
+**Rejected:**
+- Replacing bench-judge-v1 as the scorer of record: it would move every earlier number after the
+  fact.
+- A human-labelled validity set: no time before the freeze.
