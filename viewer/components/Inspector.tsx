@@ -17,6 +17,8 @@ import { DIFF_EDGE } from "./EvidenceEdge";
 import { ComponentIcon, TechLogo } from "./ComponentIcon";
 import { ModelMark, NvidiaLogo } from "./ModelMark";
 import { NameSourceBadge } from "./NameSourceBadge";
+import { ExpandableSourceRow } from "./ExpandableSourceRow";
+import { fileEvidence } from "@/lib/source";
 
 const CHANGES_TAB: { id: Tab; label: string } = { id: "changes", label: "Changes" };
 const NODE_TABS: { id: Tab; label: string }[] = [
@@ -162,11 +164,8 @@ function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot;
             {component.routes.map((r) => {
               const ev = snapshot.evidence.find((e) => e.id === r.evidenceId);
               return (
-                <li key={r.evidenceId} className="flex items-baseline gap-3">
-                  <span className="w-16 shrink-0 font-mono text-[13px] font-semibold text-accent">{r.method}</span>
-                  <FileLink snapshot={snapshot} file={r.file} start={ev?.range.startLine} end={ev?.range.endLine}>
-                    {r.path}
-                  </FileLink>
+                <li key={r.evidenceId} data-testid="route-row" className="rounded-xl border border-panel-line bg-card px-3 py-2">
+                  <ExpandableSourceRow snapshot={snapshot} file={r.file} label={r.path} method={r.method} evidence={ev} />
                 </li>
               );
             })}
@@ -233,8 +232,7 @@ function ComponentFiles({ snapshot, component, bind }: { snapshot: Snapshot; com
           {component.membership.map((m) => (
             // hover or focus (the permalink inside) lights up every edge with evidence in this file
             <li key={m.file} data-testid="file-row" className="rounded-lg px-2 py-1.5 data-[highlighted=true]:bg-card data-[highlighted=true]:ring-1 data-[highlighted=true]:ring-highlight/70" {...bind({ key: `file:${m.file}`, nodeIds: [], edgeIds: edgesWithEvidenceIn(snapshot, m.file) })}>
-              <FileLink snapshot={snapshot} file={m.file} />
-              <div className="mt-0.5 text-[14px] leading-normal text-muted">{m.reason}</div>
+              <ExpandableSourceRow key={m.file} snapshot={snapshot} file={m.file} label={m.file} evidence={fileEvidence(snapshot, m.file)} reason={m.reason} />
             </li>
           ))}
         </ul>
