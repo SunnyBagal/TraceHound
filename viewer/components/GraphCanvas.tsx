@@ -6,6 +6,7 @@ import {
   Panel,
   ReactFlow,
   useNodesState,
+  useNodesInitialized,
   useReactFlow,
   type NodeMouseHandler,
 } from "@xyflow/react";
@@ -69,6 +70,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
   const { expanded, toggle } = useExpandedNodes(validIds);
   const heights = useMemo(() => Object.fromEntries(base.nodes.map((n) => [n.id, expanded.has(n.id) ? expandedHeight(n.data.contents ?? []) : NODE_HEIGHT])), [base, expanded]);
   const layoutIdentity = useRef("");
+  const initialFitPending = useRef(false);
   const anchor = useRef<{ id: string; x: number; y: number } | null>(null);
   // positions are per repo (lib/positions.ts); the commit is only used to pick up pre-040 saves
   const storageKey = snapshot.repo.name;
@@ -76,6 +78,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
   const [nodes, setNodes, onNodesChange] = useNodesState<ComponentNodeType>([]);
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
+  const nodesInitialized = useNodesInitialized();
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [layoutRun, setLayoutRun] = useState(0);
   const [fitted, setFitted] = useState(0); // bumps when a layout's fitView lands
@@ -103,6 +106,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
         const identity = `${storageKey}:${legacySha}:${layoutRun}`;
         const initial = layoutIdentity.current !== identity;
         layoutIdentity.current = identity;
+        initialFitPending.current = initial;
         const saved = initial && !expanded.size ? loadPositions(storageKey, legacySha) : {};
         const first = nodesRef.current[0];
         const oldAnchor = anchor.current ?? (first ? { id: first.id, ...first.position } : null);
@@ -114,12 +118,18 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
           position: saved[n.id] ?? { x: (layout[n.id]?.x ?? 0) + offset.x, y: (layout[n.id]?.y ?? 0) + offset.y },
         })));
         anchor.current = null;
-        if (initial) requestAnimationFrame(() => void fitView(fitRef.current).then(() => !cancelled && setFitted((n) => n + 1)));
       });
     return () => {
       cancelled = true;
     };
   }, [base, storageKey, legacySha, setNodes, fitView, layoutRun, heights, expanded]);
+
+  // Fit only once React Flow has registered and measured the first layout's cards.
+  useEffect(() => {
+    if (!nodesInitialized || !nodes.length || !initialFitPending.current) return;
+    initialFitPending.current = false;
+    requestAnimationFrame(() => void fitView(fitRef.current).then(() => setFitted((n) => n + 1)));
+  }, [nodesInitialized, nodes, fitView]);
 
   // Warnings panel focus: pan to and pulse the component, centred in the part of the canvas the
   // inspector doesn't cover; several components (a change warning) are fitted into view together.
