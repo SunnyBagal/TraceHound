@@ -557,3 +557,35 @@ was re-run.
   confirmed against the console (same as earlier entries).
 - Opinion: as in the 2026-10-15 entry, short strict-JSON replies with thinking on were reliable;
   101 requests are not enough to give a failure rate.
+
+---
+
+## 2026-10-16 · Qwen3-235B-A22B-Instruct-2507 as a second judge, and Super/Qwen as validity judges (decision 060)
+
+- **Called:** `GET /v1/models` once, then `POST /v1/chat/completions` on
+  `api.tokenfactory.us-central1.nebius.com`. Judge: `Qwen/Qwen3-235B-A22B-Instruct-2507`,
+  temperature 0, no reasoning field, `max_tokens` 16,000, client timeout 300 s, four requests in
+  parallel. Validity: the same Qwen model (no reasoning field) and `nvidia/nemotron-3-super-120b-a12b`
+  (`chat_template_kwargs.enable_thinking: true`), temperature 0, `max_tokens` 16,000, timeout
+  300 s, four in parallel.
+- **`GET /v1/models`:** HTTP OK in about 1.1 s; 18 model ids in the OpenAI-compatible `data[].id`
+  shape our client reads; the Qwen id was listed with exactly the case we requested. I did not
+  re-read the docs page for this endpoint this session, so I can only say the response had the
+  shape our client was written against.
+- **Counts:** judge (Qwen) 303 requests reached the API, 303 HTTP OK with usage reported, 0
+  failures, 0 timeouts; 1 reply was not valid JSON for the requested shape and was valid after one
+  retry (57 more requests were byte-identical within the job and were served from our local
+  cache). Validity Super 319 requests, 319 OK, 0 failures; 3 replies needed the one retry and all
+  were valid after it. Validity Qwen 317 requests, 317 OK, 0 failures; 1 reply needed the retry and
+  was still invalid after it.
+- **Tokens and cost (our ledger; Qwen priced from a third-party listing, models.dev via mastra.ai,
+  2026-10-16, not verified in the console):** judge Qwen 337,292 in / 13,779 out, $0.0757;
+  validity Super 789,735 in / 179,340 out, $0.3983; validity Qwen 751,469 in / 17,880 out, $0.1610.
+- **Latency (client-measured, per validity comment):** Qwen median 2.1 s, max 15.0 s; Super median
+  3.4 s, max 16.7 s. The judge's per-request latency was not recorded; its 44 scorings (360
+  requests, four in parallel) took about 4 minutes of wall time.
+- **Docs / console:** I did not check the console for the Qwen model's per-token price this
+  session. What would have helped: catalog prices readable from the API (e.g. in `GET /v1/models`),
+  so the budget guard need not rely on third-party listings.
+- Opinion: the Qwen instruct model returned short strict-JSON replies quickly and reliably with
+  no reasoning field; one batch of a few hundred requests is not enough to give a failure rate.

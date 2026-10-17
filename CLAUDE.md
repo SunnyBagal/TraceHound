@@ -226,6 +226,14 @@ it (decision 050).
   35.1% / F 35.6%, at least the pre-registered 35.0%, so it is the reviewer for the freeze and the
   product; margin 0.6 points, fourth variant on the same dev set, only Cal.com can confirm it.
   Pipeline cost per PR median $0.032, max $0.23 (`docs/bench/pool-verify.md`).
+- **Scorer checks (decision 060, report only):** bench-judge-v1 stays the scorer of record. A second
+  judge, `bench-judge-x1` (Qwen3-235B-A22B-Instruct-2507, same prompt, no reasoning field;
+  `bench score --model … --reasoning off`), agreed with v1 on 78.6% of 1,130 dev comments (kappa
+  0.809 on outcome class) and ranked the 11 runs with tau-b 0.891; precision gap v1 − x1 averaged
+  −4.5 points on TraceHound runs and −6.6 on the tools; pool-verify-v1 F 44.6% under x1.
+  `validity-v1` (`tracehound bench validity`, Super and Qwen, diff only) judged the 324
+  deduplicated v1 FPs: valid 187 (Super) / 265 (Qwen), kappa 0.395; augmented precision has no
+  matching recall. `docs/bench/scorer-checks.md`; driver `scripts/bench/scorer-checks.ts`.
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**

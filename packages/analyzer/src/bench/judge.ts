@@ -94,12 +94,15 @@ export class LlmJudge implements Judge {
   readonly #client: ChatClient;
   readonly #model: string;
   readonly #maxTokens: number;
+  readonly #reasoning: "on" | "off";
 
-  constructor(client: ChatClient, opts: { model?: string; maxTokens?: number } = {}) {
+  /** `reasoning: "off"` sends no reasoning field at all (bench-judge-x1, decision 060); the default "on" is bench-judge-v1's request unchanged. */
+  constructor(client: ChatClient, opts: { model?: string; maxTokens?: number; reasoning?: "on" | "off" } = {}) {
     this.#client = client;
     this.#model = opts.model ?? SUPER_MODEL;
     this.#maxTokens = opts.maxTokens ?? 16_000;
-    this.name = `${JUDGE_VERSION}:${this.#model}`;
+    this.#reasoning = opts.reasoning ?? "on";
+    this.name = `${JUDGE_VERSION}:${this.#model}${this.#reasoning === "off" ? ":no-reasoning-field" : ""}`;
   }
 
   buildRequest(input: JudgeInput): ChatRequest {
@@ -111,7 +114,7 @@ export class LlmJudge implements Judge {
         { role: "system", content: JUDGE_SYSTEM_PROMPT },
         { role: "user", content: judgeUserMessage(input) },
       ],
-      ...JUDGE_REASONING,
+      ...(this.#reasoning === "on" ? JUDGE_REASONING : {}),
     };
   }
 
