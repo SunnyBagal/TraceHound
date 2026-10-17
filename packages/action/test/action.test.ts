@@ -19,6 +19,7 @@ const finding = { path: "src/widget.ts", line: 9, body: "This still dereferences
 const options: Options = {
   token: "fake-github-token", apiUrl: "https://api.example.invalid",
   model: "", maxComments: 15, dryRun: false,
+  reviewer: "review-diff-v1",
 };
 const output = (comments = [finding]) => ({
   pr_title: event.pull_request.title, pr_number: 42, comments,
@@ -46,7 +47,7 @@ function fake(outputValue: unknown = output(), statuses = [201]) {
   });
   const reviewer = vi.fn<Dependencies["runReviewer"]>().mockResolvedValue(outputValue);
   const log = vi.fn();
-  return { deps: { fetch: api, runReviewer: reviewer, log }, posts, api, reviewer, log, head };
+  return { deps: { fetch: api, runReviewer: reviewer, runPipeline: vi.fn(), checkRepoHead: vi.fn(), log }, posts, api, reviewer, log, head };
 }
 
 const requests = (api: ReturnType<typeof fake>["api"]) => api.mock.calls.map(([, init]) =>
@@ -64,7 +65,7 @@ describe("review input and mapping", () => {
     expect(f.reviewer).toHaveBeenCalledWith(buildInput(event, diff), "");
     expect(f.posts).toEqual([{
       commit_id: "abc123", event: "COMMENT",
-      body: "TraceHound · fake-nemotron · 1 findings\n\nThese comments are model-generated and unverified.",
+      body: "TraceHound · review-diff-v1 · fake-nemotron · 1 findings\n\nThese comments are model-generated and unverified.",
       comments: [{ ...finding, side: "RIGHT" }],
     }]);
     expect(requests(f.api)).toEqual([
@@ -89,7 +90,7 @@ describe("review input and mapping", () => {
     expect(r.comments.map(c => c.line)).toEqual([8, 10, 11]);
     expect(r.body).toContain("missing.ts:9");
     expect(r.body).toContain("src/widget.ts:-1");
-    expect(r.body.split("\n")[0]).toBe("TraceHound · model name · 5 findings");
+    expect(r.body.split("\n")[0]).toBe("TraceHound · review-diff-v1 · model name · 5 findings");
   });
 
   it("handles multiple hunks, renamed paths, deletions and binary files", () => {

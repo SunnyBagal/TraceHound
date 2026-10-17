@@ -5,9 +5,13 @@ inputs:
     description: Nebius Token Factory API key
     required: true
   model:
-    description: Nemotron model ID (empty uses the reviewer's default)
+    description: Nemotron model ID (empty uses each stage's default)
     required: false
     default: ''
+  reviewer:
+    description: Reviewer pipeline (pool-verify-v1 or review-diff-v1)
+    required: false
+    default: 'pool-verify-v1'
   max-comments:
     description: Maximum findings to include, including findings in the review body
     required: false
@@ -37,6 +41,8 @@ runs:
         NEBIUS_API_KEY: ${{ inputs.nebius-api-key }}
         GITHUB_TOKEN: ${{ github.token }}
         TRACEHOUND_MODEL: ${{ inputs.model }}
+        TRACEHOUND_REVIEWER: ${{ inputs.reviewer }}
+        TRACEHOUND_REPO_DIR: ${{ github.workspace }}
         TRACEHOUND_MAX_COMMENTS: ${{ inputs.max-comments }}
         TRACEHOUND_DRY_RUN: ${{ inputs.dry-run }}
       run: node packages/action/src/cli.ts

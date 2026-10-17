@@ -2,11 +2,18 @@ import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { runAction, type Dependencies, type PullEvent } from "./action.ts";
 import { runReviewer } from "./reviewer.ts";
+import { checkRepoHead, MissingHeadError, runPipeline } from "./pipeline.ts";
 
 export async function main(
   env: NodeJS.ProcessEnv,
-  deps: Dependencies = { fetch, runReviewer, log: console.log },
+  deps: Dependencies = { fetch, runReviewer, checkRepoHead,
+    runPipeline: (...args) => runPipeline(...args, console.log), log: console.log },
 ): Promise<number> {
+  const reviewer = env.TRACEHOUND_REVIEWER ?? "pool-verify-v1";
+  if (reviewer !== "pool-verify-v1" && reviewer !== "review-diff-v1") {
+    deps.log("TraceHound: reviewer must be pool-verify-v1 or review-diff-v1.");
+    return 1;
+  }
   if (!env.NEBIUS_API_KEY?.trim()) {
     deps.log("TraceHound: NEBIUS_API_KEY is missing. Set the required nebius-api-key action input.");
     return 1;
@@ -32,9 +39,15 @@ export async function main(
       model: env.TRACEHOUND_MODEL?.trim() ?? "",
       maxComments: Number(env.TRACEHOUND_MAX_COMMENTS ?? "15"),
       dryRun: dryRun === "true",
+      reviewer,
+      repoDir: env.TRACEHOUND_REPO_DIR ?? "",
     }, deps);
     return 0;
-  } catch {
+  } catch (error) {
+    if (error instanceof MissingHeadError) {
+      deps.log(error.message);
+      return 1;
+    }
     // Do not echo exception text: HTTP or subprocess errors can contain credentials.
     deps.log("TraceHound: action failed. Check the event payload, inputs, and GitHub token permissions.");
     return 1;
