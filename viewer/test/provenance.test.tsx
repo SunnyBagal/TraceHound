@@ -18,3 +18,7 @@ it("labels the analyzed commit using its branch and commit date, linking to the 
 it("does not invent a branch or date for older snapshots", () => {
   expect(provenanceLabel({ name: "test", commitSha: "a".repeat(40) })).toBe("commit @ aaaaaaa");
 });
+
+it("keeps the commit's calendar date across timezone offsets", () => {
+  expect(provenanceLabel({ name: "Recall", commitSha: "2".repeat(40), branch: "main", commitDate: "2026-10-07T03:08:24+05:30" })).toBe("main @ 2222222 · 7 Oct 2026");
+});
