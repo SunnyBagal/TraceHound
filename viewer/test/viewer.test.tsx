@@ -53,13 +53,13 @@ describe("GraphCanvas with the demo snapshot", () => {
     for (const t of labels) expect(t).not.toMatch(/proven|resolved-default|dynamic/);
   });
 
-  it("cards show the icon, the name and the kind line only; every model-written name gets the NVIDIA mark", async () => {
+  it("cards show the name, snapshot summary and kind; every model-written name gets the NVIDIA mark", async () => {
     const view = within(renderCanvas().container);
     const nodes = await view.findAllByTestId("component-node", {}, { timeout: 5000 });
     for (const c of snapshot.components) {
       const card = nodes.find((n) => n.dataset.componentId === c.id)!;
       const kind = `${KIND_META[c.kind].label} · ${c.counts.files} files${c.counts.routes > 0 ? ` · ${c.counts.routes} routes` : ""}`;
-      expect(card.textContent, c.id).toBe(`${c.name}${kind}`);
+      expect(card.textContent, c.id).toBe(`${c.name}${c.summary ?? c.subtitle}${kind}`);
       expect(card.style.height).toBe(`${NODE_HEIGHT}px`); // every card the same height
       const mark = within(card).queryByTestId("model-name-mark");
       if (c.naming.source === "llm") {
@@ -71,7 +71,7 @@ describe("GraphCanvas with the demo snapshot", () => {
     }
   });
 
-  it("no model-written prose anywhere on the canvas (both published repos)", async () => {
+  it("shows only the snapshot summary or its existing heuristic subtitle on every node", async () => {
     for (const s of [snapshot, repoSnapshot("recall")]) {
       const { container, unmount } = render(
         <div style={{ width: 1200, height: 800 }}>
@@ -82,11 +82,13 @@ describe("GraphCanvas with the demo snapshot", () => {
       );
       await within(container).findAllByTestId("component-node", {}, { timeout: 5000 });
       await waitFor(() => expect(within(container).getAllByTestId("edge-label")).toHaveLength(s.edges.length), { timeout: 5000 });
-      const text = container.textContent ?? "";
-      const summaries = s.components.flatMap((c) => (c.summary ? [c.summary] : []));
-      expect(summaries.length, s.repo.name).toBeGreaterThan(0);
-      for (const summary of summaries) expect(text, s.repo.name).not.toContain(summary);
-      expect(text).not.toMatch(/Model-written|prose not verified/);
+      for (const c of s.components) {
+        const card = container.querySelector(`[data-component-id="${c.id}"]`)!;
+        const summary = within(card as HTMLElement).getByTestId("node-summary");
+        expect(summary.textContent).toBe(c.summary ?? c.subtitle);
+        expect(summary.className).toContain("truncate");
+        expect(summary.getAttribute("title")).toBe(summary.textContent);
+      }
       unmount();
     }
   });

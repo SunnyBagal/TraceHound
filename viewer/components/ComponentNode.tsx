@@ -1,23 +1,26 @@
 "use client";
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronRight, TriangleAlert } from "lucide-react";
 import { rollupBadges, type ComponentDiff } from "@/lib/changes";
 import type { ImpactRole } from "@/lib/impact";
-import { memo } from "react";
+import { memo, type CSSProperties } from "react";
 import { NODE_HEIGHT, NODE_WIDTH, type ComponentNode as ComponentNodeType } from "@/lib/graph";
 import { KIND_META } from "@/lib/kinds";
 import { ComponentIcon } from "./ComponentIcon";
 import { ModelMark } from "./ModelMark";
+import { METHOD_COLORS } from "@/lib/contents";
 
 function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
   const { component, warnings } = data;
-  const { label } = KIND_META[component.kind];
+  const { label, color } = KIND_META[component.kind];
+  const tint = selected ? "var(--accent)" : data.panelHover || data.highlighted ? "var(--highlight)" : data.impact?.role === "changed" ? "var(--impact-changed)" : data.impact?.role === "affected" ? "var(--impact-affected)" : color;
   return (
     <div
       data-testid="component-node"
       data-component-id={component.id}
-      style={{ width: NODE_WIDTH, height: NODE_HEIGHT }}
+      style={{ width: NODE_WIDTH, height: data.height ?? NODE_HEIGHT, "--kind": tint, borderLeftWidth: 3, borderLeftColor: tint } as CSSProperties}
+      data-kind={component.kind}
       data-impact={data.impact?.role ?? (data.impact === null ? "none" : undefined)}
       data-panel-hover={data.panelHover || undefined}
       data-change={data.change ? "touched" : data.change === null ? "untouched" : undefined}
@@ -41,25 +44,35 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
       <Handle type="target" position={Position.Left} />
       {data.impact && <ImpactChip role={data.impact} />}
       {data.change && <ChangeChip diff={data.change} />}
-      {/* Railway's card: icon and name on the top row, the kind line on the bottom one, both on
-          one left edge. The card shows only these: description, routes, name source and any
-          model-written prose are in the inspector. */}
-      <div className="flex h-[22px] min-w-0 items-center gap-[11px]">
-        <ComponentIcon kind={component.kind} tech={data.tech} size="node" />
-        <div className="min-w-0 truncate text-[15px] font-semibold text-text" title={component.name}>
+      <div className="flex h-[22px] shrink-0 min-w-0 items-center gap-[11px]">
+        <ComponentIcon kind={component.kind} tech={data.tech} size="node" tint={tint} />
+        <div className="min-w-0 truncate text-[15px] font-semibold text-[var(--kind)]" title={component.name}>
           {component.name}
         </div>
         {component.naming.source === "llm" && <ModelMark />}
+        <button type="button" className="nodrag nopan ml-auto shrink-0 rounded p-1 text-muted hover:bg-panel" aria-label={`${data.expanded ? "Collapse" : "Expand"} ${component.name}`} aria-expanded={Boolean(data.expanded)} onClick={(event) => { event.stopPropagation(); data.onToggle?.(); }}>
+          {data.expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+        </button>
         {warnings.length > 0 && (
           <span className="ml-auto shrink-0 pl-1 text-warn" title={warnings.map((w) => w.message).join("\n")} aria-label={`${warnings.length} warning(s)`}>
             <TriangleAlert className="size-4" />
           </span>
         )}
       </div>
-      <div className="truncate text-[11px] text-faint">
+      <p data-testid="node-summary" title={component.summary ?? component.subtitle} className="mt-2 truncate text-sm leading-relaxed text-muted">{component.summary ?? component.subtitle}</p>
+      <div className="truncate text-sm text-faint">
         <span className="uppercase tracking-wider">{data.changeSetOnly ? "change set only" : label}</span> · {component.counts.files} files
         {component.counts.routes > 0 && <> · {component.counts.routes} routes</>}
       </div>
+      {data.expanded && <div className="mt-3 border-t border-line pt-2 text-sm leading-relaxed text-text" data-testid="node-contents">
+        {(data.contents ?? []).slice(0, 8).map((item, index) => <div key={index} className="flex h-8 min-w-0 items-center gap-2">
+          {item.method && <span className="shrink-0 rounded bg-bg px-1.5 font-mono font-medium" style={{ color: METHOD_COLORS[item.method] }}>{item.method}</span>}
+          {item.detail && <span className="shrink-0 text-muted">{item.detail}</span>}
+          <span className="truncate" title={item.label}>{item.label}</span>
+        </div>)}
+        {!data.contents?.length && <p className="text-muted">No contents recorded.</p>}
+        {(data.contents?.length ?? 0) > 8 && <button type="button" className="nodrag nopan mt-1 text-accent hover:underline" onClick={(event) => { event.stopPropagation(); data.onMore?.(); }}>+{data.contents!.length - 8} more</button>}
+      </div>}
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -72,7 +85,7 @@ function ChangeChip({ diff }: { diff: ComponentDiff }) {
   return (
     <span
       data-testid="change-badges"
-      className={`absolute -top-2.5 left-3 flex max-w-[calc(100%-24px)] items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-md border bg-bg px-1.5 py-px font-mono text-[10px] font-semibold leading-tight ${diff.warnings ? "border-warn/70" : "border-line-strong"}`}
+      className={`absolute -top-2.5 left-3 flex max-w-[calc(100%-24px)] items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-md border bg-bg px-1.5 py-px font-mono text-sm font-semibold leading-tight ${diff.warnings ? "border-warn/70" : "border-line-strong"}`}
     >
       {badges.filter((b) => b.key !== "formatting" && b.key !== "warnings").length === 0 && <span className="text-muted">{diff.warnings ? "INVOLVED" : "EDGES CHANGED"}</span>}
       {badges.map((b) => (
@@ -91,7 +104,7 @@ function ImpactChip({ role }: { role: ImpactRole }) {
     <span
       data-testid="impact-chip"
       className={[
-        "absolute -top-2.5 left-3 rounded-md border px-1.5 py-px font-mono text-[9.5px] font-semibold tracking-wide",
+        "absolute -top-2.5 left-3 rounded-md border px-1.5 py-px font-mono text-sm font-semibold tracking-wide",
         role.role === "changed" ? "border-impact-changed bg-impact-changed text-bg" : "border-dashed border-impact-affected bg-bg text-impact-affected",
       ].join(" ")}
     >

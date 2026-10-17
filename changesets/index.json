@@ -1,6 +1,7 @@
 [
   {
     "id": "recall-worker-deleted",
+    "public": false,
     "repo": "recall",
     "title": "Worker deleted (demo)",
     "kind": "demo",
@@ -32,6 +33,7 @@
   },
   {
     "id": "cex-seed-queue-consumer",
+    "public": false,
     "repo": "cex-v2-boilercode",
     "title": "Seed: queue consumer renames a payload field",
     "kind": "commit",
@@ -42,6 +44,7 @@
   },
   {
     "id": "toy-discount-run",
+    "public": false,
     "repo": "toy-cart",
     "title": "Repair run: toy-discount fix (Nemotron, resolved)",
     "kind": "run",

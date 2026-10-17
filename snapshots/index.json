@@ -2,12 +2,26 @@
   "schemaVersion": 1,
   "latest": {
     "repo": "SunnyBagal/Recall",
-    "sha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b",
+    "sha": "20ac149ea593ccc032426674ec36927da3f30f16",
     "analyzerVersion": "0.10.0",
-    "path": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b/0.10.0.json",
-    "createdAt": "2026-10-02T20:24:11.501Z"
+    "path": "20ac149ea593ccc032426674ec36927da3f30f16/0.10.0.json",
+    "createdAt": "2026-10-17T16:47:02.607Z"
   },
   "snapshots": [
+    {
+      "repo": "SunnyBagal/tracehound-demo",
+      "sha": "efc58448e828167d909bedca5b3f7a697449c7fd",
+      "analyzerVersion": "0.10.0",
+      "path": "efc58448e828167d909bedca5b3f7a697449c7fd/0.10.0.json",
+      "createdAt": "2026-10-17T16:47:09.203Z"
+    },
+    {
+      "repo": "SunnyBagal/Recall",
+      "sha": "20ac149ea593ccc032426674ec36927da3f30f16",
+      "analyzerVersion": "0.10.0",
+      "path": "20ac149ea593ccc032426674ec36927da3f30f16/0.10.0.json",
+      "createdAt": "2026-10-17T16:47:02.607Z"
+    },
     {
       "repo": "SunnyBagal/Recall",
       "sha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b",
@@ -162,16 +176,23 @@
     {
       "id": "recall",
       "name": "SunnyBagal/Recall",
-      "repoUrl": "https://github.com/SunnyBagal/Recall",
-      "defaultRef": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b",
+      "repoUrl": "https://github.com/SunnyBagal/Recall.git",
+      "defaultRef": "20ac149ea593ccc032426674ec36927da3f30f16",
       "latest": {
         "repo": "SunnyBagal/Recall",
-        "sha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b",
+        "sha": "20ac149ea593ccc032426674ec36927da3f30f16",
         "analyzerVersion": "0.10.0",
-        "path": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b/0.10.0.json",
-        "createdAt": "2026-10-02T20:24:11.501Z"
+        "path": "20ac149ea593ccc032426674ec36927da3f30f16/0.10.0.json",
+        "createdAt": "2026-10-17T16:47:02.607Z"
       },
       "versions": [
+        {
+          "repo": "SunnyBagal/Recall",
+          "sha": "20ac149ea593ccc032426674ec36927da3f30f16",
+          "analyzerVersion": "0.10.0",
+          "path": "20ac149ea593ccc032426674ec36927da3f30f16/0.10.0.json",
+          "createdAt": "2026-10-17T16:47:02.607Z"
+        },
         {
           "repo": "SunnyBagal/Recall",
           "sha": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b",
@@ -192,6 +213,29 @@
           "analyzerVersion": "0.7.0",
           "path": "5d2165aa9654f17a148f6663bc478a3fd9f7fc6b/0.7.0.json",
           "createdAt": "2026-10-01T09:52:01.853Z"
+        }
+      ]
+    },
+    {
+      "id": "tracehound-demo",
+      "displayName": "tracehound-demo (Recall copy)",
+      "name": "SunnyBagal/tracehound-demo",
+      "repoUrl": "https://github.com/SunnyBagal/tracehound-demo.git",
+      "defaultRef": "efc58448e828167d909bedca5b3f7a697449c7fd",
+      "latest": {
+        "repo": "SunnyBagal/tracehound-demo",
+        "sha": "efc58448e828167d909bedca5b3f7a697449c7fd",
+        "analyzerVersion": "0.10.0",
+        "path": "efc58448e828167d909bedca5b3f7a697449c7fd/0.10.0.json",
+        "createdAt": "2026-10-17T16:47:09.203Z"
+      },
+      "versions": [
+        {
+          "repo": "SunnyBagal/tracehound-demo",
+          "sha": "efc58448e828167d909bedca5b3f7a697449c7fd",
+          "analyzerVersion": "0.10.0",
+          "path": "efc58448e828167d909bedca5b3f7a697449c7fd/0.10.0.json",
+          "createdAt": "2026-10-17T16:47:09.203Z"
         }
       ]
     }

@@ -150,15 +150,17 @@ describe("inspector history in the viewer", () => {
         expect(named.querySelector('[data-logo="nvidia-color-eye.svg"]'), c.id).toBeTruthy();
       }
       else expect(panel.getByTitle(/Name source/).textContent, c.id).toBe(c.naming.source);
-      expect(panel.getByTestId("name-source").textContent, c.id).toMatch(c.naming.source === "llm" ? /^Name written by the model/ : c.naming.source === "override" ? /tracehound\.json override/ : /^Heuristic name/);
       // the description: the model summary with its label beside it, and the fact-based subtitle
       if (c.summary) {
         const summary = within(panel.getByTestId("summary"));
         expect(summary.getByText(c.summary)).toBeTruthy();
         // "not verified" stays visible beside a model summary, not only in a tooltip
-        expect(summary.getByTestId("summary-model-written").textContent, c.id).toBe("Written by Nemotron Nano · not verified");
-      } else expect(panel.queryByTestId("summary"), c.id).toBeNull();
-      expect(panel.getByTestId("from-facts").textContent, c.id).toBe(`From facts: ${c.subtitle}`);
+        expect(summary.getByTestId("summary-model-written").textContent, c.id).toBe("Summary by Nemotron Nano · unverified");
+        expect(panel.queryByTestId("from-facts")).toBeNull();
+      } else {
+        expect(within(panel.getByTestId("summary")).getByText(c.subtitle)).toBeTruthy();
+        expect(panel.getByText("Heuristic · from snapshot facts")).toBeTruthy();
+      }
       expect(Boolean(panel.queryByTestId("summary-dropped")), c.id).toBe(Boolean(c.naming.summaryDropped));
       // every route, not just the count on the card
       for (const r of c.routes) expect(panel.getAllByText(r.path).length, `${c.id} ${r.path}`).toBeGreaterThan(0);

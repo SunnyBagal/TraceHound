@@ -5,8 +5,9 @@ import type { ComponentKind } from "@/lib/types";
 const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 /** A vendored technology logo (public/icons, see CREDITS.md). */
-export function TechLogo({ fact, className }: { fact: TechFact; className?: string }) {
-  const { icon, tint } = techLogo(fact);
+export function TechLogo({ fact, className, tint: forcedTint }: { fact: TechFact; className?: string; tint?: string }) {
+  const { icon, tint: nativeTint } = techLogo(fact);
+  const tint = forcedTint ?? nativeTint;
   const src = `${base}/icons/${icon}`;
   if (tint) {
     // a single-colour icon: the file is the mask, the tint fills it
@@ -27,15 +28,15 @@ export function TechLogo({ fact, className }: { fact: TechFact; className?: stri
  * their strokes span the slot the way a logo does, and both look the same size. "header" is the
  * same without a tile at 28px, beside the inspector's name (Railway's panel header).
  */
-export function ComponentIcon({ kind, tech, size = "md" }: { kind: ComponentKind; tech: TechFact[]; size?: "md" | "lg" | "node" | "header" }) {
+export function ComponentIcon({ kind, tech, size = "md", tint }: { kind: ComponentKind; tech: TechFact[]; size?: "md" | "lg" | "node" | "header"; tint?: string }) {
   const primary = headerFact(tech);
   const { icon: Icon, label } = KIND_META[kind];
   const title = primary ? `${techTitle(primary)}${primary.use ? ` · ${primary.use.kind === "broker" ? "broker" : "data store"}: ${primary.use.reason}` : ""}` : `${label} (no data-store, framework or runtime fact)`;
   const props = { title, "aria-label": title, role: "img", "data-testid": "component-icon", "data-tech": primary?.tech ?? "none", "data-use": primary?.use?.kind } as const;
   if (size === "node") {
     return (
-      <span className="grid size-[22px] shrink-0 place-items-center" {...props}>
-        {primary ? <TechLogo fact={primary} className="size-[22px]" /> : <Icon className="-m-[2px] size-[26px] text-text" aria-hidden />}
+      <span className="grid size-[22px] shrink-0 place-items-center" style={{ color: tint }} {...props}>
+        {primary ? <TechLogo fact={primary} tint={tint} className="size-[22px]" /> : <Icon className="-m-[2px] size-[26px]" aria-hidden />}
       </span>
     );
   }

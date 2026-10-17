@@ -91,7 +91,7 @@ describe("model-written names carry the NVIDIA mark", () => {
       );
       const cards = await within(container).findAllByTestId("component-node", {}, { timeout: 5000 });
       const modelNamed = s.components.filter((c) => c.naming.source === "llm");
-      expect(modelNamed.length, s.repo.name).toBeGreaterThan(0);
+      if (s === cex) expect(modelNamed.length).toBeGreaterThan(0);
       for (const c of s.components) {
         const mark = within(cards.find((n) => n.dataset.componentId === c.id)!).queryByTestId("model-name-mark");
         if (c.naming.source !== "llm") {

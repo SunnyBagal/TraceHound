@@ -17,6 +17,8 @@ import { DIFF_EDGE } from "./EvidenceEdge";
 import { ComponentIcon, TechLogo } from "./ComponentIcon";
 import { ModelMark, NvidiaLogo } from "./ModelMark";
 import { NameSourceBadge } from "./NameSourceBadge";
+import { ExpandableSourceRow } from "./ExpandableSourceRow";
+import { fileEvidence } from "@/lib/source";
 
 const CHANGES_TAB: { id: Tab; label: string } = { id: "changes", label: "Changes" };
 const NODE_TABS: { id: Tab; label: string }[] = [
@@ -32,8 +34,8 @@ const EDGE_TABS: { id: Tab; label: string }[] = [
 
 function Section({ title, children, count }: { title: string; children: ReactNode; count?: number }) {
   return (
-    <section className="border-b border-panel-line px-7 py-6 last:border-b-0">
-      <h3 className="mb-3.5 text-[12px] font-semibold uppercase tracking-wider text-faint">
+    <section className="border-b border-panel-line px-7 py-7 last:border-b-0">
+      <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted">
         {title}
         {count !== undefined && <span className="ml-1.5 font-normal">{count}</span>}
       </h3>
@@ -45,9 +47,9 @@ function Section({ title, children, count }: { title: string; children: ReactNod
 function FileLink({ snapshot, file, start, end, children }: { snapshot: Snapshot; file: string; start?: number; end?: number; children?: ReactNode }) {
   const href = permalink(snapshot.repo, file, start, end);
   const label = children ?? `${file}${start ? `:${start}${end && end !== start ? `-${end}` : ""}` : ""}`;
-  if (!href) return <span className="break-all font-mono text-[13px] text-text">{label}</span>;
+  if (!href) return <span className="break-all font-mono text-sm text-text">{label}</span>;
   return (
-    <a href={href} target="_blank" rel="noreferrer" className="group inline-flex items-baseline gap-1 break-all font-mono text-[13px] text-text hover:text-accent">
+    <a href={href} target="_blank" rel="noreferrer" className="group inline-flex items-baseline gap-1 break-all font-mono text-sm text-text hover:text-accent">
       {label}
       <ExternalLink className="size-3.5 shrink-0 self-center text-faint group-hover:text-accent" aria-label="GitHub permalink" />
     </a>
@@ -57,7 +59,7 @@ function FileLink({ snapshot, file, start, end, children }: { snapshot: Snapshot
 function ConfidenceTag({ edge }: { edge: ComponentEdge }) {
   const style = EDGE_STYLES[edge.confidenceLabel];
   return (
-    <span className="inline-flex shrink-0 items-center gap-2 rounded-md border border-line px-1.5 py-0.5 text-[12px] text-text" title={style.meaning}>
+    <span className="inline-flex shrink-0 items-center gap-2 rounded-md border border-line px-1.5 py-0.5 text-sm text-text" title={style.meaning}>
       <svg width="22" height="6" aria-hidden>
         <line x1="1" y1="3" x2="21" y2="3" stroke="currentColor" strokeWidth="1.8" strokeDasharray={style.dash} strokeLinecap={edge.confidenceLabel === "dynamic" ? "round" : "butt"} />
       </svg>
@@ -84,7 +86,7 @@ function Tabs({ tabs, active, onChange, counts }: { tabs: { id: Tab; label: stri
           ].join(" ")}
         >
           {t.label}
-          {counts[t.id] !== undefined && <span className="ml-1.5 text-[12px] font-normal text-faint">{counts[t.id]}</span>}
+          {counts[t.id] !== undefined && <span className="ml-1.5 text-sm font-normal text-faint">{counts[t.id]}</span>}
         </button>
       ))}
     </div>
@@ -97,14 +99,13 @@ function StackList({ snapshot, facts }: { snapshot: Snapshot; facts: TechFact[] 
   return (
     <ul className="space-y-2.5">
       {facts.map((f) => (
-        <li key={`${f.tech}:${f.file}:${f.line}`} className="flex gap-2.5">
-          <span className="grid size-6 shrink-0 place-items-center rounded-md border border-line bg-card">
-            <TechLogo fact={f} className="size-3.5" />
+        <li key={`${f.tech}:${f.file}:${f.line}`} className="flex gap-3 rounded-xl border border-panel-line bg-card p-4" data-testid="stack-card">
+          <span className="grid size-8 shrink-0 place-items-center">
+            <TechLogo fact={f} className="size-6" />
           </span>
           <div className="min-w-0">
             <div className="text-[14px] font-medium text-text">{TECH_META[f.tech].label}</div>
-            <FileLink snapshot={snapshot} file={f.file} start={f.line} />
-            <div className="text-[13px] leading-normal text-faint">{f.detail}</div>
+            <div className="mt-1 text-sm leading-relaxed text-muted"><FileLink snapshot={snapshot} file={f.file} start={f.line}>{f.detail}</FileLink></div>
           </div>
         </li>
       ))}
@@ -115,9 +116,9 @@ function StackList({ snapshot, facts }: { snapshot: Snapshot; facts: TechFact[] 
 /** Beside a model-written summary: which model wrote it, and "not verified", always visible. */
 function SummaryByModel({ model }: { model?: string }) {
   return (
-    <span data-testid="summary-model-written" title="Summary written by the model from extracted facts; prose not verified" className="mt-2 inline-flex items-center gap-1.5 text-[13px] text-muted">
+    <span data-testid="summary-model-written" title="Summary written by the model from extracted facts; prose not verified" className="mt-2 inline-flex items-center gap-1.5 text-sm text-muted">
       <NvidiaLogo className="h-3.5 w-4" />
-      Written by {modelDisplayName(model)} · not verified
+      Summary by {modelDisplayName(model)} · unverified
     </span>
   );
 }
@@ -128,32 +129,12 @@ function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot;
   return (
     <>
       <Section title="Summary">
-        {component.summary && (
-          // a summary only ever comes from the naming model: its label sits right beside it
-          <div data-testid="summary">
-            <p className="text-[15px] leading-normal text-text">{component.summary}</p>
-            {component.naming.source === "llm" && <SummaryByModel model={component.naming.model} />}
-          </div>
-        )}
-        <p className={`${component.summary ? "mt-3" : ""} text-[14px] leading-normal text-muted`} data-testid="from-facts">
-          <span className="text-faint">From facts: </span>
-          {component.subtitle}
-        </p>
-        <p className="mt-2 text-[13px] leading-normal text-faint" data-testid="name-source">
-          {component.naming.source === "llm" ? (
-            <>
-              Name written by the model; heuristic name: <span className="text-muted">{component.naming.heuristicName}</span>
-            </>
-          ) : component.naming.source === "override" ? (
-            <>
-              Name set by a <span className="font-mono text-muted">tracehound.json</span> override; heuristic name: <span className="text-muted">{component.naming.heuristicName}</span>
-            </>
-          ) : (
-            "Heuristic name (from the code, no model)"
-          )}
-        </p>
-        {component.naming.summaryDropped && (
-          <p className="mt-1 text-[13px] leading-normal text-faint" data-testid="summary-dropped">
+        <div data-testid="summary">
+          <p className="text-[15px] leading-relaxed text-text">{component.summary ?? component.subtitle}</p>
+          {component.summary ? <SummaryByModel model={component.naming.model} /> : <p className="mt-2 text-sm leading-relaxed text-muted">Heuristic · from snapshot facts</p>}
+        </div>
+        {component.naming.summaryDropped && component.naming.model && (
+          <p className="mt-1 text-sm leading-relaxed text-faint" data-testid="summary-dropped">
             The model&apos;s summary was wrong and is not shown (<span className="font-mono">summary: false</span> in tracehound.json).
           </p>
         )}
@@ -163,7 +144,7 @@ function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot;
         <Section title="Warnings" count={warnings.length}>
           <ul className="space-y-2">
             {warnings.map((w) => (
-              <li key={w.id} className="flex gap-2 text-[14px] leading-normal text-warn">
+              <li key={w.id} className="flex gap-2 text-[14px] leading-relaxed text-warn">
                 <TriangleAlert className="mt-1 size-4 shrink-0" aria-hidden /> {w.message}
               </li>
             ))}
@@ -183,11 +164,8 @@ function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot;
             {component.routes.map((r) => {
               const ev = snapshot.evidence.find((e) => e.id === r.evidenceId);
               return (
-                <li key={r.evidenceId} className="flex items-baseline gap-3">
-                  <span className="w-16 shrink-0 font-mono text-[13px] font-semibold text-accent">{r.method}</span>
-                  <FileLink snapshot={snapshot} file={r.file} start={ev?.range.startLine} end={ev?.range.endLine}>
-                    {r.path}
-                  </FileLink>
+                <li key={r.evidenceId} data-testid="route-row" className="rounded-xl border border-panel-line bg-card px-3 py-2">
+                  <ExpandableSourceRow snapshot={snapshot} file={r.file} label={r.path} method={r.method} evidence={ev} />
                 </li>
               );
             })}
@@ -199,7 +177,7 @@ function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot;
         <Section title="Redis keys" count={keys.length}>
           <ul className="flex flex-wrap gap-1.5">
             {keys.map((k) => (
-              <li key={k} className="rounded-md border border-line bg-card px-2 py-0.5 font-mono text-[12.5px] text-muted">
+              <li key={k} className="rounded-md border border-line bg-card px-2 py-0.5 font-mono text-sm text-muted">
                 {k}
               </li>
             ))}
@@ -209,7 +187,7 @@ function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot;
 
       {component.resource?.models && component.resource.models.length > 0 && (
         <Section title="Models">
-          <p className="font-mono text-[13px] text-muted">{component.resource.models.join(", ")}</p>
+          <p className="font-mono text-sm text-muted">{component.resource.models.join(", ")}</p>
         </Section>
       )}
 
@@ -229,7 +207,7 @@ function ComponentEnv({ snapshot, component }: { snapshot: Snapshot; component: 
             const sites = reads.filter((r) => r.name === v).map((r) => snapshot.evidence.find((e) => e.id === r.evidenceId)).filter((e) => e !== undefined);
             return (
               <li key={v} data-testid="env-var" className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-3.5 py-2.5">
-                <span className="min-w-40 font-mono text-[13px] font-medium text-text">{v}</span>
+                <span className="min-w-40 font-mono text-sm font-medium text-text">{v}</span>
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   {sites.map((e) => (
                     <FileLink key={e.id} snapshot={snapshot} file={e.file} start={e.range.startLine} />
@@ -254,8 +232,7 @@ function ComponentFiles({ snapshot, component, bind }: { snapshot: Snapshot; com
           {component.membership.map((m) => (
             // hover or focus (the permalink inside) lights up every edge with evidence in this file
             <li key={m.file} data-testid="file-row" className="rounded-lg px-2 py-1.5 data-[highlighted=true]:bg-card data-[highlighted=true]:ring-1 data-[highlighted=true]:ring-highlight/70" {...bind({ key: `file:${m.file}`, nodeIds: [], edgeIds: edgesWithEvidenceIn(snapshot, m.file) })}>
-              <FileLink snapshot={snapshot} file={m.file} />
-              <div className="mt-0.5 text-[14px] leading-normal text-muted">{m.reason}</div>
+              <ExpandableSourceRow key={m.file} snapshot={snapshot} file={m.file} label={m.file} evidence={fileEvidence(snapshot, m.file)} reason={m.reason} />
             </li>
           ))}
         </ul>
@@ -285,7 +262,7 @@ function ConnectionList({ snapshot, edges, direction, onOpen, bind }: { snapshot
             <Dir className="size-4 shrink-0 text-faint" aria-label={direction === "out" ? "outgoing" : "incoming"} />
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-1.5 text-[14px] font-medium text-text">{name(direction === "out" ? e.target : e.source)}</span>
-              <span className="text-[13px] text-muted">
+              <span className="text-sm text-muted">
                 {e.kind}
                 {e.weight > 1 && <span className="text-faint"> · {e.weight} evidence</span>}
               </span>
@@ -340,7 +317,7 @@ function Endpoint({ snapshot, id, role, onOpen, bind }: { snapshot: Snapshot; id
     >
       {component && <ComponentIcon kind={component.kind} tech={facts} />}
       <span className="min-w-0 flex-1">
-        <span className="block text-[12px] uppercase tracking-wider text-faint">{role}</span>
+        <span className="block text-sm uppercase tracking-wider text-faint">{role}</span>
         <span className="flex min-w-0 items-center gap-1.5 text-[14px] font-medium text-text">
           <ComponentLabel snapshot={snapshot} id={id} />
         </span>
@@ -362,14 +339,14 @@ function EdgeOverview({ snapshot, edge, onOpenNode, onEvidence, bind }: { snapsh
         </div>
       </Section>
       <Section title="Details">
-        <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2.5 text-[14px] leading-normal">
+        <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2.5 text-[14px] leading-relaxed">
           <dt className="text-faint">Relationship</dt>
           <dd className="text-text">{edge.kind}</dd>
           <dt className="text-faint">Label</dt>
-          <dd className="break-words font-mono text-[13px] text-muted">{edge.label}</dd>
+          <dd className="break-words font-mono text-sm text-muted">{edge.label}</dd>
           <dt className="text-faint">Confidence</dt>
           <dd className="flex flex-wrap items-center gap-2">
-            <ConfidenceTag edge={edge} /> <span className="text-[13px] text-muted">{EDGE_STYLES[edge.confidenceLabel].meaning}</span>
+            <ConfidenceTag edge={edge} /> <span className="text-sm text-muted">{EDGE_STYLES[edge.confidenceLabel].meaning}</span>
           </dd>
           <dt className="text-faint">Detector</dt>
           <dd className="text-muted">{detectors.map((d) => `${d} extractor`).join(", ")}</dd>
@@ -394,9 +371,9 @@ function EdgeEvidence({ snapshot, edge }: { snapshot: Snapshot; edge: ComponentE
           <li key={ev.id} data-testid="evidence-item" className="min-w-0">
             <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
               <FileLink snapshot={snapshot} file={ev.file} start={ev.range.startLine} end={ev.range.endLine} />
-              {ev.symbol && <span className="text-[13px] text-faint">in <span className="font-mono">{ev.symbol}</span></span>}
+              {ev.symbol && <span className="text-sm text-faint">in <span className="font-mono">{ev.symbol}</span></span>}
             </div>
-            <p className="mb-2 text-[14px] leading-normal text-muted">
+            <p className="mb-2 text-[14px] leading-relaxed text-muted">
               {ev.detail}
               {ev.resolution && <span className="text-faint"> · {ev.resolution}</span>}
             </p>
@@ -414,7 +391,7 @@ function EdgeInChange({ model, edge }: { model: ChangeModel; edge: ComponentEdge
   const decls = model.pairEdges.get(`${edge.source}->${edge.target}`) ?? [];
   return (
     <Section title="In this change">
-      <p className="text-[14px] leading-normal text-muted" data-testid="edge-in-change">
+      <p className="text-[14px] leading-relaxed text-muted" data-testid="edge-in-change">
         {status ? (
           <>
             <StatusPill status={status === "regrouped" ? "regrouped" : status} /> <span className="ml-1">{DIFF_EDGE[status].meaning}.</span>
@@ -426,7 +403,7 @@ function EdgeInChange({ model, edge }: { model: ChangeModel; edge: ComponentEdge
       {decls.length > 0 && (
         <ul className="mt-2.5 space-y-1.5">
           {decls.map((e) => (
-            <li key={e.id} className="text-[13px]">
+            <li key={e.id} className="text-sm">
               <div className="flex flex-wrap items-center gap-1.5 font-mono text-text">
                 <StatusPill status={e.status === "added" ? "added" : "removed"} /> <span className="text-faint">{e.kind}</span> {endpointLabel(e.from)} <ArrowRight className="size-3.5 text-faint" aria-label="to" /> {endpointLabel(e.to)}
               </div>
@@ -454,7 +431,7 @@ function Breadcrumbs({ snapshot, nav }: { snapshot: Snapshot; nav: PanelNavigati
   const { stack } = nav;
   return (
     <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
-      <ol className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[13px] leading-snug">
+      <ol className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-sm leading-snug">
         {stack.map((entry, i) => {
           const label = crumbLabel(snapshot, entry, stack[i - 1]);
           const last = i === stack.length - 1;
@@ -511,8 +488,8 @@ export function Inspector({ snapshot, nav, bind = noHighlight, changes }: { snap
           <ComponentIcon kind={component.kind} tech={facts} size="header" />
           <h2 className="min-w-0 text-[22px] font-semibold leading-tight text-text">{component.name}</h2>
         </div>
-        <div className="mt-2.5 text-[13px] text-muted">
-          {changes?.synthetic.has(component.id) ? "Change set only" : label} · <span className="break-all font-mono text-[12.5px]">{component.id}</span>
+        <div className="mt-2.5 text-sm text-muted">
+          {changes?.synthetic.has(component.id) ? "Change set only" : label} · <span className="break-all font-mono text-sm">{component.id}</span>
         </div>
         <div className="mt-2 flex">
           <NameSourceBadge naming={component.naming} />
@@ -552,7 +529,7 @@ export function Inspector({ snapshot, nav, bind = noHighlight, changes }: { snap
             {end(edge.target)}
           </h2>
         </div>
-        <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-muted">
+        <div className="mt-2.5 flex flex-wrap items-center gap-2 text-sm text-muted">
           Edge · {edge.kind} <ConfidenceTag edge={edge} />
         </div>
       </div>

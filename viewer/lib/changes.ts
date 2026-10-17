@@ -15,6 +15,7 @@ export const ChangeSetEntry = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
   repo: z.string(), // a repo id of snapshots/index.json; a repo without a published snapshot is drawn from the change set alone
   title: z.string(),
+  public: z.boolean().optional(),
   kind: z.enum(["commit", "run", "demo"]), // demo: head is a local commit made from `patch` (no GitHub permalinks at head)
   base: z.string(),
   head: z.string(), // a SHA, or the run id for kind "run"
@@ -25,6 +26,10 @@ export const ChangeSetEntry = z.object({
 });
 export type ChangeSetEntry = z.infer<typeof ChangeSetEntry>;
 export const ChangeSetIndex = z.array(ChangeSetEntry);
+
+export function visibleChangeSets(entries: ChangeSetEntry[], search = ""): ChangeSetEntry[] {
+  return new URLSearchParams(search).get("dev") === "1" ? entries : entries.filter((entry) => entry.public !== false);
+}
 
 /** ?changes=<id>, only when it's a safe id. */
 export function changesParam(search: string): string | null {

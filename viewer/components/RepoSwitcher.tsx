@@ -3,6 +3,7 @@
 import { Check, ChevronsUpDown, GitCompareArrows } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ChangeSetEntry } from "@/lib/changes";
+import { visibleChangeSets } from "@/lib/changes";
 import { repoHref, type RepoInfo } from "@/lib/repos";
 
 const KIND_LABEL: Record<ChangeSetEntry["kind"], string> = { commit: "commit", run: "repair run", demo: "demo diff" };
@@ -13,6 +14,7 @@ const KIND_LABEL: Record<ChangeSetEntry["kind"], string> = { commit: "commit", r
  */
 export function RepoSwitcher({ repos, repoId, label, changeSets, changesId }: { repos: RepoInfo[]; repoId?: string; label: string; changeSets: ChangeSetEntry[]; changesId?: string }) {
   const [open, setOpen] = useState(false);
+  changeSets = visibleChangeSets(changeSets, typeof window === "undefined" ? "" : window.location.search);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -42,11 +44,11 @@ export function RepoSwitcher({ repos, repoId, label, changeSets, changesId }: { 
       href={href(c.repo, c.id)}
       data-testid="changeset-link"
       aria-current={c.id === changesId ? "page" : undefined}
-      className="flex items-center gap-2 rounded-lg py-1.5 pl-7 pr-2 text-[13px] text-muted hover:bg-card hover:text-text aria-[current=page]:text-accent"
+      className="flex items-center gap-2 rounded-lg py-1.5 pl-7 pr-2 text-sm text-muted hover:bg-card hover:text-text aria-[current=page]:text-accent"
     >
       <GitCompareArrows className="size-3.5 shrink-0 text-faint" aria-hidden />
       <span className="min-w-0 flex-1 truncate">{c.title}</span>
-      <span className="shrink-0 text-[11px] text-faint">{KIND_LABEL[c.kind]}</span>
+      <span className="shrink-0 text-sm text-faint">{KIND_LABEL[c.kind]}</span>
     </a>
   );
 
@@ -75,8 +77,8 @@ export function RepoSwitcher({ repos, repoId, label, changeSets, changesId }: { 
               >
                 <span className="grid size-4 shrink-0 place-items-center">{r.id === repoId && <Check className="size-4 text-accent" aria-label="current repo" />}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13.5px] font-medium text-text">{r.name}</span>
-                  <span className="block font-mono text-[11px] text-faint">
+                  <span className="block truncate text-sm font-medium text-text">{r.displayName ?? r.name}</span>
+                  <span className="block font-mono text-sm text-faint">
                     {r.latest.sha.slice(0, 7)} · analyzer {r.latest.analyzerVersion}
                   </span>
                 </span>
@@ -88,7 +90,7 @@ export function RepoSwitcher({ repos, repoId, label, changeSets, changesId }: { 
           ))}
           {orphanSets.length > 0 && (
             <div className="mt-1 border-t border-line pt-1">
-              <div className="px-2 py-1 text-[11px] uppercase tracking-wider text-faint">No published snapshot</div>
+              <div className="px-2 py-1 text-sm uppercase tracking-wider text-faint">No published snapshot</div>
               {orphanSets.map((c) => (
                 <ChangeLink key={c.id} c={c} />
               ))}

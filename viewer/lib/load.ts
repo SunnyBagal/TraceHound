@@ -1,5 +1,6 @@
-import { ChangeSet, ImpactReport, Snapshot, SnapshotManifest, type ManifestEntry } from "@tracehound/analyzer/schema";
-import { buildChangeModel, ChangeSetIndex, type ChangeModel, type ChangeSetEntry } from "./changes";
+import { ChangeSet, ImpactReport, type SnapshotManifest, type ManifestEntry } from "@tracehound/analyzer/schema";
+import { Snapshot, ViewerManifest } from "./types";
+import { buildChangeModel, ChangeSetIndex, visibleChangeSets, type ChangeModel, type ChangeSetEntry } from "./changes";
 import { githubSlug } from "./github";
 import { repoList, resolveRepo, type RepoInfo } from "./repos";
 
@@ -18,7 +19,7 @@ async function getSnapshot(entry: ManifestEntry): Promise<Snapshot> {
 }
 
 export async function loadManifest(): Promise<SnapshotManifest> {
-  return SnapshotManifest.parse(await getJson(`${base}/snapshots/index.json`));
+  return ViewerManifest.parse(await getJson(`${base}/snapshots/index.json`));
 }
 
 /** changesets/index.json; an empty list when the deploy has none. */
@@ -26,7 +27,7 @@ export async function loadChangeSetIndex(): Promise<ChangeSetEntry[]> {
   const res = await fetch(`${base}/changesets/index.json`, { cache: "no-cache" });
   if (res.status === 404) return [];
   if (!res.ok) throw new Error(`GET ${base}/changesets/index.json → HTTP ${res.status}`);
-  return ChangeSetIndex.parse(await res.json());
+  return visibleChangeSets(ChangeSetIndex.parse(await res.json()), typeof window === "undefined" ? "" : window.location.search);
 }
 
 export interface Loaded {

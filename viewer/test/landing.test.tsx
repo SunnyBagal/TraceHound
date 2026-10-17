@@ -294,7 +294,7 @@ describe("every name and number in the animations and sections comes from the re
 
   it("repo → graph: Recall's snapshot components, edges and evidence", () => {
     const manifest = json("snapshots/index.json");
-    expect(manifest.repos.find((r: { id: string }) => r.id === "recall").latest.path).toBe(RECALL_SNAPSHOT.replace("snapshots/", ""));
+    expect(manifest.repos.find((r: { id: string }) => r.id === "recall").versions.map((v: { path: string }) => v.path)).toContain(RECALL_SNAPSHOT.replace("snapshots/", ""));
     const snapshot = json(RECALL_SNAPSHOT);
     expect(snapshot.repo.commitSha.startsWith(RECALL.short)).toBe(true);
     expect(snapshot.analyzerVersion).toBe(RECALL.analyzerVersion);

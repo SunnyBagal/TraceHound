@@ -28,23 +28,23 @@ export function WarningCard({ model, warning, active, onToggle, onOpen }: { mode
         <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warn" aria-hidden />
         <span className="min-w-0 flex-1">
           <span className="block text-[14px] font-semibold leading-snug text-text">{WARNING_TITLE[warning.kind]}</span>
-          <span className="block font-mono text-[11px] text-faint">{warning.kind}</span>
+          <span className="block font-mono text-sm text-faint">{warning.kind}</span>
         </span>
       </button>
-      <p className="mt-2 text-[13px] leading-snug text-muted">
+      <p className="mt-2 text-sm leading-snug text-muted">
         <span className="font-medium text-text">Rule: </span>
         {warning.rule}
       </p>
-      <p className="mt-1.5 text-[13px] leading-snug text-text" data-testid="warning-message">
+      <p className="mt-1.5 text-sm leading-snug text-text" data-testid="warning-message">
         {warning.message}
       </p>
-      {warning.alsoCaughtByTypecheck && <p className="mt-1 text-[12px] text-faint">The typechecker also reports this.</p>}
-      <h4 className="mb-1 mt-2.5 text-[11px] font-semibold uppercase tracking-wider text-faint">Evidence</h4>
+      {warning.alsoCaughtByTypecheck && <p className="mt-1 text-sm text-faint">The typechecker also reports this.</p>}
+      <h4 className="mb-1 mt-2.5 text-sm font-semibold uppercase tracking-wider text-faint">Evidence</h4>
       <ul className="space-y-1.5" data-testid="warning-evidence">
         {warning.evidence.map((e, i) => (
-          <li key={`${e.side}:${e.file}:${e.line}:${i}`} className="text-[12.5px]">
+          <li key={`${e.side}:${e.file}:${e.line}:${i}`} className="text-sm">
             <div className="flex min-w-0 items-baseline gap-1.5">
-              <span className={`shrink-0 rounded px-1 font-mono text-[10.5px] font-semibold ${e.side === "base" ? "bg-diff-removed/15 text-diff-removed" : "bg-diff-added/15 text-diff-added"}`}>{e.side}</span>
+              <span className={`shrink-0 rounded px-1 font-mono text-sm font-semibold ${e.side === "base" ? "bg-diff-removed/15 text-diff-removed" : "bg-diff-added/15 text-diff-added"}`}>{e.side}</span>
               <EvidenceRef link={evidenceLink(model.link, e.side, e.file, e.line)} />
             </div>
             <div className="ml-10 text-muted">{e.detail}</div>
@@ -52,7 +52,7 @@ export function WarningCard({ model, warning, active, onToggle, onOpen }: { mode
         ))}
       </ul>
       {components.length > 0 && (
-        <p className="mt-2.5 flex flex-wrap gap-x-1.5 text-[12.5px] text-muted">
+        <p className="mt-2.5 flex flex-wrap gap-x-1.5 text-sm text-muted">
           <span className="text-faint">Involves</span>
           {components.map((id, i) => (
             <span key={id}>
@@ -68,7 +68,7 @@ export function WarningCard({ model, warning, active, onToggle, onOpen }: { mode
 
 export function NoWarnings() {
   return (
-    <div className="text-[13px] leading-snug text-muted" data-testid="no-warnings">
+    <div className="text-sm leading-snug text-muted" data-testid="no-warnings">
       <p className="flex items-center gap-1.5 text-text">
         <ShieldCheck className="size-4 text-diff-added" aria-hidden /> None of the four rules fired.
       </p>
@@ -97,13 +97,13 @@ export function ChangeWarningsPanel({ model, activeId, onToggle, onOpen }: { mod
         <TriangleAlert className={`size-4 shrink-0 ${count ? "text-warn" : "text-faint"}`} aria-hidden />
         {open ? (
           <span className="min-w-0 flex-1">
-            <span className="block text-[11px] font-semibold uppercase tracking-wider text-faint">What could break</span>
+            <span className="block text-sm font-semibold uppercase tracking-wider text-faint">What could break</span>
             <span className="block text-[14px] font-medium text-text">
               {count ? `${count} warning${count === 1 ? "" : "s"}` : "No warnings"}
             </span>
           </span>
         ) : (
-          <span className="text-[12px] font-semibold text-text [writing-mode:vertical-rl]">{count ? `${count} warning${count === 1 ? "" : "s"}` : "No warnings"}</span>
+          <span className="text-sm font-semibold text-text [writing-mode:vertical-rl]">{count ? `${count} warning${count === 1 ? "" : "s"}` : "No warnings"}</span>
         )}
         {open && <ChevronRight className="size-4 rotate-180 text-faint" aria-hidden />}
       </button>
@@ -111,7 +111,7 @@ export function ChangeWarningsPanel({ model, activeId, onToggle, onOpen }: { mod
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
           {count ? (
             <>
-              <p className="mb-2.5 text-[12px] text-faint">Click a warning to highlight the components it involves.</p>
+              <p className="mb-2.5 text-sm text-faint">Click a warning to highlight the components it involves.</p>
               <ul className="space-y-2.5">
                 {model.warnings.map((w) => (
                   <WarningCard key={w.id} model={model} warning={w} active={activeId === w.id} onToggle={onToggle} onOpen={onOpen} />

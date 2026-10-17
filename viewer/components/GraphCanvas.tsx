@@ -6,6 +6,7 @@ import {
   Panel,
   ReactFlow,
   useNodesState,
+  useNodesInitialized,
   useReactFlow,
   type NodeMouseHandler,
 } from "@xyflow/react";
@@ -20,6 +21,9 @@ import { clearPositions, loadPositions, savePositions } from "@/lib/positions";
 import type { Snapshot } from "@/lib/types";
 import { clampZoom, keepInView, MAX_ZOOM, MIN_ZOOM, minZoomFor } from "@/lib/zoom";
 import { ComponentNode } from "./ComponentNode";
+import { KindLegend } from "./KindLegend";
+import { useExpandedNodes } from "@/lib/expansion";
+import { expandedHeight } from "@/lib/contents";
 import { EdgeMarkers, EvidenceEdge } from "./EvidenceEdge";
 
 export type Selection = { type: "node"; id: string } | { type: "edge"; id: string } | null;
@@ -62,10 +66,19 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
   const roles = useMemo(() => (impact ? impactRoles(impact) : null), [impact]);
   const chainEdges = useMemo(() => (impact ? impactEdges(impact) : null), [impact]);
   const base = useMemo(() => buildGraph(snapshot, changes?.extraEdges), [snapshot, changes]);
+  const validIds = useMemo(() => new Set(base.nodes.map((n) => n.id)), [base]);
+  const { expanded, toggle } = useExpandedNodes(validIds);
+  const heights = useMemo(() => Object.fromEntries(base.nodes.map((n) => [n.id, expanded.has(n.id) ? expandedHeight(n.data.contents ?? []) : NODE_HEIGHT])), [base, expanded]);
+  const layoutIdentity = useRef("");
+  const initialFitPending = useRef(false);
+  const anchor = useRef<{ id: string; x: number; y: number } | null>(null);
   // positions are per repo (lib/positions.ts); the commit is only used to pick up pre-040 saves
   const storageKey = snapshot.repo.name;
   const legacySha = snapshot.repo.commitSha;
   const [nodes, setNodes, onNodesChange] = useNodesState<ComponentNodeType>([]);
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  const nodesInitialized = useNodesInitialized();
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [layoutRun, setLayoutRun] = useState(0);
   const [fitted, setFitted] = useState(0); // bumps when a layout's fitView lands
@@ -82,18 +95,41 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
     elkLayout(
       base.nodes.map((n) => n.id),
       base.edges,
+      heights,
     )
-      .catch((): Positions => Object.fromEntries(base.nodes.map((n, i) => [n.id, { x: (i % 3) * (NODE_WIDTH + 120), y: Math.floor(i / 3) * (NODE_HEIGHT + 80) }])))
+      .catch((): Positions => {
+        let y = 0;
+        return Object.fromEntries(base.nodes.map((n) => { const p = { x: 0, y }; y += heights[n.id]! + 80; return [n.id, p]; }));
+      })
       .then((layout) => {
         if (cancelled) return;
-        const saved = loadPositions(storageKey, legacySha);
-        setNodes(base.nodes.map((n) => ({ ...n, position: saved[n.id] ?? layout[n.id] ?? n.position })));
-        requestAnimationFrame(() => void fitView(fitRef.current).then(() => !cancelled && setFitted((n) => n + 1)));
+        const identity = `${storageKey}:${legacySha}:${layoutRun}`;
+        const initial = layoutIdentity.current !== identity;
+        layoutIdentity.current = identity;
+        initialFitPending.current = initial;
+        const saved = initial && !expanded.size ? loadPositions(storageKey, legacySha) : {};
+        const first = nodesRef.current[0];
+        const oldAnchor = anchor.current ?? (first ? { id: first.id, ...first.position } : null);
+        const origin = oldAnchor && layout[oldAnchor.id];
+        const offset = !initial && origin && oldAnchor ? { x: oldAnchor.x - origin.x, y: oldAnchor.y - origin.y } : { x: 0, y: 0 };
+        setNodes(base.nodes.map((n) => ({
+          ...n, height: heights[n.id],
+          handles: n.handles?.map((h) => ({ ...h, y: heights[n.id]! / 2 - 4 })),
+          position: saved[n.id] ?? { x: (layout[n.id]?.x ?? 0) + offset.x, y: (layout[n.id]?.y ?? 0) + offset.y },
+        })));
+        anchor.current = null;
       });
     return () => {
       cancelled = true;
     };
-  }, [base, storageKey, legacySha, setNodes, fitView, layoutRun]);
+  }, [base, storageKey, legacySha, setNodes, fitView, layoutRun, heights, expanded]);
+
+  // Fit only once React Flow has registered and measured the first layout's cards.
+  useEffect(() => {
+    if (!nodesInitialized || !nodes.length || !initialFitPending.current) return;
+    initialFitPending.current = false;
+    requestAnimationFrame(() => void fitView(fitRef.current).then(() => setFitted((n) => n + 1)));
+  }, [nodesInitialized, nodes, fitView]);
 
   // Warnings panel focus: pan to and pulse the component, centred in the part of the canvas the
   // inspector doesn't cover; several components (a change warning) are fitted into view together.
@@ -109,7 +145,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
       const node = targets[0]!;
       justFocused.current = `node:${node.id}`;
       const zoom = clampZoom(1.05, minZoom);
-      setCenter(node.position.x + NODE_WIDTH / 2 + occludeRight / 2 / zoom, node.position.y + NODE_HEIGHT / 2, { zoom, duration: 500 });
+      setCenter(node.position.x + NODE_WIDTH / 2 + occludeRight / 2 / zoom, node.position.y + (node.height ?? NODE_HEIGHT) / 2, { zoom, duration: 500 });
     } else {
       void fitView({ ...fit, nodes: targets.map((n) => ({ id: n.id })), maxZoom: 1.05, ...(occludeRight ? { padding: { top: 0.15, bottom: 0.15, left: 0.1, right: `${occludeRight + MARGIN}px` } } : {}) });
     }
@@ -137,7 +173,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
       minX: Math.min(...boxes.map((n) => n.position.x)),
       minY: Math.min(...boxes.map((n) => n.position.y)),
       maxX: Math.max(...boxes.map((n) => n.position.x + NODE_WIDTH)),
-      maxY: Math.max(...boxes.map((n) => n.position.y + NODE_HEIGHT)),
+      maxY: Math.max(...boxes.map((n) => n.position.y + (n.height ?? NODE_HEIGHT))),
     };
     const next = keepInView(bounds, getViewport(), { width: el.clientWidth, height: el.clientHeight }, occludeRight, MARGIN, minZoom);
     if (next) setViewport(next, { duration: 350 });
@@ -162,6 +198,10 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
           selected: selection?.type === "node" && selection.id === n.id,
           data: {
             ...n.data,
+            expanded: expanded.has(n.id),
+            height: n.height,
+            onToggle: () => { anchor.current = { id: n.id, ...n.position }; toggle(n.id); },
+            onMore: () => onSelect({ type: "node", id: n.id }),
             // a panel-hovered node is never dimmed; then hover/selection focus; then impact mode
             // dims everything outside the impact
             // change view: components the change didn't touch stay visible, dimmed
@@ -174,7 +214,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
           },
         };
       }),
-    [nodes, selection, focusSet, focusKey, roles, highlight, changes],
+    [nodes, selection, focusSet, focusKey, roles, highlight, changes, expanded, toggle, onSelect],
   );
   const displayEdges = useMemo(
     () =>
@@ -233,6 +273,9 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
         colorMode="dark"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.4} color="var(--canvas-dot)" />
+        <Panel position="bottom-right" style={{ margin: 12, right: occludeRight }}>
+          <KindLegend components={snapshot.components} />
+        </Panel>
         {/* Railway-style controls: bottom left, stacked, icon only; the name is the aria-label */}
         <Panel position="bottom-left" className="flex flex-col gap-2" style={{ margin: 12, marginBottom: "calc(12px + env(safe-area-inset-bottom))" }} data-testid="canvas-controls">
           <div className={CONTROL_GROUP}>

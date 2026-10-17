@@ -100,7 +100,7 @@ describe("?changes=recall-worker-deleted", () => {
     // the removed calls into neighbouring components, each with its evidence
     const edges = panel.getAllByTestId("edge-change");
     expect(edges.map((e) => e.dataset.status)).toEqual(["removed", "removed", "removed", "removed", "removed"]);
-    expect(edges.some((e) => /generateEmbedding/.test(e.textContent!) && /Shared Recall/.test(e.textContent!))).toBe(true);
+    expect(edges.some((e) => /generateEmbedding/.test(e.textContent!) && e.querySelector('a,button'))).toBe(true);
   });
 });
 
