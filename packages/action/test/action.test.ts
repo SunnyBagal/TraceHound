@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildInput, buildReview, runAction, type Dependencies, type Options, type PullEvent } from "../src/action.ts";
+import { buildInput, buildReview, runAction, type Dependencies, type Options, type PullEvent, type ReviewPayload } from "../src/action.ts";
+import type { FixOutput } from "../src/fix.ts";
 
 const event: PullEvent = {
   repository: { full_name: "example/widget" },
@@ -47,7 +48,7 @@ function fake(outputValue: unknown = output(), statuses = [201]) {
   });
   const reviewer = vi.fn<Dependencies["runReviewer"]>().mockResolvedValue(outputValue);
   const log = vi.fn();
-  return { deps: { fetch: api, runReviewer: reviewer, runPipeline: vi.fn(), checkRepoHead: vi.fn(), log }, posts, api, reviewer, log, head };
+  return { deps: { fetch: api, runReviewer: reviewer, runPipeline: vi.fn(), runFixes: vi.fn<Dependencies["runFixes"]>(), checkRepoHead: vi.fn(), log }, posts, api, reviewer, log, head };
 }
 
 const requests = (api: ReturnType<typeof fake>["api"]) => api.mock.calls.map(([, init]) =>
@@ -131,6 +132,13 @@ describe("review input and mapping", () => {
 });
 
 describe("no-post paths and failures", () => {
+  it("refuses the benchmark test-set repository before all effects", async () => {
+    const f = fake();
+    await runAction({ ...event, repository: { full_name: "CALCOM/CAL.COM" } }, options, f.deps);
+    expect(f.api).not.toHaveBeenCalled();
+    expect(f.reviewer).not.toHaveBeenCalled();
+    expect(f.deps.runFixes).not.toHaveBeenCalled();
+  });
   it("dry-run prints the exact proposed JSON and posts nothing", async () => {
     const f = fake();
     f.reviewer.mockImplementation(async () => {
@@ -257,5 +265,112 @@ describe("no-post paths and failures", () => {
     const f = fake(output(), [403]);
     await expect(runAction(event, options, f.deps)).rejects.toThrow("HTTP 403");
     expect(f.posts).toHaveLength(1);
+  });
+});
+
+const fix = { startLine: 8, endLine: 10, replacement: " context\nfixed\nadded", original: "context\nnew\nadded" };
+const fixes: FixOutput = { suggestions: [fix], counts: { attempted: 1, valid: 1, rejected: 0 } };
+function footerData(body: string) {
+  const line = body.split("\n").at(-1)!;
+  expect(line.length).toBeLessThan(8_000);
+  const match = /^<!-- tracehound:v1 (\{.*\}) -->$/.exec(line);
+  expect(match).not.toBeNull();
+  return JSON.parse(match![1]!);
+}
+
+describe("fix suggestions and review data", () => {
+  function pooled(statuses = [201], comments = [finding]) {
+    const f = fake(output(comments), statuses);
+    f.deps.runPipeline.mockResolvedValue({ comments, sources: comments.map(() => "both"),
+      review: { model: "fake-nemotron", chunkFailed: 0 }, pipeline: { pool: 4, kept: comments.length } });
+    f.deps.runFixes.mockResolvedValue(fixes);
+    return f;
+  }
+  const pooledOptions: Options = { ...options, reviewer: "pool-verify-v1", repoDir: "/fake/repo" };
+
+  it("runs fixes after verification and the cap, then posts a native multi-line RIGHT suggestion and a parseable footer", async () => {
+    const f = pooled([201], [finding, { ...finding, body: "Omitted" }]);
+    f.deps.runFixes.mockImplementation(async posted => {
+      expect(f.deps.runPipeline).toHaveBeenCalledOnce();
+      expect(posted).toEqual([finding]);
+      return fixes;
+    });
+    await runAction(event, { ...pooledOptions, maxComments: 1 }, f.deps);
+    expect(f.deps.runFixes).toHaveBeenCalledWith([finding], diff, "/fake/repo", "abc123");
+    const payload = f.posts[0] as ReviewPayload;
+    expect(payload.comments).toEqual([{ path: finding.path, line: 10, start_line: 8, start_side: "RIGHT", side: "RIGHT",
+      body: `${finding.body}\n\nSuggested fix (model-generated, not tested):\n\`\`\`suggestion\n${fix.replacement}\n\`\`\`` }]);
+    expect(footerData(payload.body)).toEqual({ version: 1, pipeline: "pool-verify-v1", headSha: "abc123", pool: 4, kept: 2, posted: 1,
+      fixes: fixes.counts, findings: [{ path: finding.path, line: 9, startLine: 8, source: "both", hasSuggestion: true }] });
+    expect(payload.body.split("<!-- tracehound:v1")[1]).not.toContain(finding.body);
+  });
+
+  it("omits start_line and start_side for a one-line fix", async () => {
+    const f = pooled();
+    f.deps.runFixes.mockResolvedValue({ ...fixes, suggestions: [{ ...fix, startLine: 9, endLine: 9 }] });
+    await runAction(event, pooledOptions, f.deps);
+    const comment = (f.posts[0] as ReviewPayload).comments[0]!;
+    expect(comment.line).toBe(9);
+    expect(comment).not.toHaveProperty("start_line");
+    expect(comment).not.toHaveProperty("start_side");
+  });
+
+  it("posts the original finding when a fix is rejected, without a suggestion", async () => {
+    const f = pooled();
+    f.deps.runFixes.mockResolvedValue({ suggestions: [null], counts: { attempted: 1, valid: 0, rejected: 1 } });
+    await runAction(event, pooledOptions, f.deps);
+    const payload = f.posts[0] as ReviewPayload;
+    expect(payload.comments).toEqual([{ ...finding, side: "RIGHT" }]);
+    expect(footerData(payload.body).findings[0]).toEqual({ path: finding.path, line: 9, source: "both", hasSuggestion: false });
+  });
+
+  it("fixes off is byte-identical to the legacy pool payload and never calls the fix stage", async () => {
+    const f = pooled();
+    await runAction(event, { ...pooledOptions, fixes: "off" }, f.deps);
+    expect(f.deps.runFixes).not.toHaveBeenCalled();
+    expect(JSON.stringify(f.posts[0])).toBe(JSON.stringify({ commit_id: "abc123", event: "COMMENT",
+      body: "TraceHound · pool-verify-v1 · fake-nemotron · 1 findings (pool 4, kept 1)\n\nThese comments are model-generated and unverified.",
+      comments: [{ ...finding, side: "RIGHT" }] }));
+  });
+
+  it("retains the fix as a plain diff on the body-only 422 retry, with no extra model calls", async () => {
+    const f = pooled([422, 201]);
+    await runAction(event, pooledOptions, f.deps);
+    const payload = f.posts[1] as ReviewPayload;
+    expect(payload.comments).toEqual([]);
+    expect(payload.body).toContain("```diff\n@@ -8,3 +8,3 @@\n-context\n-new\n-added\n+ context\n+fixed\n+added\n```");
+    expect(payload.body).not.toContain("```suggestion");
+    expect(footerData(payload.body).fixes).toEqual(fixes.counts);
+    expect(f.deps.runFixes).toHaveBeenCalledOnce();
+  });
+
+  it("isolates fix-stage initialization failure and posts kept findings", async () => {
+    const f = pooled();
+    f.deps.runFixes.mockRejectedValue(new Error("private error"));
+    await runAction(event, pooledOptions, f.deps);
+    const payload = f.posts[0] as ReviewPayload;
+    expect(payload.comments).toEqual([{ ...finding, side: "RIGHT" }]);
+    expect(footerData(payload.body).fixes).toEqual({ attempted: 1, valid: 0, rejected: 1 });
+    expect(JSON.stringify(f.log.mock.calls)).not.toContain("private error");
+  });
+
+  it("truncates oversized metadata by dropping the whole findings array", () => {
+    const comments = Array.from({ length: 100 }, (_, i) => ({ ...finding, path: `${i}/${"x".repeat(100)}.ts` }));
+    const payload = buildReview(comments, diff, "abc123", "fake", 100, false, "pool-verify-v1", { pool: 100, kept: 100 }, {
+      sources: comments.map(() => "ctx"), fixes: { suggestions: comments.map(() => null), counts: { attempted: 100, valid: 0, rejected: 100 } },
+    });
+    const data = footerData(payload.body);
+    expect(data.findingsTruncated).toBe(true);
+    expect(data).not.toHaveProperty("findings");
+    expect(data.posted).toBe(100);
+  });
+
+  it("escapes HTML delimiters in paths while retaining valid one-line JSON", () => {
+    const path = "src/-->\n<widget>.ts";
+    const payload = buildReview([{ ...finding, path }], diff, "abc123", "fake", 15, false, "pool-verify-v1", { pool: 1, kept: 1 }, {
+      sources: ["diff"], fixes: { suggestions: [null], counts: { attempted: 1, valid: 0, rejected: 1 } },
+    });
+    expect(footerData(payload.body).findings[0].path).toBe(path);
+    expect(payload.body.split("\n").at(-1)!.match(/-->/g)).toHaveLength(1);
   });
 });

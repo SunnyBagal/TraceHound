@@ -14,8 +14,10 @@ export type Execute = (file: string, args: string[], options: {
 }) => Promise<unknown>;
 
 export interface PipelineCounts { pool: number; kept: number }
+export type FindingSource = "diff" | "ctx" | "both";
 export interface PipelineOutput {
   comments: Finding[];
+  sources: FindingSource[];
   review: { model: string; chunkFailed: number };
   pipeline: PipelineCounts;
 }
@@ -65,6 +67,14 @@ export function poolFindings(diff: Finding[], ctx: Finding[]): Finding[] {
   return [...diff, ...ctx.filter(finding => !diff.some(candidate => agrees(candidate, finding)))];
 }
 
+/** Sidecar metadata: never changes the bytes sent to the frozen verifier. */
+export function poolSources(diff: Finding[], ctx: Finding[]): FindingSource[] {
+  return [
+    ...diff.map((finding): FindingSource => ctx.some(candidate => agrees(finding, candidate)) ? "both" : "diff"),
+    ...ctx.filter(finding => !diff.some(candidate => agrees(candidate, finding))).map((): FindingSource => "ctx"),
+  ];
+}
+
 class StageError extends Error {
   readonly stage: string;
   constructor(stage: string) { super(stage); this.stage = stage; }
@@ -111,6 +121,7 @@ export async function runPipeline(
     const diff = diffResult!.value;
     const ctx = ctxResult!.value;
     const pool = poolFindings(diff.comments, ctx.comments);
+    const sources = poolSources(diff.comments, ctx.comments);
     await stage("pool", () => writeFile(poolPath, JSON.stringify({
       pr_title: input.title, pr_number: input.number, comments: pool,
     }), { mode: 0o600 }));
@@ -140,13 +151,16 @@ export async function runPipeline(
         }
       }
       const available = pool.map(key);
+      const remainingSources = [...sources];
+      const keptSources: FindingSource[] = [];
       for (const comment of comments) {
         const index = available.indexOf(key(comment));
         if (index < 0) throw new Error("Kept finding not in pool");
         available.splice(index, 1);
+        keptSources.push(remainingSources.splice(index, 1)[0]!);
       }
       // Use the CLI's kept file directly, including its VERIFY_FAILED decisions.
-      return { comments, review: { model: [...new Set([diff.model, ctx.model, verifyModel])].join(", "), chunkFailed: 0 },
+      return { comments, sources: keptSources, review: { model: [...new Set([diff.model, ctx.model, verifyModel])].join(", "), chunkFailed: 0 },
         pipeline: { pool: pool.length, kept: comments.length } };
     });
   } catch (error) {

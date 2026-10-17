@@ -3,10 +3,12 @@ import { pathToFileURL } from "node:url";
 import { runAction, type Dependencies, type PullEvent } from "./action.ts";
 import { runReviewer } from "./reviewer.ts";
 import { checkRepoHead, MissingHeadError, runPipeline } from "./pipeline.ts";
+import { createFixClient, runFixes } from "./fix.ts";
 
 export async function main(
   env: NodeJS.ProcessEnv,
   deps: Dependencies = { fetch, runReviewer, checkRepoHead,
+    runFixes: (...args) => runFixes(...args, createFixClient()),
     runPipeline: (...args) => runPipeline(...args, console.log), log: console.log },
 ): Promise<number> {
   const reviewer = env.TRACEHOUND_REVIEWER ?? "pool-verify-v1";
@@ -27,6 +29,11 @@ export async function main(
     return 1;
   }
   const dryRun = env.TRACEHOUND_DRY_RUN ?? "false";
+  const fixes = env.TRACEHOUND_FIXES ?? "on";
+  if (fixes !== "on" && fixes !== "off") {
+    deps.log("TraceHound: fixes must be on or off.");
+    return 1;
+  }
   if (!["true", "false"].includes(dryRun)) {
     deps.log("TraceHound: dry-run must be true or false.");
     return 1;
@@ -40,6 +47,7 @@ export async function main(
       maxComments: Number(env.TRACEHOUND_MAX_COMMENTS ?? "15"),
       dryRun: dryRun === "true",
       reviewer,
+      fixes,
       repoDir: env.TRACEHOUND_REPO_DIR ?? "",
     }, deps);
     return 0;
