@@ -133,7 +133,7 @@ function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot;
           <p className="text-[15px] leading-relaxed text-text">{component.summary ?? component.subtitle}</p>
           {component.summary ? <SummaryByModel model={component.naming.model} /> : <p className="mt-2 text-sm leading-relaxed text-muted">Heuristic · from snapshot facts</p>}
         </div>
-        {component.naming.summaryDropped && (
+        {component.naming.summaryDropped && component.naming.model && (
           <p className="mt-1 text-sm leading-relaxed text-faint" data-testid="summary-dropped">
             The model&apos;s summary was wrong and is not shown (<span className="font-mono">summary: false</span> in tracehound.json).
           </p>

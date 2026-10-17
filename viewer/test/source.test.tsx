@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { SourcePreview } from "@/components/SourcePreview";
-import { fileEvidence, sourceWindow } from "@/lib/source";
+import { declarationRange, fileEvidence, sourceWindow } from "@/lib/source";
 import { highlightCode } from "@/lib/highlight";
 import { repoSnapshot } from "./repo-snapshot";
 const snapshot = repoSnapshot("recall");
@@ -29,4 +29,10 @@ it("uses declaration bounds when known and otherwise thirty context lines", () =
   expect(sourceWindow(source, evidence, { startLine: 50, endLine: 55 })).toEqual({ startLine: 50, lines: ["50", "51", "52", "53", "54", "55"] });
   expect(sourceWindow(source, { ...evidence, range: { startLine: 80, endLine: 81 } }).lines).toHaveLength(62);
   expect(highlightCode('const x = "<script>"; // text').map((t) => t.text).join("")).toBe('const x = "<script>"; // text');
+});
+
+it("keeps an inline route handler's recorded declaration range", () => {
+  const route = snapshot.components.find((c) => c.kind === "api")!.routes[0]!;
+  const ev = snapshot.evidence.find((e) => e.id === route.evidenceId)!;
+  expect(declarationRange(snapshot, route.file, ev)).toEqual(ev.range);
 });

@@ -10,7 +10,7 @@ export function declarationRange(snapshot: Snapshot, file: string, evidence?: Ev
   const facts = snapshot.files.find((f) => f.path === file);
   const route = facts?.routes.find((r) => r.evidenceId === evidence?.id);
   const symbol = facts?.symbols.find((s) => s.name === evidence?.symbol || route?.handlers.includes(s.name));
-  return symbol?.range;
+  return symbol?.range ?? (route && evidence && evidence.range.endLine > evidence.range.startLine ? evidence.range : undefined);
 }
 
 export function sourceWindow(text: string, evidence?: Evidence, declaration?: { startLine: number; endLine: number }) {
