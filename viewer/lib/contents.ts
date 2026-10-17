@@ -13,8 +13,8 @@ export function nodeContents(snapshot: Snapshot, component: Component): ContentI
   if (component.kind === "worker") return [...new Set(files.flatMap((f) => (f.queueOps ?? []).filter((op) => op.role === "consume" && op.handler).map((op) => op.handler!)))].map((label) => ({ label, detail: "Processor" }));
   if (component.kind === "db") return (component.resource?.models ?? []).map((label) => ({ label, detail: "Model" }));
   if (component.kind === "cache") return (component.resource?.keys ?? []).map((label) => ({ label, detail: "Key" }));
-  const exports = files.flatMap((f) => f.symbols.filter((s) => s.exported).map((s) => ({ label: s.name, detail: s.kind })));
-  return exports.length ? exports : component.entryPoints.map((e) => ({ label: e.file, detail: "Entry file" }));
+  const exported = files.flatMap((f) => f.symbols.filter((s) => s.exported).map((s) => ({ label: s.name, detail: s.kind })));
+  return exported.length ? exported : component.entryPoints.map((e) => ({ label: e.file, detail: "Entry file" }));
 }
 
 export const METHOD_COLORS: Record<string, string> = {
