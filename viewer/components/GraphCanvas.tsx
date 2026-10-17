@@ -20,6 +20,7 @@ import { clearPositions, loadPositions, savePositions } from "@/lib/positions";
 import type { Snapshot } from "@/lib/types";
 import { clampZoom, keepInView, MAX_ZOOM, MIN_ZOOM, minZoomFor } from "@/lib/zoom";
 import { ComponentNode } from "./ComponentNode";
+import { KindLegend } from "./KindLegend";
 import { EdgeMarkers, EvidenceEdge } from "./EvidenceEdge";
 
 export type Selection = { type: "node"; id: string } | { type: "edge"; id: string } | null;
@@ -233,6 +234,9 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
         colorMode="dark"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.4} color="var(--canvas-dot)" />
+        <Panel position="bottom-right" style={{ margin: 12, right: occludeRight }}>
+          <KindLegend components={snapshot.components} />
+        </Panel>
         {/* Railway-style controls: bottom left, stacked, icon only; the name is the aria-label */}
         <Panel position="bottom-left" className="flex flex-col gap-2" style={{ margin: 12, marginBottom: "calc(12px + env(safe-area-inset-bottom))" }} data-testid="canvas-controls">
           <div className={CONTROL_GROUP}>
