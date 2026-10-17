@@ -21,7 +21,7 @@ function copy(edit?: (index: Record<string, any>) => void) {
 describe("build-time snapshot verification covers every repo, not only `latest`", () => {
   it("accepts the committed index", () => {
     const { manifest } = verifySnapshots(copy());
-    expect(manifest.repos!.map((r) => r.id)).toEqual(["cex-v2-boilercode", "recall"]);
+    expect(manifest.repos!.map((r) => r.id)).toEqual(["cex-v2-boilercode", "recall", "tracehound-demo"]);
   });
 
   it("accepts `latest` pointing at either repo", () => {
@@ -34,7 +34,7 @@ describe("build-time snapshot verification covers every repo, not only `latest`"
     const dir = copy();
     const recall = JSON.parse(readFileSync(path.join(dir, "index.json"), "utf8")).repos.find((r: { id: string }) => r.id === "recall");
     rmSync(path.join(dir, recall.latest.path));
-    expect(() => verifySnapshots(dir, "snap")).toThrow(/snap\/5d2165a.*\/\d+\.\d+\.\d+\.json is missing \(referenced by index\.json as repo recall's latest\)/);
+    expect(() => verifySnapshots(dir, "snap")).toThrow(/snap\/.*\/\d+\.\d+\.\d+\.json is missing \(referenced by index\.json as repo recall's latest\)/);
   });
 
   it("fails when a repo's latest is another repo's snapshot", () => {

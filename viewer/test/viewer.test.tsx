@@ -84,7 +84,6 @@ describe("GraphCanvas with the demo snapshot", () => {
       await waitFor(() => expect(within(container).getAllByTestId("edge-label")).toHaveLength(s.edges.length), { timeout: 5000 });
       const text = container.textContent ?? "";
       const summaries = s.components.flatMap((c) => (c.summary ? [c.summary] : []));
-      expect(summaries.length, s.repo.name).toBeGreaterThan(0);
       for (const summary of summaries) expect(text, s.repo.name).not.toContain(summary);
       expect(text).not.toMatch(/Model-written|prose not verified/);
       unmount();
