@@ -85,7 +85,7 @@ function ChangeChip({ diff }: { diff: ComponentDiff }) {
   return (
     <span
       data-testid="change-badges"
-      className={`absolute -top-2.5 left-3 flex max-w-[calc(100%-24px)] items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-md border bg-bg px-1.5 py-px font-mono text-[10px] font-semibold leading-tight ${diff.warnings ? "border-warn/70" : "border-line-strong"}`}
+      className={`absolute -top-2.5 left-3 flex max-w-[calc(100%-24px)] items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-md border bg-bg px-1.5 py-px font-mono text-sm font-semibold leading-tight ${diff.warnings ? "border-warn/70" : "border-line-strong"}`}
     >
       {badges.filter((b) => b.key !== "formatting" && b.key !== "warnings").length === 0 && <span className="text-muted">{diff.warnings ? "INVOLVED" : "EDGES CHANGED"}</span>}
       {badges.map((b) => (
@@ -104,7 +104,7 @@ function ImpactChip({ role }: { role: ImpactRole }) {
     <span
       data-testid="impact-chip"
       className={[
-        "absolute -top-2.5 left-3 rounded-md border px-1.5 py-px font-mono text-[9.5px] font-semibold tracking-wide",
+        "absolute -top-2.5 left-3 rounded-md border px-1.5 py-px font-mono text-sm font-semibold tracking-wide",
         role.role === "changed" ? "border-impact-changed bg-impact-changed text-bg" : "border-dashed border-impact-affected bg-bg text-impact-affected",
       ].join(" ")}
     >

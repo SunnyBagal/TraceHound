@@ -27,12 +27,12 @@ function Limits({ model, onClose }: { model: ChangeModel; onClose: () => void })
       className="absolute left-2 right-2 top-full z-40 mt-1 max-h-[70dvh] overflow-y-auto rounded-xl border border-line bg-panel p-4 shadow-lg sm:left-auto sm:w-[560px]"
     >
       <div className="mb-2 flex items-center gap-2">
-        <h3 className="flex-1 text-[13px] font-semibold uppercase tracking-wider text-faint">How this was computed</h3>
+        <h3 className="flex-1 text-sm font-semibold uppercase tracking-wider text-faint">How this was computed</h3>
         <button type="button" onClick={onClose} aria-label="Close" className="rounded p-1 text-muted hover:bg-card hover:text-text">
           <X className="size-4" />
         </button>
       </div>
-      <ul className="list-disc space-y-1.5 pl-5 text-[13px] leading-snug text-muted">
+      <ul className="list-disc space-y-1.5 pl-5 text-sm leading-snug text-muted">
         <li>
           Computed without AI by <span className="font-mono text-text">tracehound changes</span> (analyzer {set.analyzerVersion}): ts-morph and git over both trees, no model.
         </li>
@@ -49,7 +49,7 @@ function Limits({ model, onClose }: { model: ChangeModel; onClose: () => void })
         {unmapped.length > 0 && (
           <li>
             {unmapped.length} changed file{unmapped.length === 1 ? "" : "s"} belong to no component (ignored by the repo&apos;s config, or not TypeScript):{" "}
-            <span className="break-all font-mono text-[12px]">{unmapped.map((f) => f.path).join(", ")}</span>
+            <span className="break-all font-mono text-sm">{unmapped.map((f) => f.path).join(", ")}</span>
           </li>
         )}
         {set.limitations.map((l) => (
@@ -58,8 +58,8 @@ function Limits({ model, onClose }: { model: ChangeModel; onClose: () => void })
       </ul>
       {entry.regenerate && (
         <>
-          <h3 className="mb-1 mt-3 text-[13px] font-semibold uppercase tracking-wider text-faint">Regenerate</h3>
-          <pre className="whitespace-pre-wrap break-all rounded-lg border border-line bg-bg p-2 font-mono text-[11.5px] text-muted">{entry.regenerate}</pre>
+          <h3 className="mb-1 mt-3 text-sm font-semibold uppercase tracking-wider text-faint">Regenerate</h3>
+          <pre className="whitespace-pre-wrap break-all rounded-lg border border-line bg-bg p-2 font-mono text-sm text-muted">{entry.regenerate}</pre>
         </>
       )}
     </div>
@@ -94,11 +94,11 @@ export function ChangeSummaryBar({ model }: { model: ChangeModel }) {
 
   return (
     <div ref={ref} className="relative shrink-0 border-b border-line bg-page" data-testid="change-summary">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-[13px] text-muted md:px-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-sm text-muted md:px-4">
         <span className="inline-flex min-w-0 items-center gap-1.5 text-text">
           <GitCompareArrows className="size-4 shrink-0 text-accent" aria-hidden />
           <span className="truncate font-medium">{entry.title}</span>
-          <span className="shrink-0 font-mono text-[12px] text-faint">
+          <span className="shrink-0 font-mono text-sm text-faint">
             {short(set.base.sha)}..{head}
           </span>
         </span>
@@ -107,7 +107,7 @@ export function ChangeSummaryBar({ model }: { model: ChangeModel }) {
         </Stat>
         <Stat title={`Declarations: ${s.declarations.added} added, ${s.declarations.removed} removed, ${s.declarations.modified} modified; ${s.declarations.formatting} formatting only (not counted as modified)`} testId="stat-declarations">
           <span className="font-semibold text-text">{decls}</span> declaration{decls === 1 ? "" : "s"}
-          <span className="font-mono text-[12px]">
+          <span className="font-mono text-sm">
             (<span className="text-diff-added">+{s.declarations.added}</span> <span className="text-diff-removed">−{s.declarations.removed}</span>{" "}
             <span className="text-diff-modified">~{s.declarations.modified}</span>)
           </span>
@@ -121,18 +121,18 @@ export function ChangeSummaryBar({ model }: { model: ChangeModel }) {
         </Stat>
         <span className="ml-auto inline-flex items-center gap-3">
           <span
-            className="inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[12px] text-muted"
+            className="inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-sm text-muted"
             title="Change sets come from ts-morph and git only. No model is involved; component names keep their own labels."
             data-testid="no-ai"
           >
             <Cpu className="size-3.5" aria-hidden /> Computed without AI
           </span>
-          <button type="button" onClick={() => setLimits((o) => !o)} aria-expanded={limits} className="inline-flex items-center gap-1 text-[12.5px] text-accent hover:underline" data-testid="limits-toggle">
+          <button type="button" onClick={() => setLimits((o) => !o)} aria-expanded={limits} className="inline-flex items-center gap-1 text-sm text-accent hover:underline" data-testid="limits-toggle">
             <Info className="size-3.5" aria-hidden /> Limits
           </button>
         </span>
       </div>
-      <div className="hidden items-center gap-4 border-t border-line/60 px-4 py-1 text-[11.5px] text-faint lg:flex" aria-label="Change legend">
+      <div className="hidden items-center gap-4 border-t border-line/60 px-4 py-1 text-sm text-faint lg:flex" aria-label="Change legend">
         {(Object.keys(DIFF_EDGE) as (keyof typeof DIFF_EDGE)[]).map((k) => (
           <span key={k} className="inline-flex items-center gap-1.5" title={DIFF_EDGE[k].meaning}>
             <svg width="24" height="6" aria-hidden>

@@ -13,7 +13,7 @@ const STATUS: Record<ImpactReport["files"][number]["status"], string> = { added:
 
 function Heading({ children, count }: { children: ReactNode; count?: number }) {
   return (
-    <h3 className="mb-1.5 mt-3 text-[11px] font-semibold uppercase tracking-wider text-faint first:mt-0">
+    <h3 className="mb-1.5 mt-3 text-sm font-semibold uppercase tracking-wider text-faint first:mt-0">
       {children}
       {count !== undefined && <span className="ml-1.5 font-normal">{count}</span>}
     </h3>
@@ -23,9 +23,9 @@ function Heading({ children, count }: { children: ReactNode; count?: number }) {
 function Evidence({ snapshot, file, line }: { snapshot: Snapshot; file: string; line: number }) {
   const href = permalink(snapshot.repo, file, line);
   const text = `${file}:${line}`;
-  if (!href) return <span className="break-all font-mono text-[11px] text-muted">{text}</span>;
+  if (!href) return <span className="break-all font-mono text-sm text-muted">{text}</span>;
   return (
-    <a href={href} target="_blank" rel="noreferrer" className="group inline-flex items-center gap-1 break-all font-mono text-[11px] text-muted hover:text-accent">
+    <a href={href} target="_blank" rel="noreferrer" className="group inline-flex items-center gap-1 break-all font-mono text-sm text-muted hover:text-accent">
       {text}
       <ExternalLink className="size-3 shrink-0 text-faint group-hover:text-accent" aria-label="GitHub permalink at the base commit" />
     </a>
@@ -44,7 +44,7 @@ export function ImpactPanel({ name, impact, snapshot, onSelect }: { name: string
         {componentName(id)}
         {modelNamed(id) && <ModelMark className="ml-1 align-[-1px]" />}
       </span>{" "}
-      <span className="font-mono text-[11px] text-faint">{id}</span>
+      <span className="font-mono text-sm text-faint">{id}</span>
     </button>
   );
 
@@ -56,17 +56,17 @@ export function ImpactPanel({ name, impact, snapshot, onSelect }: { name: string
     >
       <button type="button" onClick={() => setOpen((o) => !o)} className="flex items-start gap-2 px-4 py-2.5 text-left md:cursor-default" aria-expanded={open}>
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Impact</div>
-          <div className="truncate font-mono text-[13px] text-text">{name}</div>
-          <div className="mt-0.5 font-mono text-[11px] text-muted">
+          <div className="text-sm font-semibold uppercase tracking-wider text-faint">Impact</div>
+          <div className="truncate font-mono text-sm text-text">{name}</div>
+          <div className="mt-0.5 font-mono text-sm text-muted">
             {impact.base.slice(0, 7)}..{impact.head.slice(0, 7)} · depth {impact.depth} · {impact.affected.length} affected
           </div>
         </div>
         <ChevronRight className={`mt-1 size-4 text-faint transition-transform md:hidden ${open ? "rotate-90" : ""}`} aria-hidden />
       </button>
       {open && (
-        <div className="min-h-0 flex-1 overflow-y-auto border-t border-line px-4 py-3 text-[12px]">
-          <div className="mb-3 flex flex-wrap gap-1.5 text-[10px]" aria-label="Impact legend">
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-line px-4 py-3 text-sm">
+          <div className="mb-3 flex flex-wrap gap-1.5 text-sm" aria-label="Impact legend">
             <span className="rounded-md border-2 border-solid border-impact-changed px-1.5 font-mono font-semibold text-impact-changed">CHANGED</span>
             <span className="rounded-md border-2 border-dashed border-impact-affected px-1.5 font-mono font-semibold text-impact-affected">AFFECTED · depth n</span>
             <span className="rounded bg-warn px-1 font-mono font-semibold text-bg">⚠ DYNAMIC</span>
@@ -79,13 +79,13 @@ export function ImpactPanel({ name, impact, snapshot, onSelect }: { name: string
                 <span className="w-3 shrink-0 font-mono text-faint">{STATUS[f.status]}</span>
                 <span className="min-w-0">
                   {slug ? (
-                    <a href={`https://github.com/${slug}/blob/${f.status === "deleted" ? impact.base : impact.head}/${f.path}`} target="_blank" rel="noreferrer" className="break-all font-mono text-[11px] text-text hover:text-accent">
+                    <a href={`https://github.com/${slug}/blob/${f.status === "deleted" ? impact.base : impact.head}/${f.path}`} target="_blank" rel="noreferrer" className="break-all font-mono text-sm text-text hover:text-accent">
                       {f.path}
                     </a>
                   ) : (
-                    <span className="break-all font-mono text-[11px] text-text">{f.path}</span>
+                    <span className="break-all font-mono text-sm text-text">{f.path}</span>
                   )}
-                  <span className="block text-[11px] text-faint">{f.componentId ? `→ ${f.componentId}` : `unmapped: ${f.reason}`}</span>
+                  <span className="block text-sm text-faint">{f.componentId ? `→ ${f.componentId}` : `unmapped: ${f.reason}`}</span>
                 </span>
               </li>
             ))}
@@ -106,9 +106,9 @@ export function ImpactPanel({ name, impact, snapshot, onSelect }: { name: string
               <li key={a.id} className="rounded-lg border border-dashed border-line-strong p-2">
                 <div className="flex flex-wrap items-baseline gap-x-2">
                   <Name id={a.id} />
-                  <span className="font-mono text-[10.5px] text-impact-affected">depth {a.depth}</span>
+                  <span className="font-mono text-sm text-impact-affected">depth {a.depth}</span>
                   {a.dynamic && (
-                    <span className="inline-flex items-center gap-1 rounded bg-warn px-1 font-mono text-[10px] font-semibold text-bg">
+                    <span className="inline-flex items-center gap-1 rounded bg-warn px-1 font-mono text-sm font-semibold text-bg">
                       <TriangleAlert className="size-3" aria-hidden /> via dynamic edge
                     </span>
                   )}
@@ -116,10 +116,10 @@ export function ImpactPanel({ name, impact, snapshot, onSelect }: { name: string
                 <ol className="mt-1.5 space-y-1.5 border-l border-line pl-2.5">
                   {a.chain.map((h, i) => (
                     <li key={`${h.edgeId}:${i}`}>
-                      <button type="button" onClick={() => onSelect({ type: "edge", id: h.edgeId })} className="text-left font-mono text-[11px] text-text hover:text-accent" title="Open this edge in the inspector">
+                      <button type="button" onClick={() => onSelect({ type: "edge", id: h.edgeId })} className="text-left font-mono text-sm text-text hover:text-accent" title="Open this edge in the inspector">
                         {h.source} -{h.kind}→ {h.target}
                       </button>
-                      <div className="flex flex-wrap items-center gap-x-1.5 text-[11px]">
+                      <div className="flex flex-wrap items-center gap-x-1.5 text-sm">
                         {h.confidenceLabel === "dynamic" ? (
                           <span className="rounded bg-warn px-1 font-mono font-semibold text-bg">⚠ DYNAMIC</span>
                         ) : (
@@ -143,7 +143,7 @@ export function ImpactPanel({ name, impact, snapshot, onSelect }: { name: string
           {impact.unmapped.length ? (
             <ul className="space-y-1">
               {impact.unmapped.map((f) => (
-                <li key={f.path} className="break-all font-mono text-[11px] text-muted">
+                <li key={f.path} className="break-all font-mono text-sm text-muted">
                   {f.path} <span className="text-faint">({f.reason})</span>
                 </li>
               ))}
@@ -157,14 +157,14 @@ export function ImpactPanel({ name, impact, snapshot, onSelect }: { name: string
             {impact.linkedTests.length} linked test{impact.linkedTests.length === 1 ? "" : "s"}
           </p>
           {impact.linkedTests.map((t) => (
-            <div key={`${t.file}:${t.componentId}`} className="font-mono text-[11px] text-muted">
+            <div key={`${t.file}:${t.componentId}`} className="font-mono text-sm text-muted">
               {t.file} → {t.componentId}
             </div>
           ))}
 
-          <p className="mt-3 text-[11px] leading-snug text-faint">{impact.directionRule}</p>
+          <p className="mt-3 text-sm leading-snug text-faint">{impact.directionRule}</p>
           {impact.affected.some((a) => modelNamed(a.id)) && (
-            <p className="mt-1 flex items-center gap-1 text-[11px] text-faint">
+            <p className="mt-1 flex items-center gap-1 text-sm text-faint">
               <ModelMark /> {MODEL_NAME_DISCLOSURE}
             </p>
           )}

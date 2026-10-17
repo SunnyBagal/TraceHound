@@ -47,7 +47,7 @@ export function TopBar({ snapshot, repos = [], repoId, changeSets = [], changes 
       {changes && (
         <a
           href={repoId ? `${base}/graph?repo=${repoId}` : `${base}/graph`}
-          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-accent/50 bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent hover:border-accent"
+          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-accent/50 bg-accent-soft px-2 py-0.5 text-sm font-medium text-accent hover:border-accent"
           title="Leave the change view"
           data-testid="exit-changes"
         >
@@ -56,7 +56,7 @@ export function TopBar({ snapshot, repos = [], repoId, changeSets = [], changes 
       )}
       <div className={`ml-auto hidden items-center gap-3 ${changes ? "" : "lg:flex"}`} aria-label="Edge legend">
         {(Object.keys(EDGE_STYLES) as Resolution[]).map((label) => (
-          <span key={label} className="inline-flex items-center gap-1.5 text-[11px] text-muted" title={EDGE_STYLES[label].meaning}>
+          <span key={label} className="inline-flex items-center gap-1.5 text-sm text-muted" title={EDGE_STYLES[label].meaning}>
             <svg width="24" height="6" aria-hidden>
               <line x1="1" y1="3" x2="23" y2="3" stroke="var(--edge)" strokeWidth="1.8" strokeDasharray={EDGE_STYLES[label].dash} strokeLinecap={label === "dynamic" ? "round" : "butt"} />
             </svg>

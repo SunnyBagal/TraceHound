@@ -101,7 +101,7 @@ function EvidenceEdgeView({ id, source, target, data, selected }: EdgeProps<Evid
         <div
           data-testid="edge-label"
           className={[
-            "nodrag nopan pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer whitespace-nowrap rounded-md border px-1.5 py-0.5 font-mono text-[10px] leading-tight transition-opacity duration-200",
+            "nodrag nopan pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer whitespace-nowrap rounded-md border px-1.5 py-0.5 font-mono text-sm leading-tight transition-opacity duration-200",
             hover ? "border-highlight bg-panel text-text" : active ? "border-accent/60 bg-panel text-text" : "border-line bg-bg/90 text-muted",
           ].join(" ")}
           style={{ left: labelX, top: labelY, opacity: data.dimmed ? (flagDynamic ? 0.6 : 0.15) : 1 }}

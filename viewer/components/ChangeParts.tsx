@@ -46,7 +46,7 @@ const PILL: Record<DeclStatus, string> = {
 export function StatusPill({ status }: { status: DeclStatus | "regrouped" }) {
   const cls = status === "regrouped" ? "border-line text-diff-regrouped" : PILL[status];
   return (
-    <span data-testid="status-pill" data-status={status} className={`inline-flex shrink-0 items-center rounded-md border px-1.5 py-px text-[11.5px] font-medium leading-tight ${cls}`}>
+    <span data-testid="status-pill" data-status={status} className={`inline-flex shrink-0 items-center rounded-md border px-1.5 py-px text-sm font-medium leading-tight ${cls}`}>
       {status === "regrouped" ? "regrouped" : STATUS_LABEL[status]}
     </span>
   );
@@ -55,7 +55,7 @@ export function StatusPill({ status }: { status: DeclStatus | "regrouped" }) {
 export function LineCounts({ added, removed }: { added: number; removed: number }) {
   if (!added && !removed) return null;
   return (
-    <span className="shrink-0 font-mono text-[12px]" title={`${added} line${added === 1 ? "" : "s"} added, ${removed} removed`} data-testid="line-counts">
+    <span className="shrink-0 font-mono text-sm" title={`${added} line${added === 1 ? "" : "s"} added, ${removed} removed`} data-testid="line-counts">
       <span className="text-diff-added">+{added}</span> <span className="text-diff-removed">−{removed}</span>
     </span>
   );
@@ -63,19 +63,19 @@ export function LineCounts({ added, removed }: { added: number; removed: number 
 
 export function EvidenceRef({ link, className = "" }: { link: EvidenceLink; className?: string }) {
   const body = link.href ? (
-    <a href={link.href} target="_blank" rel="noreferrer" className="group inline-flex items-baseline gap-1 break-all font-mono text-[12.5px] text-muted hover:text-accent">
+    <a href={link.href} target="_blank" rel="noreferrer" className="group inline-flex items-baseline gap-1 break-all font-mono text-sm text-muted hover:text-accent">
       {link.text}
       <ExternalLink className="size-3 shrink-0 self-center text-faint group-hover:text-accent" aria-label="GitHub permalink" />
     </a>
   ) : (
-    <span className="break-all font-mono text-[12.5px] text-muted" title={link.note}>
+    <span className="break-all font-mono text-sm text-muted" title={link.note}>
       {link.text}
     </span>
   );
   return (
     <span className={`inline-flex min-w-0 flex-wrap items-baseline gap-x-1.5 ${className}`}>
       {body}
-      {link.note && !link.href && <span className="text-[11.5px] text-faint">({link.note})</span>}
+      {link.note && !link.href && <span className="text-sm text-faint">({link.note})</span>}
     </span>
   );
 }
@@ -108,14 +108,14 @@ function DeclarationRow({ model, d }: { model: ChangeModel; d: DeclarationChange
     <li data-testid="declaration" data-declaration-id={d.id} data-status={status} className="rounded-lg px-2 py-1.5">
       <div className="flex min-w-0 items-center gap-2">
         <Icon className="size-4 shrink-0 text-faint" aria-label={DECL_KIND_LABEL[d.kind]} role="img" />
-        <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-text" title={`${DECL_KIND_LABEL[d.kind]} ${d.id}${moved}`}>
+        <span className="min-w-0 flex-1 truncate font-mono text-sm text-text" title={`${DECL_KIND_LABEL[d.kind]} ${d.id}${moved}`}>
           {d.name}
         </span>
         {warned && <TriangleAlert className="size-3.5 shrink-0 text-warn" aria-label="a change warning points here" />}
         <LineCounts added={d.lines.added} removed={d.lines.removed} />
         <StatusPill status={status} />
       </div>
-      <div className="ml-6 mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12.5px] text-muted">
+      <div className="ml-6 mt-0.5 flex flex-wrap items-baseline gap-x-2 text-sm text-muted">
         <span className="text-faint">{DECL_KIND_LABEL[d.kind]}{d.exported ? ", exported" : ""}</span>
         {why.length > 0 && <span data-testid="reasons">{why.join(" · ")}</span>}
         {link && <EvidenceRef link={link} />}
@@ -126,7 +126,7 @@ function DeclarationRow({ model, d }: { model: ChangeModel; d: DeclarationChange
 
 function Toggle({ open, onClick, children, testId }: { open: boolean; onClick: () => void; children: ReactNode; testId?: string }) {
   return (
-    <button type="button" onClick={onClick} aria-expanded={open} data-testid={testId} className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-[12.5px] text-muted hover:bg-card hover:text-text">
+    <button type="button" onClick={onClick} aria-expanded={open} data-testid={testId} className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-sm text-muted hover:bg-card hover:text-text">
       <ChevronRight className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-90" : ""}`} aria-hidden />
       <span className="min-w-0">{children}</span>
     </button>
@@ -146,14 +146,14 @@ function FileBlock({ model, group, defaultOpen }: { model: ChangeModel; group: F
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full min-w-0 items-center gap-2 px-2.5 py-2 text-left hover:bg-card">
         <ChevronRight className={`size-3.5 shrink-0 text-faint transition-transform ${open ? "rotate-90" : ""}`} aria-hidden />
         <FileDiff className="size-4 shrink-0 text-faint" aria-hidden />
-        <span className="min-w-0 flex-1 break-all font-mono text-[12.5px] text-text">{group.file}</span>
+        <span className="min-w-0 flex-1 break-all font-mono text-sm text-text">{group.file}</span>
         {f && <LineCounts added={f.linesAdded} removed={f.linesRemoved} />}
         {f && f.status !== "modified" && <StatusPill status={f.status} />}
       </button>
       {open && (
         <div className="border-t border-line px-1 py-1.5">
           {href && (
-            <a href={href} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-1 text-[12px] text-faint hover:text-accent">
+            <a href={href} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-1 text-sm text-faint hover:text-accent">
               file at {side} <ExternalLink className="size-3" aria-hidden />
             </a>
           )}
@@ -164,7 +164,7 @@ function FileBlock({ model, group, defaultOpen }: { model: ChangeModel; group: F
               ))}
             </ul>
           ) : (
-            group.formatting.length === 0 && <p className="px-2 py-1 text-[12.5px] text-faint">No declaration changed in this file.</p>
+            group.formatting.length === 0 && <p className="px-2 py-1 text-sm text-faint">No declaration changed in this file.</p>
           )}
           {group.formatting.length > 0 && (
             <div data-testid="formatting-group">
@@ -202,7 +202,7 @@ function FileBlock({ model, group, defaultOpen }: { model: ChangeModel; group: F
 
 function EdgeChanges({ model, componentId, onOpen, bind }: { model: ChangeModel; componentId: string; onOpen?: (id: string) => void; bind: BindHighlight }) {
   const edges = componentEdgeChanges(model, componentId);
-  if (!edges.length) return <p className="text-[13px] text-faint">No call, route or queue edge was added or removed here.</p>;
+  if (!edges.length) return <p className="text-sm text-faint">No call, route or queue edge was added or removed here.</p>;
   return (
     <ul className="-mx-2 space-y-1" data-testid="edge-changes">
       {edges.map((e) => {
@@ -220,14 +220,14 @@ function EdgeChanges({ model, componentId, onOpen, bind }: { model: ChangeModel;
             {...bind({ key: `edge-change:${e.id}`, nodeIds: other && other !== componentId ? [other] : [], edgeIds: snapshotEdge ? [snapshotEdge] : [] })}
             tabIndex={0}
           >
-            <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 font-mono text-[12.5px] text-text">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 font-mono text-sm text-text">
               <StatusPill status={e.status === "added" ? "added" : "removed"} />
               <span className="text-faint">{e.kind}</span>
               <span className="break-all">{endpointLabel(e.from)}</span>
               <ArrowRight className="size-3.5 shrink-0 text-faint" aria-label="to" />
               <span className="break-all">{endpointLabel(e.to)}</span>
             </div>
-            <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12.5px] text-muted">
+            <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-sm text-muted">
               {other && other !== componentId ? (
                 <span>
                   {from === componentId ? "to" : "from"} <ComponentName model={model} id={other} onOpen={onOpen} />
@@ -255,9 +255,9 @@ export function ComponentChanges({ model, componentId, onOpen, bind = noHighligh
   return (
     <div className="space-y-4" data-testid="component-changes">
       {!diff ? (
-        <p className="text-[13.5px] text-muted">This change doesn&apos;t touch this component.</p>
+        <p className="text-sm text-muted">This change doesn&apos;t touch this component.</p>
       ) : (
-        <p className="text-[13.5px] text-muted" data-testid="rollup-words">
+        <p className="text-sm text-muted" data-testid="rollup-words">
           {[
             diff.added && `${diff.added} added`,
             diff.removed && `${diff.removed} removed`,
@@ -272,7 +272,7 @@ export function ComponentChanges({ model, componentId, onOpen, bind = noHighligh
       {warnings.length > 0 && (
         <ul className="space-y-1">
           {warnings.map((w) => (
-            <li key={w.id} className="flex gap-2 text-[13px] leading-snug text-warn">
+            <li key={w.id} className="flex gap-2 text-sm leading-snug text-warn">
               <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden /> {WARNING_TITLE[w.kind]}
             </li>
           ))}
@@ -280,7 +280,7 @@ export function ComponentChanges({ model, componentId, onOpen, bind = noHighligh
       )}
       {groups.length > 0 && (
         <div>
-          <h4 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-faint">
+          <h4 className="mb-1.5 text-sm font-semibold uppercase tracking-wider text-faint">
             Files <span className="font-normal">{groups.length}</span>
           </h4>
           <ul className="space-y-1.5">
@@ -291,7 +291,7 @@ export function ComponentChanges({ model, componentId, onOpen, bind = noHighligh
         </div>
       )}
       <div>
-        <h4 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-faint">Edges added or removed</h4>
+        <h4 className="mb-1.5 text-sm font-semibold uppercase tracking-wider text-faint">Edges added or removed</h4>
         <EdgeChanges model={model} componentId={componentId} onOpen={onOpen} bind={bind} />
       </div>
     </div>

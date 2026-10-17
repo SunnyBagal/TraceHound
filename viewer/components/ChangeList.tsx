@@ -43,12 +43,12 @@ export function ChangeList({ model, onOpen }: { model: ChangeModel; onOpen: (id:
             <span className="flex flex-wrap gap-1 pt-0.5">
               {diff ? (
                 rollupBadges(diff).map((b) => (
-                  <span key={b.key} title={b.title} className={`rounded border border-line bg-panel px-1 font-mono text-[11px] font-semibold ${TONE[b.tone]}`}>
+                  <span key={b.key} title={b.title} className={`rounded border border-line bg-panel px-1 font-mono text-sm font-semibold ${TONE[b.tone]}`}>
                     {b.text}
                   </span>
                 ))
               ) : (
-                <span className="text-[12px] text-faint">unchanged</span>
+                <span className="text-sm text-faint">unchanged</span>
               )}
             </span>
           </span>
@@ -57,7 +57,7 @@ export function ChangeList({ model, onOpen }: { model: ChangeModel; onOpen: (id:
         {open && (
           <div className="border-t border-line px-3 py-3">
             <ComponentChanges model={model} componentId={id} onOpen={onOpen} />
-            <button type="button" onClick={() => onOpen(id)} className="mt-3 text-[13px] text-accent hover:underline">
+            <button type="button" onClick={() => onOpen(id)} className="mt-3 text-sm text-accent hover:underline">
               Component details →
             </button>
           </div>
@@ -69,7 +69,7 @@ export function ChangeList({ model, onOpen }: { model: ChangeModel; onOpen: (id:
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-[calc(16px+env(safe-area-inset-bottom))] pt-3" data-testid="change-list">
       <section aria-label="What could break">
-        <h2 className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-faint">
+        <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wider text-faint">
           <TriangleAlert className={`size-3.5 ${model.warnings.length ? "text-warn" : ""}`} aria-hidden /> What could break
           <span className="font-normal">{model.warnings.length}</span>
         </h2>
@@ -86,13 +86,13 @@ export function ChangeList({ model, onOpen }: { model: ChangeModel; onOpen: (id:
         )}
       </section>
       <section aria-label="Components" className="mt-5">
-        <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-faint">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-faint">
           Components touched <span className="font-normal">{touched.length}</span>
         </h2>
         <ul className="space-y-2">{touched.map((c) => row(c.id))}</ul>
         {untouched.length > 0 && (
           <>
-            <button type="button" onClick={() => setShowUntouched((o) => !o)} aria-expanded={showUntouched} className="mt-3 flex items-center gap-1.5 text-[13px] text-muted hover:text-text">
+            <button type="button" onClick={() => setShowUntouched((o) => !o)} aria-expanded={showUntouched} className="mt-3 flex items-center gap-1.5 text-sm text-muted hover:text-text">
               <ChevronRight className={`size-3.5 transition-transform ${showUntouched ? "rotate-90" : ""}`} aria-hidden />
               {showUntouched ? "Hide" : "Show"} {untouched.length} unchanged component{untouched.length === 1 ? "" : "s"}
             </button>

@@ -32,7 +32,7 @@ export default function GraphPage() {
         ) : (
           <>
             <p className="mt-3 text-sm text-text">Couldn&apos;t load a snapshot</p>
-            <p className="mt-1 font-mono text-xs text-faint">{state.message}</p>
+            <p className="mt-1 font-mono text-sm text-faint">{state.message}</p>
           </>
         )}
       </div>

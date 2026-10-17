@@ -56,7 +56,7 @@ export function WarningsControl({ snapshot, onFocus, right = 0 }: { snapshot: Sn
         aria-label={label}
         title={label}
         className={[
-          "inline-flex items-center gap-1.5 rounded-xl border bg-panel px-3 py-2 text-[12.5px] font-medium text-text shadow-[0_16px_48px_-16px_var(--scrim)]",
+          "inline-flex items-center gap-1.5 rounded-xl border bg-panel px-3 py-2 text-sm font-medium text-text shadow-[0_16px_48px_-16px_var(--scrim)]",
           open ? "border-warn/60" : "border-panel-line hover:border-line-strong",
         ].join(" ")}
       >
@@ -74,7 +74,7 @@ export function WarningsControl({ snapshot, onFocus, right = 0 }: { snapshot: Sn
             "bottom-full right-0 mb-2 max-h-[60dvh] md:bottom-auto md:right-full md:top-1/2 md:mb-0 md:mr-2 md:max-h-[min(70dvh,520px)] md:-translate-y-1/2",
           ].join(" ")}
         >
-          <div className="flex items-center gap-2 border-b border-panel-line px-4 py-3 text-[13px] font-medium text-text">
+          <div className="flex items-center gap-2 border-b border-panel-line px-4 py-3 text-sm font-medium text-text">
             <TriangleAlert className="size-4 text-warn" aria-hidden />
             {label}
           </div>
@@ -91,7 +91,7 @@ export function WarningsControl({ snapshot, onFocus, right = 0 }: { snapshot: Sn
                   }}
                   className="w-full rounded-lg px-2.5 py-2 text-left hover:bg-card-hover disabled:cursor-default"
                 >
-                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-faint">
+                  <div className="flex items-center gap-2 text-sm uppercase tracking-wider text-faint">
                     {w.kind}
                     {w.componentId && (
                       <span className="inline-flex items-center gap-1 normal-case tracking-normal text-accent">
@@ -100,8 +100,8 @@ export function WarningsControl({ snapshot, onFocus, right = 0 }: { snapshot: Sn
                       </span>
                     )}
                   </div>
-                  {w.file && <div className="mt-0.5 break-all font-mono text-[11.5px] text-text">{w.file}</div>}
-                  <div className="mt-0.5 text-[12px] leading-snug text-muted">{w.message}</div>
+                  {w.file && <div className="mt-0.5 break-all font-mono text-sm text-text">{w.file}</div>}
+                  <div className="mt-0.5 text-sm leading-snug text-muted">{w.message}</div>
                 </button>
               </li>
             ))}

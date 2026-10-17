@@ -28,7 +28,7 @@ export function ModelMark({ className = "" }: { className?: string }) {
 /** Inspector: the NVIDIA logo and plain muted text naming the model; the tooltip carries the disclosure. */
 export function NamedByModel({ model }: { model?: string }) {
   return (
-    <span data-testid="model-written" title={MODEL_NAME_DISCLOSURE} className="inline-flex items-center gap-1.5 text-[13px] text-muted">
+    <span data-testid="model-written" title={MODEL_NAME_DISCLOSURE} className="inline-flex items-center gap-1.5 text-sm text-muted">
       <NvidiaLogo className="h-3.5 w-4" />
       Named by {modelDisplayName(model)}
     </span>
