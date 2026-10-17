@@ -3,6 +3,7 @@
 import { Check, ChevronsUpDown, GitCompareArrows } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ChangeSetEntry } from "@/lib/changes";
+import { visibleChangeSets } from "@/lib/changes";
 import { repoHref, type RepoInfo } from "@/lib/repos";
 
 const KIND_LABEL: Record<ChangeSetEntry["kind"], string> = { commit: "commit", run: "repair run", demo: "demo diff" };
@@ -13,6 +14,7 @@ const KIND_LABEL: Record<ChangeSetEntry["kind"], string> = { commit: "commit", r
  */
 export function RepoSwitcher({ repos, repoId, label, changeSets, changesId }: { repos: RepoInfo[]; repoId?: string; label: string; changeSets: ChangeSetEntry[]; changesId?: string }) {
   const [open, setOpen] = useState(false);
+  changeSets = visibleChangeSets(changeSets, typeof window === "undefined" ? "" : window.location.search);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

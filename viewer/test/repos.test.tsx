@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it } from "vitest";
 import { RepoSwitcher } from "@/components/RepoSwitcher";
 import { Viewer } from "@/components/Viewer";
-import { ChangeSetIndex } from "@/lib/changes";
+import { ChangeSetIndex, visibleChangeSets } from "@/lib/changes";
 import { entryFromSearch, searchFor } from "@/lib/navigation";
 import { repoHref, repoList, resolveRepo } from "@/lib/repos";
 
@@ -65,17 +65,26 @@ describe("repo switcher", () => {
     render(<RepoSwitcher repos={repos} repoId="recall" label="SunnyBagal/Recall" changeSets={changeSets} />);
     fireEvent.click(screen.getByTestId("repo-switcher"));
     const options = screen.getAllByTestId("repo-option");
-    expect(options.map((o) => o.dataset.repoId)).toEqual(["cex-v2-boilercode", "recall"]);
+    expect(options.map((o) => o.dataset.repoId)).toEqual(repos.map((r) => r.id));
     const recall = within(options[1]!);
     expect(recall.getByLabelText("current repo")).toBeTruthy();
     expect(within(options[0]!).getByRole("link", { name: /cex-v2-boilercode/ }).getAttribute("href")).toBe("/?repo=cex-v2-boilercode");
     expect(recall.getAllByTestId("changeset-link").map((a) => a.getAttribute("href"))).toEqual([
-      "/?repo=recall&changes=recall-worker-deleted",
       "/?repo=recall&changes=recall-7943212",
       "/?repo=recall&changes=recall-5d2165a",
     ]);
-    // a change set of a repo with no published snapshot is still reachable
-    expect(screen.getByText(/No published snapshot/i)).toBeTruthy();
+    expect(screen.queryByText(/No published snapshot/i)).toBeNull();
+    expect(screen.queryByText(/Repair run:/)).toBeNull();
+  });
+
+  it("uses explicit visibility and restores fixtures only with dev=1", () => {
+    expect(visibleChangeSets(changeSets).map((c) => c.id)).toEqual(["recall-7943212", "recall-5d2165a"]);
+    expect(visibleChangeSets(changeSets, "?dev=1")).toEqual(changeSets);
+    expect(visibleChangeSets(changeSets, "?dev=0")).toEqual(visibleChangeSets(changeSets));
+    window.history.replaceState(null, "", "/?dev=1");
+    render(<RepoSwitcher repos={repos} label="Recall" changeSets={changeSets} />);
+    fireEvent.click(screen.getByTestId("repo-switcher"));
+    expect(screen.getByText(/Repair run:/)).toBeTruthy();
   });
 
   it("the header shows the repo switcher, not the product name", () => {
