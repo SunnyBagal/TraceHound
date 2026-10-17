@@ -3003,3 +3003,141 @@ discourse; 40 pull requests, n = 74): Cal.com was not read, fetched, cloned, rev
 - Replacing bench-judge-v1 as the scorer of record: it would move every earlier number after the
   fact.
 - A human-labelled validity set: no time before the freeze.
+
+## 061 · Pre-registered plan for the one Cal.com test-set run
+**Context:** tuning is over. pool-verify-v1 (059) is the configuration under test. On the 40 dev
+pull requests (n = 74) it scores F 35.6% under bench-judge-v1 and F 44.6% under bench-judge-x1
+(060), 5th of 11 runs under both judges. Every result so far is a single run. This decision is the
+plan for the Cal.com run and the code that run needs, written before anyone has seen a Cal.com
+result. Job 062 only executes it. This job made no model call and no model-list request, and it
+did not read, list, fetch, clone, review or score anything for Cal.com. Prompt:
+`docs/prompts/061-test-plan.md`. Commands for 062: `docs/bench/test-plan.md`.
+**Choice:**
+- **Configuration under test:** pool-verify-v1, exactly as in 059.
+  - Stages, all Super (`nvidia/nemotron-3-super-120b-a12b`), reasoning on
+    (`chat_template_kwargs.enable_thinking: true`), temperature 0:
+    - review-diff-v1 (055), max_tokens 32,000, chunks of at most 60,000 diff characters;
+    - review-ctx-v1 (057), max_tokens 32,000;
+    - the pool: review-diff-v1's findings plus review-ctx-v1's findings that agree with none of
+      them (058's agreement rule, `scripts/bench/agree-rule.ts`);
+    - verify-ctx-v1 (058) on every pool finding, max_tokens 16,000. A finding is kept if the
+      verdict is keep or the finding is VERIFY_FAILED. Kept = review-diff-v1 findings kept, then
+      ctx-only findings kept (059's merge order).
+  - Prompt and rule pins (copied from the pinning tests):
+
+    | what | value | pinned at |
+    |---|---|---|
+    | review-diff-v1 prompt sha256 | `f77c203105111e02222d8f1c985a4629d9ac8cdd07b465fdb526cf1dddea4849` | `packages/analyzer/test/review.test.ts:229` |
+    | review-ctx-v1 prompt sha256 | `0c4dcdcf4d764919b87c581278943e1c6d7b0714aa72b0f3cf60aa0f728089e0` | `packages/analyzer/test/review-ctx.test.ts:206` |
+    | verify-ctx-v1 prompt sha256 | `75703fc6b34910f5bdebf29703023d6ec8e8cbbbfbc35574bfbf60830a383e70` | `packages/analyzer/test/verify-ctx.test.ts:295` |
+    | bench-judge-v1 prompt sha256 | `23de4e9e571f18a4269eaa5da9b1df14dabf34b8c0fad6774f2c7aa727058460` | `packages/analyzer/test/scorer-checks.test.ts:45` |
+    | agreement rule `AGREE_LINES` | `3` (same path after normalising, both lines non-null, within 3 lines) | `packages/analyzer/test/pool-verify.test.ts:64` |
+- **Frozen code:** the commit that merges this PR. Job 062 tags it `review-freeze-1` before any
+  call. The run is void if `git diff review-freeze-1 HEAD -- packages/analyzer/src scripts/bench
+  config` is not empty when it starts. The runner checks this itself. It refuses to start
+  without the tag, when that diff is not empty, or when those paths have uncommitted changes.
+- **Rows reported:**
+  - Primary: pool-verify-v1.
+  - Declared secondaries, which come from the same pipeline at no extra reviewer cost:
+    review-diff-v1 alone (its findings unfiltered) and pool-raw (the whole pool, unfiltered).
+  - Comparison: the five recorded tools' Cal.com reviews (greptile, coderabbit, augment, cursor,
+    copilot; converted in 054). They are judged in Cal.com run 1 only, because their reviews do not
+    change between runs. Runs 2–3 and the dev repeats judge the three TraceHound rows.
+  - Nothing else. The rows are fixed in `scripts/bench/test-set.ts` (frozen arrays), and no option
+    adds one. No row is swapped in after the run.
+- **Scorer of record:** bench-judge-v1 (sha `23de4e9e…058460`; Super, reasoning on, temperature
+  0). bench-judge-x1 (060: `Qwen/Qwen3-235B-A22B-Instruct-2507`, temperature 0, no reasoning field,
+  the same prompt) is reported alongside for every row and changes nothing. The validity check
+  (validity-v1) is not run on Cal.com, because 060 found it too lenient.
+- **Metrics:** precision, recall and F, micro-averaged (counts summed over pull requests, then
+  divided). 054's counting rules:
+  - a comment matching a Medium, High or Critical golden comment is a TP;
+  - each golden comment is credited once, and further matches are duplicates, neither TP nor FP;
+  - a comment matching a Low golden comment counts as nothing, and a missed Low counts as nothing;
+  - a comment matching no golden comment is an FP;
+  - a Medium-or-higher golden comment that nothing matched is an FN.
+
+  P = TP / (TP + FP), R = TP / (TP + FN), F = 2PR / (P + R). n (the Medium-or-higher golden
+  comments) is taken from the golden file at run time. JUDGE_FAILED pull requests are left out of
+  the totals and counted. They are not re-judged.
+- **Runs, all at temperature 0:**
+  - **Cal.com run 1 is the pre-registered primary result. Its numbers are the headline.**
+  - **Cal.com runs 2 and 3 are repeats** that measure run-to-run spread (provider nondeterminism
+    at temperature 0). They are reported as min, median and max beside run 1 and never replace it.
+  - **Dev runs 2 and 3:** two repeats of pool-verify-v1 on the 40 dev pull requests. With 059's
+    run (dev run 1) they give a dev spread. They change no adoption.
+  - Every reviewer and verifier call in runs 1–3 bypasses response-cache reads (`readCache: false`,
+    `scripts/bench/run-test-set.ts:89`), so the repeats are real calls, not cache hits. Judge calls
+    may use the cache.
+  - **The only rerun allowed:** a pull request is rerun once, within its run, when any reviewer
+    chunk or verifier finding ended in a failed request (an HTTP error, network error or timeout,
+    after the stage's own handling) or hit a provider outage. The whole pull request goes through
+    the pipeline again. The original attempt is kept on disk and reported. The rerun's output is
+    used whatever happens to it. An invalid model reply (CHUNK_FAILED or VERIFY_FAILED after the
+    stage's one retry) is not a failed request and is not rerun. No other rerun for any reason:
+    a run that crashes is void, is reported, and is not repeated (the runner never reuses a run
+    directory).
+- **Reported whatever the outcome:**
+  - the full table under both judges for Cal.com run 1 (eight rows);
+  - the spread over Cal.com runs 1–3 and over dev runs 1–3: min, median and max of P, R and F per
+    TraceHound row, under both judges;
+  - per-pull-request cost and wall time (median, max);
+  - void runs, items not done, and any deviation from this plan.
+- **Predictions, written now as guesses** (to be scored in the results doc; a wrong prediction is
+  reported as wrong):
+  - (a) **pool-verify-v1's F on Cal.com is above review-diff-v1's.** This rests on dev, where
+    pool-verify-v1's F is 35.6% and review-diff-v1's is 32.2% overall. Per repo it was higher in only
+    two of four (sentry 27.3 vs 28.6, grafana 34.8 vs 34.5, keycloak 37.2 vs 25.7, discourse 44.4
+    vs 45.5), so this is a weak guess.
+  - (b) **pool-verify-v1 ranks 5th of the six reviewers** (five tools plus pool-verify-v1) under
+    bench-judge-v1, above Copilot only. On dev the F scores were Augment 64.1%, Cursor 49.6%,
+    Greptile 49.3%, CodeRabbit 41.0%, pool-verify-v1 35.6% and Copilot 31.3%.
+  - (c) **pool-verify-v1's F on Cal.com is not within 5 points of its dev F** (outside 30.6–40.6%).
+    On dev its per-repo F ranged from 27.3% to 44.4%, and two of four repos fell more than 5 points
+    from 35.6%. Cal.com's n is a single repo's (dev repos had 16 to 21 each). It is also TypeScript,
+    a language none of the dev repos used.
+- **Cap for 062: $15 of Nebius credit,** spent in this order, stopping before the cap:
+  1. Cal.com run 1 plus both judges: planned at most $6 (059's per-pull-request max of $0.23 × 10
+     pull requests × 2 for a larger repo, plus judges). Run 1 is never cut. It may use the whole
+     $15, and more than $6 is reported as a deviation.
+  2. Cal.com runs 2–3: at most $5 together.
+  3. Dev runs 2–3: at most $4 together.
+
+  The runner enforces this (`planItem` in `scripts/bench/test-set.ts`). Each item gets the smaller
+  of its group's cap minus what the group has spent, and $15 minus everything spent before it.
+  Every earlier item must have run. The client refuses any request whose worst-case estimate
+  would cross the allowance. A run stopped this way is `stopped-at-cap`, and every later item is
+  then refused and reported as not done. So the order of cuts is: dev run 3, dev run 2, Cal.com
+  run 3, Cal.com run 2, never Cal.com run 1.
+- **Blindness after the run:** results stay counts-only in the repo (Cal.com is AGPL and the
+  dataset has no licence). No Cal.com comment, golden or code text goes in any file, pull request
+  or message, ever. The runner prints counts only. Its full records stay in the bench folder.
+- **Code (written and tested in 061, never run on Cal.com in 061):**
+  - `scripts/bench/fetch-prs.ts` and `fetch-repos.ts` have a test-set mode, `--test-set
+    cal_dot_com`. It works only with `TRACEHOUND_TEST_RUN=061` in the environment, and otherwise
+    refuses as before. It writes under `~/Projects/tracehound-bench/test/` (`prs/cal_dot_com/`,
+    `repos/cal_dot_com`, `repos/cal_dot_com.heads.json`) and prints counts only.
+  - `scripts/bench/run-test-set.ts --set cal_dot_com|dev --run 1|2|3` calls the analyzer's exported
+    functions directly. It runs the pipeline one pull request after another, then bench-judge-v1
+    and bench-judge-x1 on the rows. It writes under `test/run-<n>/` or
+    `reviews/dev-repeat/run-<n>/` in the bench folder, into a directory that must not exist,
+    and never over a file. `--set cal_dot_com` needs `TRACEHOUND_TEST_RUN=061`, and
+    `--set dev --run 1` is refused (it is 059's).
+  - `scripts/bench/spread.ts --set …` gives the spread tables.
+  - Gates, rows and the cap are in `scripts/bench/test-set.ts`.
+  - Tests: `packages/analyzer/test/test-set-run.test.ts`. It uses invented data and a fake fetch.
+    The open-gate path (`TRACEHOUND_TEST_RUN=061`) is not exercised in tests.
+**Limits:**
+- There is one pre-registered primary run. The repeats measure spread; they are not extra chances.
+- The configuration was the fourth reviewer variant chosen on the same dev set.
+- The judge is the same model family as the reviewer (060: the gap is small).
+- The golden set was built from the tools' comments (060).
+- n is small (a test set of 10 pull requests).
+- The pull requests have been public since 2025, so models may have seen them.
+**Rejected:**
+- Re-running the CLIs for the repeats: they always read the response cache, so a repeat would
+  return run 1's replies.
+- Judging the five tools in every run: their reviews are fixed, so the spread would only measure
+  the judge.
+- Letting a crashed run resume in its own directory: that would be a second chance at the same
+  run.

@@ -1,0 +1,147 @@
+// Gates, paths, rows and the spending cap of the Cal.com test-set run (decision 061). No I/O
+// except `readItemStates`, no model call. The plan these encode is decision 061; job 062 runs it.
+//   - Cal.com (`cal_dot_com`) is reachable only with TRACEHOUND_TEST_RUN=061 in the environment.
+//   - Rows are fixed here and frozen; nothing on the command line adds one.
+//   - The $15 cap is spent in a fixed order of items; a cap stop leaves every later item not done.
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+export const TEST_RUN_ENV = "TRACEHOUND_TEST_RUN";
+export const TEST_RUN_ID = "061";
+export const TEST_SET = "cal_dot_com";
+export const DEV_REPOS = Object.freeze(["sentry", "grafana", "keycloak", "discourse"] as const);
+export const SETS = Object.freeze(["cal_dot_com", "dev"] as const);
+export type SetName = (typeof SETS)[number];
+export type RunNumber = 1 | 2 | 3;
+
+/** Throws unless TRACEHOUND_TEST_RUN=061 is set. */
+export function requireTestRun(env: NodeJS.ProcessEnv): void {
+  if (env[TEST_RUN_ENV] !== TEST_RUN_ID) throw new Error(`refusing ${TEST_SET}: the test set needs ${TEST_RUN_ENV}=${TEST_RUN_ID} in the environment (decision 061)`);
+}
+
+/**
+ * What fetch-prs.ts and fetch-repos.ts fetch, and under which root. Without `--test-set`: dev repos
+ * only, under <bench> (as before 061). With `--test-set cal_dot_com` and TRACEHOUND_TEST_RUN=061:
+ * Cal.com only, under <bench>/test/. Anything else throws before any fetch.
+ */
+export function fetchTarget(argv: string[], env: NodeJS.ProcessEnv, bench: string): { repos: string[]; root: string; testSet: boolean } {
+  const arg = (name: string) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
+  if (argv.includes("--test-set")) {
+    const set = arg("--test-set");
+    if (set !== TEST_SET) throw new Error(`refusing --test-set ${set}: the only test set is ${TEST_SET}`);
+    if (argv.includes("--repos")) throw new Error("refusing --repos with --test-set");
+    requireTestRun(env);
+    return { repos: [TEST_SET], root: join(bench, "test"), testSet: true };
+  }
+  const repos = arg("--repos")?.split(",") ?? [...DEV_REPOS];
+  for (const r of repos) if (!(DEV_REPOS as readonly string[]).includes(r)) throw new Error(`refusing repo ${r}: dev repos only (${DEV_REPOS.join(", ")})`);
+  return { repos, root: bench, testSet: false };
+}
+
+/** `--set` and `--run` of run-test-set.ts, with the refusals of decision 061. */
+export function checkRun(set: string | undefined, run: string | undefined, env: NodeJS.ProcessEnv): { set: SetName; run: RunNumber } {
+  if (!(SETS as readonly string[]).includes(set ?? "")) throw new Error(`refusing --set ${set}: one of ${SETS.join(", ")}`);
+  if (!["1", "2", "3"].includes(run ?? "")) throw new Error(`refusing --run ${run}: 1, 2 or 3`);
+  const n = Number(run) as RunNumber;
+  if (set === "dev" && n === 1) throw new Error("refusing --set dev --run 1: dev run 1 is decision 059's run");
+  if (set === TEST_SET) requireTestRun(env);
+  return { set: set as SetName, run: n };
+}
+
+/** The repos of a set. */
+export const reposOf = (set: SetName): readonly string[] => (set === TEST_SET ? [TEST_SET] : DEV_REPOS);
+
+/** Inputs of a set: pull request files, bare clone, heads file. Cal.com's live under <bench>/test/. */
+export function inputPaths(bench: string, set: SetName, repo: string) {
+  const root = set === TEST_SET ? join(bench, "test") : bench;
+  return {
+    prs: join(root, "prs", repo),
+    gitDir: join(root, "repos", repo),
+    heads: join(root, "repos", `${repo}.heads.json`),
+    golden: join(bench, "golden/code_review_benchmarks", `${repo}.json`),
+  };
+}
+
+/** Where a run writes. Never an existing directory. */
+export const runDir = (bench: string, set: SetName, run: RunNumber) => (set === TEST_SET ? join(bench, "test", `run-${run}`) : join(bench, "reviews/dev-repeat", `run-${run}`));
+
+// ---- rows ----
+
+/** pool-verify-v1 (primary), then the declared secondaries. */
+export const TRACEHOUND_ROWS = Object.freeze(["pool-verify-v1", "review-diff-v1", "pool-raw"] as const);
+/** The five recorded tools (comparison rows, Cal.com run 1 only: their reviews do not change between runs). */
+export const TOOL_ROWS = Object.freeze(["greptile", "coderabbit", "augment", "cursor", "copilot"] as const);
+export type Row = (typeof TRACEHOUND_ROWS)[number] | (typeof TOOL_ROWS)[number];
+
+const CAL_RUN1_ROWS: readonly Row[] = Object.freeze([...TRACEHOUND_ROWS, ...TOOL_ROWS]);
+
+/** The rows a run judges and reports, in order. Frozen: there is no way to add one. */
+export const rowsFor = (set: SetName, run: RunNumber): readonly Row[] => (set === TEST_SET && run === 1 ? CAL_RUN1_ROWS : TRACEHOUND_ROWS);
+
+/** Review files of a row: TraceHound rows from the run directory, tools from their converted recorded reviews (054). */
+export const rowReviews = (bench: string, dir: string, row: Row, repo: string) =>
+  (TOOL_ROWS as readonly string[]).includes(row) ? join(bench, "reviews", row, repo) : join(dir, row, repo);
+
+// ---- the cap ----
+
+export const CAP_USD = 15;
+/** The order of 062's items; each later item gets only what is left. */
+export const ITEMS = Object.freeze([
+  { set: "cal_dot_com", run: 1, group: "cal-run-1", plannedUSD: 6 },
+  { set: "cal_dot_com", run: 2, group: "cal-repeats", plannedUSD: 5 },
+  { set: "cal_dot_com", run: 3, group: "cal-repeats", plannedUSD: 5 },
+  { set: "dev", run: 2, group: "dev-repeats", plannedUSD: 4 },
+  { set: "dev", run: 3, group: "dev-repeats", plannedUSD: 4 },
+] as const);
+const GROUP_CAP_USD: Record<string, number | null> = { "cal-run-1": null, "cal-repeats": 5, "dev-repeats": 4 };
+
+export type RunStatus = "running" | "complete" | "stopped-at-cap";
+/** What run.json says about an item; "running" left behind by a crash means the run is void. */
+export interface ItemState {
+  status: RunStatus;
+  costUSD: number;
+}
+
+/**
+ * The money an item may spend, or why it may not start. Every earlier item must have started
+ * (order); an earlier cap stop means this item is not done; the item gets min(its group's cap
+ * minus what the group spent, $15 minus everything spent). Cal.com run 1 has no group cap: it is
+ * never cut, and may use the whole $15 (more than its planned $6 is reported as a deviation).
+ */
+export function planItem(set: SetName, run: RunNumber, states: (ItemState | null)[]): { ok: true; allowanceUSD: number } | { ok: false; why: string } {
+  const idx = ITEMS.findIndex((i) => i.set === set && i.run === run);
+  if (idx < 0) throw new Error(`no item ${set} run ${run}`);
+  if (states.length !== ITEMS.length) throw new Error(`planItem: ${states.length} states for ${ITEMS.length} items`);
+  const name = (i: number) => `${ITEMS[i]!.set} run ${ITEMS[i]!.run}`;
+  if (states[idx]) return { ok: false, why: `${name(idx)} already has a run directory` };
+  let spent = 0;
+  let groupSpent = 0;
+  for (let i = 0; i < idx; i++) {
+    const s = states[i];
+    if (!s) return { ok: false, why: `${name(i)} has not run; the order is ${ITEMS.map((_, j) => name(j)).join(", ")}` };
+    if (s.status === "stopped-at-cap") return { ok: false, why: `not done: the cap stopped ${name(i)}` };
+    spent += s.costUSD;
+    if (ITEMS[i]!.group === ITEMS[idx]!.group) groupSpent += s.costUSD;
+  }
+  const groupCap = GROUP_CAP_USD[ITEMS[idx]!.group]!;
+  const allowanceUSD = Math.min(CAP_USD - spent, groupCap === null ? Infinity : groupCap - groupSpent);
+  if (allowanceUSD <= 0) return { ok: false, why: `not done: the cap is reached (spent $${spent.toFixed(4)} of $${CAP_USD})` };
+  return { ok: true, allowanceUSD };
+}
+
+/** Each item's run.json, or null when its run directory does not exist. */
+export function readItemStates(bench: string): (ItemState | null)[] {
+  return ITEMS.map((i) => {
+    const dir = runDir(bench, i.set, i.run);
+    if (!existsSync(dir)) return null;
+    const f = join(dir, "run.json");
+    if (!existsSync(f)) return { status: "running", costUSD: 0 };
+    const j = JSON.parse(readFileSync(f, "utf8")) as ItemState;
+    return { status: j.status, costUSD: j.costUSD };
+  });
+}
+
+// ---- the rerun rule ----
+
+/** A failure string from the reviewer or verifier that is a failed request (HTTP error, network, timeout), not an invalid reply. */
+export const isRequestFailure = (failure: string | undefined) => !!failure && /request failed/.test(failure);
