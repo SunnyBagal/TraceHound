@@ -32,8 +32,8 @@ const EDGE_TABS: { id: Tab; label: string }[] = [
 
 function Section({ title, children, count }: { title: string; children: ReactNode; count?: number }) {
   return (
-    <section className="border-b border-panel-line px-7 py-6 last:border-b-0">
-      <h3 className="mb-3.5 text-[12px] font-semibold uppercase tracking-wider text-faint">
+    <section className="border-b border-panel-line px-7 py-7 last:border-b-0">
+      <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted">
         {title}
         {count !== undefined && <span className="ml-1.5 font-normal">{count}</span>}
       </h3>
@@ -97,14 +97,13 @@ function StackList({ snapshot, facts }: { snapshot: Snapshot; facts: TechFact[] 
   return (
     <ul className="space-y-2.5">
       {facts.map((f) => (
-        <li key={`${f.tech}:${f.file}:${f.line}`} className="flex gap-2.5">
-          <span className="grid size-6 shrink-0 place-items-center rounded-md border border-line bg-card">
-            <TechLogo fact={f} className="size-3.5" />
+        <li key={`${f.tech}:${f.file}:${f.line}`} className="flex gap-3 rounded-xl border border-panel-line bg-card p-4" data-testid="stack-card">
+          <span className="grid size-8 shrink-0 place-items-center">
+            <TechLogo fact={f} className="size-6" />
           </span>
           <div className="min-w-0">
             <div className="text-[14px] font-medium text-text">{TECH_META[f.tech].label}</div>
-            <FileLink snapshot={snapshot} file={f.file} start={f.line} />
-            <div className="text-[13px] leading-normal text-faint">{f.detail}</div>
+            <div className="mt-1 text-sm leading-relaxed text-muted"><FileLink snapshot={snapshot} file={f.file} start={f.line}>{f.detail}</FileLink></div>
           </div>
         </li>
       ))}
@@ -117,7 +116,7 @@ function SummaryByModel({ model }: { model?: string }) {
   return (
     <span data-testid="summary-model-written" title="Summary written by the model from extracted facts; prose not verified" className="mt-2 inline-flex items-center gap-1.5 text-[13px] text-muted">
       <NvidiaLogo className="h-3.5 w-4" />
-      Written by {modelDisplayName(model)} · not verified
+      Summary by {modelDisplayName(model)} · unverified
     </span>
   );
 }
@@ -128,30 +127,10 @@ function ComponentOverview({ snapshot, component, facts }: { snapshot: Snapshot;
   return (
     <>
       <Section title="Summary">
-        {component.summary && (
-          // a summary only ever comes from the naming model: its label sits right beside it
-          <div data-testid="summary">
-            <p className="text-[15px] leading-normal text-text">{component.summary}</p>
-            {component.naming.source === "llm" && <SummaryByModel model={component.naming.model} />}
-          </div>
-        )}
-        <p className={`${component.summary ? "mt-3" : ""} text-[14px] leading-normal text-muted`} data-testid="from-facts">
-          <span className="text-faint">From facts: </span>
-          {component.subtitle}
-        </p>
-        <p className="mt-2 text-[13px] leading-normal text-faint" data-testid="name-source">
-          {component.naming.source === "llm" ? (
-            <>
-              Name written by the model; heuristic name: <span className="text-muted">{component.naming.heuristicName}</span>
-            </>
-          ) : component.naming.source === "override" ? (
-            <>
-              Name set by a <span className="font-mono text-muted">tracehound.json</span> override; heuristic name: <span className="text-muted">{component.naming.heuristicName}</span>
-            </>
-          ) : (
-            "Heuristic name (from the code, no model)"
-          )}
-        </p>
+        <div data-testid="summary">
+          <p className="text-[15px] leading-relaxed text-text">{component.summary ?? component.subtitle}</p>
+          {component.summary ? <SummaryByModel model={component.naming.model} /> : <p className="mt-2 text-sm leading-relaxed text-muted">Heuristic · from snapshot facts</p>}
+        </div>
         {component.naming.summaryDropped && (
           <p className="mt-1 text-[13px] leading-normal text-faint" data-testid="summary-dropped">
             The model&apos;s summary was wrong and is not shown (<span className="font-mono">summary: false</span> in tracehound.json).
