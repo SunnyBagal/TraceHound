@@ -25,7 +25,7 @@ runs:
   steps:
     - uses: pnpm/action-setup@v4
       with:
-        package_json_file: ${{ github.action_path }}/../../../package.json
+        version: 11.20.0
         run_install: false
     - uses: actions/setup-node@v4
       with:
