@@ -4,13 +4,14 @@ import type { ManifestEntry, SnapshotManifest } from "@tracehound/analyzer/schem
 export interface RepoInfo {
   id: string;
   name: string;
+  displayName?: string;
   repoUrl?: string;
   latest: ManifestEntry;
 }
 
 /** The manifest's repos; an index written before 0.9.0 (no `repos`) yields its `latest` as the only repo. */
 export function repoList(manifest: SnapshotManifest): RepoInfo[] {
-  if (manifest.repos?.length) return manifest.repos.map((r) => ({ id: r.id, name: r.name, repoUrl: r.repoUrl, latest: r.latest }));
+  if (manifest.repos?.length) return manifest.repos.map((r) => ({ id: r.id, name: r.name, displayName: (r as { displayName?: string }).displayName, repoUrl: r.repoUrl, latest: r.latest }));
   if (!manifest.latest) return [];
   const name = manifest.latest.repo;
   return [{ id: name.split("/").pop()!.toLowerCase(), name, latest: manifest.latest }];

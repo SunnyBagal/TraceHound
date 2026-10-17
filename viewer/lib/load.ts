@@ -1,4 +1,5 @@
-import { ChangeSet, ImpactReport, Snapshot, SnapshotManifest, type ManifestEntry } from "@tracehound/analyzer/schema";
+import { ChangeSet, ImpactReport, type SnapshotManifest, type ManifestEntry } from "@tracehound/analyzer/schema";
+import { Snapshot, ViewerManifest } from "./types";
 import { buildChangeModel, ChangeSetIndex, visibleChangeSets, type ChangeModel, type ChangeSetEntry } from "./changes";
 import { githubSlug } from "./github";
 import { repoList, resolveRepo, type RepoInfo } from "./repos";
@@ -18,7 +19,7 @@ async function getSnapshot(entry: ManifestEntry): Promise<Snapshot> {
 }
 
 export async function loadManifest(): Promise<SnapshotManifest> {
-  return SnapshotManifest.parse(await getJson(`${base}/snapshots/index.json`));
+  return ViewerManifest.parse(await getJson(`${base}/snapshots/index.json`));
 }
 
 /** changesets/index.json; an empty list when the deploy has none. */

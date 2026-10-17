@@ -77,7 +77,7 @@ export function RepoSwitcher({ repos, repoId, label, changeSets, changesId }: { 
               >
                 <span className="grid size-4 shrink-0 place-items-center">{r.id === repoId && <Check className="size-4 text-accent" aria-label="current repo" />}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13.5px] font-medium text-text">{r.name}</span>
+                  <span className="block truncate text-sm font-medium text-text">{r.displayName ?? r.name}</span>
                   <span className="block font-mono text-[11px] text-faint">
                     {r.latest.sha.slice(0, 7)} · analyzer {r.latest.analyzerVersion}
                   </span>
