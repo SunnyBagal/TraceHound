@@ -1,18 +1,21 @@
 // Pull request inputs for the diff-only reviewer (decision 055, step 2). Dev repos only: Cal.com is
-// the blind test set and is refused here. For each golden entry, takes the pull request with that
+// the blind test set and is refused here, except in the test-set mode of decision 061
+// (`--test-set cal_dot_com`, only with TRACEHOUND_TEST_RUN=061 set; writes under <bench>/test/prs/
+// instead of <bench>/prs/). For each golden entry, takes the pull request with that
 // title in the greptile-<repo> fork (recorded/greptile/<repo>/pulls.json, decision 054) and saves its
 // number, title, body and unified diff to <bench>/prs/<repo>/<golden index>.json. Then compares each
 // diff's sha256 with the same pull request's in the coderabbit-<repo> fork (diffs are not saved).
 // Prints counts only, never titles, bodies or diff text.
 //   node scripts/bench/fetch-prs.ts [--bench ~/Projects/tracehound-bench] [--repos sentry,grafana,...]
+//   TRACEHOUND_TEST_RUN=061 node scripts/bench/fetch-prs.ts --test-set cal_dot_com [--bench ...]
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { mapByTitle } from "../../packages/analyzer/src/bench/titles.ts";
+import { fetchTarget } from "./test-set.ts";
 
-const DEV_REPOS = ["sentry", "grafana", "keycloak", "discourse"];
 const ORG = "ai-code-review-evaluations";
 
 const arg = (name: string) => {
@@ -20,8 +23,7 @@ const arg = (name: string) => {
   return i >= 0 ? process.argv[i + 1] : undefined;
 };
 const bench = arg("--bench") ?? join(homedir(), "Projects/tracehound-bench");
-const repos = arg("--repos")?.split(",") ?? DEV_REPOS;
-for (const r of repos) if (!DEV_REPOS.includes(r)) throw new Error(`refusing repo ${r}: dev repos only (${DEV_REPOS.join(", ")})`);
+const { repos, root } = fetchTarget(process.argv.slice(2), process.env, bench);
 
 function gh(args: string[]): string {
   for (let attempt = 1; ; attempt++) {
@@ -43,7 +45,7 @@ const statsOf = (xs: number[]) => {
 
 for (const repo of repos) {
   const golden = (JSON.parse(readFileSync(join(bench, "golden/code_review_benchmarks", `${repo}.json`), "utf8")) as { pr_title: string }[]).map((g) => g.pr_title);
-  const dir = join(bench, "prs", repo);
+  const dir = join(root, "prs", repo);
   mkdirSync(dir, { recursive: true });
   const pullsOf = (tool: string) =>
     (JSON.parse(readFileSync(join(bench, "recorded", tool, repo, "pulls.json"), "utf8")) as { number: number; title: string }[]).sort((a, b) => a.number - b.number);

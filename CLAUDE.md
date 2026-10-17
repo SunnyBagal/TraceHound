@@ -234,6 +234,17 @@ it (decision 050).
   `validity-v1` (`tracehound bench validity`, Super and Qwen, diff only) judged the 324
   deduplicated v1 FPs: valid 187 (Super) / 265 (Qwen), kappa 0.395; augmented precision has no
   matching recall. `docs/bench/scorer-checks.md`; driver `scripts/bench/scorer-checks.ts`.
+- **Cal.com test-set plan (decision 061, pre-registered, not run yet):** job 062 runs pool-verify-v1
+  on Cal.com once from the tag `review-freeze-1`. Cal.com run 1 is the headline. Cal.com runs 2–3
+  and dev runs 2–3 measure spread only. The rows are pool-verify-v1, review-diff-v1, pool-raw and
+  the five tools. bench-judge-v1 is the scorer of record, with bench-judge-x1 alongside. The cap is
+  $15 (Cal.com run 1 is never cut), and the three predictions are in 061. Code:
+  `scripts/bench/run-test-set.ts` (reviewer and verifier cache reads off, one rerun on a failed
+  request, never overwrites), `spread.ts`, `test-set.ts` (gates, rows, cap), and `--test-set
+  cal_dot_com` in `fetch-prs.ts` / `fetch-repos.ts`. Cal.com is reachable only with
+  `TRACEHOUND_TEST_RUN=061`. Amended before merge (061a): a crashed run (status `running`, nothing
+  under its `scores/`) may be restarted once with `--restart` into `run-<n>r/`, which stands for run
+  n; the fetches run before the freeze tag. Commands: `docs/bench/test-plan.md`.
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**
