@@ -242,7 +242,9 @@ it (decision 050).
   `scripts/bench/run-test-set.ts` (reviewer and verifier cache reads off, one rerun on a failed
   request, never overwrites), `spread.ts`, `test-set.ts` (gates, rows, cap), and `--test-set
   cal_dot_com` in `fetch-prs.ts` / `fetch-repos.ts`. Cal.com is reachable only with
-  `TRACEHOUND_TEST_RUN=061`. Commands: `docs/bench/test-plan.md`.
+  `TRACEHOUND_TEST_RUN=061`. Amended before merge (061a): a crashed run (status `running`, nothing
+  under its `scores/`) may be restarted once with `--restart` into `run-<n>r/`, which stands for run
+  n; the fetches run before the freeze tag. Commands: `docs/bench/test-plan.md`.
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**

@@ -3032,8 +3032,11 @@ did not read, list, fetch, clone, review or score anything for Cal.com. Prompt:
     | verify-ctx-v1 prompt sha256 | `75703fc6b34910f5bdebf29703023d6ec8e8cbbbfbc35574bfbf60830a383e70` | `packages/analyzer/test/verify-ctx.test.ts:295` |
     | bench-judge-v1 prompt sha256 | `23de4e9e571f18a4269eaa5da9b1df14dabf34b8c0fad6774f2c7aa727058460` | `packages/analyzer/test/scorer-checks.test.ts:45` |
     | agreement rule `AGREE_LINES` | `3` (same path after normalising, both lines non-null, within 3 lines) | `packages/analyzer/test/pool-verify.test.ts:64` |
-- **Frozen code:** the commit that merges this PR. Job 062 tags it `review-freeze-1` before any
-  call. The run is void if `git diff review-freeze-1 HEAD -- packages/analyzer/src scripts/bench
+- **Frozen code:** the commit that merges this PR. Job 062 first runs the two Cal.com fetches (no
+  model call), then tags the frozen commit `review-freeze-1` (an annotated tag), then starts the
+  runs, so the freeze still comes before the first model call. The gated fetch path has never run:
+  if it fails, a fix merges and the tag goes on that new merge commit, so no tag is ever moved.
+  The run is void if `git diff review-freeze-1 HEAD -- packages/analyzer/src scripts/bench
   config` is not empty when it starts. The runner checks this itself. It refuses to start
   without the tag, when that diff is not empty, or when those paths have uncommitted changes.
 - **Rows reported:**
@@ -3074,9 +3077,27 @@ did not read, list, fetch, clone, review or score anything for Cal.com. Prompt:
     after the stage's own handling) or hit a provider outage. The whole pull request goes through
     the pipeline again. The original attempt is kept on disk and reported. The rerun's output is
     used whatever happens to it. An invalid model reply (CHUNK_FAILED or VERIFY_FAILED after the
-    stage's one retry) is not a failed request and is not rerun. No other rerun for any reason:
-    a run that crashes is void, is reported, and is not repeated (the runner never reuses a run
-    directory).
+    stage's one retry) is not a failed request and is not rerun. No other rerun for any reason,
+    except the one restart below. The runner never reuses a run directory.
+  - **One restart for a crashed run (061a).** A run whose `run.json` status is still `running`
+    (it exited 3, or the process died) may be restarted **once**, and only if its directory has
+    **no file under `scores/`**: with no score file no result of the void run exists, so nobody
+    has seen anything to select on.
+    - `--run <n> --restart` writes to a new directory, `run-<n>r/` (for example `test/run-1r/`).
+      It refuses, with nothing written, if `run-<n>/` doesn't exist, if its status is `complete`
+      or `stopped-at-cap`, if `run-<n>/scores/` holds any file, or if `run-<n>r/` already exists.
+    - The void directory stays untouched and is reported: its spend, the pull request it stopped
+      at, and the error. Its partial reviews are never scored.
+    - The restart's result is used whatever it is, and it takes the run's place: if Cal.com run 1
+      was void, run 1r is the headline. A second crash means the run is void, with no further
+      restart.
+    - The void run's spend counts toward its plan item and the $15 (the larger of its `run.json`
+      spend and the ledger's spend since it started). The restart gets what is left of that
+      item's allowance.
+    - Every run (Cal.com 1–3, dev 2–3) gets this one restart. The order checks and `spread.ts`
+      treat `run-<n>r` as run n, and the output labels it "(restarted)". A crashed run that may
+      still be restarted blocks every later item until it is restarted, so the restart always
+      comes before the next item.
 - **Reported whatever the outcome:**
   - the full table under both judges for Cal.com run 1 (eight rows);
   - the spread over Cal.com runs 1–3 and over dev runs 1–3: min, median and max of P, R and F per
@@ -3097,7 +3118,7 @@ did not read, list, fetch, clone, review or score anything for Cal.com. Prompt:
     from 35.6%. Cal.com's n is a single repo's (dev repos had 16 to 21 each). It is also TypeScript,
     a language none of the dev repos used.
 - **Cap for 062: $15 of Nebius credit,** spent in this order, stopping before the cap:
-  1. Cal.com run 1 plus both judges: planned at most $6 (059's per-pull-request max of $0.23 × 10
+  1. Cal.com run 1 plus both judges (and its void run, if restarted): planned at most $6 (059's per-pull-request max of $0.23 × 10
      pull requests × 2 for a larger repo, plus judges). Run 1 is never cut. It may use the whole
      $15, and more than $6 is reported as a deviation.
   2. Cal.com runs 2–3: at most $5 together.
@@ -3117,12 +3138,12 @@ did not read, list, fetch, clone, review or score anything for Cal.com. Prompt:
     cal_dot_com`. It works only with `TRACEHOUND_TEST_RUN=061` in the environment, and otherwise
     refuses as before. It writes under `~/Projects/tracehound-bench/test/` (`prs/cal_dot_com/`,
     `repos/cal_dot_com`, `repos/cal_dot_com.heads.json`) and prints counts only.
-  - `scripts/bench/run-test-set.ts --set cal_dot_com|dev --run 1|2|3` calls the analyzer's exported
+  - `scripts/bench/run-test-set.ts --set cal_dot_com|dev --run 1|2|3 [--restart]` calls the analyzer's exported
     functions directly. It runs the pipeline one pull request after another, then bench-judge-v1
     and bench-judge-x1 on the rows. It writes under `test/run-<n>/` or
     `reviews/dev-repeat/run-<n>/` in the bench folder, into a directory that must not exist,
-    and never over a file. `--set cal_dot_com` needs `TRACEHOUND_TEST_RUN=061`, and
-    `--set dev --run 1` is refused (it is 059's).
+    and never over a file (`run-<n>r/` for a restart). `--set cal_dot_com` needs
+    `TRACEHOUND_TEST_RUN=061`, and `--set dev --run 1` is refused (it is 059's).
   - `scripts/bench/spread.ts --set …` gives the spread tables.
   - Gates, rows and the cap are in `scripts/bench/test-set.ts`.
   - Tests: `packages/analyzer/test/test-set-run.test.ts`. It uses invented data and a fake fetch.
@@ -3140,4 +3161,7 @@ did not read, list, fetch, clone, review or score anything for Cal.com. Prompt:
 - Judging the five tools in every run: their reviews are fixed, so the spread would only measure
   the judge.
 - Letting a crashed run resume in its own directory: that would be a second chance at the same
-  run.
+  run. The 061a restart is different: it starts clean in a new directory, and only before any
+  score of the void run exists.
+
+Amended before merge (061a, 17 Oct, Sunny's decision), before any Cal.com call: one restart for a crashed run; fetches before the freeze tag.
