@@ -44,9 +44,6 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
       <Handle type="target" position={Position.Left} />
       {data.impact && <ImpactChip role={data.impact} />}
       {data.change && <ChangeChip diff={data.change} />}
-      {/* Railway's card: icon and name on the top row, the kind line on the bottom one, both on
-          one left edge. The card shows only these: description, routes, name source and any
-          model-written prose are in the inspector. */}
       <div className="flex h-[22px] shrink-0 min-w-0 items-center gap-[11px]">
         <ComponentIcon kind={component.kind} tech={data.tech} size="node" tint={tint} />
         <div className="min-w-0 truncate text-[15px] font-semibold text-[var(--kind)]" title={component.name}>
@@ -62,6 +59,7 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
           </span>
         )}
       </div>
+      <p data-testid="node-summary" title={component.summary ?? component.subtitle} className="mt-2 truncate text-sm leading-relaxed text-muted">{component.summary ?? component.subtitle}</p>
       <div className="truncate text-sm text-faint">
         <span className="uppercase tracking-wider">{data.changeSetOnly ? "change set only" : label}</span> · {component.counts.files} files
         {component.counts.routes > 0 && <> · {component.counts.routes} routes</>}
