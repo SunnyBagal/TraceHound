@@ -1,10 +1,19 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { TopBar } from "@/components/TopBar";
+import { NameSourceBadge } from "@/components/NameSourceBadge";
+import { modelDisplayName } from "@/lib/naming";
 import { commitHref, provenanceLabel } from "@/lib/provenance";
 import { repoSnapshot } from "./repo-snapshot";
 
 afterEach(cleanup);
+
+it("identifies Nemotron 3 Super when disclosing model-written prose", () => {
+  const model = "nvidia/nemotron-3-super-120b-a12b";
+  expect(modelDisplayName(model)).toBe("Nemotron 3 Super");
+  render(<NameSourceBadge naming={{ source: "llm", model, heuristicName: "Shared Utilities" }} />);
+  expect(screen.getByText("Named by Nemotron 3 Super").getAttribute("title")).toBe("Name written by the model; prose not verified");
+});
 
 it("labels the analyzed commit using its branch and commit date, linking to the commit", () => {
   const s = repoSnapshot("recall");
