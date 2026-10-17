@@ -3,7 +3,9 @@
 //   - Cal.com (`cal_dot_com`) is reachable only with TRACEHOUND_TEST_RUN=061 in the environment.
 //   - Rows are fixed here and frozen; nothing on the command line adds one.
 //   - The $15 cap is spent in a fixed order of items; a cap stop leaves every later item not done.
-import { existsSync, readFileSync } from "node:fs";
+//   - A crashed run may be restarted once, into run-<n>r/, only while no file exists under its
+//     scores/ (061a); the restart then takes the run's place.
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const TEST_RUN_ENV = "TRACEHOUND_TEST_RUN";
@@ -38,7 +40,7 @@ export function fetchTarget(argv: string[], env: NodeJS.ProcessEnv, bench: strin
   return { repos, root: bench, testSet: false };
 }
 
-/** `--set` and `--run` of run-test-set.ts, with the refusals of decision 061. */
+/** `--set` and `--run` of run-test-set.ts, with the refusals of decision 061. A restart (061a) passes the same checks. */
 export function checkRun(set: string | undefined, run: string | undefined, env: NodeJS.ProcessEnv): { set: SetName; run: RunNumber } {
   if (!(SETS as readonly string[]).includes(set ?? "")) throw new Error(`refusing --set ${set}: one of ${SETS.join(", ")}`);
   if (!["1", "2", "3"].includes(run ?? "")) throw new Error(`refusing --run ${run}: 1, 2 or 3`);
@@ -62,8 +64,22 @@ export function inputPaths(bench: string, set: SetName, repo: string) {
   };
 }
 
-/** Where a run writes. Never an existing directory. */
-export const runDir = (bench: string, set: SetName, run: RunNumber) => (set === TEST_SET ? join(bench, "test", `run-${run}`) : join(bench, "reviews/dev-repeat", `run-${run}`));
+/** Where a run writes: run-<n>/, or run-<n>r/ for its one restart (061a). Never an existing directory. */
+export const runDir = (bench: string, set: SetName, run: RunNumber, restart = false) =>
+  join(bench, set === TEST_SET ? "test" : "reviews/dev-repeat", `run-${run}${restart ? "r" : ""}`);
+
+/** The directory whose results stand for run n: run-<n>r/ once it exists, else run-<n>/. */
+export function standingRunDir(bench: string, set: SetName, run: RunNumber): { dir: string; restarted: boolean } {
+  const r = runDir(bench, set, run, true);
+  return existsSync(r) ? { dir: r, restarted: true } : { dir: runDir(bench, set, run), restarted: false };
+}
+
+/** Files (at any depth) under <dir>/scores/; 0 when there is no scores/. */
+export function scoreFileCount(dir: string): number {
+  const scores = join(dir, "scores");
+  if (!existsSync(scores)) return 0;
+  return readdirSync(scores, { recursive: true, withFileTypes: true }).filter((e) => !e.isDirectory()).length;
+}
 
 // ---- rows ----
 
@@ -98,28 +114,53 @@ const GROUP_CAP_USD: Record<string, number | null> = { "cal-run-1": null, "cal-r
 export type RunStatus = "running" | "complete" | "stopped-at-cap";
 /** What run.json says about an item; "running" left behind by a crash means the run is void. */
 export interface ItemState {
+  /** the run that stands: run-<n>r's once restarted */
   status: RunStatus;
+  /** everything the item spent: run-<n>'s, plus run-<n>r's once restarted */
   costUSD: number;
+  /** run-<n>r/ exists (061a) */
+  restarted?: boolean;
+  /** run-<n>/'s own status, when restarted */
+  firstStatus?: RunStatus;
+  /** files under run-<n>/scores/ */
+  firstScoreFiles?: number;
+}
+
+/** 061a: why run-<n>/ may not be restarted, or null when it may. */
+export function restartRefusal(s: ItemState | null, dirName: string): string | null {
+  if (!s) return `${dirName}/ does not exist`;
+  if (s.restarted) return `${dirName}r/ already exists: a run is restarted once, and a second crash leaves it void`;
+  const status = s.firstStatus ?? s.status;
+  if (status !== "running") return `${dirName}/ is ${status}; only a crashed run (status running) is restarted`;
+  if (s.firstScoreFiles) return `${dirName}/scores/ holds ${s.firstScoreFiles} file(s): a result exists, so the run is void with no restart`;
+  return null;
 }
 
 /**
  * The money an item may spend, or why it may not start. Every earlier item must have started
- * (order); an earlier cap stop means this item is not done; the item gets min(its group's cap
- * minus what the group spent, $15 minus everything spent). Cal.com run 1 has no group cap: it is
- * never cut, and may use the whole $15 (more than its planned $6 is reported as a deviation).
+ * (order); an earlier cap stop means this item is not done; an earlier crashed run that may still
+ * be restarted (061a) must be restarted first; the item gets min(its group's cap minus what the
+ * group spent, $15 minus everything spent). Cal.com run 1 has no group cap: it is never cut, and
+ * may use the whole $15 (more than its planned $6 is reported as a deviation). A restart (061a)
+ * needs restartRefusal to pass and gets what is left of the item's allowance after the void run.
  */
-export function planItem(set: SetName, run: RunNumber, states: (ItemState | null)[]): { ok: true; allowanceUSD: number } | { ok: false; why: string } {
+export function planItem(set: SetName, run: RunNumber, states: (ItemState | null)[], restart = false): { ok: true; allowanceUSD: number } | { ok: false; why: string } {
   const idx = ITEMS.findIndex((i) => i.set === set && i.run === run);
   if (idx < 0) throw new Error(`no item ${set} run ${run}`);
   if (states.length !== ITEMS.length) throw new Error(`planItem: ${states.length} states for ${ITEMS.length} items`);
   const name = (i: number) => `${ITEMS[i]!.set} run ${ITEMS[i]!.run}`;
-  if (states[idx]) return { ok: false, why: `${name(idx)} already has a run directory` };
   let spent = 0;
   let groupSpent = 0;
+  if (restart) {
+    const why = restartRefusal(states[idx] ?? null, `run-${run}`);
+    if (why) return { ok: false, why };
+    spent = groupSpent = states[idx]!.costUSD; // the void run's spend counts toward its item
+  } else if (states[idx]) return { ok: false, why: `${name(idx)} already has a run directory` };
   for (let i = 0; i < idx; i++) {
     const s = states[i];
     if (!s) return { ok: false, why: `${name(i)} has not run; the order is ${ITEMS.map((_, j) => name(j)).join(", ")}` };
     if (s.status === "stopped-at-cap") return { ok: false, why: `not done: the cap stopped ${name(i)}` };
+    if (!restartRefusal(s, `run-${ITEMS[i]!.run}`)) return { ok: false, why: `${name(i)} crashed and may be restarted once: restart it first (--set ${ITEMS[i]!.set} --run ${ITEMS[i]!.run} --restart)` };
     spent += s.costUSD;
     if (ITEMS[i]!.group === ITEMS[idx]!.group) groupSpent += s.costUSD;
   }
@@ -129,15 +170,27 @@ export function planItem(set: SetName, run: RunNumber, states: (ItemState | null
   return { ok: true, allowanceUSD };
 }
 
-/** Each item's run.json, or null when its run directory does not exist. */
+/** A run directory's run.json; a directory without one is a run that died at once. */
+export function readRunJson(dir: string): { status: RunStatus; costUSD: number; voidCostUSD?: number } {
+  const f = join(dir, "run.json");
+  return existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : { status: "running", costUSD: 0 };
+}
+
+/**
+ * Each item's state, or null when run-<n>/ does not exist. Once run-<n>r/ exists it stands for the
+ * item (061a): its status, and the spend of both directories (the void run's as the restart
+ * recorded it, `voidCostUSD`, which also counts ledger spend run.json missed).
+ */
 export function readItemStates(bench: string): (ItemState | null)[] {
   return ITEMS.map((i) => {
     const dir = runDir(bench, i.set, i.run);
     if (!existsSync(dir)) return null;
-    const f = join(dir, "run.json");
-    if (!existsSync(f)) return { status: "running", costUSD: 0 };
-    const j = JSON.parse(readFileSync(f, "utf8")) as ItemState;
-    return { status: j.status, costUSD: j.costUSD };
+    const first = readRunJson(dir);
+    const firstScoreFiles = scoreFileCount(dir);
+    const rdir = runDir(bench, i.set, i.run, true);
+    if (!existsSync(rdir)) return { status: first.status, costUSD: first.costUSD, firstScoreFiles };
+    const r = readRunJson(rdir);
+    return { status: r.status, costUSD: (r.voidCostUSD ?? first.costUSD) + r.costUSD, restarted: true, firstStatus: first.status, firstScoreFiles };
   });
 }
 

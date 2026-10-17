@@ -1,6 +1,7 @@
 // The test-set runner of decision 061 (scripts/bench/test-set.ts, run-test-set.ts, spread.ts):
 // refusals, cache reads off for reviewer and verifier calls, the rerun rule, the cap and its order
-// of cuts, no overwrite, fixed rows, spread arithmetic, counts-only output. Invented data in temp
+// of cuts, no overwrite, fixed rows, spread arithmetic, counts-only output, the one restart of a
+// crashed run (061a). Invented data in temp
 // dirs and a fake fetch; no network, no dataset text. The open test-set gate is not exercised here.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -8,7 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { buildClients, runTestSet, writeNew, type Deps } from "../../../scripts/bench/run-test-set.ts";
-import { minMedMax, rowSpread } from "../../../scripts/bench/spread.ts";
+import { minMedMax, rowSpread, spreadReport } from "../../../scripts/bench/spread.ts";
 import {
   checkRun,
   DEV_REPOS,
@@ -18,6 +19,7 @@ import {
   planItem,
   readItemStates,
   requireTestRun,
+  restartRefusal,
   rowsFor,
   runDir,
   TOOL_ROWS,
@@ -139,8 +141,8 @@ describe("the cap and its order of cuts", () => {
     for (const [set, run] of [["cal_dot_com", 3], ["dev", 2], ["dev", 3]] as const) {
       expect(planItem(set, run, states(done(6), stopped, null, null, null))).toEqual({ ok: false, why: "not done: the cap stopped cal_dot_com run 2" });
     }
-    // a void run (crashed, left "running") does not block the order; its recorded spend counts
-    expect(planItem("cal_dot_com", 2, states({ status: "running", costUSD: 3 }))).toEqual({ ok: true, allowanceUSD: 5 });
+    // a void run that may not be restarted (a score file exists) does not block the order; its recorded spend counts
+    expect(planItem("cal_dot_com", 2, states({ status: "running", costUSD: 3, firstScoreFiles: 1 }))).toEqual({ ok: true, allowanceUSD: 5 });
   });
 
   it("an item with a run directory never runs again", () => {
@@ -336,6 +338,128 @@ describe("a dev repeat run on invented data", () => {
   });
 });
 
+describe("the one restart of a crashed run (061a)", () => {
+  const done = (costUSD: number): ItemState => ({ status: "complete", costUSD });
+  const crashed = (costUSD: number, firstScoreFiles = 0): ItemState => ({ status: "running", costUSD, firstScoreFiles });
+  const states = (...xs: (ItemState | null)[]) => [...xs, ...Array(ITEMS.length - xs.length).fill(null)];
+
+  it("refused without run-<n>/, after a complete or cap-stopped run, with a score file, and a second time", () => {
+    expect(restartRefusal(null, "run-1")).toBe("run-1/ does not exist");
+    expect(restartRefusal(done(1), "run-1")).toMatch(/run-1\/ is complete; only a crashed run/);
+    expect(restartRefusal({ status: "stopped-at-cap", costUSD: 1 }, "run-1")).toMatch(/run-1\/ is stopped-at-cap/);
+    expect(restartRefusal(crashed(1, 2), "run-1")).toMatch(/scores\/ holds 2 file\(s\): a result exists, so the run is void with no restart/);
+    expect(restartRefusal({ status: "running", costUSD: 1, restarted: true, firstStatus: "running" }, "run-1")).toMatch(/run-1r\/ already exists/);
+    expect(restartRefusal(crashed(1), "run-1")).toBeNull();
+    expect(planItem("cal_dot_com", 1, states(), true)).toEqual({ ok: false, why: "run-1/ does not exist" });
+    expect(planItem("cal_dot_com", 1, states(done(3)), true)).toMatchObject({ ok: false });
+    expect(planItem("cal_dot_com", 1, states(crashed(3, 1)), true)).toMatchObject({ ok: false });
+  });
+
+  it("spend carry-over: the restart gets what is left of its item's allowance after the void run", () => {
+    expect(planItem("cal_dot_com", 1, states(crashed(2.5)), true)).toEqual({ ok: true, allowanceUSD: 12.5 });
+    expect(planItem("cal_dot_com", 2, states(done(6), crashed(1.5)), true)).toEqual({ ok: true, allowanceUSD: 3.5 });
+    expect(planItem("dev", 2, states(done(5), done(2), done(2), crashed(1)), true)).toEqual({ ok: true, allowanceUSD: 3 });
+    expect(planItem("dev", 2, states(done(7), done(4), done(1), crashed(2.5)), true)).toEqual({ ok: true, allowanceUSD: 0.5 });
+    expect(planItem("dev", 3, states(done(5), done(2), done(2), crashed(4)), false)).toMatchObject({ ok: false }); // dev run 2 must be restarted first
+    expect(planItem("dev", 2, states(done(5), done(2), done(2), crashed(4)), true)).toEqual({ ok: false, why: expect.stringMatching(/not done: the cap is reached/) });
+    // the restarted item's spend (both directories) counts for later items
+    expect(planItem("cal_dot_com", 3, states({ status: "complete", costUSD: 7, restarted: true, firstStatus: "running" }, { status: "complete", costUSD: 3, restarted: true, firstStatus: "running" }))).toEqual({ ok: true, allowanceUSD: 2 });
+  });
+
+  it("order: a restartable crash blocks later items; 1r stands for 1; a crashed restart is void and blocks nothing", () => {
+    expect(planItem("cal_dot_com", 2, states(crashed(1)))).toEqual({ ok: false, why: "cal_dot_com run 1 crashed and may be restarted once: restart it first (--set cal_dot_com --run 1 --restart)" });
+    expect(planItem("cal_dot_com", 2, states({ status: "complete", costUSD: 7, restarted: true, firstStatus: "running" }))).toEqual({ ok: true, allowanceUSD: 5 });
+    expect(planItem("cal_dot_com", 2, states({ status: "running", costUSD: 7, restarted: true, firstStatus: "running" }))).toEqual({ ok: true, allowanceUSD: 5 });
+    expect(planItem("cal_dot_com", 2, states({ status: "stopped-at-cap", costUSD: 15, restarted: true, firstStatus: "running" }))).toEqual({ ok: false, why: "not done: the cap stopped cal_dot_com run 1" });
+    expect(planItem("cal_dot_com", 1, states({ status: "complete", costUSD: 7, restarted: true, firstStatus: "running" }))).toEqual({ ok: false, why: "cal_dot_com run 1 already has a run directory" });
+  });
+
+  it("readItemStates reads run-<n>r/ as run n, with both directories' spend", () => {
+    const bench = tmp("tracehound-061a-states-");
+    put(path.join(runDir(bench, "cal_dot_com", 1), "run.json"), { status: "running", costUSD: 2 });
+    put(path.join(runDir(bench, "cal_dot_com", 1, true), "run.json"), { status: "complete", costUSD: 3, voidCostUSD: 2.5 });
+    put(path.join(runDir(bench, "cal_dot_com", 2), "run.json"), { status: "running", costUSD: 1 });
+    put(path.join(runDir(bench, "cal_dot_com", 2), "scores/judge-v1/pool-verify-v1-cal_dot_com.summary.json"), {});
+    expect(runDir(bench, "cal_dot_com", 1, true)).toBe(path.join(bench, "test", "run-1r"));
+    const s = readItemStates(bench);
+    expect(s[0]).toEqual({ status: "complete", costUSD: 5.5, restarted: true, firstStatus: "running", firstScoreFiles: 0 });
+    expect(s[1]).toEqual({ status: "running", costUSD: 1, firstScoreFiles: 1 });
+    expect(planItem("cal_dot_com", 3, s)).toEqual({ ok: true, allowanceUSD: 5 - 1 });
+  });
+
+  /** dev run 2 left crashed: status running, one pull request done, and ledger spend run.json missed. */
+  function crashedDevRun2(bench: string, extra: Record<string, unknown> = {}) {
+    const startedAt = "2026-10-17T10:00:00.000Z";
+    put(path.join(runDir(bench, "dev", 2), "run.json"), { status: "running", costUSD: 0.5, startedAt, pulls: [{ repo: "sentry" }], error: "TypeError: SECRET-CODE broke", ...extra });
+    const entry = (timestamp: string, estCostUSD: number) => JSON.stringify({ timestamp, model: "m", inputTokens: 1, outputTokens: 1, estCostUSD, purpose: "review" });
+    put(path.join(bench, ".state", "spend.jsonl"), [entry("2026-10-16T09:00:00.000Z", 9), entry("2026-10-17T10:01:00.000Z", 0.4), entry("2026-10-17T10:02:00.000Z", 0.3)].join("\n") + "\n");
+  }
+  const listAll = (d: string) => readdirSync(d, { recursive: true }).map(String).sort();
+
+  it("runs once into run-2r/, leaves run-2/ untouched and reported, carries its spend, and is refused a second time", async () => {
+    const bench = inventedBench();
+    crashedDevRun2(bench);
+    const voidDir = runDir(bench, "dev", 2);
+    const before = listAll(voidDir);
+    const voidJson = readFileSync(path.join(voidDir, "run.json"), "utf8");
+    const { fetch } = fakeFetch(() => false);
+    const out: string[] = [];
+    const deps: Deps = { bench, stateDir: path.join(bench, ".state"), pricesFile: PRICES, env: { NEBIUS_API_KEY: "k", TRACEHOUND_BUDGET_RUN_USD: "15" }, log: (l) => out.push(l), err: (l) => out.push(l), fetch, freezeCheck: () => ({ ok: true, head: "x" }) };
+    expect(await runTestSet(["--set", "dev", "--run", "3"], deps)).toBe(1); // not before the restart
+    expect(await runTestSet(["--set", "dev", "--run", "2"], deps)).toBe(1); // no plain rerun
+    expect(await runTestSet(["--set", "dev", "--run", "2", "--restart"], deps)).toBe(0);
+
+    expect(listAll(voidDir)).toEqual(before);
+    expect(readFileSync(path.join(voidDir, "run.json"), "utf8")).toBe(voidJson);
+    const r = JSON.parse(readFileSync(path.join(runDir(bench, "dev", 2, true), "run.json"), "utf8"));
+    expect(r).toMatchObject({ status: "complete", restart: true, restartOf: { status: "running", recordedCostUSD: 0.5, pullsDone: 1, stoppedAt: "pull request 2 of 4", error: "TypeError: SECRET-CODE broke" } });
+    expect(r.voidCostUSD).toBeCloseTo(0.7, 9); // the ledger since the void run started, above run.json's $0.5
+    expect(r.allowanceUSD).toBeCloseTo(4 - 0.7, 9); // dev-repeats' $4 minus the void run
+    const text = out.join("\n");
+    expect(text).toMatch(/refusing dev run 3: dev run 2 crashed and may be restarted once/);
+    expect(text).toMatch(/refusing dev run 2: dev run 2 already has a run directory/);
+    expect(text).toMatch(/dev run 2 \(restarted\): void run-2\/ left untouched, never scored · spend \$0\.7000 .* stopped at pull request 2 of 4 · error TypeError/);
+    expect(text).toContain("## dev run 2 (restarted) (decision 061)");
+    expect(text).toMatch(/\[run-test-set\] dev run 2 \(restarted\): pull request 4\/4 done/);
+    for (const s of SECRETS) expect(text).not.toContain(s);
+
+    const states = readItemStates(bench);
+    expect(states[3]).toMatchObject({ status: "complete", restarted: true });
+    expect(states[3]!.costUSD).toBeCloseTo(0.7 + r.costUSD, 9);
+    expect(await runTestSet(["--set", "dev", "--run", "2", "--restart"], deps)).toBe(1);
+    expect(out.join("\n")).toMatch(/refusing dev run 2 \(restarted\): run-2r\/ already exists/);
+    expect(planItem("dev", 3, states)).toEqual({ ok: true, allowanceUSD: expect.closeTo(4 - 0.7 - r.costUSD, 9) });
+  });
+
+  it("refused, with nothing written, when a score file exists or the run completed or stopped at the cap", async () => {
+    for (const [extra, scores, why] of [
+      [{}, true, /scores\/ holds 1 file\(s\)/],
+      [{ status: "complete" }, false, /run-2\/ is complete/],
+      [{ status: "stopped-at-cap" }, false, /run-2\/ is stopped-at-cap/],
+    ] as const) {
+      const bench = inventedBench();
+      crashedDevRun2(bench, extra);
+      if (scores) put(path.join(runDir(bench, "dev", 2), "scores/judge-v1/pool-raw-sentry.summary.json"), {});
+      const { fetch, calls } = fakeFetch(() => false);
+      const out: string[] = [];
+      const deps: Deps = { bench, stateDir: path.join(bench, ".state"), pricesFile: PRICES, env: { NEBIUS_API_KEY: "k" }, log: (l) => out.push(l), err: (l) => out.push(l), fetch, freezeCheck: () => ({ ok: true, head: "x" }) };
+      expect(await runTestSet(["--set", "dev", "--run", "2", "--restart"], deps)).toBe(1);
+      expect(out.join("\n")).toMatch(why);
+      expect(existsSync(runDir(bench, "dev", 2, true))).toBe(false);
+      expect(calls.review).toEqual({});
+    }
+  });
+
+  it("refused when run-<n>/ does not exist", async () => {
+    const bench = inventedBench();
+    const out: string[] = [];
+    const deps: Deps = { bench, stateDir: path.join(bench, ".state"), pricesFile: PRICES, env: { NEBIUS_API_KEY: "k" }, log: (l) => out.push(l), err: (l) => out.push(l), freezeCheck: () => ({ ok: true, head: "x" }) };
+    expect(await runTestSet(["--set", "dev", "--run", "2", "--restart"], deps)).toBe(1);
+    expect(out.join("\n")).toMatch(/run-2\/ does not exist/);
+    expect(existsSync(runDir(bench, "dev", 2, true))).toBe(false);
+  });
+});
+
 describe("spread", () => {
   const counts = (tp: number, fp: number, fn: number): Counts => ({ ...zeroCounts(), comments: tp + fp, tp, fp, fn, goldenCounted: tp + fn });
 
@@ -354,6 +478,20 @@ describe("spread", () => {
     expect(s.fSpread!.min).toBeCloseTo(0.322581, 5);
     expect(s.fSpread!.median).toBeCloseTo(0.356164, 5);
     expect(s.fSpread!.max).toBeCloseTo(0.365854, 5);
+  });
+
+  it("reads a restarted run from run-<n>r/ and labels it", () => {
+    const bench = tmp("tracehound-061a-spread-");
+    const summary = (dir: string, c: Counts) => {
+      for (const j of ["judge-v1", "judge-x1"]) for (const row of TRACEHOUND_ROWS) put(path.join(dir, "scores", j, `${row}-cal_dot_com.summary.json`), { counts: c });
+    };
+    put(path.join(runDir(bench, "cal_dot_com", 1), "run.json"), { status: "running", costUSD: 1 }); // void, no scores
+    summary(runDir(bench, "cal_dot_com", 1, true), counts(1, 1, 1)); // F 50.0%
+    summary(runDir(bench, "cal_dot_com", 2), counts(1, 3, 1)); // F 33.3%
+    const lines = spreadReport(bench, "cal_dot_com").filter((l) => l.startsWith("| pool-verify-v1 "));
+    expect(lines).toHaveLength(2);
+    for (const l of lines) expect(l).toContain("| pool-verify-v1 | 2 | 50.0% (restarted) / 33.3% / not done |");
+    expect(rowSpread("x", [counts(1, 1, 1)], [true]).restarted).toEqual([true]);
   });
 
   it("a run not done is shown and left out; an even count takes the mean of the middle two", () => {

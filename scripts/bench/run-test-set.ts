@@ -10,9 +10,11 @@
 // reviewer or verifier request is rerun once, with the first attempt kept; the run stops before its
 // allowance under the $15 cap (test-set.ts); it writes only into a run directory that did not exist,
 // never over a file. stdout and stderr get counts only, never titles, comment or golden text; full
-// records go to the run directory in the bench folder, outside this repo.
-//   TRACEHOUND_TEST_RUN=061 node scripts/bench/run-test-set.ts --set cal_dot_com --run 1|2|3 [--bench <dir>]
-//   node scripts/bench/run-test-set.ts --set dev --run 2|3 [--bench <dir>]
+// records go to the run directory in the bench folder, outside this repo. A crashed run (run.json
+// still "running", nothing under its scores/) may be restarted once with --restart (061a): the
+// restart writes run-<n>r/, leaves run-<n>/ untouched, reports it, and stands for run n.
+//   TRACEHOUND_TEST_RUN=061 node scripts/bench/run-test-set.ts --set cal_dot_com --run 1|2|3 [--restart] [--bench <dir>]
+//   node scripts/bench/run-test-set.ts --set dev --run 2|3 [--restart] [--bench <dir>]
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -38,10 +40,12 @@ import {
   checkRun,
   inputPaths,
   isRequestFailure,
+  ITEMS,
   planItem,
   readItemStates,
   reposOf,
   rowReviews,
+  readRunJson,
   rowsFor,
   runDir,
   type Row,
@@ -193,26 +197,42 @@ interface PullRecord {
   wallMs: number;
 }
 
+/** What a restart (061a) reports about the void run it replaces. Spend is the larger of run.json's and the ledger's since the void run started. */
+export function voidRunReport(dir: string, stateDir: string) {
+  const j = readRunJson(dir) as { status: string; costUSD: number; startedAt?: string; pulls?: unknown[]; scored?: unknown[]; error?: string | null };
+  const since = j.startedAt;
+  const ledgerUSD = since ? new SpendLedger(join(stateDir, "spend.jsonl")).entries().filter((e) => e.timestamp >= since).reduce((sum, e) => sum + e.estCostUSD, 0) : 0;
+  return { dir, status: j.status, recordedCostUSD: j.costUSD, ledgerSinceStartUSD: ledgerUSD, costUSD: Math.max(j.costUSD, ledgerUSD), pullsDone: j.pulls?.length ?? 0, error: j.error ?? null };
+}
+
 /** Exit codes: 0 complete, 1 refused (nothing written), 2 stopped at the cap, 3 failed (the run is void). */
 export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
   let set: SetName;
   let run: RunNumber;
+  let restart: boolean;
   try {
-    const { values } = parseArgs({ args: argv, options: { set: { type: "string" }, run: { type: "string" }, bench: { type: "string" } }, strict: true });
+    const { values } = parseArgs({ args: argv, options: { set: { type: "string" }, run: { type: "string" }, restart: { type: "boolean", default: false }, bench: { type: "string" } }, strict: true });
     ({ set, run } = checkRun(values.set, values.run, deps.env));
+    restart = values.restart!;
   } catch (e) {
     deps.err(`[run-test-set] ${(e as Error).message}`);
     return 1;
   }
   const bench = deps.bench;
-  const plan = planItem(set, run, readItemStates(bench));
+  const label = `${set} run ${run}${restart ? " (restarted)" : ""}`;
+  const states = readItemStates(bench);
+  const idx = states.findIndex((_, i) => ITEMS[i]!.set === set && ITEMS[i]!.run === run);
+  // 061a: the void run's spend, ledger included, counts toward the item before the restart's allowance
+  const voidRun = restart && states[idx] && !states[idx].restarted ? voidRunReport(runDir(bench, set, run), deps.stateDir) : null;
+  if (voidRun) states[idx] = { ...states[idx]!, costUSD: voidRun.costUSD };
+  const plan = planItem(set, run, states, restart);
   if (!plan.ok) {
-    deps.err(`[run-test-set] refusing ${set} run ${run}: ${plan.why}`);
+    deps.err(`[run-test-set] refusing ${label}: ${plan.why}`);
     return 1;
   }
   const freeze = (deps.freezeCheck ?? freezeCheck)();
   if (!freeze.ok) {
-    deps.err(`[run-test-set] refusing ${set} run ${run}: ${freeze.why}`);
+    deps.err(`[run-test-set] refusing ${label}: ${freeze.why}`);
     return 1;
   }
   const apiKey = deps.env.NEBIUS_API_KEY;
@@ -236,23 +256,32 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
         });
     });
   } catch (e) {
-    deps.err(`[run-test-set] refusing ${set} run ${run}: inputs not ready (${(e as Error).name})`);
+    deps.err(`[run-test-set] refusing ${label}: inputs not ready (${(e as Error).name})`);
     return 1;
   }
 
-  const dir = runDir(bench, set, run);
+  const dir = runDir(bench, set, run, restart);
   mkdirSync(dirname(dir), { recursive: true });
   try {
     mkdirSync(dir); // not recursive: fails if the run directory exists
   } catch {
-    deps.err(`[run-test-set] refusing ${set} run ${run}: the run directory exists`);
+    deps.err(`[run-test-set] refusing ${label}: the run directory exists`);
     return 1;
+  }
+  const restartOf = voidRun && { ...voidRun, stoppedAt: voidRun.pullsDone < jobs.length ? `pull request ${voidRun.pullsDone + 1} of ${jobs.length}` : "judging" };
+  if (restartOf) {
+    // counts only: the error's name; its message stays in both run.json files
+    deps.log(`${label}: void run-${run}/ left untouched, never scored · spend $${restartOf.costUSD.toFixed(4)} (run.json $${restartOf.recordedCostUSD.toFixed(4)}, ledger since its start $${restartOf.ledgerSinceStartUSD.toFixed(4)}) · stopped at ${restartOf.stoppedAt} · error ${restartOf.error ? restartOf.error.split(":")[0] : "none recorded (the process died)"}`);
   }
   const { reviewer, judge, budget } = buildClients({ apiKey, stateDir: deps.stateDir, pricesFile: deps.pricesFile, allowanceUSD: plan.allowanceUSD, env: deps.env, fetch: deps.fetch });
   const state = {
     decision: "061",
     set,
     run,
+    restart,
+    /** 061a: the void run this restart replaces, and its spend counted toward the item */
+    restartOf,
+    voidCostUSD: restartOf ? restartOf.costUSD : undefined,
     status: "running" as "running" | "complete" | "stopped-at-cap",
     allowanceUSD: plan.allowanceUSD,
     costUSD: 0,
@@ -320,7 +349,7 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
         wallMs: a1.wallMs + (attempts === 2 ? used.wallMs : 0),
       });
       save();
-      deps.err(`[run-test-set] ${set} run ${run}: pull request ${k + 1}/${jobs.length} done · attempts ${attempts} · run spend $${budget.runSpent.toFixed(4)}`);
+      deps.err(`[run-test-set] ${label}: pull request ${k + 1}/${jobs.length} done · attempts ${attempts} · run spend $${budget.runSpent.toFixed(4)}`);
     }
 
     // 2. both judges on the run's rows, scorer of record first
@@ -349,35 +378,36 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
       state.error = e.message;
       state.finishedAt = new Date().toISOString();
       save();
-      deps.log(`${set} run ${run}: STOPPED AT THE CAP (allowance $${plan.allowanceUSD.toFixed(4)}) at ${state.stoppedAt}; spent $${budget.runSpent.toFixed(4)}; later items are not done`);
+      deps.log(`${label}: STOPPED AT THE CAP (allowance $${plan.allowanceUSD.toFixed(4)}) at ${state.stoppedAt}; spent $${budget.runSpent.toFixed(4)}; later items are not done`);
       return 2;
     }
     state.error = `${(e as Error).name}: ${(e as Error).message}`;
     state.finishedAt = new Date().toISOString();
     save();
-    deps.err(`[run-test-set] ${set} run ${run} FAILED (${(e as Error).name}); the run is void; message in ${runJson}`);
+    const next = restart ? "a restart crashed: the run is void, with no further restart" : `it may be restarted once if ${dir}/scores/ is empty (--restart)`;
+    deps.err(`[run-test-set] ${label} FAILED (${(e as Error).name}); the run is void; message in ${runJson}; ${next}`);
     return 3;
   }
   state.status = "complete";
   state.finishedAt = new Date().toISOString();
   save();
-  printSummary(set, run, state, deps.log, dir, repos);
+  printSummary(label, state, deps.log, dir, repos, rowsFor(set, run));
   return 0;
 }
 
 /** Counts-only report of a completed run: pipeline counts, cost and time per pull request, the table under each judge. */
 function printSummary(
-  set: SetName,
-  run: RunNumber,
+  label: string,
   state: { pulls: PullRecord[]; scored: { row: Row; judge: string; repo: string; judgeFailed: number }[]; costUSD: number; allowanceUSD: number },
   log: (line: string) => void,
   dir: string,
   repos: readonly string[],
+  rows: readonly Row[],
 ) {
   const p = state.pulls;
   const costs = p.map((x) => x.costUSD);
   const walls = p.map((x) => x.wallMs / 1000);
-  log(`## ${set} run ${run} (decision 061)`);
+  log(`## ${label} (decision 061)`);
   log("");
   log(`pull requests ${p.length} · reruns ${p.filter((x) => x.attempts === 2).length} · still with failed requests after the rerun ${p.filter((x) => x.attempts === 2 && x.requestFailuresUsed > 0).length}`);
   log(`cost per pull request: median $${median(costs).toFixed(4)} · max $${Math.max(0, ...costs).toFixed(4)} · wall time median ${median(walls).toFixed(0)} s · max ${Math.max(0, ...walls).toFixed(0)} s`);
@@ -387,7 +417,7 @@ function printSummary(
     log(`### ${j.id === "judge-v1" ? "bench-judge-v1 (scorer of record)" : "bench-judge-x1 (report only)"}`);
     log("");
     log(TABLE_HEAD);
-    for (const row of rowsFor(set, run)) {
+    for (const row of rows) {
       let c = zeroCounts();
       let jf = 0;
       for (const repo of repos) {
