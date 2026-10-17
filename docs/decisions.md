@@ -3165,3 +3165,43 @@ did not read, list, fetch, clone, review or score anything for Cal.com. Prompt:
   score of the void run exists.
 
 Amended before merge (061a, 17 Oct, Sunny's decision), before any Cal.com call: one restart for a crashed run; fetches before the freeze tag.
+
+## 062 · Result: the Cal.com test-set run (decision 061, as amended by 061a)
+**Context:** this job ran 061's pre-registered plan, using `docs/bench/test-plan.md`'s commands in
+order. The two Cal.com fetches came first (10 saved, 0 unmatched golden, diffs 10/10). Then the
+annotated tag `review-freeze-1` went on `6b4276e` (PR #33's merge; tag object `f3283894`), pushed
+alone, with an empty frozen-paths diff. Then Cal.com runs 1–3, dev runs 2–3 and both spreads ran.
+Every run ran from `main` @ `e7309a5`. Prompt: `docs/prompts/062-test-run.md`. Results, counts
+only: `docs/bench/test-results.md`.
+**Result:**
+- **Cal.com run 1 (headline, n = 23), bench-judge-v1:** pool-verify-v1 P 56.0% / R 60.9% /
+  F 58.3%. review-diff-v1 scored 48.3 / 60.9 / 53.8% and pool-raw 41.0 / 69.6 / 51.6%. The tools'
+  F: augment 73.2%, cursor 66.7%, greptile 50.0%, copilot 46.2%, coderabbit 36.7%. pool-verify-v1
+  ranks 3rd of six. Under bench-judge-x1 (report only), pool-verify-v1 has F 58.3%, review-diff-v1
+  60.0% and pool-raw 56.1%, and the order of the six is the same.
+- **Spread, F min / median / max, bench-judge-v1:**
+  - Cal.com runs 1–3: pool-verify-v1 51.3 / 52.8 / 58.3%, review-diff-v1 38.5 / 42.6 / 53.8%,
+    pool-raw 40.0 / 44.1 / 51.6%.
+  - Dev runs 1 and 2r: pool-verify-v1 35.6 / 41.8 / 48.0%. Dev run 3 was not done.
+- **Predictions:**
+  - (a) right: 58.3% vs 53.8%, under v1.
+  - (b) wrong: pool-verify-v1 ranked 3rd, not 5th.
+  - (c) right: 58.3% is outside 30.6–40.6%.
+- **Spend:** $5.30959 by the ledger, against the $15 cap. By plan item: item 1 $0.4112
+  (under the planned $6), item 2 $0.9154, item 3 $3.9830.
+- **Per pull request on Cal.com:** cost median about $0.04, max $0.0859. Wall time median
+  123–158 s, max 312 s.
+- **Void runs and items not done:**
+  - Dev run 2 was void and restarted once (2r, complete). Its process was killed at pull request
+    30 of 40 by the relay session's 2-hour background-command limit. It spent $1.4429, with error
+    "none recorded (the process died)".
+  - Dev run 3 stopped at the cap at pull request 16 of 40, after $0.7581, and was not done.
+- **Other counts:** no pull request needed a rerun. One JUDGE_FAILED (Cal.com run 2,
+  pool-verify-v1, v1).
+**Consequence:** pool-verify-v1's Cal.com F under the scorer of record is above review-diff-v1's.
+It is below augment's and cursor's and above greptile's, copilot's and coderabbit's.
+**Limits:** 061's limits apply. Run-to-run spread at temperature 0 is large next to the margins
+the reviewer was chosen on: dev F was 35.6% and 48.0% across two runs. The tools were judged once,
+on recorded reviews. The dev spread covers two runs.
+**Rejected:** re-running dev run 3 under a fresh allowance: 061's cap order cuts it, and a cap stop
+is never restarted.

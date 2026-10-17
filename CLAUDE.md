@@ -234,7 +234,7 @@ it (decision 050).
   `validity-v1` (`tracehound bench validity`, Super and Qwen, diff only) judged the 324
   deduplicated v1 FPs: valid 187 (Super) / 265 (Qwen), kappa 0.395; augmented precision has no
   matching recall. `docs/bench/scorer-checks.md`; driver `scripts/bench/scorer-checks.ts`.
-- **Cal.com test-set plan (decision 061, pre-registered, not run yet):** job 062 runs pool-verify-v1
+- **Cal.com test-set plan (decision 061, pre-registered; run in 062):** job 062 runs pool-verify-v1
   on Cal.com once from the tag `review-freeze-1`. Cal.com run 1 is the headline. Cal.com runs 2–3
   and dev runs 2–3 measure spread only. The rows are pool-verify-v1, review-diff-v1, pool-raw and
   the five tools. bench-judge-v1 is the scorer of record, with bench-judge-x1 alongside. The cap is
@@ -245,6 +245,13 @@ it (decision 050).
   `TRACEHOUND_TEST_RUN=061`. Amended before merge (061a): a crashed run (status `running`, nothing
   under its `scores/`) may be restarted once with `--restart` into `run-<n>r/`, which stands for run
   n; the fetches run before the freeze tag. Commands: `docs/bench/test-plan.md`.
+- **Cal.com test-set result (decision 062, 2026-10-17):** from `review-freeze-1` (tag on `6b4276e`).
+  Cal.com run 1 (n = 23), bench-judge-v1: pool-verify-v1 P 56.0% / R 60.9% / F 58.3%,
+  review-diff-v1 F 53.8%. pool-verify-v1 ranks 3rd of six: augment 73.2%, cursor 66.7%, greptile
+  50.0%, copilot 46.2%, coderabbit 36.7%. Predictions: (a) right, (b) wrong, (c) right. Spread:
+  pool-verify-v1 F was 51.3–58.3% over Cal.com runs 1–3 and 35.6% / 48.0% over dev runs 1–2.
+  Dev run 2 was void (the session's background limit killed it) and was restarted as 2r. Dev run 3
+  stopped at the cap and was not done. Spend $5.31. `docs/bench/test-results.md`.
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**

@@ -589,3 +589,34 @@ was re-run.
   so the budget guard need not rely on third-party listings.
 - Opinion: the Qwen instruct model returned short strict-JSON replies quickly and reliably with
   no reasoning field; one batch of a few hundred requests is not enough to give a failure rate.
+
+---
+
+## 2026-10-17 · Super reviewer/verifier/judge and Qwen judge for the Cal.com test-set run (decision 062)
+
+- **Called:** `POST /v1/chat/completions` on `api.tokenfactory.us-central1.nebius.com`.
+  `nvidia/nemotron-3-super-120b-a12b` (`chat_template_kwargs.enable_thinking: true`, temperature 0)
+  served as reviewer, verifier and judge. `Qwen/Qwen3-235B-A22B-Instruct-2507` (temperature 0, no
+  reasoning field) served as a second judge. Calls ran 16:44–21:27 UTC, from one machine, with the
+  pipeline's usual per-stage parallelism.
+- **Counts (our ledger):**
+  - Super, review and verify: 794 requests, 794 OK, 0 failures.
+  - Super, judge: 150 requests, 149 OK, 1 failure, with no usage reported. Our runner stores the
+    exact error string only in a record this session did not open, so I can't quote it here.
+  - Qwen, judge: 195 requests, 195 OK, 0 failures.
+  - No reviewer or verifier request needed the runner's one rerun for a failed request.
+- **Tokens and cost (our ledger, prices from `config/prices.json`, not verified in the
+  console):**
+  - Super, review and verify: 6,906,710 in / 3,378,799 out, $5.1129.
+  - Super, judge: 104,511 in / 135,103 out, $0.1530.
+  - Qwen, judge: 184,346 in / 11,406 out, $0.0437.
+  - Total $5.3096.
+- **Latency:** not measured per request. Whole-pipeline wall time per pull request: median 86 to
+  158 s across the four runs, max 777 s.
+- **Dev run 2 was killed:** the process was killed locally by our session's own time limit, not by
+  Nebius. The runner's budget guard stopped dev run 3 before a request was sent, so that was not a
+  Nebius error either.
+- **Docs / console:** nothing new checked this session. Per-token prices are still not confirmed
+  against the console.
+- Opinion: about 1,100 requests with a single failed request is in line with earlier entries.
+  Catalog prices readable from the API would still help the budget guard.
