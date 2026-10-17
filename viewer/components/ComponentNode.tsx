@@ -4,7 +4,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { TriangleAlert } from "lucide-react";
 import { rollupBadges, type ComponentDiff } from "@/lib/changes";
 import type { ImpactRole } from "@/lib/impact";
-import { memo } from "react";
+import { memo, type CSSProperties } from "react";
 import { NODE_HEIGHT, NODE_WIDTH, type ComponentNode as ComponentNodeType } from "@/lib/graph";
 import { KIND_META } from "@/lib/kinds";
 import { ComponentIcon } from "./ComponentIcon";
@@ -12,12 +12,14 @@ import { ModelMark } from "./ModelMark";
 
 function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
   const { component, warnings } = data;
-  const { label } = KIND_META[component.kind];
+  const { label, color } = KIND_META[component.kind];
+  const tint = selected ? "var(--accent)" : data.panelHover || data.highlighted ? "var(--highlight)" : data.impact?.role === "changed" ? "var(--impact-changed)" : data.impact?.role === "affected" ? "var(--impact-affected)" : color;
   return (
     <div
       data-testid="component-node"
       data-component-id={component.id}
-      style={{ width: NODE_WIDTH, height: NODE_HEIGHT }}
+      style={{ width: NODE_WIDTH, height: NODE_HEIGHT, "--kind": tint, borderLeftWidth: 3, borderLeftColor: tint } as CSSProperties}
+      data-kind={component.kind}
       data-impact={data.impact?.role ?? (data.impact === null ? "none" : undefined)}
       data-panel-hover={data.panelHover || undefined}
       data-change={data.change ? "touched" : data.change === null ? "untouched" : undefined}
@@ -45,8 +47,8 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
           one left edge. The card shows only these: description, routes, name source and any
           model-written prose are in the inspector. */}
       <div className="flex h-[22px] min-w-0 items-center gap-[11px]">
-        <ComponentIcon kind={component.kind} tech={data.tech} size="node" />
-        <div className="min-w-0 truncate text-[15px] font-semibold text-text" title={component.name}>
+        <ComponentIcon kind={component.kind} tech={data.tech} size="node" tint={tint} />
+        <div className="min-w-0 truncate text-[15px] font-semibold text-[var(--kind)]" title={component.name}>
           {component.name}
         </div>
         {component.naming.source === "llm" && <ModelMark />}
