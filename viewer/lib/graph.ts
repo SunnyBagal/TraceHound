@@ -3,6 +3,7 @@ import type { ComponentDiff, EdgeDiffStatus, ExtraEdge } from "./changes";
 import type { ImpactRole } from "./impact";
 import { techFacts, type TechFact } from "./tech";
 import type { Component, ComponentEdge, Resolution, Snapshot, Warning } from "./types";
+import { nodeContents, type ContentItem } from "./contents";
 
 /** Every card is 2:1 like Railway's: icon and name on the top row, the kind line at the bottom. */
 export const NODE_WIDTH = 272;
@@ -20,6 +21,11 @@ export type ComponentNodeData = {
   warnings: Warning[];
   /** technology facts (lib/tech.ts); headerFact() picks the one behind the header icon */
   tech: TechFact[];
+  contents?: ContentItem[];
+  expanded?: boolean;
+  height?: number;
+  onToggle?: () => void;
+  onMore?: () => void;
   dimmed?: boolean; // not connected to the hovered/selected node
   highlighted?: boolean; // focused from the warnings panel
   panelHover?: boolean; // an inspector row pointing at this node is hovered/focused
@@ -68,7 +74,7 @@ export function buildGraph(snapshot: Snapshot, extraEdges: ExtraEdge[] = []): { 
     width: NODE_WIDTH,
     height: NODE_HEIGHT,
     handles,
-    data: { component, warnings: snapshot.warnings.filter((w) => w.componentId === component.id), tech: techFacts(snapshot, component) },
+    data: { component, contents: nodeContents(snapshot, component), warnings: snapshot.warnings.filter((w) => w.componentId === component.id), tech: techFacts(snapshot, component) },
   }));
 
   // A change set's added component edge carries no snapshot evidence; it is drawn from its id and

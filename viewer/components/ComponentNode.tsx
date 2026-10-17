@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronRight, TriangleAlert } from "lucide-react";
 import { rollupBadges, type ComponentDiff } from "@/lib/changes";
 import type { ImpactRole } from "@/lib/impact";
 import { memo, type CSSProperties } from "react";
@@ -9,6 +9,7 @@ import { NODE_HEIGHT, NODE_WIDTH, type ComponentNode as ComponentNodeType } from
 import { KIND_META } from "@/lib/kinds";
 import { ComponentIcon } from "./ComponentIcon";
 import { ModelMark } from "./ModelMark";
+import { METHOD_COLORS } from "@/lib/contents";
 
 function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
   const { component, warnings } = data;
@@ -18,7 +19,7 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
     <div
       data-testid="component-node"
       data-component-id={component.id}
-      style={{ width: NODE_WIDTH, height: NODE_HEIGHT, "--kind": tint, borderLeftWidth: 3, borderLeftColor: tint } as CSSProperties}
+      style={{ width: NODE_WIDTH, height: data.height ?? NODE_HEIGHT, "--kind": tint, borderLeftWidth: 3, borderLeftColor: tint } as CSSProperties}
       data-kind={component.kind}
       data-impact={data.impact?.role ?? (data.impact === null ? "none" : undefined)}
       data-panel-hover={data.panelHover || undefined}
@@ -46,22 +47,34 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
       {/* Railway's card: icon and name on the top row, the kind line on the bottom one, both on
           one left edge. The card shows only these: description, routes, name source and any
           model-written prose are in the inspector. */}
-      <div className="flex h-[22px] min-w-0 items-center gap-[11px]">
+      <div className="flex h-[22px] shrink-0 min-w-0 items-center gap-[11px]">
         <ComponentIcon kind={component.kind} tech={data.tech} size="node" tint={tint} />
         <div className="min-w-0 truncate text-[15px] font-semibold text-[var(--kind)]" title={component.name}>
           {component.name}
         </div>
         {component.naming.source === "llm" && <ModelMark />}
+        <button type="button" className="nodrag nopan ml-auto shrink-0 rounded p-1 text-muted hover:bg-panel" aria-label={`${data.expanded ? "Collapse" : "Expand"} ${component.name}`} aria-expanded={Boolean(data.expanded)} onClick={(event) => { event.stopPropagation(); data.onToggle?.(); }}>
+          {data.expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+        </button>
         {warnings.length > 0 && (
           <span className="ml-auto shrink-0 pl-1 text-warn" title={warnings.map((w) => w.message).join("\n")} aria-label={`${warnings.length} warning(s)`}>
             <TriangleAlert className="size-4" />
           </span>
         )}
       </div>
-      <div className="truncate text-[11px] text-faint">
+      <div className="truncate text-sm text-faint">
         <span className="uppercase tracking-wider">{data.changeSetOnly ? "change set only" : label}</span> · {component.counts.files} files
         {component.counts.routes > 0 && <> · {component.counts.routes} routes</>}
       </div>
+      {data.expanded && <div className="mt-3 border-t border-line pt-2 text-sm leading-relaxed text-text" data-testid="node-contents">
+        {(data.contents ?? []).slice(0, 8).map((item, index) => <div key={index} className="flex h-8 min-w-0 items-center gap-2">
+          {item.method && <span className="shrink-0 rounded bg-bg px-1.5 font-mono font-medium" style={{ color: METHOD_COLORS[item.method] }}>{item.method}</span>}
+          {item.detail && <span className="shrink-0 text-muted">{item.detail}</span>}
+          <span className="truncate" title={item.label}>{item.label}</span>
+        </div>)}
+        {!data.contents?.length && <p className="text-muted">No contents recorded.</p>}
+        {(data.contents?.length ?? 0) > 8 && <button type="button" className="nodrag nopan mt-1 text-accent hover:underline" onClick={(event) => { event.stopPropagation(); data.onMore?.(); }}>+{data.contents!.length - 8} more</button>}
+      </div>}
       <Handle type="source" position={Position.Right} />
     </div>
   );

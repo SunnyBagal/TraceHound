@@ -1,6 +1,12 @@
 @import "tailwindcss";
 @import "@xyflow/react/dist/style.css";
 
+/* Reflow positions gently; the viewport stays fixed when a card expands. */
+.react-flow__node-component { transition: transform 180ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__node-component { transition: none; }
+}
+
 /*
  * TraceHound palette: every colour lives here. Surfaces are sampled from Railway's project canvas
  * (a 1442×840 screenshot, the most common pixel of each region): page and canvas #13111b, node and
