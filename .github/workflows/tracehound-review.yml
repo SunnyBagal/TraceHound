@@ -23,7 +23,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       # Update this main-commit pin by hand after action changes.
-      - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@f437ecb76311a712f47a0938b6feba5b294d34d6
+      - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@50e1d4a6a0797933dd8c66d1010cc8484aeaa51f
         with:
           nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
           max-comments: '10'
