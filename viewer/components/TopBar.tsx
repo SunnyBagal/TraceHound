@@ -1,6 +1,8 @@
 "use client";
 
 import { ExternalLink, GitCommitHorizontal, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { commitsBehindMain } from "@/lib/freshness";
 import type { ChangeModel, ChangeSetEntry } from "@/lib/changes";
 import { EDGE_STYLES } from "@/lib/graph";
 import { githubSlug } from "@/lib/github";
@@ -14,6 +16,13 @@ const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export function TopBar({ snapshot, repos = [], repoId, changeSets = [], changes }: { snapshot: Snapshot; repos?: RepoInfo[]; repoId?: string; changeSets?: ChangeSetEntry[]; changes?: ChangeModel }) {
   const slug = githubSlug(snapshot.repo);
+  const [behind, setBehind] = useState<number>();
+  useEffect(() => {
+    let active = true;
+    setBehind(undefined);
+    void commitsBehindMain(snapshot.repo).then((count) => { if (active) setBehind(count); });
+    return () => { active = false; };
+  }, [snapshot.repo]);
   return (
     <header className="flex h-12 min-w-0 shrink-0 items-center gap-2 bg-page px-3 sm:gap-3 md:px-4">
       {/* the mark lives in the rail; below 640px the rail is hidden and it comes back here */}
@@ -33,7 +42,7 @@ export function TopBar({ snapshot, repos = [], repoId, changeSets = [], changes 
         className="inline-flex min-w-0 items-center gap-1.5 text-sm text-muted hover:text-text"
       >
         <GitCommitHorizontal className="size-3.5" aria-hidden />
-        <span className="truncate">{provenanceLabel(snapshot.repo)}</span>
+        <span className="truncate">{provenanceLabel(snapshot.repo)}{behind !== undefined && ` · ${behind} commits behind main`}</span>
       </a>
       {changes && (
         <a

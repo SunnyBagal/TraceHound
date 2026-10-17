@@ -1,6 +1,9 @@
 import { scrubGitEnv } from "@tracehound/analyzer/git-env";
 import { vi } from "vitest";
 
+// No viewer test may reach the network. Individual fetch tests supply offline responses.
+vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("Network disabled in viewer tests"))));
+
 // A hook or `git rebase --exec` exports GIT_DIR & co.; tests must never inherit them (decision 032).
 scrubGitEnv();
 
