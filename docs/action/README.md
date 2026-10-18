@@ -35,7 +35,60 @@ this repository's workflows, so adding this action does not enable model calls i
 | `reviewer` | `pool-verify-v1` | Accepts `pool-verify-v1` or `review-diff-v1`. Other values fail before model calls. |
 | `model` | Each stage's CLI default | Optional Nemotron model ID, passed to every selected stage. An empty value preserves their individual defaults. |
 | `max-comments` | `15` | Maximum findings included in reviewer order, counting inline and body findings together. Extra findings are omitted with a count. `0` skips the reviewer. |
+| `fixes` | `on` | `on` or `off`. Adds fix proposals and dashboard metadata to `pool-verify-v1`. `off` preserves the previous review payload, without proposals or the metadata footer. |
 | `dry-run` | `false` | `true` prints the proposed review payload as JSON and posts nothing. It still runs the reviewer and incurs its Nebius cost. |
+
+## Fix suggestions
+
+With `pool-verify-v1`, fixes default to `on`. After context verification and the `max-comments`
+cap, each included finding gets one extra Nemotron Super proposal through the existing Nebius
+client and budget, with at most four calls in parallel. Invalid JSON gets one retry. Fix calls
+always use `nvidia/nemotron-3-super-120b-a12b` at temperature 0, independently of the `model` input.
+The model sees the finding, a numbered window of the file at the PR head (40 lines on each side),
+and that file's diff hunks. For a finding without a line, the window centers on the first diff hunk.
+
+Fixes are **model-generated and not tested**. They are a product feature and are **not part of
+the benchmarked reviewer**; candidate generation, pooling order, and verification remain unchanged.
+The prompt asks for only the reported defect to be fixed, preserving style and indentation,
+without new dependencies, and for no proposal when unsure. Validation accepts at most 15 existing
+lines and 15 replacement lines, requires every affected line to be on the right side of the diff,
+and rejects unchanged text. The range must contain the finding's line; if that line is `null`,
+the entire range must consist of added lines. A rejected proposal or fix-stage failure leaves
+the finding intact at its original line.
+
+Valid proposals use GitHub's native suggestion block and inclusive right-side line range, so
+GitHub can show its **Commit suggestion** button. Read and test a proposal before applying it.
+If inline posting receives HTTP 422, the body-only retry includes the fix as a plain diff block.
+If the original text contains three or more consecutive backticks, the retry replaces that diff
+with `fix withheld: unsafe to render` to avoid escaping the Markdown fence.
+Set `fixes: 'off'` in the action's `with:` block to disable this stage and preserve the legacy
+payload exactly, including omitting the metadata footer. `review-diff-v1` keeps its legacy behavior.
+The composite action passes this setting as `TRACEHOUND_FIXES`.
+
+## Dashboard footer
+
+When fixes are enabled for `pool-verify-v1`, each posted review body ends with one hidden line:
+
+```html
+<!-- tracehound:v1 {"version":1,"pipeline":"pool-verify-v1","headSha":"<PR head SHA>","pool":3,"kept":2,"posted":1,"fixes":{"attempted":1,"valid":1,"rejected":0},"findings":[{"path":"src/example.ts","line":12,"startLine":11,"source":"both","hasSuggestion":true}]} -->
+```
+
+Dashboard readers can match that exact prefix/suffix and parse the enclosed JSON. `pool` and `kept`
+count the full pipeline output; `posted` counts findings after the cap, including body findings.
+`fixes.attempted` counts included findings considered by the fix stage (not HTTP calls; a retry
+can add a call). `valid` counts accepted proposals and `rejected` counts the rest, including no-safe-fix
+responses and source/model failures. No finding text or replacement text is included in the JSON.
+
+`findings` follows posting order. `line` is the original finding's head line, possibly `null`;
+optional `startLine` is the start of an accepted fix range. `source` is `diff` for a diff-only finding,
+`ctx` for a context-only finding, or `both` for a diff finding that agrees with a context finding
+under the shared agreement rule. `hasSuggestion` means a validated fix is included; on a body-only
+retry the same fix is rendered as a plain diff. The footer uses the triggering `headSha` so readers
+can identify stale reviews. No-findings runs continue to post no review.
+
+The entire hidden line and its JSON stay below 8,000 characters. If the line would reach that size,
+`findings` is omitted and `findingsTruncated: true` is set; aggregate counts remain. HTML delimiters
+in strings are JSON-escaped to keep the hidden comment intact.
 
 ## Behavior and limits
 
@@ -49,7 +102,8 @@ this repository's workflows, so adding this action does not enable model calls i
   this action overlaps the two reviewers, so those figures are not measured Action runtimes.
   Prices are third-party estimates. See [pool-verify-v1 benchmark results](../bench/pool-verify.md)
   for the numbers and limits. Cost varies with the selected model and pull request;
-  `max-comments` limits publishing, not inference cost. The CLI defaults can differ from the
+  `max-comments` limits publishing and the added fix stage, not reviewer/verifier inference cost.
+  The figures above exclude fix proposals. The CLI defaults can differ from the
   benchmark's Super configuration; use `model: nvidia/nemotron-3-super-120b-a12b` to select Super
   for all three stages.
 - Stage failure (including a reviewer's reported failed chunk), malformed output, or no findings produces

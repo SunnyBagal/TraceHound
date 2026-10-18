@@ -11,7 +11,8 @@ afterEach(async () => {
   await Promise.all(directories.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
 });
 const deps = (): Dependencies => ({ fetch: vi.fn(() => { throw new Error("Unexpected API call"); }),
-  runReviewer: vi.fn(), runPipeline: vi.fn(), checkRepoHead: vi.fn(), log: vi.fn() });
+  runReviewer: vi.fn(), runPipeline: vi.fn(), runFixes: vi.fn(async () => ({ suggestions: [null],
+    counts: { attempted: 1, valid: 0, rejected: 1 } })), checkRepoHead: vi.fn(), log: vi.fn() });
 
 it("missing Nebius input exits 1 with a clear message and no effects", async () => {
   const d = deps();
@@ -27,7 +28,10 @@ it("skips unsupported events without using the fake key", async () => {
   expect(d.fetch).not.toHaveBeenCalled();
 });
 
-it.each(["review-diff-v1", undefined])("passes reviewer %s and an event file through to the orchestration", async reviewer => {
+it.each([
+  ["review-diff-v1", undefined], [undefined, undefined],
+  ["pool-verify-v1", "off"], ["pool-verify-v1", "on"],
+])("passes reviewer %s and fixes %s through to the orchestration", async (reviewer, fixes) => {
   const dir = await mkdtemp(path.join(tmpdir(), "tracehound-action-test-"));
   directories.push(dir);
   const eventPath = path.join(dir, "event.json");
@@ -45,11 +49,13 @@ it.each(["review-diff-v1", undefined])("passes reviewer %s and an event file thr
   d.runPipeline = vi.fn().mockResolvedValue({
     comments: [{ path: "missing.ts", line: 1, body: "A finding" }], review: { model: "fake", chunkFailed: 0 },
     pipeline: { pool: 2, kept: 1 },
+    sources: ["ctx"],
   });
   expect(await main({
     NEBIUS_API_KEY: "fake-unused", GITHUB_EVENT_NAME: "pull_request", GITHUB_TOKEN: "fake-github",
     GITHUB_EVENT_PATH: eventPath, TRACEHOUND_DRY_RUN: "true",
     TRACEHOUND_REVIEWER: reviewer, TRACEHOUND_REPO_DIR: "/fake/repo",
+    TRACEHOUND_FIXES: fixes,
   }, d)).toBe(0);
   const input = { title: "Title", body: "", number: 1, diff: "" };
   if (reviewer === "review-diff-v1") {
@@ -62,6 +68,13 @@ it.each(["review-diff-v1", undefined])("passes reviewer %s and an event file thr
     expect(d.runReviewer).not.toHaveBeenCalled();
   }
   expect(JSON.parse(vi.mocked(d.log).mock.calls[0]![0])).toMatchObject({ comments: [], event: "COMMENT" });
+  if (reviewer === "review-diff-v1" || fixes === "off") {
+    expect(d.runFixes).not.toHaveBeenCalled();
+    expect(vi.mocked(d.log).mock.calls[0]![0]).not.toContain("tracehound:v1");
+  } else {
+    expect(d.runFixes).toHaveBeenCalledWith([{ path: "missing.ts", line: 1, body: "A finding" }], "", "/fake/repo", "abc");
+    expect(vi.mocked(d.log).mock.calls[0]![0]).toContain("tracehound:v1");
+  }
 });
 
 it.each(["unknown", "", "review-ctx-v1"])("invalid reviewer %j fails before any effects", async reviewer => {
@@ -98,5 +111,13 @@ it("rejects malformed boolean input", async () => {
     NEBIUS_API_KEY: "fake-unused", GITHUB_EVENT_NAME: "pull_request", GITHUB_TOKEN: "fake-github",
     GITHUB_EVENT_PATH: "/unused", TRACEHOUND_DRY_RUN: "yes",
   }, d)).toBe(1);
+  expect(d.fetch).not.toHaveBeenCalled();
+});
+
+it.each(["yes", "", "ON"])("rejects invalid fixes input %j before effects", async fixes => {
+  const d = deps();
+  expect(await main({ NEBIUS_API_KEY: "fake-unused", GITHUB_EVENT_NAME: "pull_request", GITHUB_TOKEN: "fake-unused",
+    GITHUB_EVENT_PATH: "/unused", TRACEHOUND_FIXES: fixes }, d)).toBe(1);
+  expect(d.runFixes).not.toHaveBeenCalled();
   expect(d.fetch).not.toHaveBeenCalled();
 });

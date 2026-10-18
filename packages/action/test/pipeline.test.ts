@@ -1,7 +1,7 @@
 import { access, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkRepoHead, MissingHeadError, poolFindings, runPipeline, type Execute } from "../src/pipeline.ts";
+import { checkRepoHead, MissingHeadError, poolFindings, poolSources, runPipeline, type Execute } from "../src/pipeline.ts";
 import { runAction, type Finding, type Options, type PullEvent, type ReviewPayload } from "../src/action.ts";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -81,6 +81,8 @@ function fake() {
       ? new Response(diff) : Response.json({ head: { sha: "abc123" } });
   });
   const deps = { fetch, log, runReviewer: vi.fn(),
+    runFixes: vi.fn(async (findings: Finding[]) => ({ suggestions: findings.map(() => null),
+      counts: { attempted: findings.length, valid: 0, rejected: findings.length } })),
     checkRepoHead: (repo: string, head: string) => checkRepoHead(repo, head, exec),
     runPipeline: (pr: typeof input, model: string, repo: string, head: string) => runPipeline(pr, model, repo, head, log, exec),
   };
@@ -92,6 +94,16 @@ function fake() {
 }
 
 describe("pool using the shared agrees rule", () => {
+  it("tags sources without changing the pool's bytes, objects, duplicates, or order", () => {
+    const diff = [finding, finding, { ...finding, path: "other.ts" }];
+    const ctx = [{ ...finding, line: 13 }, { ...finding, line: null }, { ...finding, line: 20 }];
+    const before = JSON.stringify([...diff, ctx[1], ctx[2]]);
+    expect(poolSources(diff, ctx)).toEqual(["both", "both", "diff", "ctx", "ctx"]);
+    const pool = poolFindings(diff, ctx);
+    expect(JSON.stringify(pool)).toBe(before);
+    expect(pool[0]).toBe(finding);
+    expect(pool[3]).toBe(ctx[1]);
+  });
   it.each([
     ["normalised path, 3 lines away", { ...finding, path: " ./a/src/widget.ts ", line: 13 }, false],
     ["4 lines away", { ...finding, line: 14 }, true],
@@ -127,6 +139,7 @@ it("runs both reviewers before either finishes, then verifies the pool, using on
   release.resolve();
   const result = await pending;
   expect(result).toMatchObject({ pipeline: { pool: 2, kept: 2 }, comments: [finding, { ...finding, line: null }] });
+  expect(result?.sources).toEqual(["diff", "ctx"]);
   expect(f.commands).toEqual(["review", "review-ctx", "verify-ctx"]);
   expect(f.models).toEqual(["explicit-model", "explicit-model", "explicit-model"]);
   expect(f.inputs.size).toBe(1);
@@ -171,6 +184,8 @@ it("posts only the CLI's kept subset and reports the original pool size", async 
   expect(f.posts[0]!.comments).toEqual([]);
   expect(f.posts[0]!.body.split("\n")[0]).toBe("TraceHound · pool-verify-v1 · fake-model · 1 findings (pool 2, kept 1)");
   expect(f.posts[0]!.body).toContain("src/widget.ts:null\nSynthetic defect");
+  const footer = JSON.parse(/<!-- tracehound:v1 (.*) -->/.exec(f.posts[0]!.body)![1]!);
+  expect(footer.findings).toEqual([{ path: ctx.path, line: null, source: "ctx", hasSuggestion: false }]);
   await f.cleaned();
 });
 
