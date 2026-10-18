@@ -53,3 +53,43 @@ in place. The PR head branch's workflow was never edited.
 
 Local gates passed: `pnpm test` (797 passed, 7 skipped: action 137, analyzer 496, viewer 164)
 and `pnpm typecheck` (all three workspace packages). No dependencies were added.
+
+## Recheck after the review fixes
+
+Checked on 2026-10-18 in `SunnyBagal/tracehound-demo` after the ultrareview fixes on PR #43.
+Demo commit `b8f86d7f63de1e6bb4253d5b331404cedc6f3129` pinned the action to
+`1fa94d3760bfacb1108c3efcce6509bcd3a5d6d2`. It used one job shaped like the new example's `data`
+job: `contents: write` only, a per-repository concurrency group with `cancel-in-progress: false`,
+`fetch-depth: 0`, `max-comments: '0'` and `data-branch: 'on'`. No Nebius call was made. Push and
+closed events skip the review step, and on the reopen it logged `max-comments is 0; nothing to post`.
+
+| Event | Run | Result |
+| --- | --- | --- |
+| Pin push `b8f86d7f63de1e6bb4253d5b331404cedc6f3129` | [39153983741](https://github.com/SunnyBagal/tracehound-demo/actions/runs/39153983741) | Success; snapshot written, `latest` moved to `b8f86d7` (a descendant of `d0c6d39`) |
+| No-op push `26c3c541ba439fc427e0b9bac1c78c91fc5b0145` | [39154032404](https://github.com/SunnyBagal/tracehound-demo/actions/runs/39154032404) | Success; `latest` and `defaultRef` moved to `26c3c54`; 4 manifest entries |
+| Re-run of the pin push (attempt 2) | [39153983741](https://github.com/SunnyBagal/tracehound-demo/actions/runs/39153983741) | Success; data commit `c678812` rewrote only the `b8f86d7` snapshot file; `latest` stayed `26c3c54` |
+| PR #3 closed | [39154128356](https://github.com/SunnyBagal/tracehound-demo/actions/runs/39154128356) | Success; entry changed to `closed` |
+| PR #3 reopened | [39154166055](https://github.com/SunnyBagal/tracehound-demo/actions/runs/39154166055) | Success; entry back to `open` with `baseSha` `55c0dc7` (the merge base), not the event's base tip `26c3c54` |
+
+The re-run row is an extra check of the monotonic manifest rule (finding 2); it was not part of
+the requested push/reopen pair.
+
+The reopen rewrote `changesets/pr-3-99147bd.json` with base `55c0dc7416d81387e1b252b9af6b4254e707134f`
+and 1 modified file (1 modified declaration, 332 unchanged). The first live check above recorded
+`baseSha` `d0c6d39`, the base branch tip at that time. Its change set counted 2 modified files
+because it charged the PR with a workflow change main made after the branch point. That was
+finding 1, seen in real data.
+
+`tracehound-data` is at `3f007818a5320423bc28601ab4f8f6baed79a0d6` with seven files: four
+snapshots (`6a1865d`, `d0c6d39`, `b8f86d7`, `26c3c54`, all analyzer `0.10.0`),
+`snapshots/index.json`, `changesets/pr-3-99147bd.json` and `changesets/index.json`. The change
+set index has one entry, `pr-3-99147bd`, state `open`.
+
+Restoration commit `78aa5b7bfc880a6eb427d240b902d7e46dd3b509` restored the main workflow
+byte-for-byte: blob `1ca83722460389336faeca003f2ed25a92e74143`, action pin
+`41a92a87deb4ae21bb09de461057adf7560f49d3`. The restored workflow has no push trigger, so that push
+started no run. PR #3 remains open and `tracehound-data` remains in place. The PR head branch's
+workflow was never edited, and no PR was merged.
+
+Local gates at `1fa94d3` passed: `pnpm test` (813 passed, 7 skipped: action 153, analyzer 496,
+viewer 164) and `pnpm typecheck` (all three workspace packages). No dependencies were added.
