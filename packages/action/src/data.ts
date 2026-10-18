@@ -223,8 +223,10 @@ export async function runData(
         deps.log("TraceHound data: updated tracehound-data.");
         return 0;
       }
-      // Only retry a concurrent update, not authentication or other push failures.
-      if (attempt || !/\[rejected\].*\((?:fetch first|non-fast-forward)\)/.test(pushed.stdout)) {
+      // Only retry a concurrent update, not authentication or other push failures. A writer whose
+      // ref update lands while ours is in flight shows as a remote ref-lock rejection.
+      if (attempt || !/\[rejected\].*\((?:fetch first|non-fast-forward)\)|\[remote rejected\].*\((?:cannot lock ref|failed to update ref)\b/
+        .test(pushed.stdout)) {
         throw new Error("Cannot push data");
       }
     }

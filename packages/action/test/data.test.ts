@@ -218,6 +218,32 @@ it("retries once after a concurrent push and preserves the fetched entry and fil
   expect(f.deps.analyzer).toHaveBeenCalledTimes(1);
 });
 
+it.each([
+  "!\tHEAD:refs/heads/tracehound-data\t[remote rejected] (cannot lock ref 'refs/heads/tracehound-data': is at 1 but expected 2)\n",
+  "!\tHEAD:refs/heads/tracehound-data\t[remote rejected] (failed to update ref)\n",
+])("retries once when the remote ref moved during the push: %s", async (stdout) => {
+  const f = await fake(); const original = f.deps.git;
+  let pushes = 0;
+  f.deps.git = vi.fn((cwd, args) => {
+    if (args[0] !== "push" || ++pushes > 1) return original(cwd, args);
+    f.seed("changesets/index.json", [{ ...entry("pr-4-ccccccc"), pr: 4 }]); // the other writer's update
+    return { code: 1, stdout };
+  });
+  await f.run("pull_request", pull());
+  expect(pushes).toBe(2);
+  expect(JSON.parse(f.remote.get("changesets/index.json")!).map((e: ChangeEntry) => e.pr)).toEqual([4, 3]);
+  expect(f.deps.log).toHaveBeenCalledExactlyOnceWith("TraceHound data: updated tracehound-data.");
+});
+
+it("does not retry a remote rejection for permissions", async () => {
+  const f = await fake(); const original = f.deps.git;
+  f.deps.git = vi.fn((cwd, args) => args[0] === "push"
+    ? { code: 1, stdout: "!\tHEAD:refs/heads/tracehound-data\t[remote rejected] (permission denied)\n" } : original(cwd, args));
+  await f.run("pull_request", pull());
+  expect(vi.mocked(f.deps.git).mock.calls.filter(([, args]) => args[0] === "push")).toHaveLength(1);
+  expect(f.deps.log).toHaveBeenCalledExactlyOnceWith("TraceHound data: analyzer or data write failed; skipped.");
+});
+
 it("does not retry authentication failures and never exposes error output", async () => {
   const f = await fake(); const original = f.deps.git;
   f.deps.git = vi.fn((cwd, args) => args[0] === "push" ? { code: 128, stdout: "SECRET" } : original(cwd, args));

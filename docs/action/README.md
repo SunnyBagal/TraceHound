@@ -72,8 +72,10 @@ latest or is the default branch's current tip; otherwise its snapshot file is wr
 
 Both analyzer commands use the installing repository's `tracehound.json` when present.
 Repositories without TypeScript sources and failed analyzer runs write nothing and log one
-line. Data failures never fail the review job. A non-fast-forward push is retried once by
-fetching and reapplying the index update; a second rejection is skipped. The token is passed
+line. Data failures never fail the review job. A non-fast-forward push, or a remote
+`cannot lock ref` / `failed to update ref` rejection from a concurrent writer, is retried once by
+fetching and reapplying the index update; a second rejection is skipped. Authentication and
+permission failures are never retried. The token is passed
 through the Git subprocess environment and is never stored in a remote URL or config file.
 The branch remains in place if you later turn the input off. `dry-run` controls review posting
 only; leave `data-branch` off when you also want to avoid committing history.
