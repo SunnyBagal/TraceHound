@@ -620,3 +620,29 @@ was re-run.
   against the console.
 - Opinion: about 1,100 requests with a single failed request is in line with earlier entries.
   Catalog prices readable from the API would still help the budget guard.
+
+
+## 2026-10-18 · Nemotron 3 Super component naming and one-line summaries
+
+- **Called:** two free `GET /v1/models` checks and eight `POST /v1/chat/completions`
+  requests on `api.tokenfactory.us-central1.nebius.com`, using
+  `nvidia/nemotron-3-super-120b-a12b`, temperature 0, `max_tokens: 1500`, and
+  `chat_template_kwargs.enable_thinking: false`. The model received extracted naming facts
+  only, with no source code or snippets. The existing naming CLI and deterministic checks
+  were used without modification.
+- **Counts:** both model-list checks succeeded; all 8 completion requests succeeded with usage
+  reported, 0 cached completions, 0 HTTP failures, 0 network failures and 0 timeouts. The local
+  deterministic name check accepted 7 replies and rejected 1, retaining its heuristic fallback.
+  Existing summary-suppression and fixed-name rules left 2 model-written summaries published.
+  There were no API error strings to report.
+- **Tokens and spend (append-only ledger):** 2,689 input / 277 output tokens; **$0.001056**,
+  priced by the existing configuration at $0.30/$0.90 per million input/output tokens. The two
+  runs shared a $0.20 cap, with the second run using the remaining allowance. Baseline ledger
+  spend was $0. These configured prices were not independently checked against console billing.
+- **Latency:** client-measured completion latency 575–1,298 ms, median 1,106 ms. The free
+  model-list checks were not separately timed.
+- **Docs/console:** neither was consulted in this session; no new documentation or console
+  defect was observed. Per-request cost confirmation in the API response would help reconcile
+  the local ledger with billing.
+- Opinion: the short facts-only requests completed quickly, and the deterministic fallback
+  remained useful even for this small batch.

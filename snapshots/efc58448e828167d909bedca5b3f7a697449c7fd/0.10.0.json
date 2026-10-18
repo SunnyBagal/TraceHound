@@ -8,7 +8,7 @@
     "url": "https://github.com/SunnyBagal/tracehound-demo.git",
     "commitSha": "efc58448e828167d909bedca5b3f7a697449c7fd"
   },
-  "generatedAt": "2026-10-17T16:47:09.203Z",
+  "generatedAt": "2026-10-17T22:06:37.800Z",
   "components": [
     {
       "id": "recall-backend:worker",
@@ -81,12 +81,13 @@
     },
     {
       "id": "bullmq:content-processing",
-      "name": "content-processing queue",
+      "name": "Content Processing Queue",
       "kind": "queue",
       "subtitle": "BullMQ queue · content-processing · jobs: process-content",
       "naming": {
-        "source": "heuristic",
+        "source": "llm",
         "heuristicName": "content-processing queue",
+        "model": "nvidia/nemotron-3-super-120b-a12b",
         "summaryDropped": true
       },
       "files": [],
@@ -145,12 +146,13 @@
     },
     {
       "id": "recall-backend:brainly-server",
-      "name": "Brainly Server",
+      "name": "Content API Service",
       "kind": "api",
       "subtitle": "HTTP server entry · POST /api/v1/signup, POST /api/v1/signin",
       "naming": {
-        "source": "heuristic",
+        "source": "llm",
         "heuristicName": "Brainly Server",
+        "model": "nvidia/nemotron-3-super-120b-a12b",
         "summaryDropped": true
       },
       "package": "recall-backend",
@@ -298,12 +300,14 @@
     },
     {
       "id": "recall-backend:shared",
-      "name": "Brainly Shared",
+      "name": "Shared Utilities",
       "kind": "library",
       "subtitle": "Shared modules · Usecontent, db, schema…",
+      "summary": "Provides reusable TypeScript types, database configuration, and AI service helpers for backend modules.",
       "naming": {
-        "source": "heuristic",
-        "heuristicName": "Brainly Shared"
+        "source": "llm",
+        "heuristicName": "Brainly Shared",
+        "model": "nvidia/nemotron-3-super-120b-a12b"
       },
       "package": "recall-backend",
       "files": [
@@ -13102,7 +13106,61 @@
       ]
     }
   ],
-  "llmCalls": [],
+  "llmCalls": [
+    {
+      "purpose": "component-naming",
+      "componentId": "recall-backend:worker",
+      "model": "nvidia/nemotron-3-super-120b-a12b",
+      "latencyMs": 575,
+      "promptTokens": 325,
+      "completionTokens": 33,
+      "totalTokens": 358,
+      "cached": false,
+      "accepted": false,
+      "rejectReason": "name \"Text Extraction Worker\" describes only recall-backend/services/textExtractor.ts (\"text\"), but the component has 2 files",
+      "estCostUSD": 0.0001272,
+      "ok": true
+    },
+    {
+      "purpose": "component-naming",
+      "componentId": "bullmq:content-processing",
+      "model": "nvidia/nemotron-3-super-120b-a12b",
+      "latencyMs": 1058,
+      "promptTokens": 230,
+      "completionTokens": 33,
+      "totalTokens": 263,
+      "cached": false,
+      "accepted": true,
+      "estCostUSD": 9.87e-05,
+      "ok": true
+    },
+    {
+      "purpose": "component-naming",
+      "componentId": "recall-backend:brainly-server",
+      "model": "nvidia/nemotron-3-super-120b-a12b",
+      "latencyMs": 1285,
+      "promptTokens": 419,
+      "completionTokens": 37,
+      "totalTokens": 456,
+      "cached": false,
+      "accepted": true,
+      "estCostUSD": 0.000159,
+      "ok": true
+    },
+    {
+      "purpose": "component-naming",
+      "componentId": "recall-backend:shared",
+      "model": "nvidia/nemotron-3-super-120b-a12b",
+      "latencyMs": 1298,
+      "promptTokens": 372,
+      "completionTokens": 34,
+      "totalTokens": 406,
+      "cached": false,
+      "accepted": true,
+      "estCostUSD": 0.0001422,
+      "ok": true
+    }
+  ],
   "ignored": [
     {
       "file": "recall-backend/bench/bench-search.ts",
