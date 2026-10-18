@@ -17,12 +17,14 @@ the comments as model-generated and unverified.
 2. Copy [example-workflow.yml](example-workflow.yml) to `.github/workflows/tracehound-review.yml`
    in that repository. Replace `@main` with a reviewed TraceHound commit SHA
    containing this action before enabling it.
-3. Keep `contents: read` and `pull-requests: write` permissions and the same-repository job
-   condition. Repository or organization policy must permit the workflow token to write reviews.
-4. Keep the example's `actions/checkout` step with `ref: ${{ github.event.pull_request.head.sha }}`
-   and `persist-credentials: false`. The default pipeline needs the target repository at that head
+3. The example has two jobs. `review` gets `contents: read` and `pull-requests: write`; `data`
+   writes graph history and is the only job with `contents: write`. For review only, delete the
+   `data` job and the `push` trigger. Keep the same-repository PR condition. Repository or
+   organization policy must permit these workflow token permissions.
+4. Keep the example's `actions/checkout` steps with the head SHA as `ref` and
+   `persist-credentials: false`. The default pipeline needs the target repository at that head
    in `${{ github.workspace }}`; it checks that the head commit exists before any model call.
-   Keep the job's 20-minute timeout.
+   Keep each job's 20-minute timeout.
 
 The composite action sets up Node 24 and pnpm, installs the reviewer's existing dependencies
 from the action's own repository, and runs its CLI with Node's native TypeScript support.
@@ -37,6 +39,67 @@ this repository's workflows, so adding this action does not enable model calls i
 | `max-comments` | `15` | Maximum findings included in reviewer order, counting inline and body findings together. Extra findings are omitted with a count. `0` skips the reviewer. |
 | `fixes` | `on` | `on` or `off`. Adds fix proposals and dashboard metadata to `pool-verify-v1`. `off` preserves the previous review payload, without proposals or the metadata footer. |
 | `dry-run` | `false` | `true` prints the proposed review payload as JSON and posts nothing. It still runs the reviewer and incurs its Nebius cost. |
+| `data-branch` | `off` | Set to `on` to write heuristic graph history to `tracehound-data`. Requires `contents: write`. |
+
+## Graph history and permissions
+
+`data-branch: 'on'` opts into a persistent, serverless history on an orphan `tracehound-data`
+branch in the installing repository. The workflow token needs `contents: write`; keep
+`pull-requests: write` for reviews. Fork PRs are skipped. Use `pull_request`, never
+`pull_request_target` with an untrusted checkout. This branch has the repository's visibility:
+graph metadata, file paths, declarations, and change information are committed there.
+
+The [example workflow](example-workflow.yml) handles pushes to `main` (replace that with your
+default branch), plus PR opens, updates, reopenings, and closures. Its two jobs have separate
+concurrency groups. Reviews are grouped per PR with `cancel-in-progress: true`, so a newer push
+cancels a superseded review. Data writes are grouped per repository with
+`cancel-in-progress: false`, so they run one at a time and a running write is never cancelled.
+GitHub still keeps at most one *pending* job per group: when three or more events arrive while a
+write runs, the older pending ones are cancelled and their history is never written. A later
+push writes the newest snapshot, but a dropped PR close leaves that PR's entries `open`.
+The `data` job uses full checkout history (`fetch-depth: 0`) for the changes CLI and
+`max-comments: '0'`, so its review step makes no model call and posts nothing. Push and closed
+events skip the reviewer. The data step runs after the review step even if review failed, uses
+heuristic naming, and makes no model calls.
+
+The data step shares its job's `timeout-minutes` with the review step. With `data-branch: 'on'`
+on a job that also reviews, the data step gets only what the review leaves of the 20 minutes. If
+the job times out after the review posts, the data write is lost and the job is marked failed,
+because `continue-on-error` does not cover a job timeout. That single-job setup is the only one
+that records `reviewFooter` (the footer file stays on the review job's runner), but its shared
+concurrency group cannot cancel superseded reviews without also cancelling history writes. The
+example's separate `data` job has its own timeout and records no `reviewFooter`.
+
+Default-branch pushes write `snapshots/<sha>/<analyzerVersion>.json` and
+`snapshots/index.json`, using the analyzer's viewer-compatible manifest. PR events write
+`changesets/pr-<number>-<headSha7>.json` and a JSON array in `changesets/index.json`.
+Each array entry contains `id`, `repo`, `pr`, `title`, `headSha`, `baseSha`, and `state`.
+`baseSha` is the merge base of the PR's base and head, and the change set diffs from it. If the
+checkout lacks it, the data step fetches the base commit (unshallowing a shallow checkout)
+without credentials, so a private repository needs the example's `fetch-depth: 0`.
+It also contains the parsed `reviewFooter` when this run successfully posted a review with
+a matching `tracehound:v1` footer. Only the review body's last line is read as the footer, so
+finding text that quotes a footer-like comment is never recorded; the review step hands it to the
+data step as a plain JSON file. Closing a PR marks every recorded head of that PR `merged`
+or `closed`; reopening updates the current head to `open`. Files are retained.
+States never move backwards, so a re-run of an older event cannot undo a newer one: `merged`
+beats `closed`, `closed` beats `open`, and only a `reopened` event returns a `closed` entry to
+`open`. A push moves the manifest's `latest` only when its commit descends from the recorded
+latest or is the default branch's current tip; otherwise its snapshot file is written and
+`snapshots/index.json` is left alone.
+
+Both analyzer commands use the installing repository's `tracehound.json` when present.
+Repositories without TypeScript sources and failed analyzer runs write nothing and log one
+line. Data failures never fail the review step's job, except for the job timeout above. A non-fast-forward push, or a remote
+`cannot lock ref` / `failed to update ref` rejection from a concurrent writer, is retried once by
+fetching and reapplying the index update; a second rejection is skipped. Authentication and
+permission failures are never retried. The token is passed
+only to the git that writes the temporary data-branch clone, through its environment, and is
+never stored in a remote URL or config file; that git ignores global and system config. Git in
+the checked-out workspace gets no token and keeps the runner's config, such as the
+`safe.directory` entry `actions/checkout` writes in container jobs.
+The branch remains in place if you later turn the input off. `dry-run` controls review posting
+only; leave `data-branch` off when you also want to avoid committing history.
 
 ## Fix suggestions
 
@@ -114,6 +177,9 @@ in strings are JSON-escaped to keep the hidden comment intact.
   in the review body. Other HTTP failures are reported without automatically retrying a POST.
 - Reviews are attached to the triggering head SHA. Events whose head has already changed are skipped.
   A rerun can create another review; the action does not edit or deduplicate prior reviews.
+- Each data run fetches and checks out the whole `tracehound-data` tip tree, which grows by one
+  snapshot per default-branch push and is never pruned, though only the two `index.json` files
+  are read (backlog: a blobless or sparse checkout of those files).
 - GitHub diff/API size limits still apply. There is no fallback for an unavailable GitHub diff. Dry-run JSON
   contains finding text in the Actions log, so treat log access like access to review comments.
 

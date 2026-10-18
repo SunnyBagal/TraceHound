@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -13,6 +13,25 @@ afterEach(async () => {
 const deps = (): Dependencies => ({ fetch: vi.fn(() => { throw new Error("Unexpected API call"); }),
   runReviewer: vi.fn(), runPipeline: vi.fn(), runFixes: vi.fn(async () => ({ suggestions: [null],
     counts: { attempted: 1, valid: 0, rejected: 1 } })), checkRepoHead: vi.fn(), log: vi.fn() });
+
+it("saves only parsed footer metadata after a successful review", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "tracehound-action-test-")); directories.push(dir);
+  const eventPath = path.join(dir, "event.json"), footerPath = path.join(dir, "footer");
+  await writeFile(eventPath, JSON.stringify({ repository: { full_name: "example/widget" },
+    pull_request: { title: "A change", body: "", number: 1, head: { sha: "abc", repo: { full_name: "example/widget" } } } }));
+  const d = deps();
+  d.fetch = vi.fn(async (_url, init) => init?.method === "POST" ? Response.json({})
+    : new Headers(init?.headers).get("Accept") === "application/vnd.github.diff" ? new Response("") : Response.json({ head: { sha: "abc" } }));
+  d.runPipeline = vi.fn<Dependencies["runPipeline"]>(async () => ({ comments: [{ path: "a.ts", line: 1, body: "Finding text" }],
+    pipeline: { pool: 1, kept: 1 }, sources: ["ctx"], review: { model: "fake", chunkFailed: 0 } }));
+  expect(await main({ NEBIUS_API_KEY: "fake-unused", GITHUB_EVENT_NAME: "pull_request", GITHUB_TOKEN: "fake-unused",
+    GITHUB_EVENT_PATH: eventPath, TRACEHOUND_REVIEW_FILE: footerPath }, d)).toBe(0);
+  const saved = await readFile(footerPath, "utf8");
+  // Plain JSON, not the review body's HTML comment.
+  expect(JSON.parse(saved)).toMatchObject({ version: 1, headSha: "abc" });
+  expect(saved).not.toContain("Finding text");
+  expect(saved).not.toContain("fake-unused");
+});
 
 it("missing Nebius input exits 1 with a clear message and no effects", async () => {
   const d = deps();

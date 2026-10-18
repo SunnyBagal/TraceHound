@@ -46,6 +46,7 @@ export interface Options {
 }
 
 export interface Dependencies {
+  onReview?: (body: string) => Promise<void>;
   fetch: typeof fetch;
   runReviewer: (input: ReviewerInput, model: string) => Promise<unknown>;
   runPipeline: (input: ReviewerInput, model: string, repo: string, head: string) => Promise<PipelineOutput | null>;
@@ -269,6 +270,10 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     const fallback = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, true, reviewer, pipeline, data);
     if (!await canPost()) return;
     await github(`${endpoint}/reviews`, options, deps, { payload: fallback });
+  }
+  if (deps.onReview) {
+    try { await deps.onReview(payload.body); }
+    catch { deps.log("TraceHound: review metadata could not be saved."); }
   }
   deps.log(`TraceHound: posted review with ${Math.min(output.comments.length, options.maxComments)} findings.`);
 }
