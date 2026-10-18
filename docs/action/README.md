@@ -52,7 +52,9 @@ the benchmarked reviewer**; candidate generation, pooling order, and verificatio
 The prompt asks for only the reported defect to be fixed, preserving style and indentation,
 without new dependencies, and for no proposal when unsure. Validation accepts at most 15 existing
 lines and 15 replacement lines, requires every affected line to be on the right side of the diff,
-and rejects unchanged text. A rejected proposal or fix-stage failure leaves the finding intact.
+and rejects unchanged text. The range must contain the finding's line; if that line is `null`,
+the entire range must consist of added lines. A rejected proposal or fix-stage failure leaves
+the finding intact at its original line.
 
 Valid proposals use GitHub's native suggestion block and inclusive right-side line range, so
 GitHub can show its **Commit suggestion** button. Read and test a proposal before applying it.

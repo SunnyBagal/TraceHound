@@ -6,7 +6,7 @@ import { Budget, capsFromEnv } from "../../analyzer/src/llm/budget.ts";
 import { TokenFactoryClient, type ChatRequest } from "../../analyzer/src/llm/client.ts";
 import { SpendLedger } from "../../analyzer/src/llm/ledger.ts";
 import { loadPriceTable } from "../../analyzer/src/llm/prices.ts";
-import { newSideLines, parseDiff } from "../../analyzer/src/review/diff.ts";
+import { newSideLines, parseDiff, type DiffFile } from "../../analyzer/src/review/diff.ts";
 import { REASONING_OFF } from "../../analyzer/src/review/review.ts";
 import type { Finding } from "./action.ts";
 import type { Execute } from "./pipeline.ts";
@@ -30,7 +30,22 @@ export function createFixClient(): FixClient {
   });
 }
 
-export function validateFix(value: unknown, current: string[], allowed: Set<number>): Fix | null {
+function addedSideLines(file: DiffFile | undefined): Set<number> {
+  const added = new Set<number>();
+  for (const hunk of file?.hunks ?? []) {
+    let line = hunk.newStart;
+    for (const text of hunk.text.split("\n").slice(1)) {
+      if (text.startsWith("+")) added.add(line++);
+      else if ((text.startsWith(" ") || text === "") && line < hunk.newStart + hunk.newCount) line++;
+    }
+  }
+  return added;
+}
+
+export function validateFix(
+  value: unknown, current: string[], allowed: Set<number>, findingLine: number | null,
+  added: Set<number> = new Set(),
+): Fix | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const f = value as Record<string, unknown>;
   if (Object.keys(f).sort().join(",") !== "endLine,explanation,replacement,startLine"
@@ -41,7 +56,11 @@ export function validateFix(value: unknown, current: string[], allowed: Set<numb
     || typeof f.replacement !== "string" || f.replacement.split("\n").length > 15
     // A nested fence could escape GitHub's suggestion block.
     || /`{3,}/.test(f.replacement)) return null;
-  for (let line = f.startLine; line <= f.endLine; line++) if (!allowed.has(line)) return null;
+  if (findingLine !== null && (!Number.isSafeInteger(findingLine)
+    || findingLine < f.startLine || findingLine > f.endLine)) return null;
+  for (let line = f.startLine; line <= f.endLine; line++) {
+    if (!allowed.has(line) || (findingLine === null && !added.has(line))) return null;
+  }
   const original = current.slice(f.startLine - 1, f.endLine).join("\n");
   if (f.replacement === original) return null;
   return { startLine: f.startLine, endLine: f.endLine, replacement: f.replacement, original };
@@ -90,7 +109,7 @@ export async function runFixes(
             }
             break;
           }
-          suggestions[index] = validateFix(value, current, file ? newSideLines(file) : new Set());
+          suggestions[index] = validateFix(value, current, file ? newSideLines(file) : new Set(), finding.line, addedSideLines(file));
           break;
         }
       } catch {

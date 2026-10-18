@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { FIX_MODEL, runFixes, validateFix, type FixClient } from "../src/fix.ts";
 import { FIX_SYSTEM_PROMPT } from "../src/fix-prompt.ts";
 import type { Execute } from "../src/pipeline.ts";
-import type { Finding } from "../src/action.ts";
+import { buildReview, type Finding } from "../src/action.ts";
 
 const finding: Finding = { path: "src/widget.ts", line: 45, body: "Synthetic missing-value defect" };
 const current = Array.from({ length: 100 }, (_, i) => `  value${i + 1}`);
@@ -68,15 +68,15 @@ describe("validation rejects unsafe suggestions", () => {
   });
 
   it("rejects a gap even when both endpoints are allowed and bounds beyond the current file", () => {
-    expect(validateFix(proposal, current, new Set([44, 45]))).not.toBeNull();
-    expect(validateFix({ ...proposal, endLine: 46 }, current, new Set([44, 46]))).toBeNull();
-    expect(validateFix(proposal, current.slice(0, 44), new Set([44, 45]))).toBeNull();
+    expect(validateFix(proposal, current, new Set([44, 45]), 45)).not.toBeNull();
+    expect(validateFix({ ...proposal, endLine: 46 }, current, new Set([44, 46]), 45)).toBeNull();
+    expect(validateFix(proposal, current.slice(0, 44), new Set([44, 45]), 45)).toBeNull();
   });
 
   it("accepts deletion, a single line and the inclusive 15-line limit", () => {
-    expect(validateFix({ ...proposal, startLine: 45, replacement: "" }, current, new Set([45])))
+    expect(validateFix({ ...proposal, startLine: 45, replacement: "" }, current, new Set([45]), 45))
       .toMatchObject({ startLine: 45, endLine: 45, replacement: "" });
-    expect(validateFix({ ...proposal, startLine: 1, endLine: 15 }, current, new Set(Array.from({ length: 15 }, (_, i) => i + 1))))
+    expect(validateFix({ ...proposal, startLine: 1, endLine: 15 }, current, new Set(Array.from({ length: 15 }, (_, i) => i + 1)), 7))
       .toMatchObject({ startLine: 1, endLine: 15 });
   });
 });
@@ -108,10 +108,31 @@ it("counts missing source as rejected and never calls the model with missing evi
 });
 
 it("uses the first hunk as the window center for findings without a line", async () => {
-  const f = fake();
+  const f = fake([JSON.stringify({ ...proposal, startLine: 45, endLine: 45 })]);
   expect((await f.run([{ ...finding, line: null }])).counts).toEqual({ attempted: 1, valid: 1, rejected: 0 });
   const packet = JSON.parse(f.chat.mock.calls[0]![0].messages[1]!.content!);
   expect(packet.file.split("\n")[0]).toBe("4:   value4");
+});
+
+it("rejects a fix 30 lines away and keeps the inline comment on the finding's line", async () => {
+  const distant = { ...proposal, startLine: 75, endLine: 75 };
+  const f = fake([JSON.stringify(distant)]);
+  const twoHunks = diff + "@@ -75 +75 @@\n-  previous75\n+  value75\n";
+  const result = await runFixes([finding], twoHunks, "/fake/repo", "abcdef12", { chat: f.chat }, f.exec);
+  expect(result).toEqual({ suggestions: [null], counts: { attempted: 1, valid: 0, rejected: 1 } });
+  const payload = buildReview([finding], twoHunks, "abcdef12", "fake", 15, false, "pool-verify-v1", { pool: 1, kept: 1 }, {
+    fixes: result, sources: ["diff"],
+  });
+  expect(payload.comments).toEqual([{ ...finding, side: "RIGHT" }]);
+  expect(payload.comments[0]!.line).toBe(45);
+  expect(payload.comments[0]!.body).not.toContain("```suggestion");
+});
+
+it.each([
+  [44, 44], [44, 45], [45, 46], [46, 46],
+])("rejects context lines in a null-line finding's proposed range %s–%s", async (startLine, endLine) => {
+  const f = fake([JSON.stringify({ ...proposal, startLine, endLine })]);
+  expect(await f.run([{ ...finding, line: null }])).toEqual({ suggestions: [null], counts: { attempted: 1, valid: 0, rejected: 1 } });
 });
 
 it("limits concurrent calls to four and keeps suggestion order", async () => {
