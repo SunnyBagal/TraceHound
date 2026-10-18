@@ -8,16 +8,21 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { buildClients, runTestSet, writeNew, type Deps } from "../../../scripts/bench/run-test-set.ts";
+import { createHash } from "node:crypto";
+import { buildClients, EXTRA_FROZEN_PATHS, FROZEN_PATHS, runTestSet, writeNew, type Deps } from "../../../scripts/bench/run-test-set.ts";
 import { minMedMax, rowSpread, spreadReport } from "../../../scripts/bench/spread.ts";
 import {
   checkRun,
   DEV_REPOS,
+  EXTRA_CAP_USD,
+  EXTRA_ITEMS,
   fetchTarget,
   isRequestFailure,
   ITEMS,
+  planExtraItem,
   planItem,
   readItemStates,
+  readStatesOf,
   requireTestRun,
   restartRefusal,
   rowsFor,
@@ -501,5 +506,150 @@ describe("spread", () => {
     expect(s.fSpread!.median).toBeCloseTo((52 / 146 + 60 / 164) / 2, 9);
     expect(minMedMax([3, 1])).toEqual({ min: 1, median: 2, max: 3 });
     expect(minMedMax([])).toBeNull();
+  });
+});
+
+// ---- decision 064: dev runs 4–6; Cal.com's path left as the tag review-freeze-1 has it ----
+
+describe("dev runs 4–6 (decision 064)", () => {
+  const done = (costUSD: number): ItemState => ({ status: "complete", costUSD });
+  const crashed = (costUSD: number): ItemState => ({ status: "running", costUSD, firstScoreFiles: 0 });
+
+  it("accepted for --set dev only; Cal.com and dev runs 1–3 refused as before", async () => {
+    expect(() => checkRun("dev", "4", {})).toThrow(/refusing --run 4/); // checkRun is unchanged
+    const bench = tmp("tracehound-064-refuse-");
+    const out: string[] = [];
+    const deps: Deps = { bench, stateDir: path.join(bench, ".state"), pricesFile: PRICES, env: { NEBIUS_API_KEY: "k", TRACEHOUND_TEST_RUN: "061" }, log: (l) => out.push(l), err: (l) => out.push(l), freezeCheck: () => ({ ok: true, head: "x" }) };
+    expect(await runTestSet(["--set", "cal_dot_com", "--run", "4"], deps)).toBe(1);
+    expect(await runTestSet(["--set", "dev", "--run", "7"], deps)).toBe(1);
+    expect(await runTestSet(["--set", "dev", "--run", "5"], deps)).toBe(1); // order: run 4 first
+    expect(out.join("\n")).toMatch(/refusing --run 4: 1, 2 or 3/);
+    expect(out.join("\n")).toMatch(/refusing --run 7: 1, 2 or 3/);
+    expect(out.join("\n")).toMatch(/dev run 4 has not run; the order is dev run 4, dev run 5, dev run 6/);
+    expect(readdirSync(bench)).toEqual([]);
+  });
+
+  it("order and cap: 4, 5, 6 under one cap; a cap stop leaves later runs not done; 061's items play no part", () => {
+    expect(EXTRA_ITEMS.map((i) => `${i.set}:${i.run}`)).toEqual(["dev:4", "dev:5", "dev:6"]);
+    expect(planExtraItem(4, [null, null, null])).toEqual({ ok: true, allowanceUSD: EXTRA_CAP_USD });
+    expect(planExtraItem(6, [done(2), done(2.5), null])).toEqual({ ok: true, allowanceUSD: EXTRA_CAP_USD - 4.5 });
+    expect(planExtraItem(5, [{ status: "stopped-at-cap", costUSD: 8.5 }, null, null])).toEqual({ ok: false, why: "not done: the cap stopped dev run 4" });
+    expect(planExtraItem(5, [done(8.5), null, null])).toEqual({ ok: false, why: expect.stringMatching(/not done: the cap is reached/) });
+    expect(planExtraItem(4, [done(2), null, null])).toEqual({ ok: false, why: "dev run 4 already has a run directory" });
+    // the one restart (061a), with the void run's spend carried
+    expect(planExtraItem(5, [crashed(1), null, null])).toMatchObject({ ok: false, why: expect.stringMatching(/dev run 4 crashed and may be restarted once/) });
+    expect(planExtraItem(4, [crashed(1), null, null], true)).toEqual({ ok: true, allowanceUSD: EXTRA_CAP_USD - 1 });
+    // dev run 3 stopped at 061's cap: 061's order still refuses nothing new there, and 064's list ignores it
+    const bench = tmp("tracehound-064-states-");
+    put(path.join(runDir(bench, "dev", 3), "run.json"), { status: "stopped-at-cap", costUSD: 0.76 });
+    put(path.join(runDir(bench, "dev", 4), "run.json"), { status: "complete", costUSD: 1.8 });
+    expect(readStatesOf(bench, EXTRA_ITEMS)).toEqual([{ status: "complete", costUSD: 1.8, firstScoreFiles: 0 }, null, null]);
+    expect(planExtraItem(5, readStatesOf(bench, EXTRA_ITEMS))).toEqual({ ok: true, allowanceUSD: EXTRA_CAP_USD - 1.8 });
+  });
+
+  it("the freeze check for runs 4–6 excludes only 064's runner files and vote script", () => {
+    expect(EXTRA_FROZEN_PATHS.slice(0, FROZEN_PATHS.length)).toEqual(FROZEN_PATHS);
+    expect(EXTRA_FROZEN_PATHS.slice(FROZEN_PATHS.length)).toEqual([":(exclude)scripts/bench/run-test-set.ts", ":(exclude)scripts/bench/test-set.ts", ":(exclude)scripts/bench/vote.ts"]);
+  });
+
+  it("runs the same pipeline into run-4/ and records decision 064", async () => {
+    const bench = inventedBench();
+    const { fetch } = fakeFetch(() => false);
+    const out: string[] = [];
+    const deps: Deps = { bench, stateDir: path.join(bench, ".state"), pricesFile: PRICES, env: { NEBIUS_API_KEY: "k", TRACEHOUND_BUDGET_RUN_USD: "15" }, log: (l) => out.push(l), err: (l) => out.push(l), fetch, freezeCheck: () => ({ ok: true, head: "x" }) };
+    expect(await runTestSet(["--set", "dev", "--run", "4"], deps)).toBe(0);
+    const dir = runDir(bench, "dev", 4);
+    expect(dir).toBe(path.join(bench, "reviews/dev-repeat/run-4"));
+    const run = JSON.parse(readFileSync(path.join(dir, "run.json"), "utf8"));
+    expect(run).toMatchObject({ decision: "064", set: "dev", run: 4, status: "complete", allowanceUSD: EXTRA_CAP_USD, trace: { frozenPaths: EXTRA_FROZEN_PATHS } });
+    const rows = (row: string) => JSON.parse(readFileSync(path.join(dir, row, "sentry", "0.json"), "utf8")).comments.map((c: { line: number }) => c.line);
+    expect([rows("review-diff-v1"), rows("pool-raw"), rows("pool-verify-v1")]).toEqual([[2], [2, 8], [2]]);
+    for (const j of ["judge-v1", "judge-x1"]) expect(readdirSync(path.join(dir, "scores", j)).filter((f) => f.endsWith(".summary.json"))).toHaveLength(12);
+    expect(out.join("\n")).toContain("## dev run 4 (decision 064)");
+    expect(out.join("\n")).toContain("| pool-verify-v1 | 4 | 4 | 0 | 0 | 0 | 0 | 0 | 100.0% (4/4) | 100.0% (4/4) | 100.0% |");
+    for (const s of SECRETS) expect(out.join("\n")).not.toContain(s);
+    expect(await runTestSet(["--set", "dev", "--run", "4"], deps)).toBe(1); // never twice
+  });
+});
+
+describe("Cal.com's path is the tag's (decision 064)", () => {
+  const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+  const src = (f: string) => readFileSync(path.resolve(import.meta.dirname, "../../../scripts/bench", f), "utf8");
+  /** Undo each 064 edit (current text → the tag's), each exactly once. */
+  const undo = (text: string, edits: [string, string][]) =>
+    edits.reduce((t, [now, tag]) => {
+      expect(t.split(now).length - 1, now).toBe(1);
+      return t.replace(now, () => tag);
+    }, text);
+
+  // sha256 of `git show review-freeze-1:scripts/bench/<file>` (CI checks out without tags)
+  const TAG_TEST_SET = "0d9a75b58410f839628f49c80ad914d4877c980e94ee4687c4f7c8b318693fa8";
+  const TAG_RUNNER = "863dc39c4893a27cade371845b0871dcb2b60ffaeea8246c7acba7ffdd2b382e";
+
+  it("test-set.ts: the tag's text plus an appended section; the one other change widens a type", () => {
+    const now = src("test-set.ts");
+    const marker = "\n// ---- dev runs 4–6 (decision 064) ----";
+    expect(now.split(marker)).toHaveLength(2);
+    const before = undo(now.split(marker)[0]!, [["export type RunNumber = 1 | 2 | 3 | 4 | 5 | 6;", "export type RunNumber = 1 | 2 | 3;"]]);
+    expect(sha(before)).toBe(TAG_TEST_SET);
+  });
+
+  it("run-test-set.ts: the tag's text up to these edits, each a no-op unless the run is dev 4–6", () => {
+    const edits: [string, string][] = [
+      ["// Decision 064 adds dev runs 4–6: the same pipeline, records layout and rules, with their own order\n// and cap (test-set.ts, EXTRA_ITEMS) and a freeze check that allows only 064's runner changes.\n", ""],
+      ["//   node scripts/bench/run-test-set.ts --set dev --run 4|5|6 [--restart] [--bench <dir>]\n", ""],
+      ["  EXTRA_ITEMS,\n", ""],
+      ["  isDevExtraRun,\n", ""],
+      ["  planExtraItem,\n", ""],
+      ["  readStatesOf,\n", ""],
+      ["  type DevExtraRun,\n", ""],
+      [src("run-test-set.ts").match(/\/\*\*\n \* Decision 064's dev runs 4–6[\s\S]*?\nexport const EXTRA_FROZEN_PATHS = [^\n]*\n/)![0], ""],
+      ["export function freezeCheck(paths: string[] = FROZEN_PATHS)", "export function freezeCheck()"],
+      ['git(["diff", "--quiet", FREEZE_TAG, "HEAD", "--", ...paths]).status !== 0) return { ok: false, why: `git diff ${FREEZE_TAG} HEAD -- ${paths.join(" ")} is not empty`, head };', 'git(["diff", "--quiet", FREEZE_TAG, "HEAD", "--", ...FROZEN_PATHS]).status !== 0) return { ok: false, why: `git diff ${FREEZE_TAG} HEAD -- ${FROZEN_PATHS.join(" ")} is not empty`, head };'],
+      ['git(["diff", "--quiet", "HEAD", "--", ...paths]).status !== 0) return { ok: false, why: `uncommitted changes under ${paths.join(" ")}`, head };', 'git(["diff", "--quiet", "HEAD", "--", ...FROZEN_PATHS]).status !== 0) return { ok: false, why: `uncommitted changes under ${FROZEN_PATHS.join(" ")}`, head };'],
+      ["  let extra: boolean;\n", ""],
+      ["    extra = isDevExtraRun(values.set, values.run);\n    ({ set, run } = extra ? { set: \"dev\", run: Number(values.run) as DevExtraRun } : checkRun(values.set, values.run, deps.env));", "    ({ set, run } = checkRun(values.set, values.run, deps.env));"],
+      ["  const items = extra ? EXTRA_ITEMS : ITEMS;\n  const states = extra ? readStatesOf(bench, EXTRA_ITEMS) : readItemStates(bench);\n  const idx = states.findIndex((_, i) => items[i]!.set === set && items[i]!.run === run);", "  const states = readItemStates(bench);\n  const idx = states.findIndex((_, i) => ITEMS[i]!.set === set && ITEMS[i]!.run === run);"],
+      ["  const plan = extra ? planExtraItem(run as DevExtraRun, states, restart) : planItem(set, run, states, restart);", "  const plan = planItem(set, run, states, restart);"],
+      ["  const freeze = deps.freezeCheck ? deps.freezeCheck() : freezeCheck(extra ? EXTRA_FROZEN_PATHS : FROZEN_PATHS);", "  const freeze = (deps.freezeCheck ?? freezeCheck)();"],
+      ['  const decision = extra ? "064" : "061";\n', ""],
+      ["    decision,\n", '    decision: "061",\n'],
+      ["    trace: { head: freeze.head, freezeTag: FREEZE_TAG, ...(extra && { frozenPaths: EXTRA_FROZEN_PATHS }) },", "    trace: { head: freeze.head, freezeTag: FREEZE_TAG },"],
+      ["  printSummary(`${label} (decision ${decision})`, state,", "  printSummary(label, state,"],
+      ["  log(`## ${label}`);", "  log(`## ${label} (decision 061)`);"],
+    ];
+    expect(sha(undo(src("run-test-set.ts"), edits))).toBe(TAG_RUNNER);
+  });
+
+  it("a Cal.com run 1 on invented data: 061's decision, allowance, rows and heading", async () => {
+    const bench = tmp("tracehound-064-cal-");
+    const src = path.join(bench, "src-repo");
+    mkdirSync(src);
+    const git = (...args: string[]) => execFileSync("git", ["-C", src, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { encoding: "utf8", env: cleanGitEnv() });
+    const lines = Array.from({ length: 10 }, (_, i) => `export const v${i + 1} = ${i + 1};`);
+    git("init", "-q", "-b", "main");
+    put(path.join(src, "src/a.ts"), lines.join("\n") + "\n");
+    git("add", "-A");
+    git("commit", "-q", "-m", "base");
+    const base = git("rev-parse", "HEAD").trim();
+    lines[1] = "export const v2 = 20;";
+    lines[7] = "export const v8 = 80;";
+    put(path.join(src, "src/a.ts"), lines.join("\n") + "\n");
+    git("commit", "-q", "-am", "head");
+    const head = git("rev-parse", "HEAD").trim();
+    execFileSync("git", ["clone", "-q", "--bare", src, path.join(bench, "test/repos/cal_dot_com")], { env: cleanGitEnv() });
+    put(path.join(bench, "test/repos/cal_dot_com.heads.json"), { 0: { head } });
+    put(path.join(bench, "test/prs/cal_dot_com/0.json"), { number: 1, title: "SECRET-TITLE-cal_dot_com", body: "d", diff: git("diff", base, head) });
+    put(path.join(bench, "golden/code_review_benchmarks/cal_dot_com.json"), [{ pr_title: "SECRET-TITLE-cal_dot_com", comments: [{ comment: "g", severity: "High" }] }]);
+    for (const tool of TOOL_ROWS) put(path.join(bench, "reviews", tool, "cal_dot_com", "0.json"), { pr_title: "SECRET-TITLE-cal_dot_com", pr_number: 1, comments: [{ path: "src/a.ts", line: 2, body: "SECRET-BODY-diff" }] });
+    const { fetch } = fakeFetch(() => false);
+    const out: string[] = [];
+    const deps: Deps = { bench, stateDir: path.join(bench, ".state"), pricesFile: PRICES, env: { NEBIUS_API_KEY: "k", TRACEHOUND_TEST_RUN: "061", TRACEHOUND_BUDGET_RUN_USD: "15" }, log: (l) => out.push(l), err: (l) => out.push(l), fetch, freezeCheck: () => ({ ok: true, head: "x" }) };
+    expect(await runTestSet(["--set", "cal_dot_com", "--run", "1"], deps)).toBe(0);
+    const run = JSON.parse(readFileSync(path.join(runDir(bench, "cal_dot_com", 1), "run.json"), "utf8"));
+    expect(run).toMatchObject({ decision: "061", set: "cal_dot_com", run: 1, status: "complete", allowanceUSD: 15, trace: { head: "x", freezeTag: "review-freeze-1" } });
+    expect(Object.keys(run.trace)).toEqual(["head", "freezeTag"]);
+    expect(readdirSync(path.join(runDir(bench, "cal_dot_com", 1), "scores", "judge-v1")).filter((f) => f.endsWith(".summary.json"))).toHaveLength(8);
+    expect(out.join("\n")).toContain("## cal_dot_com run 1 (decision 061)");
   });
 });

@@ -13,8 +13,11 @@
 // records go to the run directory in the bench folder, outside this repo. A crashed run (run.json
 // still "running", nothing under its scores/) may be restarted once with --restart (061a): the
 // restart writes run-<n>r/, leaves run-<n>/ untouched, reports it, and stands for run n.
+// Decision 064 adds dev runs 4–6: the same pipeline, records layout and rules, with their own order
+// and cap (test-set.ts, EXTRA_ITEMS) and a freeze check that allows only 064's runner changes.
 //   TRACEHOUND_TEST_RUN=061 node scripts/bench/run-test-set.ts --set cal_dot_com --run 1|2|3 [--restart] [--bench <dir>]
 //   node scripts/bench/run-test-set.ts --set dev --run 2|3 [--restart] [--bench <dir>]
+//   node scripts/bench/run-test-set.ts --set dev --run 4|5|6 [--restart] [--bench <dir>]
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -38,16 +41,21 @@ import { isKept, verifyReviewWithContext, type CtxVerifiedReview } from "../../p
 import { checkReuse, ctxOnlyFindings } from "./pool-verify.ts";
 import {
   checkRun,
+  EXTRA_ITEMS,
   inputPaths,
+  isDevExtraRun,
   isRequestFailure,
   ITEMS,
+  planExtraItem,
   planItem,
   readItemStates,
+  readStatesOf,
   reposOf,
   rowReviews,
   readRunJson,
   rowsFor,
   runDir,
+  type DevExtraRun,
   type Row,
   type RunNumber,
   type SetName,
@@ -69,6 +77,12 @@ export const JUDGES = Object.freeze([
 ]);
 export const FREEZE_TAG = "review-freeze-1";
 export const FROZEN_PATHS = ["packages/analyzer/src", "scripts/bench", "config"];
+/**
+ * Decision 064's dev runs 4–6: the frozen paths minus the files 064 changes or adds (the runner and
+ * its gates, which gain runs 4–6, and the vote script). The pipeline function is pinned to the tag's
+ * text by a test.
+ */
+export const EXTRA_FROZEN_PATHS = [...FROZEN_PATHS, ":(exclude)scripts/bench/run-test-set.ts", ":(exclude)scripts/bench/test-set.ts", ":(exclude)scripts/bench/vote.ts"];
 
 // ---- clients ----
 
@@ -164,12 +178,12 @@ const median = (xs: number[]) => {
 // ---- the freeze ----
 
 /** Decision 061: the run is void unless the frozen paths equal the tag `review-freeze-1`, committed and in the working tree. */
-export function freezeCheck(): { ok: boolean; why?: string; head: string } {
+export function freezeCheck(paths: string[] = FROZEN_PATHS): { ok: boolean; why?: string; head: string } {
   const git = (args: string[]) => spawnSync("git", ["-C", REPO_ROOT, ...args], { encoding: "utf8", env: cleanGitEnv() });
   const head = git(["rev-parse", "HEAD"]).stdout.trim();
   if (git(["rev-parse", "--verify", "--quiet", `${FREEZE_TAG}^{commit}`]).status !== 0) return { ok: false, why: `no tag ${FREEZE_TAG}`, head };
-  if (git(["diff", "--quiet", FREEZE_TAG, "HEAD", "--", ...FROZEN_PATHS]).status !== 0) return { ok: false, why: `git diff ${FREEZE_TAG} HEAD -- ${FROZEN_PATHS.join(" ")} is not empty`, head };
-  if (git(["diff", "--quiet", "HEAD", "--", ...FROZEN_PATHS]).status !== 0) return { ok: false, why: `uncommitted changes under ${FROZEN_PATHS.join(" ")}`, head };
+  if (git(["diff", "--quiet", FREEZE_TAG, "HEAD", "--", ...paths]).status !== 0) return { ok: false, why: `git diff ${FREEZE_TAG} HEAD -- ${paths.join(" ")} is not empty`, head };
+  if (git(["diff", "--quiet", "HEAD", "--", ...paths]).status !== 0) return { ok: false, why: `uncommitted changes under ${paths.join(" ")}`, head };
   return { ok: true, head };
 }
 
@@ -210,9 +224,11 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
   let set: SetName;
   let run: RunNumber;
   let restart: boolean;
+  let extra: boolean;
   try {
     const { values } = parseArgs({ args: argv, options: { set: { type: "string" }, run: { type: "string" }, restart: { type: "boolean", default: false }, bench: { type: "string" } }, strict: true });
-    ({ set, run } = checkRun(values.set, values.run, deps.env));
+    extra = isDevExtraRun(values.set, values.run);
+    ({ set, run } = extra ? { set: "dev", run: Number(values.run) as DevExtraRun } : checkRun(values.set, values.run, deps.env));
     restart = values.restart!;
   } catch (e) {
     deps.err(`[run-test-set] ${(e as Error).message}`);
@@ -220,17 +236,18 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
   }
   const bench = deps.bench;
   const label = `${set} run ${run}${restart ? " (restarted)" : ""}`;
-  const states = readItemStates(bench);
-  const idx = states.findIndex((_, i) => ITEMS[i]!.set === set && ITEMS[i]!.run === run);
+  const items = extra ? EXTRA_ITEMS : ITEMS;
+  const states = extra ? readStatesOf(bench, EXTRA_ITEMS) : readItemStates(bench);
+  const idx = states.findIndex((_, i) => items[i]!.set === set && items[i]!.run === run);
   // 061a: the void run's spend, ledger included, counts toward the item before the restart's allowance
   const voidRun = restart && states[idx] && !states[idx].restarted ? voidRunReport(runDir(bench, set, run), deps.stateDir) : null;
   if (voidRun) states[idx] = { ...states[idx]!, costUSD: voidRun.costUSD };
-  const plan = planItem(set, run, states, restart);
+  const plan = extra ? planExtraItem(run as DevExtraRun, states, restart) : planItem(set, run, states, restart);
   if (!plan.ok) {
     deps.err(`[run-test-set] refusing ${label}: ${plan.why}`);
     return 1;
   }
-  const freeze = (deps.freezeCheck ?? freezeCheck)();
+  const freeze = deps.freezeCheck ? deps.freezeCheck() : freezeCheck(extra ? EXTRA_FROZEN_PATHS : FROZEN_PATHS);
   if (!freeze.ok) {
     deps.err(`[run-test-set] refusing ${label}: ${freeze.why}`);
     return 1;
@@ -274,8 +291,9 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
     deps.log(`${label}: void run-${run}/ left untouched, never scored · spend $${restartOf.costUSD.toFixed(4)} (run.json $${restartOf.recordedCostUSD.toFixed(4)}, ledger since its start $${restartOf.ledgerSinceStartUSD.toFixed(4)}) · stopped at ${restartOf.stoppedAt} · error ${restartOf.error ? restartOf.error.split(":")[0] : "none recorded (the process died)"}`);
   }
   const { reviewer, judge, budget } = buildClients({ apiKey, stateDir: deps.stateDir, pricesFile: deps.pricesFile, allowanceUSD: plan.allowanceUSD, env: deps.env, fetch: deps.fetch });
+  const decision = extra ? "064" : "061";
   const state = {
-    decision: "061",
+    decision,
     set,
     run,
     restart,
@@ -286,7 +304,7 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
     allowanceUSD: plan.allowanceUSD,
     costUSD: 0,
     ledgerBeforeUSD: budget.spentBeforeRun,
-    trace: { head: freeze.head, freezeTag: FREEZE_TAG },
+    trace: { head: freeze.head, freezeTag: FREEZE_TAG, ...(extra && { frozenPaths: EXTRA_FROZEN_PATHS }) },
     config: {
       reviewModel: REVIEW_MODEL,
       reasoning: REVIEW_REASONING,
@@ -391,7 +409,7 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
   state.status = "complete";
   state.finishedAt = new Date().toISOString();
   save();
-  printSummary(label, state, deps.log, dir, repos, rowsFor(set, run));
+  printSummary(`${label} (decision ${decision})`, state, deps.log, dir, repos, rowsFor(set, run));
   return 0;
 }
 
@@ -407,7 +425,7 @@ function printSummary(
   const p = state.pulls;
   const costs = p.map((x) => x.costUSD);
   const walls = p.map((x) => x.wallMs / 1000);
-  log(`## ${label} (decision 061)`);
+  log(`## ${label}`);
   log("");
   log(`pull requests ${p.length} · reruns ${p.filter((x) => x.attempts === 2).length} · still with failed requests after the rerun ${p.filter((x) => x.attempts === 2 && x.requestFailuresUsed > 0).length}`);
   log(`cost per pull request: median $${median(costs).toFixed(4)} · max $${Math.max(0, ...costs).toFixed(4)} · wall time median ${median(walls).toFixed(0)} s · max ${Math.max(0, ...walls).toFixed(0)} s`);

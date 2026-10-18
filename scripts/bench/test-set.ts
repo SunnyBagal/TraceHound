@@ -14,7 +14,7 @@ export const TEST_SET = "cal_dot_com";
 export const DEV_REPOS = Object.freeze(["sentry", "grafana", "keycloak", "discourse"] as const);
 export const SETS = Object.freeze(["cal_dot_com", "dev"] as const);
 export type SetName = (typeof SETS)[number];
-export type RunNumber = 1 | 2 | 3;
+export type RunNumber = 1 | 2 | 3 | 4 | 5 | 6;
 
 /** Throws unless TRACEHOUND_TEST_RUN=061 is set. */
 export function requireTestRun(env: NodeJS.ProcessEnv): void {
@@ -198,3 +198,55 @@ export function readItemStates(bench: string): (ItemState | null)[] {
 
 /** A failure string from the reviewer or verifier that is a failed request (HTTP error, network, timeout), not an invalid reply. */
 export const isRequestFailure = (failure: string | undefined) => !!failure && /request failed/.test(failure);
+
+// ---- dev runs 4–6 (decision 064) ----
+// More dev runs of the same pipeline for 064's vote across runs. Everything above (Cal.com, the order
+// and cap of 061's items) is unchanged; these runs have their own order and cap, with the same rules:
+// run 4, then 5, then 6; a cap stop leaves every later run not done; a crashed run may be restarted
+// once (061a). Dev run 3 (stopped at 061's cap) is not part of this list and is never restarted.
+
+export const DEV_EXTRA_RUNS = Object.freeze([4, 5, 6] as const);
+export type DevExtraRun = (typeof DEV_EXTRA_RUNS)[number];
+export const isDevExtraRun = (set: string | undefined, run: string | undefined) => set === "dev" && (DEV_EXTRA_RUNS as readonly number[]).map(String).includes(run ?? "");
+
+/** 064's cap for dev runs 4–6, out of its $10 Nebius cap; the rest is left for judging the vote variants. */
+export const EXTRA_CAP_USD = 8.5;
+export const EXTRA_ITEMS = Object.freeze(DEV_EXTRA_RUNS.map((run) => Object.freeze({ set: "dev" as const, run, group: "dev-extra", plannedUSD: 1.8 })));
+
+/** readItemStates over any item list. */
+export function readStatesOf(bench: string, items: readonly { set: SetName; run: RunNumber }[]): (ItemState | null)[] {
+  return items.map((i) => {
+    const dir = runDir(bench, i.set, i.run);
+    if (!existsSync(dir)) return null;
+    const first = readRunJson(dir);
+    const firstScoreFiles = scoreFileCount(dir);
+    const rdir = runDir(bench, i.set, i.run, true);
+    if (!existsSync(rdir)) return { status: first.status, costUSD: first.costUSD, firstScoreFiles };
+    const r = readRunJson(rdir);
+    return { status: r.status, costUSD: (r.voidCostUSD ?? first.costUSD) + r.costUSD, restarted: true, firstStatus: first.status, firstScoreFiles };
+  });
+}
+
+/** planItem's rules for dev runs 4–6: one group, capped at EXTRA_CAP_USD. */
+export function planExtraItem(run: DevExtraRun, states: (ItemState | null)[], restart = false): { ok: true; allowanceUSD: number } | { ok: false; why: string } {
+  const idx = EXTRA_ITEMS.findIndex((i) => i.run === run);
+  if (idx < 0) throw new Error(`no dev run ${run} in 064's list`);
+  if (states.length !== EXTRA_ITEMS.length) throw new Error(`planExtraItem: ${states.length} states for ${EXTRA_ITEMS.length} items`);
+  const name = (i: number) => `dev run ${EXTRA_ITEMS[i]!.run}`;
+  let spent = 0;
+  if (restart) {
+    const why = restartRefusal(states[idx] ?? null, `run-${run}`);
+    if (why) return { ok: false, why };
+    spent = states[idx]!.costUSD;
+  } else if (states[idx]) return { ok: false, why: `${name(idx)} already has a run directory` };
+  for (let i = 0; i < idx; i++) {
+    const s = states[i];
+    if (!s) return { ok: false, why: `${name(i)} has not run; the order is ${EXTRA_ITEMS.map((_, j) => name(j)).join(", ")}` };
+    if (s.status === "stopped-at-cap") return { ok: false, why: `not done: the cap stopped ${name(i)}` };
+    if (!restartRefusal(s, `run-${EXTRA_ITEMS[i]!.run}`)) return { ok: false, why: `${name(i)} crashed and may be restarted once: restart it first (--set dev --run ${EXTRA_ITEMS[i]!.run} --restart)` };
+    spent += s.costUSD;
+  }
+  const allowanceUSD = EXTRA_CAP_USD - spent;
+  if (allowanceUSD <= 0) return { ok: false, why: `not done: the cap is reached (spent $${spent.toFixed(4)} of $${EXTRA_CAP_USD})` };
+  return { ok: true, allowanceUSD };
+}
