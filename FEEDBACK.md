@@ -646,3 +646,17 @@ was re-run.
   the local ledger with billing.
 - Opinion: the short facts-only requests completed quickly, and the deterministic fallback
   remained useful even for this small batch.
+
+## 2026-10-18 · job 064 (vote across runs, dev only)
+- **Called:** Nebius Token Factory chat completions, `nvidia/nemotron-3-super-120b-a12b` (reasoning
+  on; reviewer, verifier and bench-judge-v1) and `Qwen/Qwen3-235B-A22B-Instruct-2507` (bench-judge-x1).
+- **Counts (ledger, successful requests):** 1,442, of which 788 were Super reviewer/verifier calls, 326
+  Super judge calls, and 328 Qwen judge calls. Estimated spend was $5.409.
+- **Failures:** 1 failed request, `request failed: fetch failed`, a network-level failure on one
+  reviewer/verifier call in dev run 6. The pull request was rerun once and then succeeded. No HTTP
+  error replies were recorded.
+- **Latency:** not measured per request. Wall time for three sequential runs of 40 pull requests was
+  86, 86 and 109 minutes.
+- **Docs/console:** not consulted, and no defect observed.
+- Opinion: one transient `fetch failed` in about 790 long reasoning-on calls is a low rate. A
+  request id in client-side failures would help match them to server logs.

@@ -253,6 +253,7 @@ it (decision 050).
   Dev run 2 was void (the session's background limit killed it) and was restarted as 2r. Dev run 3
   stopped at the cap and was not done. Spend $5.31. `docs/bench/test-results.md`.
 - **Benchmark results page (decision 063):** `docs/bench/results.md` (3rd of six blind, 5th dev; README section `## PR reviewer benchmark`).
+- **Vote across runs (decision 064, dev only): a loss.** vote-k3of5 over dev runs 1, 2r, 4–6: v1 F 47.8% vs 5-run mean 42.3% (P 53.3% vs 40.5%) but x1 F 50.4% < mean 51.3%; pool-verify-v1 stays (`docs/bench/vote.md`, `scripts/bench/vote.ts`; runner takes `--set dev --run 4|5|6`).
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**
