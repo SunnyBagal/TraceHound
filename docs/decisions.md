@@ -3205,3 +3205,24 @@ the reviewer was chosen on: dev F was 35.6% and 48.0% across two runs. The tools
 on recorded reviews. The dev spread covers two runs.
 **Rejected:** re-running dev run 3 under a fresh allowance: 061's cap order cuts it, and a cap stop
 is never restarted.
+
+## 063 · Benchmark results page and its framing (docs only)
+**Context:** 062 produced the Cal.com test-set result. Its numbers are spread over
+`docs/bench/test-results.md`, `docs/bench/pool-verify.md`, `docs/bench/scorer-checks.md` and
+decisions 054–062, and nothing summarises them for a reader outside the project. This job made no
+model call and read nothing for Cal.com beyond the counts already in the repo. Prompt:
+`docs/prompts/063-bench-results.md`.
+**Choice:** one page, `docs/bench/results.md`, with counts copied from those files: what was
+measured; the Cal.com run 1 table under bench-judge-v1 with bench-judge-x1's F alongside;
+pool-verify-v1's rank among the six reviewers in every Cal.com run under both judges (3rd in 5 of
+6 run × judge cells, 5th under x1 in run 3); the dev rank (5th in run 1, 4th in run 2r, under both
+judges) and spread; 061's predictions scored; every loss and void run; 061's and 062's limits;
+cost. Its first paragraph states that TraceHound ranked 3rd of six on the pre-registered blind
+test under the scorer of record (behind Augment and Cursor, ahead of Greptile, Copilot and
+CodeRabbit) and 5th of six on the dev set, and that run-to-run spread at temperature 0 is larger
+than the margins the reviewer was chosen on, so single-run ranks are approximate. The README gets
+a short section with the same two statements, one table and a link.
+**Rejected:** a headline claim of beating Greptile. The run-to-run spread is larger than the
+margin (under v1, pool-verify-v1's Cal.com F was 1.3 to 8.3 points above greptile's 50.0%, and
+its dev F moved 12.4 points between two runs), and under bench-judge-x1 Cal.com run 3 ranks 5th,
+below greptile and copilot.
