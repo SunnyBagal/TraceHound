@@ -65,7 +65,7 @@ describe('the landing page at "/"', () => {
     expect(screen.getByTestId("hero-line").textContent).toBe("AI agents that review and test pull requests with full context of the codebase.");
     for (const name of ["Understand what agents write.", "How it works", "Agents", "Roadmap"]) expect(screen.getByRole("heading", { level: 2, name })).toBeTruthy();
     const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual(["TraceHound", "How it works", "Agents", "Roadmap", "GitHub"]);
+    expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual(["TraceHound", "Graph", "Reviews", "Benchmark", "How it works", "Agents", "Roadmap", "GitHub"]);
     expect(within(nav).getByRole("link", { name: "GitHub" }).getAttribute("href")).toBe("https://github.com/SunnyBagal/TraceHound");
     expect(within(nav).queryByText(/sign in|log in/i)).toBeNull();
     for (const id of ["how-it-works", "agents", "roadmap"]) expect(document.getElementById(id)).toBeTruthy();
@@ -74,11 +74,11 @@ describe('the landing page at "/"', () => {
     expect(within(footer).getAllByRole("link").map((a) => a.textContent)).toEqual(["GitHub", "MIT License"]);
   });
 
-  it('"Get started" goes to /graph; "Agents" scrolls to the Agents section', () => {
+  it('"Get started" opens demo reviews, with graph and agents navigation available', () => {
     render(<Home />);
-    expect(screen.getByRole("link", { name: "Get started" }).getAttribute("href")).toBe("/graph");
-    const veil = screen.getByTestId("hero-veil");
-    expect(within(veil).getByRole("link", { name: "Agents" }).getAttribute("href")).toBe("#agents");
+    expect(screen.getByRole("link", { name: "Get started" }).getAttribute("href")).toBe("/reviews?repo=SunnyBagal%2Ftracehound-demo");
+    expect(screen.getByRole("link", { name: "Explore graph" }).getAttribute("href")).toBe("/graph");
+    expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Agents" }).getAttribute("href")).toBe("#agents");
   });
 
   it("the hero mark is a button that howls on click, in currentColor", () => {

@@ -1,5 +1,6 @@
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, ChartNoAxesColumn, GitPullRequest } from "lucide-react";
 import { LogoLink } from "./Logo";
+import { reviewsHref } from "@/lib/reviews";
 
 const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -10,7 +11,11 @@ const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 export function Rail() {
   return (
     <nav aria-label="TraceHound" data-testid="rail" className="hidden h-full w-14 shrink-0 flex-col items-center justify-between bg-page py-3 sm:flex">
-      <LogoLink className="size-10" />
+      <div className="flex flex-col items-center gap-3">
+        <LogoLink className="size-10" />
+        <a href={reviewsHref()} aria-label="Reviews" title="Reviews" className="grid size-10 place-items-center rounded-lg text-muted hover:bg-card hover:text-text"><GitPullRequest className="size-5" aria-hidden /></a>
+        <a href={`${base}/benchmark`} aria-label="Benchmark" title="Benchmark" className="grid size-10 place-items-center rounded-lg text-muted hover:bg-card hover:text-text"><ChartNoAxesColumn className="size-5" aria-hidden /></a>
+      </div>
       <a
         href="https://github.com/SunnyBagal"
         target="_blank"

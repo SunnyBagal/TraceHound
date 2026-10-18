@@ -20,6 +20,7 @@ import {
   RECALL,
 } from "@/lib/landing";
 import { LEGACY_REDIRECT_SCRIPT } from "@/lib/legacy";
+import { reviewsHref } from "@/lib/reviews";
 import { AnimatedFigure } from "./AnimatedFigure";
 import { DiffToDeclarations } from "./DiffToDeclarations";
 import { bricolage, jetbrains } from "./fonts";
@@ -61,6 +62,9 @@ const ROADMAP = [
 ] as const;
 
 const NAV = [
+  { label: "Graph", href: GRAPH_HREF },
+  { label: "Reviews", href: reviewsHref() },
+  { label: "Benchmark", href: `${base}/benchmark` },
   { label: "How it works", href: "#how-it-works" },
   { label: "Agents", href: "#agents" },
   { label: "Roadmap", href: "#roadmap" },
@@ -145,11 +149,11 @@ export function Landing() {
               AI agents that review and test pull requests with full context of the codebase.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <a href={GRAPH_HREF} className={`inline-flex h-12 items-center rounded-full bg-ink px-7 text-[16px] font-semibold text-on-ink hover:bg-ink/85 ${focusInk}`} data-testid="get-started">
+              <a href={reviewsHref()} className={`inline-flex h-12 items-center rounded-full bg-ink px-7 text-[16px] font-semibold text-on-ink hover:bg-ink/85 ${focusInk}`} data-testid="get-started">
                 Get started
               </a>
-              <a href="#agents" className={`inline-flex h-12 items-center rounded-full border-2 border-ink px-7 text-[16px] font-semibold text-ink hover:bg-white/40 ${focusInk}`}>
-                Agents
+              <a href={GRAPH_HREF} className={`inline-flex h-12 items-center rounded-full border-2 border-ink px-7 text-[16px] font-semibold text-ink hover:bg-white/40 ${focusInk}`}>
+                Explore graph
               </a>
             </div>
           </div>
