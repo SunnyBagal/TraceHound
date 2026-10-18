@@ -23,7 +23,7 @@ function fake(responses = [JSON.stringify(proposal)]) {
 }
 
 it("pins the product-only fix prompt", () => {
-  expect(createHash("sha256").update(FIX_SYSTEM_PROMPT).digest("hex")).toBe("0ab261ca5d21b68252a31f25d215302a9f9ad5b42a90f6e9571e065424a56af4");
+  expect(createHash("sha256").update(FIX_SYSTEM_PROMPT).digest("hex")).toBe("7b8fdc3d9f22c4efb353eba7afcf30401f75943a6ec8734e21b7bca47fb3c385");
 });
 
 it("reads the PR head via git, supplies an exact numbered ±40 window and file hunks, and uses Super at zero temperature", async () => {
