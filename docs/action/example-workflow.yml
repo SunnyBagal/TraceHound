@@ -1,26 +1,29 @@
 name: TraceHound review
 
 on:
+  push:
+    branches: [main] # Use your repository's default branch.
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, closed]
 
 permissions:
   pull-requests: write
-  contents: read
+  contents: write # Required only for data-branch: 'on'.
 
 concurrency:
-  group: tracehound-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: tracehound-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false # Preserve close/push history events.
 
 jobs:
   review:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0 # The changes CLI needs both base and head commits.
           persist-credentials: false
       # Pin to a reviewed commit SHA before enabling this in your repository.
       - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@main
@@ -28,3 +31,4 @@ jobs:
           nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
           max-comments: '15'
           dry-run: 'false'
+          data-branch: 'on'

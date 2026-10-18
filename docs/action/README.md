@@ -17,9 +17,10 @@ the comments as model-generated and unverified.
 2. Copy [example-workflow.yml](example-workflow.yml) to `.github/workflows/tracehound-review.yml`
    in that repository. Replace `@main` with a reviewed TraceHound commit SHA
    containing this action before enabling it.
-3. Keep `contents: read` and `pull-requests: write` permissions and the same-repository job
-   condition. Repository or organization policy must permit the workflow token to write reviews.
-4. Keep the example's `actions/checkout` step with `ref: ${{ github.event.pull_request.head.sha }}`
+3. The example enables graph history with `contents: write` and `pull-requests: write`. For
+   review only, set `data-branch: 'off'` and reduce `contents` to `read`. Keep the same-repository
+   PR condition. Repository or organization policy must permit these workflow token permissions.
+4. Keep the example's `actions/checkout` step with `ref: ${{ github.event.pull_request.head.sha || github.sha }}`
    and `persist-credentials: false`. The default pipeline needs the target repository at that head
    in `${{ github.workspace }}`; it checks that the head commit exists before any model call.
    Keep the job's 20-minute timeout.
@@ -37,6 +38,37 @@ this repository's workflows, so adding this action does not enable model calls i
 | `max-comments` | `15` | Maximum findings included in reviewer order, counting inline and body findings together. Extra findings are omitted with a count. `0` skips the reviewer. |
 | `fixes` | `on` | `on` or `off`. Adds fix proposals and dashboard metadata to `pool-verify-v1`. `off` preserves the previous review payload, without proposals or the metadata footer. |
 | `dry-run` | `false` | `true` prints the proposed review payload as JSON and posts nothing. It still runs the reviewer and incurs its Nebius cost. |
+| `data-branch` | `off` | Set to `on` to write heuristic graph history to `tracehound-data`. Requires `contents: write`. |
+
+## Graph history and permissions
+
+`data-branch: 'on'` opts into a persistent, serverless history on an orphan `tracehound-data`
+branch in the installing repository. The workflow token needs `contents: write`; keep
+`pull-requests: write` for reviews. Fork PRs are skipped. Use `pull_request`, never
+`pull_request_target` with an untrusted checkout. This branch has the repository's visibility:
+graph metadata, file paths, declarations, and change information are committed there.
+
+The [example workflow](example-workflow.yml) handles pushes to `main` (replace that with your
+default branch), plus PR opens, updates, reopenings, and closures. Full checkout history
+(`fetch-depth: 0`) supplies both base and head commits for the changes CLI. Push and closed
+events skip the reviewer. The data step runs after review even if review failed, uses heuristic
+naming, and makes no model calls. Set `max-comments: '0'` for an analyzer-only workflow.
+
+Default-branch pushes write `snapshots/<sha>/<analyzerVersion>.json` and
+`snapshots/index.json`, using the analyzer's viewer-compatible manifest. PR events write
+`changesets/pr-<number>-<headSha7>.json` and a JSON array in `changesets/index.json`.
+Each array entry contains `id`, `repo`, `pr`, `title`, `headSha`, `baseSha`, and `state`.
+It also contains the parsed `reviewFooter` when this run successfully posted a review with
+a matching `tracehound:v1` footer. Closing a PR marks every recorded head of that PR `merged`
+or `closed`; reopening updates the current head to `open`. Files are retained.
+
+Both analyzer commands use the installing repository's `tracehound.json` when present.
+Repositories without TypeScript sources and failed analyzer runs write nothing and log one
+line. Data failures never fail the review job. A non-fast-forward push is retried once by
+fetching and reapplying the index update; a second rejection is skipped. The token is passed
+through the Git subprocess environment and is never stored in a remote URL or config file.
+The branch remains in place if you later turn the input off. `dry-run` controls review posting
+only; leave `data-branch` off when you also want to avoid committing history.
 
 ## Fix suggestions
 

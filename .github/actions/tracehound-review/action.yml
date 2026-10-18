@@ -24,6 +24,10 @@ inputs:
     description: Print the review JSON without posting (still runs the reviewer)
     required: false
     default: 'false'
+  data-branch:
+    description: Persist heuristic graph history to tracehound-data (on or off; requires contents write)
+    required: false
+    default: 'off'
 runs:
   using: composite
   steps:
@@ -39,6 +43,7 @@ runs:
       working-directory: ${{ github.action_path }}/../../..
       run: pnpm install --frozen-lockfile --ignore-scripts --filter @tracehound/analyzer...
     - name: Review and post findings
+      if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
       env:
@@ -50,4 +55,15 @@ runs:
         TRACEHOUND_MAX_COMMENTS: ${{ inputs.max-comments }}
         TRACEHOUND_FIXES: ${{ inputs.fixes }}
         TRACEHOUND_DRY_RUN: ${{ inputs.dry-run }}
+        TRACEHOUND_REVIEW_FILE: ${{ runner.temp }}/tracehound-review-${{ github.run_id }}-${{ github.run_attempt }}.json
       run: node packages/action/src/cli.ts
+    - name: Write graph history
+      if: ${{ !cancelled() && inputs.data-branch == 'on' }}
+      continue-on-error: true
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        TRACEHOUND_REPO_DIR: ${{ github.workspace }}
+        TRACEHOUND_REVIEW_FILE: ${{ runner.temp }}/tracehound-review-${{ github.run_id }}-${{ github.run_attempt }}.json
+      run: node packages/action/src/data.ts

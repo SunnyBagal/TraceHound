@@ -55,6 +55,15 @@ const requests = (api: ReturnType<typeof fake>["api"]) => api.mock.calls.map(([,
   `${init?.method} ${new Headers(init?.headers).get("Accept")}`);
 
 describe("review input and mapping", () => {
+  it("metadata-save failure does not fail an already posted review", async () => {
+    const f = fake();
+    const onReview = vi.fn(async () => { throw new Error("fake-unused-secret"); });
+    await expect(runAction(event, options, { ...f.deps, onReview })).resolves.toBeUndefined();
+    expect(f.posts).toHaveLength(1);
+    expect(onReview).toHaveBeenCalledOnce();
+    expect(f.log).toHaveBeenCalledWith("TraceHound: review metadata could not be saved.");
+    expect(JSON.stringify(f.log.mock.calls)).not.toContain("fake-unused-secret");
+  });
   it("builds neutral input from the event and the exact diff", () => {
     expect(buildInput(event, diff)).toEqual({ title: event.pull_request.title, body: event.pull_request.body, number: 42, diff });
     expect(buildInput({ ...event, pull_request: { ...event.pull_request, body: null } }, diff).body).toBe("");

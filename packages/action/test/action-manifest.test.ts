@@ -22,3 +22,12 @@ it("pins pnpm to the version declared by TraceHound's root package", async () =>
   expect(rootVersion).toBeDefined();
   expect(actionVersion).toBe(rootVersion);
 });
+
+it("makes graph history opt-in, after review, and skips review for push and closed", async () => {
+  const manifest = await readFile(manifestUrl, "utf8");
+  expect(manifest).toMatch(/data-branch:\n(?:[^\n]*\n)*?    default: 'off'/);
+  expect(manifest).toContain("github.event_name == 'pull_request' && github.event.action != 'closed'");
+  expect(manifest).toContain("!cancelled() && inputs.data-branch == 'on'");
+  expect(manifest.indexOf("name: Write graph history")).toBeGreaterThan(manifest.indexOf("name: Review and post findings"));
+  expect(manifest).toContain("continue-on-error: true");
+});

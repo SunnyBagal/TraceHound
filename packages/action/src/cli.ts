@@ -1,9 +1,10 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { runAction, type Dependencies, type PullEvent } from "./action.ts";
 import { runReviewer } from "./reviewer.ts";
 import { checkRepoHead, MissingHeadError, runPipeline } from "./pipeline.ts";
 import { createFixClient, runFixes } from "./fix.ts";
+import { parseReviewFooter } from "./data.ts";
 
 export async function main(
   env: NodeJS.ProcessEnv,
@@ -49,7 +50,10 @@ export async function main(
       reviewer,
       fixes,
       repoDir: env.TRACEHOUND_REPO_DIR ?? "",
-    }, deps);
+    }, { ...deps, ...(env.TRACEHOUND_REVIEW_FILE && { onReview: async (body: string) => {
+      const footer = parseReviewFooter(body);
+      if (footer) await writeFile(env.TRACEHOUND_REVIEW_FILE!, `<!-- tracehound:v1 ${JSON.stringify(footer)} -->`);
+    } }) });
     return 0;
   } catch (error) {
     if (error instanceof MissingHeadError) {
