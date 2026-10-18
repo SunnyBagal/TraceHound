@@ -1,0 +1,10 @@
+{
+  "pr_title": "Clamp the page size",
+  "pr_number": 101,
+  "comments": [
+    { "path": "src/page.ts", "line": 3, "body": "  The clamp uses the wrong bound: a size of 0 passes through and divides by zero later.  " },
+    { "path": "src/page.ts", "line": null, "body": "File-level finding." },
+    { "path": "src/page.ts", "line": 4, "body": "   " }
+  ],
+  "verify": { "model": "fake-model", "kept": 3 }
+}

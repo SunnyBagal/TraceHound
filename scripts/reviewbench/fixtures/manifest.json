@@ -1,0 +1,19 @@
+[
+  {
+    "repo": "example-org/widgets",
+    "pr_number": 101,
+    "base": "1111111111111111111111111111111111111111",
+    "head": "2222222222222222222222222222222222222222",
+    "title": "Clamp the page size",
+    "body": "Hand-made fixture, not ReviewBench data.",
+    "language": "TypeScript"
+  },
+  {
+    "id": "example-org_ledger-7",
+    "repo": "example-org/ledger",
+    "pr_number": 7,
+    "base_sha": "3333333",
+    "head_sha": "4444444",
+    "language": "Python"
+  }
+]
