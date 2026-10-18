@@ -16,14 +16,14 @@ const repos = repoList(manifest);
 const snap = (id: string) => Snapshot.parse(JSON.parse(readFileSync(path.join(ROOT, "snapshots", repos.find((r) => r.id === id)!.latest.path), "utf8")));
 
 describe("repo resolution (?repo=, defaultRepo)", () => {
-  it("the site opens on Recall", () => {
+  it("the site opens on the public demo without changing the published manifest", () => {
     expect(manifest.defaultRepo).toBe("recall");
-    expect(resolveRepo("", manifest)?.name).toBe("SunnyBagal/Recall");
+    expect(resolveRepo("", manifest)?.name).toBe("SunnyBagal/tracehound-demo");
   });
 
   it("?repo=<id> picks that repo; an unknown id falls back to the default", () => {
     expect(resolveRepo("?repo=cex-v2-boilercode", manifest)?.latest.path).toMatch(/^da0e3d640a9c02f815fcca48f8328c94558cc058\/\d+\.\d+\.\d+\.json$/);
-    expect(resolveRepo("?repo=nope", manifest)?.id).toBe("recall");
+    expect(resolveRepo("?repo=nope", manifest)?.id).toBe("tracehound-demo");
   });
 
   it("an index without repos (pre-0.9.0) still yields its latest", () => {

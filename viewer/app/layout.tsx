@@ -4,7 +4,7 @@ import { WOLF_PATH, WOLF_VIEWBOX } from "@/lib/wolf";
 
 export const metadata: Metadata = {
   title: "TraceHound",
-  description: "Evidence-backed architecture graph: every edge points back to a file, line and extractor.",
+  description: "TraceHound reviews: bugs, suggested fixes and an evidence-backed architecture graph.",
   icons: {
     // the wolf mark alone (no tile): the page colour on light tab bars, silver (--logo) on dark ones
     icon: "data:image/svg+xml," + encodeURIComponent(
