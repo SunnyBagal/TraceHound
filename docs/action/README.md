@@ -177,6 +177,9 @@ in strings are JSON-escaped to keep the hidden comment intact.
   in the review body. Other HTTP failures are reported without automatically retrying a POST.
 - Reviews are attached to the triggering head SHA. Events whose head has already changed are skipped.
   A rerun can create another review; the action does not edit or deduplicate prior reviews.
+- Each data run fetches and checks out the whole `tracehound-data` tip tree, which grows by one
+  snapshot per default-branch push and is never pruned, though only the two `index.json` files
+  are read (backlog: a blobless or sparse checkout of those files).
 - GitHub diff/API size limits still apply. There is no fallback for an unavailable GitHub diff. Dry-run JSON
   contains finding text in the Actions log, so treat log access like access to review comments.
 
