@@ -7,7 +7,7 @@ import { SCHEMA_VERSION, CHANGESET_SCHEMA_VERSION, FileFacts, Snapshot, Snapshot
 import { upsertManifest } from "../../analyzer/src/manifest.ts";
 import { applyUpdate, dataMain, parseReviewFooter, runData, type ChangeEntry, type DataDependencies, type DataEvent } from "../src/data.ts";
 
-const sha = "a".repeat(40), base = "b".repeat(40);
+const sha = "a".repeat(40), base = "b".repeat(40), mergeBase = "d".repeat(40);
 const repository = { full_name: "example/widget", default_branch: "main" };
 const push: DataEvent = { repository, ref: "refs/heads/main", after: sha };
 const pull = (action = "opened", merged = false): DataEvent => ({ repository, action,
@@ -25,7 +25,7 @@ const changeset: ChangeSet = { schemaVersion: CHANGESET_SCHEMA_VERSION, analyzer
   nodeModules: [], components: [], files: [], declarations: [], edges: [], warnings: [], limitations: [],
   stats: { declarations: { ...zero, formatting: 0, unchanged: 0 }, edges: { added: 0, removed: 0, unchanged: 0 },
     files: zero, calls: { base: calls, head: calls }, runtimeMs: 0 } };
-const entry = (id = "pr-3-aaaaaaa"): ChangeEntry => ({ id, repo: repository.full_name, pr: 3, title: "A change", headSha: sha, baseSha: base, state: "open" });
+const entry = (id = "pr-3-aaaaaaa"): ChangeEntry => ({ id, repo: repository.full_name, pr: 3, title: "A change", headSha: sha, baseSha: mergeBase, state: "open" });
 const dirs: string[] = [];
 afterEach(async () => { await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))); });
 async function temp() { const dir = await mkdtemp(path.join(tmpdir(), "tracehound-data-test-")); dirs.push(dir); return dir; }
@@ -35,7 +35,7 @@ const save = (file: string, value: unknown) => { mkdirSync(path.dirname(file), {
 async function fake() {
   const workspace = await temp();
   const remote = new Map<string, string>();
-  let present = false, rejects = 0;
+  let present = false, rejects = 0, missingBase = 0;
   const capture = (dir: string, prefix = "") => {
     for (const item of readdirSync(path.join(dir, prefix), { withFileTypes: true })) {
       if (item.name === ".git") continue;
@@ -47,7 +47,8 @@ async function fake() {
   const deps: DataDependencies = {
     git: vi.fn((cwd, args) => {
       const ok = (stdout = "") => ({ code: 0, stdout });
-      if (args[0] === "rev-parse") return ok(sha + "\n");
+      if (args[0] === "merge-base") return missingBase-- > 0 ? { code: 1, stdout: "" } : ok(mergeBase + "\n");
+      if (args[0] === "rev-parse") return ok(args[1] === "--is-shallow-repository" ? "true\n" : sha + "\n");
       if (args[0] === "ls-files") return ok("src/a.ts\0");
       if (args[0] === "ls-remote") return { code: present ? 0 : 2, stdout: "" };
       if (args[0] === "checkout" && args[1] === "-B") {
@@ -76,7 +77,7 @@ async function fake() {
       return { code: 0, stdout: "" };
     }), log: vi.fn(),
   };
-  return { deps, workspace, remote, reject: () => { rejects = 1; },
+  return { deps, workspace, remote, reject: () => { rejects = 1; }, missBase: (n = 1) => { missingBase = n; },
     run: (name: string, event: DataEvent, extra: NodeJS.ProcessEnv = {}) => runData(name, event,
       { GITHUB_TOKEN: "fake-unused", TRACEHOUND_REPO_DIR: workspace, ...extra }, deps) };
 }
@@ -115,8 +116,25 @@ it("appends and updates PR entries without duplicating IDs; uses changes CLI and
   const index = JSON.parse(f.remote.get("changesets/index.json")!);
   expect(index).toEqual([{ ...entry(), title: "Updated", reviewFooter: { version: 1, headSha: sha, posted: 1 } }]);
   expect(f.remote.has("changesets/pr-3-aaaaaaa.json")).toBe(true);
-  expect(f.deps.analyzer).toHaveBeenCalledWith(["bin.ts", "changes", "--repo", f.workspace, "--diff", `${base}..${sha}`, "--json"]);
+  expect(f.deps.analyzer).toHaveBeenCalledWith(["bin.ts", "changes", "--repo", f.workspace, "--diff", `${mergeBase}..${sha}`, "--json"]);
+  expect(f.deps.git).toHaveBeenCalledWith(f.workspace, ["merge-base", base, sha]);
   expect(f.deps.git).toHaveBeenCalledWith(expect.any(String), ["checkout", "-B", "tracehound-data", "FETCH_HEAD"]);
+});
+
+it("diffs a PR from the merge base, not the base branch tip, fetching the base when it is missing", async () => {
+  const f = await fake(); f.missBase();
+  await f.run("pull_request", pull());
+  expect(f.deps.git).toHaveBeenCalledWith(f.workspace, ["fetch", "--no-tags", "--unshallow", "origin", base]);
+  expect(f.deps.analyzer).toHaveBeenCalledWith(["bin.ts", "changes", "--repo", f.workspace, "--diff", `${mergeBase}..${sha}`, "--json"]);
+  expect(JSON.parse(f.remote.get("changesets/index.json")!)[0].baseSha).toBe(mergeBase);
+});
+
+it("writes nothing when the merge base cannot be found", async () => {
+  const f = await fake(); f.missBase(2);
+  expect(await f.run("pull_request", pull())).toBe(0);
+  expect(f.deps.analyzer).not.toHaveBeenCalled();
+  expect(f.remote.size).toBe(0);
+  expect(f.deps.log).toHaveBeenCalledExactlyOnceWith("TraceHound data: analyzer or data write failed; skipped.");
 });
 
 it.each([false, true])("updates all PR heads on closed (merged=%s), retains files, and reopens", async (merged) => {

@@ -149,8 +149,22 @@ export async function runData(
         // Use the installing repo identity, even if its local remote has a different spelling.
         update.snapshot.repo.name = repo;
       } else {
+        // base.sha is the base branch tip when the event fired; diff from the merge base so commits
+        // merged into the base after the branch point are not recorded as removed by this PR.
+        const mergeBase = () => {
+          const result = deps.git(workspace, ["merge-base", pr.base.sha, sha]);
+          return result.code === 0 && SHA.test(result.stdout.trim()) ? result.stdout.trim() : undefined;
+        };
+        let baseSha = mergeBase();
+        if (!baseSha) {
+          const shallow = checked(deps.git(workspace, ["rev-parse", "--is-shallow-repository"])).trim() === "true";
+          checked(deps.git(workspace, ["fetch", "--no-tags", ...(shallow ? ["--unshallow"] : []), "origin", pr.base.sha]));
+          baseSha = mergeBase();
+        }
+        if (!baseSha) throw new Error("No merge base");
+        update.entry!.baseSha = baseSha;
         update.changeset = ChangeSet.parse(JSON.parse(checked(deps.analyzer([
-          "bin.ts", "changes", ...args, "--diff", `${pr.base.sha}..${sha}`, "--json",
+          "bin.ts", "changes", ...args, "--diff", `${baseSha}..${sha}`, "--json",
         ]))));
         if (env.TRACEHOUND_REVIEW_FILE && existsSync(env.TRACEHOUND_REVIEW_FILE)) {
           const footer = parseReviewFooter(await readFile(env.TRACEHOUND_REVIEW_FILE, "utf8"));

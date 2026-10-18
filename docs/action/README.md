@@ -58,6 +58,9 @@ Default-branch pushes write `snapshots/<sha>/<analyzerVersion>.json` and
 `snapshots/index.json`, using the analyzer's viewer-compatible manifest. PR events write
 `changesets/pr-<number>-<headSha7>.json` and a JSON array in `changesets/index.json`.
 Each array entry contains `id`, `repo`, `pr`, `title`, `headSha`, `baseSha`, and `state`.
+`baseSha` is the merge base of the PR's base and head, and the change set diffs from it. If the
+checkout lacks it, the data step fetches the base commit (unshallowing a shallow checkout)
+without credentials, so a private repository needs the example's `fetch-depth: 0`.
 It also contains the parsed `reviewFooter` when this run successfully posted a review with
 a matching `tracehound:v1` footer. Closing a PR marks every recorded head of that PR `merged`
 or `closed`; reopening updates the current head to `open`. Files are retained.
