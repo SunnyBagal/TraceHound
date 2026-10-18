@@ -1,0 +1,7 @@
+{
+  "pr_title": "Synthetic cart and session fixes",
+  "comments": [
+    { "path": "src/cart.ts", "line": 1, "body": "An empty cart reaches charge() and debits the default amount." },
+    { "path": "src/session.ts", "line": 1, "body": "A revoked session still reaches the handler because the lookup skips the revoked flag." }
+  ]
+}

@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import { TraceHoundConfig } from "../src/config.ts";
 import { parseDiff, newSideLines } from "../src/review/diff.ts";
 import { prefilterDiff } from "../src/gate/prefilter.ts";
+import { gateFindings } from "../src/gate/gate.ts";
+import type { Candidate, GateContext } from "../src/gate/gate.ts";
+import { nitMatch, nitPatterns } from "../src/gate/nits.ts";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/gate/prefilter.json", import.meta.url), "utf8")) as {
   lockfiles: string[]; generated: string[]; snapshots: string[];
@@ -58,5 +61,146 @@ describe("prefilter", () => {
     expect(TraceHoundConfig.parse({ review: {} }).review?.ignore).toEqual([]);
     expect(TraceHoundConfig.parse({ review: { ignore: ["docs/**"] } }).review?.ignore).toEqual(["docs/**"]);
     expect(() => TraceHoundConfig.parse({ review: { ignore: [""] } })).toThrow();
+  });
+});
+
+const candidate = (patch: Partial<Candidate> = {}): Candidate => ({ path: "src/cart.ts", line: 1, body: "An empty cart charges the default amount.", ...patch });
+const context = (patch: Partial<GateContext> = {}): GateContext => ({
+  diff: diff(), readFileAt: (path) => path === "src/cart.ts" ? "return charge();\n" : undefined, suppressions: [], ...patch,
+});
+const ruleFor = (finding: Candidate, ctx = context()) => gateFindings([finding], ctx).dropped[0]?.rule;
+
+describe("gate", () => {
+  it("prefiltered: drops removed paths but retains regular paths and partially filtered files", () => {
+    expect(ruleFor(candidate({ path: "yarn.lock" }), context({ diff: diff("yarn.lock") }))).toBe("prefiltered");
+    expect(ruleFor(candidate())).toBeUndefined();
+    const files = parseDiff(diff()[0]!.text + "@@ -10 +10 @@\n- a b\n+ab\n");
+    expect(ruleFor(candidate(), context({ diff: files }))).toBeUndefined();
+    expect(ruleFor(candidate({ line: 10 }), context({ diff: files }))).toBe("not-in-diff");
+  });
+  it("not-in-diff: validates added/context lines, rejecting removed, deleted, absent and null locations", () => {
+    const files = parseDiff(diff()[0]!.header + "@@ -1,2 +1,2 @@\n same\n-old\n+new\n");
+    for (const line of [1, 2]) expect(ruleFor(candidate({ line }), context({ diff: files }))).toBeUndefined();
+    for (const line of [0, 3, null]) expect(ruleFor(candidate({ line }), context({ diff: files }))).toBe("not-in-diff");
+    expect(ruleFor(candidate({ path: "missing.ts" }))).toBe("not-in-diff");
+    const deleted = parseDiff("diff --git a/src/cart.ts b/src/cart.ts\n--- a/src/cart.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-old\n");
+    expect(ruleFor(candidate(), context({ diff: deleted }))).toBe("not-in-diff");
+  });
+  it.each(["contract", "tsc"])("not-in-diff: %s exemption requires a head file", (source) => {
+    expect(ruleFor(candidate({ source, line: null }), context({ diff: [] }))).toBeUndefined();
+    expect(ruleFor(candidate({ source, path: "absent.ts", line: null }))).toBe("not-in-diff");
+    expect(ruleFor(candidate({ source: "other", line: null }))).toBe("not-in-diff");
+  });
+  it("evidence-missing: opt-in, missing or empty evidence fails; cited evidence passes", () => {
+    const ctx = context({ options: { requireEvidence: true } });
+    expect(ruleFor(candidate(), ctx)).toBe("evidence-missing");
+    expect(ruleFor(candidate({ evidence: [] }), ctx)).toBe("evidence-missing");
+    expect(ruleFor(candidate({ evidence: [{ path: "src/cart.ts", line: 1, quote: "return charge();" }] }), ctx)).toBeUndefined();
+    expect(ruleFor(candidate())).toBeUndefined();
+  });
+  it("evidence-mismatch: trims lines, supports multiline quotes and both ±3 boundaries", () => {
+    const ctx = context({ readFileAt: () => "first\nx\ny\n  target();  \n  next();\nz\nlast\n" });
+    const evidence = (line: number, quote = "target();"): Candidate => candidate({ evidence: [{ path: "src/cart.ts", line, quote }] });
+    for (const line of [1, 4, 7]) expect(ruleFor(evidence(line), ctx)).toBeUndefined();
+    expect(ruleFor(evidence(8), ctx)).toBe("evidence-mismatch");
+    expect(ruleFor(evidence(1, " target();\n next(); "), ctx)).toBeUndefined();
+    expect(ruleFor(evidence(1, "target( );"), ctx)).toBe("evidence-mismatch");
+    expect(ruleFor(evidence(0), ctx)).toBe("evidence-mismatch");
+    expect(ruleFor(evidence(1, " "), ctx)).toBe("evidence-mismatch");
+    expect(ruleFor(evidence(1), context({ readFileAt: () => undefined }))).toBe("evidence-mismatch");
+    expect(ruleFor(candidate({ evidence: [evidence(1).evidence![0]!, { path: "src/cart.ts", line: 1, quote: "absent" }] }), ctx)).toBe("evidence-mismatch");
+    expect(ruleFor(candidate(), ctx)).toBeUndefined();
+  });
+  it("style: category drops, functional claims pass", () => {
+    expect(ruleFor(candidate({ category: "style" }))).toBe("style");
+    expect(ruleFor(candidate({ category: "correctness" }))).toBeUndefined();
+  });
+  const nits = JSON.parse(readFileSync(new URL("./fixtures/gate/nits.json", import.meta.url), "utf8")) as { id: string; positive: string; negative: string }[];
+  it("style: every reviewed pattern has a fixture", () => {
+    expect(nits.map((f) => f.id)).toEqual(nitPatterns.map((p) => p.id));
+  });
+  it.each(nits)("style: $id positive and negative", ({ id, positive, negative }) => {
+    expect(nitMatch(positive)).toBe(id);
+    expect(ruleFor(candidate({ body: positive }))).toBe("style");
+    expect(nitMatch(negative)).toBeUndefined();
+    expect(ruleFor(candidate({ body: negative }))).toBeUndefined();
+  });
+  it("suppressed: uses an injected fingerprint matcher", () => {
+    const ctx = context({ suppressions: [{ matches: (f) => f.body === "fingerprint match" }] });
+    expect(ruleFor(candidate({ body: "fingerprint match" }), ctx)).toBe("suppressed");
+    expect(ruleFor(candidate(), ctx)).toBeUndefined();
+    expect(ruleFor(candidate({ body: "fingerprint match" }))).toBeUndefined();
+  });
+  it("duplicate: same normalized path within 3; votes, severity, then earliest win", () => {
+    const ctx = context({ diff: [], readFileAt: () => "head" });
+    const base = candidate({ source: "contract" });
+    const cases: [Partial<Candidate>, Partial<Candidate>, number][] = [
+      [{ votes: 1, severity: "critical" }, { votes: 2, severity: "low" }, 1],
+      [{ votes: 2, severity: "low" }, { votes: 2, severity: "high" }, 1],
+      [{ votes: 2, severity: "high" }, { votes: 2, severity: "high" }, 0],
+      [{}, {}, 0],
+    ];
+    for (const [a, b, winner] of cases) {
+      const inputs = [{ ...base, ...a }, { ...base, path: "./b/src/cart.ts", line: 4, ...b }];
+      const result = gateFindings(inputs, ctx);
+      expect(result.kept).toEqual([inputs[winner]]);
+      expect(result.dropped[0]?.rule).toBe("duplicate");
+    }
+    for (const patch of [{ line: 5 }, { path: "different.ts" }, { line: null }]) {
+      expect(gateFindings([base, { ...base, ...patch }], ctx).dropped).toEqual([]);
+    }
+  });
+  it("severity-floor: opt-in; equal, higher and unspecified severities pass", () => {
+    const ctx = context({ options: { minSeverity: "medium" } });
+    expect(ruleFor(candidate({ severity: "low" }), ctx)).toBe("severity-floor");
+    for (const severity of [undefined, "medium", "high", "critical"] as const) expect(ruleFor(candidate({ severity }), ctx)).toBeUndefined();
+    expect(ruleFor(candidate({ severity: "low" }))).toBeUndefined();
+  });
+  it("cap: ranks votes, severity, then order, retaining selected input order", () => {
+    const inputs = [candidate({ path: "a", votes: 1, severity: "critical" }), candidate({ path: "b", votes: 2, severity: "low" }),
+      candidate({ path: "c", votes: 2, severity: "high" }), candidate({ path: "d", votes: 2, severity: "high" })].map((f) => ({ ...f, source: "contract" }));
+    const ctx = context({ readFileAt: () => "head", options: { maxPerPr: 2 } });
+    const result = gateFindings(inputs, ctx);
+    expect(result.kept).toEqual(inputs.slice(2));
+    expect(result.dropped.map((d) => d.rule)).toEqual(["cap", "cap"]);
+    expect(gateFindings(inputs, { ...ctx, options: {} }).kept).toEqual(inputs);
+    expect(gateFindings(inputs, { ...ctx, options: { maxPerPr: 4 } }).dropped).toEqual([]);
+    expect(gateFindings(inputs, { ...ctx, options: { maxPerPr: 0 } }).kept).toEqual([]);
+    expect(() => gateFindings(inputs, { ...ctx, options: { maxPerPr: -1 } })).toThrow();
+  });
+  it("runs rules in the specified order", () => {
+    const ctx = context({ diff: [...diff(), ...diff("yarn.lock")], options: { requireEvidence: true, minSeverity: "high", maxPerPr: 0 }, suppressions: [{ matches: () => true }] });
+    expect(ruleFor(candidate({ path: "yarn.lock", category: "style" }), ctx)).toBe("prefiltered");
+    expect(ruleFor(candidate({ line: 50, category: "style" }), ctx)).toBe("not-in-diff");
+    expect(ruleFor(candidate({ category: "style" }), ctx)).toBe("evidence-missing");
+    const bad = candidate({ evidence: [{ path: "src/cart.ts", line: 1, quote: "bad" }], category: "style" });
+    expect(ruleFor(bad, ctx)).toBe("evidence-mismatch");
+    const good = candidate({ evidence: [{ path: "src/cart.ts", line: 1, quote: "return charge();" }] });
+    expect(ruleFor({ ...good, category: "style" }, ctx)).toBe("style");
+    expect(ruleFor(good, ctx)).toBe("suppressed");
+    const ranked = [{ ...good, votes: 1, severity: "critical" as const }, { ...good, votes: 2, severity: "low" as const }];
+    expect(gateFindings(ranked, { ...ctx, suppressions: [] }).dropped.map((d) => d.rule)).toEqual(["duplicate", "severity-floor"]);
+    expect(ruleFor({ ...good, severity: "high" }, { ...ctx, suppressions: [] })).toBe("cap");
+  });
+  it("is idempotent across deterministic generated pools and options, including overlapping duplicate neighborhoods", () => {
+    let seed = 42;
+    const random = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0);
+    for (let run = 0; run < 80; run++) {
+      const inputs = Array.from({ length: 30 }, (_, i) => candidate({ path: `src/${random() % 4}.ts`, line: (random() % 15) + 1,
+        source: "contract", votes: random() % 4, severity: (["low", "medium", "high", undefined] as const)[random() % 4], body: i % 9 === 0 ? "Nit: shorter name" : `Failure ${i}` }));
+      const original = structuredClone(inputs);
+      const ctx = context({ readFileAt: () => "head", options: { ...(run % 2 ? { maxPerPr: 7 } : {}), ...(run % 3 ? { minSeverity: "medium" as const } : {}) } });
+      const once = gateFindings(inputs, ctx);
+      expect(gateFindings(once.kept, ctx)).toEqual({ kept: once.kept, dropped: [] });
+      expect(inputs).toEqual(original);
+    }
+    const chain = [1, 4, 7].map((line) => candidate({ line, source: "contract" }));
+    expect(gateFindings(chain, context()).kept.map((f) => f.line)).toEqual([1, 7]);
+  });
+  it("pool-verify-v1 output comments pass through unchanged when no rule fires (synthetic fixture)", () => {
+    const output = JSON.parse(readFileSync(new URL("./fixtures/gate/pool-verify-v1.json", import.meta.url), "utf8")) as { comments: Candidate[] };
+    const result = gateFindings(output.comments, context({ diff: [...diff(), ...diff("src/session.ts")] }));
+    expect(result).toEqual({ kept: output.comments, dropped: [] });
+    expect(result.kept[0]).toBe(output.comments[0]);
   });
 });

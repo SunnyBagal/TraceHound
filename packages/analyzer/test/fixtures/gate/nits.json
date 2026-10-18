@@ -1,0 +1,12 @@
+[
+  { "id": "naming", "positive": "Rename this to customerCount.", "negative": "The rename operation overwrites the destination before checking permissions." },
+  { "id": "formatting", "positive": "The indentation should use two spaces.", "negative": "The formatter crashes on empty input." },
+  { "id": "typos", "positive": "There is a typo in this message.", "negative": "The wrong status code causes retries to stop." },
+  { "id": "comments-docs", "positive": "Update the documentation for this option.", "negative": "The docs renderer executes arbitrary scripts from user input." },
+  { "id": "readability", "positive": "Extract this for readability.", "negative": "The extracted handler drops the authentication check." },
+  { "id": "consider", "positive": "Consider extracting this method.", "negative": "The method reads an uninitialized value." },
+  { "id": "nit", "positive": "Nit: use a shorter expression.", "negative": "Initialization fails when the connection closes." },
+  { "id": "import-order", "positive": "Sort the imports alphabetically.", "negative": "The import resolves to a module that does not export this function." },
+  { "id": "magic-numbers", "positive": "Replace this magic number with a constant.", "negative": "The timeout of 5 milliseconds expires before the response arrives." },
+  { "id": "unused-import", "positive": "Remove the unused import of Widget.", "negative": "Remove the unused import of Widget. Its module initializer also registers the only handler, so requests now fail." }
+]
