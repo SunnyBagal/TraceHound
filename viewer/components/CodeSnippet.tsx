@@ -7,7 +7,7 @@ export function CodeSnippet({ evidence }: { evidence: Evidence }) {
 }
 
 /** Shared code renderer for snapshot evidence and public review suggestion diffs. */
-export function CodeBlock({ lines, startLine = 1, range, marker }: { lines: string[]; startLine?: number; range?: { startLine: number; endLine: number }; marker?: "+" | "-" }) {
+export function CodeBlock({ lines, startLine = 1, range, marker, wrap = false }: { lines: string[]; startLine?: number; range?: { startLine: number; endLine: number }; marker?: "+" | "-"; wrap?: boolean }) {
   if (!lines.length) return null;
   return (
     <pre className="max-h-[520px] overflow-auto rounded-lg border border-line bg-bg py-3 font-mono text-sm leading-[1.7]" data-testid="code-snippet">
@@ -15,10 +15,10 @@ export function CodeBlock({ lines, startLine = 1, range, marker }: { lines: stri
         const n = startLine + i;
         const hit = range && n >= range.startLine && n <= range.endLine;
         return (
-          <div key={n} className={marker === "+" ? "bg-diff-added/10" : marker === "-" ? "bg-diff-removed/10" : hit ? "bg-accent-soft" : undefined}>
-            <span className={`inline-block w-10 select-none pr-3 text-right ${hit ? "text-accent" : "text-faint"}`}>{n}</span>
-            {marker && <span aria-hidden className={`mr-2 select-none ${marker === "+" ? "text-diff-added" : "text-diff-removed"}`}>{marker}</span>}
-            <span className={hit ? "text-text" : "text-muted"}>{line ? highlightCode(line).map((token, index) => <span key={index} className={{ plain: "", comment: "text-faint", string: "text-diff-added", keyword: "text-highlight", number: "text-accent" }[token.kind]}>{token.text}</span>) : " "}</span>
+          <div key={n} className={`${wrap ? "flex pr-3" : ""} ${marker === "+" ? "bg-diff-added/10" : marker === "-" ? "bg-diff-removed/10" : hit ? "bg-accent-soft" : ""}`}>
+            <span className={`inline-block w-10 shrink-0 select-none pr-3 text-right ${hit ? "text-accent" : "text-faint"}`}>{n}</span>
+            {marker && <span aria-hidden className={`mr-2 shrink-0 select-none ${marker === "+" ? "text-diff-added" : "text-diff-removed"}`}>{marker}</span>}
+            <span className={`${wrap ? "min-w-0 flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]" : ""} ${hit ? "text-text" : "text-muted"}`}>{line ? highlightCode(line).map((token, index) => <span key={index} className={{ plain: "", comment: "text-faint", string: "text-diff-added", keyword: "text-highlight", number: "text-accent" }[token.kind]}>{token.text}</span>) : " "}</span>
           </div>
         );
       })}

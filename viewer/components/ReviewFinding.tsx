@@ -11,11 +11,11 @@ export function FixDiff({ finding }: { finding: Finding }) {
   return <div className="grid min-w-0 gap-4 lg:grid-cols-2" aria-label="Suggested fix diff" data-testid="fix-diff">
     <section className="min-w-0" aria-label="Original code">
       <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-muted"><span className="text-diff-removed" aria-hidden>−</span> Before</h3>
-      {finding.original !== undefined ? <CodeBlock lines={finding.original.split("\n")} startLine={finding.startLine ?? finding.line ?? 1} marker="-" /> : <p className="rounded-lg border border-line bg-bg p-4 text-sm leading-relaxed text-muted">Original code is unavailable in this review’s diff context. Open the comment on GitHub.</p>}
+      {finding.original !== undefined ? <CodeBlock lines={finding.original.split("\n")} startLine={finding.startLine ?? finding.line ?? 1} marker="-" wrap /> : <p className="rounded-lg border border-line bg-bg p-4 text-sm leading-relaxed text-muted">Original code is unavailable in this review’s diff context. Open the comment on GitHub.</p>}
     </section>
     <section className="min-w-0" aria-label="Suggested replacement">
       <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-muted"><span className="text-diff-added" aria-hidden>+</span> After · suggestion</h3>
-      {finding.suggestion === "" ? <div className="rounded-lg border border-line bg-bg p-4 text-sm leading-relaxed text-diff-added">Delete the selected lines.</div> : <CodeBlock lines={finding.suggestion.split("\n")} startLine={finding.startLine ?? finding.line ?? 1} marker="+" />}
+      {finding.suggestion === "" ? <div className="rounded-lg border border-line bg-bg p-4 text-sm leading-relaxed text-diff-added">Delete the selected lines.</div> : <CodeBlock lines={finding.suggestion.split("\n")} startLine={finding.startLine ?? finding.line ?? 1} marker="+" wrap />}
     </section>
   </div>;
 }
