@@ -22,6 +22,7 @@ if (command === "bench") {
   if (existsSync(envFile) && !process.env.NEBIUS_API_KEY) process.loadEnvFile(envFile);
   const { main } = await import("./bench/cli.ts");
   process.exitCode = await main(rest);
+} else if (command === "gate") { process.exitCode = (await import("./gate/cli.ts")).main(rest);
 } else if (command === "review") {
   // review needs NEBIUS_API_KEY: load the workspace .env for this command only
   const { existsSync } = await import("node:fs");
