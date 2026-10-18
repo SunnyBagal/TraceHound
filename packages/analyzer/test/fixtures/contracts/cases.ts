@@ -29,6 +29,9 @@ const ENV_FILE = (name: string) => `${name}=postgres://localhost/app\nPORT=3000\
 const CONFIG = (name: string) => `export const dbUrl = process.env.${name};\n`;
 const DB = (name: string) => `export const url = process.env.${name} ?? "";\n`;
 
+const EMITTER = (event: string) => `export function created(bus: { emit(e: string, x: unknown): void }, user: unknown) {\n  bus.emit("${event}", user);\n}\n`;
+const LISTENER = (event: string) => `export function listen(bus: { on(e: string, f: (x: unknown) => void): void }) {\n  bus.on("${event}", (user) => console.log(user));\n}\n`;
+
 const PY_SERVER = (route: string, task: string) => `from flask import Flask\nfrom celery import Celery\n\napp = Flask(__name__)\ncelery_app = Celery("app")\n\n@app.route("${route}")\ndef list_users():\n    return []\n\n@celery_app.task(name="${task}")\ndef send_welcome(user_id):\n    return user_id\n`;
 const PY_CLIENT = (route: string, task: string) => `import requests\nfrom tasks import celery_app\n\ndef users(base):\n    return requests.get(base + "${route}").json()\n\ndef welcome(user_id):\n    celery_app.send_task("${task}", args=[user_id])\n`;
 const GO_CONFIG = (env: string, key: string) => `package main\n\nimport "os"\n\nfunc dbURL() string {\n\treturn os.Getenv("${env}")\n}\n\nfunc loadSession(id string) string {\n\treturn rdb.Get(ctx, "${key}"+id).Val()\n}\n`;
@@ -131,6 +134,20 @@ export const CASES: ContractCase[] = [
     control: true,
     base: { ...TS, "src/server.ts": SERVER("/api/users"), "src/client.ts": CLIENT("/api/users") },
     head: { "src/server.ts": SERVER("/api/members"), "src/client.ts": CLIENT("/api/members") },
+    expected: { tsc: 0, contract: 0, paths: [] },
+  },
+  {
+    name: "event renamed in the emitter only",
+    control: false,
+    base: { ...TS, "src/events.ts": EMITTER("user.created"), "src/listener.ts": LISTENER("user.created") },
+    head: { "src/events.ts": EMITTER("user.registered") },
+    expected: { tsc: 0, contract: 1, paths: ["src/listener.ts:2"] },
+  },
+  {
+    name: "event renamed in the emitter and the listener",
+    control: true,
+    base: { ...TS, "src/events.ts": EMITTER("user.created"), "src/listener.ts": LISTENER("user.created") },
+    head: { "src/events.ts": EMITTER("user.registered"), "src/listener.ts": LISTENER("user.registered") },
     expected: { tsc: 0, contract: 0, paths: [] },
   },
   {
