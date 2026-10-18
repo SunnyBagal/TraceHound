@@ -44,7 +44,7 @@ function addedSideLines(file: DiffFile | undefined): Set<number> {
 
 export function validateFix(
   value: unknown, current: string[], allowed: Set<number>, findingLine: number | null,
-  added: Set<number> = new Set(),
+  hunks: DiffFile["hunks"], added: Set<number> = new Set(),
 ): Fix | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const f = value as Record<string, unknown>;
@@ -61,9 +61,29 @@ export function validateFix(
   for (let line = f.startLine; line <= f.endLine; line++) {
     if (!allowed.has(line) || (findingLine === null && !added.has(line))) return null;
   }
+  if (!committableRange(hunks, f.startLine, f.endLine)) return null;
   const original = current.slice(f.startLine - 1, f.endLine).join("\n");
   if (f.replacement === original) return null;
   return { startLine: f.startLine, endLine: f.endLine, replacement: f.replacement, original };
+}
+
+/** GitHub cannot apply a multi-line suggestion across a deletion in diff order. */
+function committableRange(hunks: DiffFile["hunks"], start: number, end: number): boolean {
+  if (start === end) return true;
+  for (const hunk of hunks) {
+    let line = hunk.newStart;
+    let started = false;
+    for (const text of hunk.text.split("\n").slice(1)) {
+      if (text.startsWith("-")) {
+        if (started) break;
+      } else if (text.startsWith("+") || ((text.startsWith(" ") || text === "") && line < hunk.newStart + hunk.newCount)) {
+        if (line === start) started = true;
+        if (started && line === end) return true;
+        line++;
+      }
+    }
+  }
+  return false;
 }
 
 /** Findings are already capped. All effects can be replaced by offline test doubles. */
@@ -109,7 +129,7 @@ export async function runFixes(
             }
             break;
           }
-          suggestions[index] = validateFix(value, current, file ? newSideLines(file) : new Set(), finding.line, addedSideLines(file));
+          suggestions[index] = validateFix(value, current, file ? newSideLines(file) : new Set(), finding.line, file?.hunks ?? [], addedSideLines(file));
           break;
         }
       } catch {

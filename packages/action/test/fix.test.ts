@@ -4,11 +4,13 @@ import { FIX_MODEL, runFixes, validateFix, type FixClient } from "../src/fix.ts"
 import { FIX_SYSTEM_PROMPT } from "../src/fix-prompt.ts";
 import type { Execute } from "../src/pipeline.ts";
 import { buildReview, type Finding } from "../src/action.ts";
+import { parseDiff } from "../../analyzer/src/review/diff.ts";
 
 const finding: Finding = { path: "src/widget.ts", line: 45, body: "Synthetic missing-value defect" };
 const current = Array.from({ length: 100 }, (_, i) => `  value${i + 1}`);
 const diff = "diff --git a/src/widget.ts b/src/widget.ts\n--- a/src/widget.ts\n+++ b/src/widget.ts\n@@ -44,3 +44,3 @@\n   value44\n-  old\n+  value45\n   value46\n";
-const proposal = { startLine: 44, endLine: 45, replacement: "  fixed44\n  fixed45", explanation: "Handle the missing value." };
+const hunks = parseDiff(diff)[0]!.hunks;
+const proposal = { startLine: 45, endLine: 46, replacement: "  fixed45\n  fixed46", explanation: "Handle the missing value." };
 function fake(responses = [JSON.stringify(proposal)]) {
   const exec = vi.fn<Execute>(async (file, args, options) => {
     expect(file).toBe("git");
@@ -27,7 +29,7 @@ it("pins the product-only fix prompt", () => {
 it("reads the PR head via git, supplies an exact numbered ±40 window and file hunks, and uses Super at zero temperature", async () => {
   const f = fake();
   const output = await f.run();
-  expect(output).toEqual({ suggestions: [{ startLine: 44, endLine: 45, replacement: proposal.replacement, original: "  value44\n  value45" }],
+  expect(output).toEqual({ suggestions: [{ startLine: 45, endLine: 46, replacement: proposal.replacement, original: "  value45\n  value46" }],
     counts: { attempted: 1, valid: 1, rejected: 0 } });
   expect(f.chat).toHaveBeenCalledOnce();
   const [request, meta] = f.chat.mock.calls[0]!;
@@ -53,7 +55,7 @@ describe("validation rejects unsafe suggestions", () => {
     ["non-numeric range", { ...proposal, startLine: "44" }],
     ["off-diff end", { ...proposal, endLine: 47 }],
     ["off-diff middle", { ...proposal, startLine: 43, endLine: 46 }],
-    ["unchanged", { ...proposal, replacement: "  value44\n  value45" }],
+    ["unchanged", { ...proposal, replacement: "  value45\n  value46" }],
     ["too many replacement lines", { ...proposal, replacement: Array(16).fill("new").join("\n") }],
     ["fence escape", { ...proposal, replacement: "```\ninjected" }],
     ["non-string replacement", { ...proposal, replacement: 7 }],
@@ -68,16 +70,55 @@ describe("validation rejects unsafe suggestions", () => {
   });
 
   it("rejects a gap even when both endpoints are allowed and bounds beyond the current file", () => {
-    expect(validateFix(proposal, current, new Set([44, 45]), 45)).not.toBeNull();
-    expect(validateFix({ ...proposal, endLine: 46 }, current, new Set([44, 46]), 45)).toBeNull();
-    expect(validateFix(proposal, current.slice(0, 44), new Set([44, 45]), 45)).toBeNull();
+    expect(validateFix(proposal, current, new Set([45, 46]), 45, hunks)).not.toBeNull();
+    expect(validateFix({ ...proposal, endLine: 47 }, current, new Set([45, 47]), 45, hunks)).toBeNull();
+    expect(validateFix(proposal, current.slice(0, 45), new Set([45, 46]), 45, hunks)).toBeNull();
   });
 
   it("accepts deletion, a single line and the inclusive 15-line limit", () => {
-    expect(validateFix({ ...proposal, startLine: 45, replacement: "" }, current, new Set([45]), 45))
+    expect(validateFix({ ...proposal, startLine: 45, endLine: 45, replacement: "" }, current, new Set([45]), 45, hunks))
       .toMatchObject({ startLine: 45, endLine: 45, replacement: "" });
-    expect(validateFix({ ...proposal, startLine: 1, endLine: 15 }, current, new Set(Array.from({ length: 15 }, (_, i) => i + 1)), 7))
+    const addedHunks = parseDiff("diff --git a/src/widget.ts b/src/widget.ts\n--- /dev/null\n+++ b/src/widget.ts\n@@ -0,0 +1,15 @@\n"
+      + current.slice(0, 15).map(line => `+${line}`).join("\n") + "\n")[0]!.hunks;
+    expect(validateFix({ ...proposal, startLine: 1, endLine: 15 }, current, new Set(Array.from({ length: 15 }, (_, i) => i + 1)), 7, addedHunks))
       .toMatchObject({ startLine: 1, endLine: 15 });
+  });
+});
+
+describe("committable suggestion ranges", () => {
+  const replaced = "diff --git a/src/widget.ts b/src/widget.ts\n--- a/src/widget.ts\n+++ b/src/widget.ts\n@@ -59,3 +59,3 @@\n   value59\n-  old60\n+  value60\n   value61\n";
+
+  it("rejects context/deleted/added/context across RIGHT 59–61 and preserves the finding at line 60", async () => {
+    const f = fake([JSON.stringify({ ...proposal, startLine: 59, endLine: 61 })]);
+    const anchored = { ...finding, line: 60 };
+    const result = await runFixes([anchored], replaced, "/fake/repo", "abcdef12", { chat: f.chat }, f.exec);
+    expect(result).toEqual({ suggestions: [null], counts: { attempted: 1, valid: 0, rejected: 1 } });
+    const review = buildReview([anchored], replaced, "abcdef12", "fake", 15, false, "pool-verify-v1", { pool: 1, kept: 1 }, {
+      sources: ["diff"], fixes: result,
+    });
+    expect(review.comments).toEqual([{ ...anchored, side: "RIGHT" }]);
+  });
+
+  it("accepts the same proposal narrowed to added line 60 after a deletion", async () => {
+    const f = fake([JSON.stringify({ ...proposal, startLine: 60, endLine: 60 })]);
+    const result = await runFixes([{ ...finding, line: 60 }], replaced, "/fake/repo", "abcdef12", { chat: f.chat }, f.exec);
+    expect(result.counts).toEqual({ attempted: 1, valid: 1, rejected: 0 });
+    expect(result.suggestions[0]).toMatchObject({ startLine: 60, endLine: 60, original: "  value60" });
+  });
+
+  it("accepts consecutive added lines when the deletion precedes the range", async () => {
+    const consecutive = "diff --git a/src/widget.ts b/src/widget.ts\n--- a/src/widget.ts\n+++ b/src/widget.ts\n@@ -59,3 +59,4 @@\n   value59\n-  old60\n+  value60\n+  value61\n   value62\n";
+    const f = fake([JSON.stringify({ ...proposal, startLine: 60, endLine: 61 })]);
+    const result = await runFixes([{ ...finding, line: 60 }], consecutive, "/fake/repo", "abcdef12", { chat: f.chat }, f.exec);
+    expect(result.counts).toEqual({ attempted: 1, valid: 1, rejected: 0 });
+    expect(result.suggestions[0]).toMatchObject({ startLine: 60, endLine: 61, original: "  value60\n  value61" });
+  });
+
+  it("rejects a range spanning separate hunks even when RIGHT line numbers are consecutive", async () => {
+    const separate = "diff --git a/src/widget.ts b/src/widget.ts\n--- a/src/widget.ts\n+++ b/src/widget.ts\n@@ -60 +60 @@\n-  old60\n+  value60\n@@ -61 +61 @@\n-  old61\n+  value61\n";
+    const f = fake([JSON.stringify({ ...proposal, startLine: 60, endLine: 61 })]);
+    const result = await runFixes([{ ...finding, line: 60 }], separate, "/fake/repo", "abcdef12", { chat: f.chat }, f.exec);
+    expect(result).toEqual({ suggestions: [null], counts: { attempted: 1, valid: 0, rejected: 1 } });
   });
 });
 
