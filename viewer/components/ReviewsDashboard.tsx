@@ -28,6 +28,7 @@ function useReviewData<T>(loader: (repo: string, query: URLSearchParams) => Prom
 const list = (repo: string) => loadReviewList(repo);
 const detail = (repo: string, query: URLSearchParams) => loadPullReview(repo, reviewNumber(query.get("n")));
 const stateLabel = (pull: PullRequest) => pull.merged_at ? "Merged" : pull.state === "open" ? "Open" : "Closed";
+const plural = (count: number | undefined, noun: string) => `${noun}${count === 1 ? "" : "s"}`;
 
 function LoadMessage({ state }: { state: Load<unknown> }) {
   if (state.status === "ready") return null;
@@ -49,7 +50,7 @@ export function ReviewsDashboard() {
         {state.data.pulls.map(({ pull, review, unavailable }) => <li key={pull.number}>
           <a href={reviewsHref(repo, pull.number)} className="group flex flex-wrap items-center justify-between gap-5 px-5 py-6 transition-colors hover:bg-card-hover sm:px-7">
             <div className="flex min-w-0 flex-1 items-start gap-4"><GitPullRequest className={`mt-1 size-5 shrink-0 ${pull.merged_at ? "text-violet-300" : pull.state === "open" ? "text-green-300" : "text-muted"}`} aria-hidden /><div className="min-w-0"><h3 className="text-base font-medium leading-relaxed text-text group-hover:text-accent">{pull.title}</h3><p className="mt-2 text-sm text-muted">#{pull.number} · {stateLabel(pull)}{unavailable ? " · Review unavailable" : !review ? " · No TraceHound review" : ""}</p></div></div>
-            <div className="flex items-center gap-5 text-sm text-muted sm:pl-9"><span className="flex items-center gap-2"><MessageSquare className="size-4" aria-hidden /><span><strong className="font-medium text-text">{review?.footer.posted ?? "—"}</strong> findings</span></span><span className="flex items-center gap-2"><Wrench className="size-4" aria-hidden /><span><strong className="font-medium text-text">{review?.footer.fixes.valid ?? "—"}</strong> suggestions</span></span><ArrowUpRight className="size-4 text-faint" aria-hidden /></div>
+            <div className="flex items-center gap-5 text-sm text-muted sm:pl-9"><span className="flex items-center gap-2"><MessageSquare className="size-4" aria-hidden /><span><strong className="font-medium text-text">{review?.footer.posted ?? "—"}</strong> {plural(review?.footer.posted, "finding")}</span></span><span className="flex items-center gap-2"><Wrench className="size-4" aria-hidden /><span><strong className="font-medium text-text">{review?.footer.fixes.valid ?? "—"}</strong> {plural(review?.footer.fixes.valid, "suggestion")}</span></span><ArrowUpRight className="size-4 text-faint" aria-hidden /></div>
           </a>
         </li>)}
       </ul>}
@@ -72,7 +73,7 @@ function PullFindings({ repo, data: { pull, review, findings } }: { repo: string
     <header className="mb-9 border-b border-panel-line pb-8">
       <p className="mb-3 break-all font-mono text-sm text-muted">{repo} · #{pull.number} · {stateLabel(pull)}</p>
       <h1 className="max-w-[40ch] text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">{pull.title}</h1>
-      <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted"><p>{review ? `${review.footer.posted} findings · ${review.footer.fixes.valid} suggestions` : "No TraceHound review"} · {MODEL_DISCLOSURE}</p><a href={pullHref(repo, pull.number)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-text hover:text-accent">Pull request on GitHub<ArrowUpRight className="size-4" aria-hidden /></a></div>
+      <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted"><p>{review ? `${review.footer.posted} ${plural(review.footer.posted, "finding")} · ${review.footer.fixes.valid} ${plural(review.footer.fixes.valid, "suggestion")}` : "No TraceHound review"} · {MODEL_DISCLOSURE}</p><a href={pullHref(repo, pull.number)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-text hover:text-accent">Pull request on GitHub<ArrowUpRight className="size-4" aria-hidden /></a></div>
       {review && review.footer.headSha !== pull.head.sha && <p className="mt-4 text-sm leading-relaxed text-muted">This review is for an earlier commit ({review.footer.headSha.slice(0, 7)}). Check the current code on GitHub before applying a fix.</p>}
     </header>
     {findings.length ? <div className="space-y-6">{findings.map((finding) => <ReviewFinding key={finding.id} finding={finding} repo={repo} number={pull.number} reviewId={review!.id} />)}</div> : <p className="rounded-xl border border-panel-line bg-panel p-7 text-base leading-relaxed text-muted">{review ? review.footer.posted ? "The review’s inline comments are unavailable. Open the review on GitHub." : "TraceHound posted no findings in this review." : "No TraceHound review with a data footer has been posted on this pull request."}</p>}

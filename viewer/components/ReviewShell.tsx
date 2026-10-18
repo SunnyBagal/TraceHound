@@ -19,7 +19,7 @@ export function ReviewShell({ children, active = "Reviews" }: { children: ReactN
 }
 
 export function RepositoryForm({ repo = DEFAULT_REVIEW_REPO }: { repo?: string }) {
-  return <form action={`${base}/reviews`} method="get" className="flex max-w-xl flex-wrap items-end gap-3">
+  return <form action={`${base}/reviews`} method="get" className="flex w-full max-w-full flex-wrap items-end gap-3 sm:w-[32rem]">
     <label className="min-w-0 flex-1 text-sm text-muted">Public repository
       <input name="repo" defaultValue={repo} required aria-label="Public repository" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="owner/name" className="mt-2 block w-full rounded-lg border border-line-strong bg-bg px-3.5 py-3 font-mono text-sm text-text outline-none focus:border-accent" />
     </label>

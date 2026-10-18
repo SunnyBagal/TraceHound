@@ -14,7 +14,8 @@ it("defaults to the demo repo and shows footer counts, state and a detail link",
   expect(loadReviewList).toHaveBeenCalledWith("SunnyBagal/tracehound-demo");
   const row = screen.getByRole("link", { name: /Handle expired sessions/ });
   expect(row.getAttribute("href")).toBe("/reviews/pr?repo=SunnyBagal%2Ftracehound-demo&n=3");
-  expect(row.textContent).toContain("1 findings"); expect(row.textContent).toContain("1 suggestions");
+  expect(row.textContent).toContain("1 finding"); expect(row.textContent).toContain("1 suggestion");
+  expect(row.textContent).not.toContain("1 findings"); expect(row.textContent).not.toContain("1 suggestions");
   expect(screen.getByRole("link", { name: /Merged work/ }).textContent).toContain("Merged");
   expect(screen.getByRole("link", { name: /Merged work/ }).textContent).toContain("— findings");
 });
