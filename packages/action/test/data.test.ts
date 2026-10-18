@@ -1,11 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { SCHEMA_VERSION, CHANGESET_SCHEMA_VERSION, FileFacts, Snapshot, SnapshotManifest, type ChangeSet } from "../../analyzer/src/schema.ts";
 import { upsertManifest } from "../../analyzer/src/manifest.ts";
-import { applyUpdate, dataMain, parseReviewFooter, runData, type ChangeEntry, type DataDependencies, type DataEvent } from "../src/data.ts";
+import { applyUpdate, createDataDependencies, dataMain, parseReviewFooter, runData, workspaceEnv, type ChangeEntry,
+  type DataDependencies, type DataEvent } from "../src/data.ts";
 
 const sha = "a".repeat(40), base = "b".repeat(40), mergeBase = "d".repeat(40);
 const repository = { full_name: "example/widget", default_branch: "main" };
@@ -29,6 +31,7 @@ const entry = (id = "pr-3-aaaaaaa"): ChangeEntry => ({ id, repo: repository.full
 const dirs: string[] = [];
 afterEach(async () => { await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))); });
 async function temp() { const dir = await mkdtemp(path.join(tmpdir(), "tracehound-data-test-")); dirs.push(dir); return dir; }
+const realpath = (file: string) => realpathSync(file);
 const save = (file: string, value: unknown) => { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, JSON.stringify(value)); };
 
 /** A remote tree in memory. No subprocess, network, model, or real git is used. */
@@ -44,8 +47,7 @@ async function fake() {
       else remote.set(relative, readFileSync(path.join(dir, relative), "utf8"));
     }
   };
-  const deps: DataDependencies = {
-    git: vi.fn((cwd, args) => {
+  const impl: DataDependencies["git"] = (cwd, args) => {
       const ok = (stdout = "") => ({ code: 0, stdout });
       if (args[0] === "merge-base" && args[1] === "--is-ancestor") return { code: ancestor ? 0 : 1, stdout: "" };
       if (args[0] === "ls-remote" && args.at(-1) === "refs/heads/main") return ok(`${tip}\trefs/heads/main\n`);
@@ -68,7 +70,9 @@ async function fake() {
         capture(cwd); present = true;
       }
       return ok();
-    }),
+  };
+  const deps: DataDependencies = {
+    git: vi.fn(impl), branchGit: vi.fn(impl),
     analyzer: vi.fn((args) => {
       if (args[0] === "bin.ts") return { code: 0, stdout: JSON.stringify(changeset) };
       const out = args[args.indexOf("--out") + 1]!;
@@ -90,14 +94,17 @@ it("creates an orphan branch and writes a viewer-valid snapshot manifest", async
   const f = await fake();
   await writeFile(path.join(f.workspace, "tracehound.json"), "{}");
   expect(await f.run("push", push)).toBe(0);
-  expect(f.deps.git).toHaveBeenCalledWith(expect.any(String), ["checkout", "--orphan", "tracehound-data"]);
+  expect(f.deps.branchGit).toHaveBeenCalledWith(expect.any(String), ["checkout", "--orphan", "tracehound-data"]);
   expect(f.deps.analyzer).toHaveBeenCalledWith(["cli.ts", "--repo", f.workspace, "--config", path.join(f.workspace, "tracehound.json"),
     "--naming", "heuristic", "--out", expect.any(String)]);
   const manifest = SnapshotManifest.parse(JSON.parse(f.remote.get("snapshots/index.json")!));
   expect(manifest.latest?.path).toBe(`${sha}/0.1.0.json`);
   expect(f.remote.has(`snapshots/${sha}/0.1.0.json`)).toBe(true);
-  expect(f.deps.git).toHaveBeenCalledWith(expect.any(String), ["commit", "-m", "data: push aaaaaaa"]);
-  expect(f.deps.git).toHaveBeenCalledWith(expect.any(String), ["push", "--porcelain", "origin", "HEAD:refs/heads/tracehound-data"]);
+  expect(f.deps.branchGit).toHaveBeenCalledWith(expect.any(String), ["commit", "-m", "data: push aaaaaaa"]);
+  expect(f.deps.branchGit).toHaveBeenCalledWith(expect.any(String), ["push", "--porcelain", "origin", "HEAD:refs/heads/tracehound-data"]);
+  // The token-bearing git never runs in the workspace, and the workspace git never touches the clone.
+  expect(vi.mocked(f.deps.git).mock.calls.map(([cwd, args]) => [cwd, args[0]])).toEqual([[f.workspace, "rev-parse"], [f.workspace, "ls-files"]]);
+  expect(vi.mocked(f.deps.branchGit).mock.calls.every(([cwd]) => cwd !== f.workspace)).toBe(true);
 });
 
 it("appends snapshots, replaces the same version, and retains old files", async () => {
@@ -173,7 +180,7 @@ it("appends and updates PR entries without duplicating IDs; uses changes CLI and
   expect(f.remote.has("changesets/pr-3-aaaaaaa.json")).toBe(true);
   expect(f.deps.analyzer).toHaveBeenCalledWith(["bin.ts", "changes", "--repo", f.workspace, "--diff", `${mergeBase}..${sha}`, "--json"]);
   expect(f.deps.git).toHaveBeenCalledWith(f.workspace, ["merge-base", base, sha]);
-  expect(f.deps.git).toHaveBeenCalledWith(expect.any(String), ["checkout", "-B", "tracehound-data", "FETCH_HEAD"]);
+  expect(f.deps.branchGit).toHaveBeenCalledWith(expect.any(String), ["checkout", "-B", "tracehound-data", "FETCH_HEAD"]);
 });
 
 it("diffs a PR from the merge base, not the base branch tip, fetching the base when it is missing", async () => {
@@ -214,7 +221,7 @@ it("retries once after a concurrent push and preserves the fetched entry and fil
   await f.run("pull_request", pull());
   expect(JSON.parse(f.remote.get("changesets/index.json")!).map((e: ChangeEntry) => e.pr)).toEqual([4, 3]);
   expect(f.remote.has("changesets/pr-4-ccccccc.json")).toBe(true);
-  expect(vi.mocked(f.deps.git).mock.calls.filter(([, args]) => args[0] === "push")).toHaveLength(2);
+  expect(vi.mocked(f.deps.branchGit).mock.calls.filter(([, args]) => args[0] === "push")).toHaveLength(2);
   expect(f.deps.analyzer).toHaveBeenCalledTimes(1);
 });
 
@@ -222,9 +229,9 @@ it.each([
   "!\tHEAD:refs/heads/tracehound-data\t[remote rejected] (cannot lock ref 'refs/heads/tracehound-data': is at 1 but expected 2)\n",
   "!\tHEAD:refs/heads/tracehound-data\t[remote rejected] (failed to update ref)\n",
 ])("retries once when the remote ref moved during the push: %s", async (stdout) => {
-  const f = await fake(); const original = f.deps.git;
+  const f = await fake(); const original = f.deps.branchGit;
   let pushes = 0;
-  f.deps.git = vi.fn((cwd, args) => {
+  f.deps.branchGit = vi.fn((cwd, args) => {
     if (args[0] !== "push" || ++pushes > 1) return original(cwd, args);
     f.seed("changesets/index.json", [{ ...entry("pr-4-ccccccc"), pr: 4 }]); // the other writer's update
     return { code: 1, stdout };
@@ -236,19 +243,19 @@ it.each([
 });
 
 it("does not retry a remote rejection for permissions", async () => {
-  const f = await fake(); const original = f.deps.git;
-  f.deps.git = vi.fn((cwd, args) => args[0] === "push"
+  const f = await fake(); const original = f.deps.branchGit;
+  f.deps.branchGit = vi.fn((cwd, args) => args[0] === "push"
     ? { code: 1, stdout: "!\tHEAD:refs/heads/tracehound-data\t[remote rejected] (permission denied)\n" } : original(cwd, args));
   await f.run("pull_request", pull());
-  expect(vi.mocked(f.deps.git).mock.calls.filter(([, args]) => args[0] === "push")).toHaveLength(1);
+  expect(vi.mocked(f.deps.branchGit).mock.calls.filter(([, args]) => args[0] === "push")).toHaveLength(1);
   expect(f.deps.log).toHaveBeenCalledExactlyOnceWith("TraceHound data: analyzer or data write failed; skipped.");
 });
 
 it("does not retry authentication failures and never exposes error output", async () => {
-  const f = await fake(); const original = f.deps.git;
-  f.deps.git = vi.fn((cwd, args) => args[0] === "push" ? { code: 128, stdout: "SECRET" } : original(cwd, args));
+  const f = await fake(); const original = f.deps.branchGit;
+  f.deps.branchGit = vi.fn((cwd, args) => args[0] === "push" ? { code: 128, stdout: "SECRET" } : original(cwd, args));
   expect(await f.run("push", push)).toBe(0);
-  expect(vi.mocked(f.deps.git).mock.calls.filter(([, args]) => args[0] === "push")).toHaveLength(1);
+  expect(vi.mocked(f.deps.branchGit).mock.calls.filter(([, args]) => args[0] === "push")).toHaveLength(1);
   expect(f.deps.log).toHaveBeenCalledExactlyOnceWith("TraceHound data: analyzer or data write failed; skipped.");
 });
 
@@ -257,13 +264,14 @@ it("analyzer failure writes nothing, logs once and exits zero", async () => {
   expect(await f.run("push", push)).toBe(0);
   expect(f.remote.size).toBe(0);
   expect(vi.mocked(f.deps.git).mock.calls.every(([, args]) => ["rev-parse", "ls-files"].includes(args[0]!))).toBe(true);
+  expect(f.deps.branchGit).not.toHaveBeenCalled();
   expect(f.deps.log).toHaveBeenCalledExactlyOnceWith("TraceHound data: analyzer or data write failed; skipped.");
 });
 
 it("stops after a second non-fast-forward rejection", async () => {
-  const f = await fake(); const original = f.deps.git; f.reject();
+  const f = await fake(); const original = f.deps.branchGit; f.reject();
   let pushes = 0;
-  f.deps.git = vi.fn((cwd, args) => {
+  f.deps.branchGit = vi.fn((cwd, args) => {
     if (args[0] === "push" && ++pushes === 2) return { code: 1, stdout: "[rejected] (non-fast-forward)" };
     return original(cwd, args);
   });
@@ -296,6 +304,7 @@ it("refuses the excluded repo, forks, non-default pushes and unsupported events 
   await f.run("pull_request", { ...pull(), pull_request: { ...pull().pull_request!, head: { sha, repo: { full_name: "fork/widget" } } } });
   await f.run("workflow_dispatch", push);
   expect(f.deps.git).not.toHaveBeenCalled();
+  expect(f.deps.branchGit).not.toHaveBeenCalled();
   expect(f.deps.analyzer).not.toHaveBeenCalled();
 });
 
@@ -311,4 +320,29 @@ it("CLI returns zero on an unreadable event", async () => {
   const f = await fake();
   expect(await dataMain({ GITHUB_EVENT_PATH: path.join(f.workspace, "missing") }, f.deps)).toBe(0);
   expect(f.deps.log).toHaveBeenCalledTimes(1);
+});
+
+it("builds child envs from cleanGitEnv; only the data-branch git is isolated and carries the token", async () => {
+  const dir = await temp();
+  const plain = { ...workspaceEnv(process.env), GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+  for (const name of ["victim", "workspace", "branch"]) {
+    mkdirSync(path.join(dir, name));
+    expect(spawnSync("git", ["init", "-q"], { cwd: path.join(dir, name), env: plain }).status).toBe(0);
+  }
+  const global = path.join(dir, "gitconfig");
+  writeFileSync(global, `[safe]\n\tdirectory = ${path.join(dir, "workspace")}\n`);
+  const env = { ...process.env, GIT_DIR: path.join(dir, "victim/.git"), GIT_WORK_TREE: path.join(dir, "victim"),
+    GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.hooksPath", GIT_CONFIG_VALUE_0: "/nowhere",
+    GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: global, GITHUB_TOKEN: "fake-unused", NEBIUS_API_KEY: "fake-unused" };
+  const deps = createDataDependencies(env);
+  const gitDir = (run: DataDependencies["git"], name: string) => run(path.join(dir, name), ["rev-parse", "--absolute-git-dir"]).stdout.trim();
+  // An inherited GIT_DIR must not redirect either git into another repository (decision 032).
+  expect(gitDir(deps.git, "workspace")).toBe(realpath(path.join(dir, "workspace/.git")));
+  expect(gitDir(deps.branchGit, "branch")).toBe(realpath(path.join(dir, "branch/.git")));
+  // The workspace keeps the runner's global config (actions/checkout's safe.directory) and gets no token.
+  expect(deps.git(path.join(dir, "workspace"), ["config", "--get", "safe.directory"]).stdout.trim()).toBe(path.join(dir, "workspace"));
+  expect(deps.git(path.join(dir, "workspace"), ["config", "--get-regexp", "extraheader"]).code).toBe(1);
+  expect(deps.branchGit(path.join(dir, "branch"), ["config", "--get", "safe.directory"]).code).toBe(1);
+  expect(deps.branchGit(path.join(dir, "branch"), ["config", "--get-regexp", "extraheader"]).stdout).toContain("AUTHORIZATION: basic");
+  for (const name of ["GIT_DIR", "GIT_WORK_TREE", "GIT_CONFIG_KEY_0", "NEBIUS_API_KEY", "GITHUB_TOKEN"]) expect(workspaceEnv(env)[name]).toBeUndefined();
 });

@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
 import { readManifest, repoIdOf, reposOf, upsertManifest } from "../../analyzer/src/manifest.ts";
 import { ChangeSet, Snapshot, SnapshotManifest } from "../../analyzer/src/schema.ts";
 
@@ -27,7 +28,10 @@ export interface ChangeEntry {
 }
 interface Result { code: number; stdout: string }
 export interface DataDependencies {
+  /** git in the checked-out workspace: the runner's own config, no credentials. */
   git: (cwd: string, args: string[]) => Result;
+  /** git in the temporary data-branch clone: isolated config and the token's auth header. */
+  branchGit: (cwd: string, args: string[]) => Result;
   analyzer: (args: string[]) => Result;
   log: (message: string) => void;
 }
@@ -189,7 +193,7 @@ export async function runData(
     }
     const dir = path.join(temp, "branch");
     await mkdir(dir);
-    const git = (args: string[]) => checked(deps.git(dir, args));
+    const git = (args: string[]) => checked(deps.branchGit(dir, args));
     const server = new URL(env.GITHUB_SERVER_URL || "https://github.com");
     if (server.protocol !== "https:" || server.username || server.password || server.pathname !== "/") {
       throw new Error("Invalid server URL");
@@ -202,10 +206,10 @@ export async function runData(
       // Move latest only to a descendant of the recorded latest or to the current default-branch tip.
       update.advance = (recorded) => (SHA.test(recorded)
         && deps.git(workspace, ["merge-base", "--is-ancestor", recorded, sha]).code === 0)
-        || checked(deps.git(dir, ["ls-remote", "origin", `refs/heads/${event.repository.default_branch}`])).split("\t")[0] === sha;
+        || checked(deps.branchGit(dir, ["ls-remote", "origin", `refs/heads/${event.repository.default_branch}`])).split("\t")[0] === sha;
     }
     for (let attempt = 0; attempt < 2; attempt++) {
-      const remote = deps.git(dir, ["ls-remote", "--exit-code", "origin", `refs/heads/${BRANCH}`]);
+      const remote = deps.branchGit(dir, ["ls-remote", "--exit-code", "origin", `refs/heads/${BRANCH}`]);
       if (remote.code === 0) {
         git(["fetch", "--depth=1", "origin", `refs/heads/${BRANCH}`]);
         git(["checkout", "-B", BRANCH, "FETCH_HEAD"]);
@@ -214,11 +218,11 @@ export async function runData(
       const files = await applyUpdate(dir, update);
       if (!files.length) return 0;
       git(["add", "--", ...files]);
-      const diff = deps.git(dir, ["diff", "--cached", "--quiet"]);
+      const diff = deps.branchGit(dir, ["diff", "--cached", "--quiet"]);
       if (diff.code === 0) return 0;
       if (diff.code !== 1) throw new Error("Cannot inspect staged data");
       git(["commit", "-m", `data: ${eventName} ${sha.slice(0, 7)}`]);
-      const pushed = deps.git(dir, ["push", "--porcelain", "origin", `HEAD:refs/heads/${BRANCH}`]);
+      const pushed = deps.branchGit(dir, ["push", "--porcelain", "origin", `HEAD:refs/heads/${BRANCH}`]);
       if (!pushed.code) {
         deps.log("TraceHound data: updated tracehound-data.");
         return 0;
@@ -239,19 +243,27 @@ export async function runData(
   return 0;
 }
 
+/** The workspace git and analyzer env: no repo-selecting git variables (decision 032), no secrets. */
+export function workspaceEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const clean = cleanGitEnv(env);
+  delete clean.NEBIUS_API_KEY;
+  delete clean.GITHUB_TOKEN;
+  return clean;
+}
+
 export function createDataDependencies(env: NodeJS.ProcessEnv): DataDependencies {
   const run = (command: string, args: string[], cwd: string, childEnv: NodeJS.ProcessEnv): Result => {
     const result = spawnSync(command, args, { cwd, env: childEnv, encoding: "utf8", timeout: 600_000,
       maxBuffer: 128 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
     return { code: result.status ?? 1, stdout: result.stdout ?? "" };
   };
-  const clean = { ...env };
-  delete clean.NEBIUS_API_KEY;
-  delete clean.GITHUB_TOKEN;
-  // Credentials exist only in the git child's environment, never a URL or config file.
+  const clean = workspaceEnv(env);
+  // Credentials exist only in the data-branch git's environment, never a URL or config file.
+  // Its config is isolated; the workspace git keeps the runner's (e.g. actions/checkout's safe.directory).
   const auth = Buffer.from(`x-access-token:${env.GITHUB_TOKEN ?? ""}`).toString("base64");
   return {
-    git: (cwd, args) => run("git", args, cwd, { ...clean, GIT_TERMINAL_PROMPT: "0",
+    git: (cwd, args) => run("git", args, cwd, { ...clean, GIT_TERMINAL_PROMPT: "0" }),
+    branchGit: (cwd, args) => run("git", args, cwd, { ...clean, GIT_TERMINAL_PROMPT: "0",
       GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: `http.${env.GITHUB_SERVER_URL || "https://github.com"}/.extraheader`,
       GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${auth}`, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" }),
     analyzer: ([script, ...args]) => run(process.execPath,

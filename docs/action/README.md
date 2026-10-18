@@ -76,7 +76,10 @@ line. Data failures never fail the review job. A non-fast-forward push, or a rem
 `cannot lock ref` / `failed to update ref` rejection from a concurrent writer, is retried once by
 fetching and reapplying the index update; a second rejection is skipped. Authentication and
 permission failures are never retried. The token is passed
-through the Git subprocess environment and is never stored in a remote URL or config file.
+only to the git that writes the temporary data-branch clone, through its environment, and is
+never stored in a remote URL or config file; that git ignores global and system config. Git in
+the checked-out workspace gets no token and keeps the runner's config, such as the
+`safe.directory` entry `actions/checkout` writes in container jobs.
 The branch remains in place if you later turn the input off. `dry-run` controls review posting
 only; leave `data-branch` off when you also want to avoid committing history.
 
