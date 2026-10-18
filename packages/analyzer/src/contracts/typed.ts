@@ -335,5 +335,8 @@ function causeOf(trees: Trees, d: RawDiagnostic): ChangeSite | undefined {
     const how = imports.has(f.path) ? "first change in an imported edited file" : "first change in the diff";
     return h.added.length ? head(f.path, h.newStart, how) : { path: f.path, line: h.oldStart, side: "base", text: h.removed[0] ?? "", how };
   }
-  return undefined;
+  // 5. a diff without text hunks (binary files, mode changes): the first edited file
+  const first = ranked[0];
+  if (!first) return undefined;
+  return first.status === "deleted" ? { path: first.path, line: 1, side: "base", text: trees.lineText("base", first.path, 1), how: "first edited file" } : head(first.path, 1, "first edited file");
 }
