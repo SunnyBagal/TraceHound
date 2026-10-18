@@ -52,7 +52,7 @@ export async function main(
       repoDir: env.TRACEHOUND_REPO_DIR ?? "",
     }, { ...deps, ...(env.TRACEHOUND_REVIEW_FILE && { onReview: async (body: string) => {
       const footer = parseReviewFooter(body);
-      if (footer) await writeFile(env.TRACEHOUND_REVIEW_FILE!, `<!-- tracehound:v1 ${JSON.stringify(footer)} -->`);
+      if (footer) await writeFile(env.TRACEHOUND_REVIEW_FILE!, JSON.stringify(footer));
     } }) });
     return 0;
   } catch (error) {

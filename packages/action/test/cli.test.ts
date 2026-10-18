@@ -27,8 +27,8 @@ it("saves only parsed footer metadata after a successful review", async () => {
   expect(await main({ NEBIUS_API_KEY: "fake-unused", GITHUB_EVENT_NAME: "pull_request", GITHUB_TOKEN: "fake-unused",
     GITHUB_EVENT_PATH: eventPath, TRACEHOUND_REVIEW_FILE: footerPath }, d)).toBe(0);
   const saved = await readFile(footerPath, "utf8");
-  expect(saved).toContain('"version":1');
-  expect(saved).toContain('"headSha":"abc"');
+  // Plain JSON, not the review body's HTML comment.
+  expect(JSON.parse(saved)).toMatchObject({ version: 1, headSha: "abc" });
   expect(saved).not.toContain("Finding text");
   expect(saved).not.toContain("fake-unused");
 });

@@ -45,14 +45,20 @@ interface Update {
 // A re-run of an older event must never move a change set entry back to an earlier state.
 const RANK: Record<ChangeEntry["state"], number> = { open: 0, closed: 1, merged: 2 };
 
-export function parseReviewFooter(body: string): Record<string, unknown> | undefined {
+/** The footer is optional: an absent, malformed or non-v1 value is undefined. */
+export function parseFooterJson(text: string): Record<string, unknown> | undefined {
   try {
-    const match = /<!-- tracehound:v1 (.+?) -->/.exec(body);
-    const value: unknown = match && JSON.parse(match[1]!);
+    const value: unknown = JSON.parse(text);
     if (value && typeof value === "object" && !Array.isArray(value)
       && (value as Record<string, unknown>).version === 1) return value as Record<string, unknown>;
   } catch { /* An absent or malformed footer is optional. */ }
   return undefined;
+}
+
+/** The footer is the review body's last line; earlier finding text may quote footer-like comments. */
+export function parseReviewFooter(body: string): Record<string, unknown> | undefined {
+  const match = /^<!-- tracehound:v1 (\{.*\}) -->$/.exec(body.trimEnd().split("\n").at(-1)!);
+  return match ? parseFooterJson(match[1]!) : undefined;
 }
 
 async function json(file: string, value: unknown): Promise<void> {
@@ -186,7 +192,7 @@ export async function runData(
           "bin.ts", "changes", ...args, "--diff", `${baseSha}..${sha}`, "--json",
         ]))));
         if (env.TRACEHOUND_REVIEW_FILE && existsSync(env.TRACEHOUND_REVIEW_FILE)) {
-          const footer = parseReviewFooter(await readFile(env.TRACEHOUND_REVIEW_FILE, "utf8"));
+          const footer = parseFooterJson(await readFile(env.TRACEHOUND_REVIEW_FILE, "utf8"));
           if (footer?.headSha === sha) update.entry!.reviewFooter = footer;
         }
       }

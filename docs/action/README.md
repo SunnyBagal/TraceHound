@@ -62,7 +62,9 @@ Each array entry contains `id`, `repo`, `pr`, `title`, `headSha`, `baseSha`, and
 checkout lacks it, the data step fetches the base commit (unshallowing a shallow checkout)
 without credentials, so a private repository needs the example's `fetch-depth: 0`.
 It also contains the parsed `reviewFooter` when this run successfully posted a review with
-a matching `tracehound:v1` footer. Closing a PR marks every recorded head of that PR `merged`
+a matching `tracehound:v1` footer. Only the review body's last line is read as the footer, so
+finding text that quotes a footer-like comment is never recorded; the review step hands it to the
+data step as a plain JSON file. Closing a PR marks every recorded head of that PR `merged`
 or `closed`; reopening updates the current head to `open`. Files are retained.
 States never move backwards, so a re-run of an older event cannot undo a newer one: `merged`
 beats `closed`, `closed` beats `open`, and only a `reopened` event returns a `closed` entry to

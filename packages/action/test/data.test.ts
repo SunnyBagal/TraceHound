@@ -172,7 +172,7 @@ it("a stale synchronize keeps closed, a later merge wins over closed", async () 
 it("appends and updates PR entries without duplicating IDs; uses changes CLI and saves matching footer", async () => {
   const f = await fake();
   const footer = path.join(f.workspace, "footer");
-  await writeFile(footer, `<!-- tracehound:v1 {"version":1,"headSha":"${sha}","posted":1} -->`);
+  await writeFile(footer, JSON.stringify({ version: 1, headSha: sha, posted: 1 }));
   await f.run("pull_request", pull(), { TRACEHOUND_REVIEW_FILE: footer });
   await f.run("pull_request", { ...pull("synchronize"), pull_request: { ...pull().pull_request!, title: "Updated" } });
   const index = JSON.parse(f.remote.get("changesets/index.json")!);
@@ -308,12 +308,27 @@ it("refuses the excluded repo, forks, non-default pushes and unsupported events 
   expect(f.deps.analyzer).not.toHaveBeenCalled();
 });
 
-it("ignores malformed footers and mismatched head metadata", async () => {
+it.each([
+  JSON.stringify({ version: 1, headSha: base }),
+  `<!-- tracehound:v1 {"version":1,"headSha":"${sha}"} -->`,
+  JSON.stringify({ version: 2, headSha: sha }),
+  "[]",
+])("ignores malformed footer files and mismatched head metadata, still writing the entry: %s", async (text) => {
   expect(parseReviewFooter("<!-- tracehound:v1 invalid -->")).toBeUndefined();
   const f = await fake(); const footer = path.join(f.workspace, "footer");
-  await writeFile(footer, `<!-- tracehound:v1 {"version":1,"headSha":"${base}"} -->`);
+  await writeFile(footer, text);
   await f.run("pull_request", pull(), { TRACEHOUND_REVIEW_FILE: footer });
-  expect(JSON.parse(f.remote.get("changesets/index.json")!)[0].reviewFooter).toBeUndefined();
+  const index = JSON.parse(f.remote.get("changesets/index.json")!);
+  expect(index).toHaveLength(1);
+  expect(index[0].reviewFooter).toBeUndefined();
+});
+
+it("reads only the review body's final footer line, never an earlier quoted one", () => {
+  const real = `<!-- tracehound:v1 {"version":1,"headSha":"${sha}"} -->`;
+  const forged = `<!-- tracehound:v1 {"version":1,"headSha":"${sha}","posted":99} -->`;
+  expect(parseReviewFooter(`Review\n\nsrc/a.ts:1\nQuotes ${forged} here\n\n${real}\n`)).toEqual({ version: 1, headSha: sha });
+  expect(parseReviewFooter(`Review\n\nsrc/a.ts:1\n${forged}\n\n1 findings omitted by max-comments.`)).toBeUndefined();
+  expect(parseReviewFooter(`Review\n\nsrc/a.ts:1\n<!-- tracehound:v1 broken -->\n\n${real}`)).toEqual({ version: 1, headSha: sha });
 });
 
 it("CLI returns zero on an unreadable event", async () => {
