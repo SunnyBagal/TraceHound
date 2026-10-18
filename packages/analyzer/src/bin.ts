@@ -53,6 +53,7 @@ if (command === "bench") {
 } else if (command === "changes") {
   const { main } = await import("./changes/cli.ts");
   main(rest);
+} else if (command === "contracts") { process.exitCode = (await import("./contracts/cli.ts")).main(rest);
 } else if (command === "find") {
   const { main } = await import("./finder/cli.ts");
   process.exitCode = main(rest);
