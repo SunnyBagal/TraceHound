@@ -344,6 +344,31 @@ describe("fix suggestions and review data", () => {
     expect(f.deps.runFixes).toHaveBeenCalledOnce();
   });
 
+  it.each([3, 4, 8])("withholds the body-only diff when the original contains %s consecutive backticks", async length => {
+    const f = pooled([422, 201]);
+    const original = `unsafe ${"`".repeat(length)} source`;
+    f.deps.runFixes.mockResolvedValue({ ...fixes, suggestions: [{ ...fix, original }] });
+    await runAction(event, pooledOptions, f.deps);
+    expect(f.posts).toHaveLength(2);
+    expect((f.posts[0] as ReviewPayload).comments[0]!.body).toContain("```suggestion");
+    const payload = f.posts[1] as ReviewPayload;
+    expect(payload.comments).toEqual([]);
+    expect(payload.body).toContain(`${finding.path}:${finding.line}\n${finding.body}\n\nfix withheld: unsafe to render`);
+    expect(payload.body).not.toContain("```diff");
+    expect(payload.body).not.toContain("```suggestion");
+    expect(payload.body).not.toContain(original);
+    expect(payload.body).not.toContain(fix.replacement);
+    expect(f.deps.runFixes).toHaveBeenCalledOnce();
+  });
+
+  it("still renders a body-only diff when the original contains only two consecutive backticks", async () => {
+    const f = pooled([422, 201]);
+    f.deps.runFixes.mockResolvedValue({ ...fixes, suggestions: [{ ...fix, original: "safe `` source" }] });
+    await runAction(event, pooledOptions, f.deps);
+    expect((f.posts[1] as ReviewPayload).body).toContain("```diff");
+    expect((f.posts[1] as ReviewPayload).body).not.toContain("fix withheld");
+  });
+
   it("isolates fix-stage initialization failure and posts kept findings", async () => {
     const f = pooled();
     f.deps.runFixes.mockRejectedValue(new Error("private error"));

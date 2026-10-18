@@ -59,6 +59,8 @@ the finding intact at its original line.
 Valid proposals use GitHub's native suggestion block and inclusive right-side line range, so
 GitHub can show its **Commit suggestion** button. Read and test a proposal before applying it.
 If inline posting receives HTTP 422, the body-only retry includes the fix as a plain diff block.
+If the original text contains three or more consecutive backticks, the retry replaces that diff
+with `fix withheld: unsafe to render` to avoid escaping the Markdown fence.
 Set `fixes: 'off'` in the action's `with:` block to disable this stage and preserve the legacy
 payload exactly, including omitting the metadata footer. `review-diff-v1` keeps its legacy behavior.
 The composite action passes this setting as `TRACEHOUND_FIXES`.

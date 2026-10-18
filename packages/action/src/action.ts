@@ -97,6 +97,7 @@ export interface ReviewData { fixes: FixOutput; sources: FindingSource[] }
 
 function fixBody(finding: Finding, fix: Fix | null | undefined, plain: boolean): string {
   if (!fix) return finding.body;
+  if (plain && /`{3,}/.test(fix.original)) return `${finding.body}\n\nfix withheld: unsafe to render`;
   const text = plain
     ? `\`\`\`diff\n@@ -${fix.startLine},${fix.endLine - fix.startLine + 1} +${fix.startLine},${fix.replacement.split("\n").length} @@\n`
       + fix.original.split("\n").map(line => `-${line}`).join("\n") + "\n"
