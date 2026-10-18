@@ -3226,3 +3226,25 @@ a short section with the same two statements, one table and a link.
 margin (under v1, pool-verify-v1's Cal.com F was 1.3 to 8.3 points above greptile's 50.0%, and
 its dev F moved 12.4 points between two runs), and under bench-judge-x1 Cal.com run 3 ranks 5th,
 below greptile and copilot.
+
+## 064 · Vote across runs (dev only): a loss
+**Context:** On Cal.com, pool-verify-v1 is 3rd of six. Its gap to the top two is precision, and dev
+F moved 12.4 points between two runs at temperature 0 (062). The hypothesis was that a finding that
+recurs across independent runs is more often real, so keeping only recurring findings would raise
+precision without a new model. Brief: `docs/prompts/064-vote.md`.
+**Choice:** pre-register the variants, the clustering definition, a fallback, and the adoption rule
+in `docs/bench/vote-plan.md`, and push it (`57f0b91`) before any model call. Run dev runs 4–6 with
+the 061 runner, extended additively: their own order and $8.50 cap, and a freeze check that excludes
+only 064's runner and vote files. A test reconstructs the tag's `test-set.ts` and `run-test-set.ts`
+from the current files and checks their sha256, which pins Cal.com's path to `review-freeze-1`. Then
+vote with `scripts/bench/vote.ts` over runs 1, 2r, 4, 5 and 6.
+**Result (`docs/bench/vote.md`):** vote-k3of5 has v1 P 53.3% / R 43.2% / F 47.8%, against a baseline
+mean F of 42.3% (P 40.5%). It passes the 5-point margin (+5.5) and the precision condition, but its
+x1 F is 50.4% against an x1 mean of 51.3%, so it fails. **No variant is adopted; pool-verify-v1
+stays.** Over five runs the baseline's F was 35.6–48.0% under v1 and 44.6–55.1% under x1. Run 1,
+the run the reviewer was chosen on, is the lowest. Voting on the raw pool (v1 F 42.7%) did not
+replace the verifier. A 5-run vote would cost about 5× per pull request (median $0.15). Spend
+$5.41. Cal.com was not opened.
+**Rejected:** adopting vote-k3of5 on the v1 result alone, because the pre-registered rule requires
+x1 too. Also rejected: changing k or the cap after seeing results, which would mean selecting on
+the same dev set again.
