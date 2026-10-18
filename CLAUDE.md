@@ -252,6 +252,7 @@ it (decision 050).
   pool-verify-v1 F was 51.3–58.3% over Cal.com runs 1–3 and 35.6% / 48.0% over dev runs 1–2.
   Dev run 2 was void (the session's background limit killed it) and was restarted as 2r. Dev run 3
   stopped at the cap and was not done. Spend $5.31. `docs/bench/test-results.md`.
+- **Benchmark results page (decision 063):** `docs/bench/results.md` (3rd of six blind, 5th dev; README section `## PR reviewer benchmark`).
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**

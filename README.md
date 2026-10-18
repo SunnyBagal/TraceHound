@@ -19,6 +19,19 @@ tasks with the graph as without it, and never called a graph tool. See
 - **Viewer** (`viewer/`) — static Next.js + React Flow + ELK canvas with node and edge
   inspectors, evidence snippets, GitHub permalinks and a warnings panel.
 
+## PR reviewer benchmark
+
+On the pre-registered blind test, TraceHound ranked 3rd of six under the scorer of record, behind Augment and Cursor, ahead of Greptile, Copilot and CodeRabbit. On the dev set it ranked 5th of six. Run-to-run spread at temperature 0 is larger than the margins the reviewer was chosen on, so treat single-run ranks as approximate. F under bench-judge-v1; details, losses and limits in [docs/bench/results.md](docs/bench/results.md).
+
+| reviewer | F, blind (Cal.com run 1, n = 23) | F, dev (run 1, n = 74) |
+|---|---|---|
+| Augment | 73.2% | 64.1% |
+| Cursor | 66.7% | 49.6% |
+| **TraceHound** (pool-verify-v1) | 58.3% | 35.6% |
+| Greptile | 50.0% | 49.3% |
+| Copilot | 46.2% | 31.3% |
+| CodeRabbit | 36.7% | 41.0% |
+
 ## Prerequisites
 - Node.js ≥ 24 (the TypeScript runs on Node's native type stripping) and pnpm 11
   (`corepack enable` picks up the version pinned in `package.json`)
