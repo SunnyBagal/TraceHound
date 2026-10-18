@@ -58,17 +58,21 @@ export interface GrepHit {
   text: string;
 }
 
-/** `git grep -F` of one literal in a commit's tree (`-w` for whole words); no match is an empty list. */
-export function gitGrep(repo: string, sha: string, literal: string, word = false): GrepHit[] {
-  const args = ["-C", repo, "-c", "core.quotePath=false", "grep", "-n", "-z", "-I", "--no-color", "-F", ...(word ? ["-w"] : []), "-e", literal, sha, "--"];
+/**
+ * `git grep -F` of one literal over the tracked files of a worktree (`-w` for whole words); no match
+ * is an empty list. Run in the head worktree, this is the head commit's tree: much faster than
+ * `git grep <sha>`, and the node_modules links are untracked, so never searched.
+ */
+export function gitGrep(worktree: string, literal: string, word = false): GrepHit[] {
+  const args = ["-C", worktree, "-c", "core.quotePath=false", "grep", "-n", "-z", "-I", "--no-color", "-F", ...(word ? ["-w"] : []), "-e", literal, "--"];
   const r = spawnSync("git", args, { encoding: "utf8", env: cleanGitEnv(), maxBuffer: 256 * 1024 * 1024 });
   if (r.status === 1) return [];
-  if (r.status !== 0) throw new Error(`git grep failed in ${repo}: ${r.stderr.trim()}`);
+  if (r.status !== 0) throw new Error(`git grep failed in ${worktree}: ${r.stderr.trim()}`);
   const hits: GrepHit[] = [];
   for (const record of r.stdout.split("\n")) {
-    const [where, line, ...text] = record.split("\0");
-    if (!where || !line) continue;
-    hits.push({ path: where.slice(sha.length + 1), line: Number(line), text: text.join("\0") });
+    const [file, line, ...text] = record.split("\0");
+    if (!file || !line) continue;
+    hits.push({ path: file, line: Number(line), text: text.join("\0") });
   }
   return hits;
 }

@@ -5,7 +5,7 @@
 // `git grep -w` of the name, unconfirmed.
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { Node, SyntaxKind, type SourceFile } from "ts-morph";
+import { Node, SyntaxKind, type Identifier, type SourceFile } from "ts-morph";
 import { indexTree, type Decl } from "../changes/declarations.ts";
 import { gitGrep, TreeProjects, TS_SOURCE } from "./projects.ts";
 import { NOT_CODE, TEST_FILE } from "./shapes.ts";
@@ -128,18 +128,17 @@ export function computeDependents(trees: Trees, opts: { baseProjects?: TreeProje
     }
   }
 
-  // use sites at head in unedited files
-  const declarations: ChangedDeclaration[] = [];
-  let notSearched = 0;
-  for (const c of changed.sort((a, b) => a.id.localeCompare(b.id))) {
-    if (declarations.length >= DEPENDENTS_LIMITS.declarations) {
-      notSearched++;
-      continue;
-    }
+  // use sites at head in unedited files; every TS file is added before any symbol is resolved, so
+  // ts-morph builds its program once instead of once per added file
+  const ordered = changed.sort((a, b) => a.id.localeCompare(b.id));
+  const searched = ordered.slice(0, DEPENDENTS_LIMITS.declarations);
+  const notSearched = ordered.length - searched.length;
+  const hitsOf = searched.map((c) => gitGrep(trees.head, c.name, true).filter((h) => !trees.edited.has(h.path) && !NOT_CODE.test(h.path)));
+  for (const hits of hitsOf) for (const h of hits) if (TS_SOURCE.test(h.path)) headProjects.sourceFile(h.path);
+  const declarations: ChangedDeclaration[] = searched.map((c, i) => {
     let rejected = 0;
     const sites: Dependent[] = [];
-    for (const hit of gitGrep(trees.repo, trees.headSha, c.name, true)) {
-      if (trees.edited.has(hit.path) || NOT_CODE.test(hit.path)) continue;
+    for (const hit of hitsOf[i]!) {
       if (c.language === "ts" && TS_SOURCE.test(hit.path)) {
         const resolution = confirm(headProjects, hit.path, hit.line, c);
         if (!resolution) {
@@ -149,13 +148,13 @@ export function computeDependents(trees: Trees, opts: { baseProjects?: TreeProje
         sites.push({ ...hit, resolution });
       } else sites.push({ ...hit, resolution: "name" });
     }
-    declarations.push({
+    return {
       ...c,
       dependents: sites.slice(0, DEPENDENTS_LIMITS.sitesPerDeclaration),
       ...(sites.length > DEPENDENTS_LIMITS.sitesPerDeclaration && { truncated: sites.length - DEPENDENTS_LIMITS.sitesPerDeclaration }),
       rejected,
-    });
-  }
+    };
+  });
   return {
     declarations,
     counts: { declarations: declarations.length, dependents: declarations.reduce((n, d) => n + d.dependents.length, 0), notSearched },
@@ -171,12 +170,25 @@ function readHead(trees: Trees, file: string): string[] {
   }
 }
 
+/** The identifiers named `name` on a line, found by position (wrapping every node of a big file is slow). */
+function identifiersOn(sf: SourceFile, line: number, name: string): Identifier[] {
+  const compiler = sf.compilerNode;
+  if (line < 1 || line > compiler.getLineStarts().length) return [];
+  const start = compiler.getPositionOfLineAndCharacter(line - 1, 0);
+  const text = compiler.text.slice(start, compiler.getLineEndOfPosition(start));
+  const out: Identifier[] = [];
+  for (const m of text.matchAll(new RegExp(`(?<![\\w$])${name.replace(/[$]/g, "\\$")}(?![\\w$])`, "g"))) {
+    const node = sf.getDescendantAtPos(start + m.index!);
+    if (node && Node.isIdentifier(node) && node.getText() === name) out.push(node);
+  }
+  return out;
+}
+
 /** Does an identifier on this line resolve to the changed declaration (or import it from its file, once removed)? */
 function confirm(projects: TreeProjects, file: string, line: number, c: Pick<ChangedDeclaration, "name" | "file">): Dependent["resolution"] | undefined {
   const sf = projects.sourceFile(file);
   if (!sf) return undefined;
-  for (const ident of sf.getDescendantsOfKind(SyntaxKind.Identifier)) {
-    if (ident.getText() !== c.name || ident.getStartLineNumber() !== line) continue;
+  for (const ident of identifiersOn(sf, line, c.name)) {
     const local = ident.getSymbol();
     const target = local?.isAlias() ? (local.getAliasedSymbol() ?? local) : local;
     if (target?.getDeclarations().some((d) => projects.rel(d.getSourceFile().getFilePath()) === c.file)) return "symbol";

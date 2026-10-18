@@ -131,8 +131,14 @@ export function computeKeyed(trees: Trees, opts: { baseProjects?: TreeProjects; 
   const baseText = new Map<string, string[]>();
   const headText = new Map<string, string[]>();
 
-  for (const f of [...trees.files.values()].sort((a, b) => a.path.localeCompare(b.path))) {
-    if (f.binary || NOT_CODE.test(f.path)) continue;
+  const editedFiles = [...trees.files.values()].filter((f) => !f.binary && !NOT_CODE.test(f.path)).sort((a, b) => a.path.localeCompare(b.path));
+  // add every edited TS file before the extractors resolve symbols: ts-morph then builds each program once
+  for (const f of editedFiles) {
+    if (!TS_SOURCE.test(f.path) || TEST_FILE.test(f.path)) continue;
+    baseProjects.sourceFile(f.path);
+    headProjects.sourceFile(f.path);
+  }
+  for (const f of editedFiles) {
     const bLines = readLines(trees.base, f.path);
     const hLines = readLines(trees.head, f.path);
     baseText.set(f.path, bLines);
@@ -198,6 +204,7 @@ export function computeKeyed(trees: Trees, opts: { baseProjects?: TreeProjects; 
 
   // stale uses: the old literal at head, in files the pull request didn't edit
   let searched = 0;
+  const hitsOf = new Map<KeyedContract, StaleUse[]>();
   for (const k of keys) {
     if (k.kind === "env" && !k.after) {
       k.note = "env var removed without a rename: not a break by itself, not searched";
@@ -208,7 +215,10 @@ export function computeKeyed(trees: Trees, opts: { baseProjects?: TreeProjects; 
       continue;
     }
     searched++;
-    const hits = gitGrep(trees.repo, trees.headSha, k.before, k.kind === "env").filter((h) => !trees.edited.has(h.path) && !NOT_CODE.test(h.path) && usesKey(h.text, k.before, k.kind, k.prefix));
+    hitsOf.set(k, gitGrep(trees.head, k.before, k.kind === "env").filter((h) => !trees.edited.has(h.path) && !NOT_CODE.test(h.path) && usesKey(h.text, k.before, k.kind, k.prefix)));
+  }
+  for (const hits of hitsOf.values()) for (const h of hits) if (TS_SOURCE.test(h.path)) headProjects.sourceFile(h.path);
+  for (const [k, hits] of hitsOf) {
     const alive = stillProvided(k, hits, headProjects, errors);
     if (alive) {
       k.note = `still provided at head by ${alive}: uses are not stale`;
