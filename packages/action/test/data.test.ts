@@ -35,7 +35,7 @@ const save = (file: string, value: unknown) => { mkdirSync(path.dirname(file), {
 async function fake() {
   const workspace = await temp();
   const remote = new Map<string, string>();
-  let present = false, rejects = 0, missingBase = 0;
+  let present = false, rejects = 0, missingBase = 0, ancestor = true, tip = sha;
   const capture = (dir: string, prefix = "") => {
     for (const item of readdirSync(path.join(dir, prefix), { withFileTypes: true })) {
       if (item.name === ".git") continue;
@@ -47,6 +47,8 @@ async function fake() {
   const deps: DataDependencies = {
     git: vi.fn((cwd, args) => {
       const ok = (stdout = "") => ({ code: 0, stdout });
+      if (args[0] === "merge-base" && args[1] === "--is-ancestor") return { code: ancestor ? 0 : 1, stdout: "" };
+      if (args[0] === "ls-remote" && args.at(-1) === "refs/heads/main") return ok(`${tip}\trefs/heads/main\n`);
       if (args[0] === "merge-base") return missingBase-- > 0 ? { code: 1, stdout: "" } : ok(mergeBase + "\n");
       if (args[0] === "rev-parse") return ok(args[1] === "--is-shallow-repository" ? "true\n" : sha + "\n");
       if (args[0] === "ls-files") return ok("src/a.ts\0");
@@ -78,6 +80,8 @@ async function fake() {
     }), log: vi.fn(),
   };
   return { deps, workspace, remote, reject: () => { rejects = 1; }, missBase: (n = 1) => { missingBase = n; },
+    seed: (file: string, value: unknown) => { remote.set(file, JSON.stringify(value)); present = true; },
+    history: (isAncestor: boolean, tipSha: string) => { ancestor = isAncestor; tip = tipSha; },
     run: (name: string, event: DataEvent, extra: NodeJS.ProcessEnv = {}) => runData(name, event,
       { GITHUB_TOKEN: "fake-unused", TRACEHOUND_REPO_DIR: workspace, ...extra }, deps) };
 }
@@ -105,6 +109,57 @@ it("appends snapshots, replaces the same version, and retains old files", async 
   expect(m.snapshots).toHaveLength(2);
   expect(m.latest?.sha).toBe(sha);
   expect(existsSync(path.join(dir, `snapshots/${base}/0.1.0.json`))).toBe(true);
+});
+
+it("writes a stale snapshot file but leaves the index when advance refuses", async () => {
+  const dir = await temp();
+  await applyUpdate(dir, { snapshot: { ...snapshot(base), generatedAt: "2026-01-01T00:00:00Z" } });
+  const before = readFileSync(path.join(dir, "snapshots/index.json"), "utf8");
+  const advance = vi.fn(() => false);
+  expect(await applyUpdate(dir, { snapshot: { ...snapshot(), generatedAt: "2026-02-01T00:00:00Z" }, advance }))
+    .toEqual([`snapshots/${sha}/0.1.0.json`]);
+  expect(advance).toHaveBeenCalledWith(base);
+  expect(readFileSync(path.join(dir, "snapshots/index.json"), "utf8")).toBe(before);
+  expect(existsSync(path.join(dir, `snapshots/${sha}/0.1.0.json`))).toBe(true);
+});
+
+it.each([
+  [false, "c".repeat(40), base],
+  [true, "c".repeat(40), sha],
+  [false, sha, sha],
+])("a re-run push only moves latest forward (descendant=%s, tip=%s)", async (isAncestor, tipSha, latest) => {
+  const f = await fake();
+  f.seed("snapshots/index.json", upsertManifest(undefined, { repo: repository.full_name, sha: base,
+    analyzerVersion: "0.1.0", path: `${base}/0.1.0.json`, createdAt: "2025-01-01T00:00:00Z" }));
+  f.history(isAncestor, tipSha);
+  await f.run("push", push);
+  const manifest = SnapshotManifest.parse(JSON.parse(f.remote.get("snapshots/index.json")!));
+  expect(manifest.latest?.sha).toBe(latest);
+  expect(manifest.repos?.[0]?.defaultRef).toBe(latest);
+  expect(f.remote.has(`snapshots/${sha}/0.1.0.json`)).toBe(true);
+  expect(f.deps.git).toHaveBeenCalledWith(f.workspace, ["merge-base", "--is-ancestor", base, sha]);
+});
+
+it("never downgrades a change set entry: a stale open or closed event keeps merged", async () => {
+  const f = await fake();
+  await f.run("pull_request", pull());
+  await f.run("pull_request", pull("closed", true));
+  await f.run("pull_request", pull("synchronize"));
+  expect(JSON.parse(f.remote.get("changesets/index.json")!)[0].state).toBe("merged");
+  await f.run("pull_request", pull("closed"));
+  expect(JSON.parse(f.remote.get("changesets/index.json")!)[0].state).toBe("merged");
+  await f.run("pull_request", pull("reopened"));
+  expect(JSON.parse(f.remote.get("changesets/index.json")!)[0].state).toBe("merged");
+});
+
+it("a stale synchronize keeps closed, a later merge wins over closed", async () => {
+  const f = await fake();
+  await f.run("pull_request", pull());
+  await f.run("pull_request", pull("closed"));
+  await f.run("pull_request", pull("synchronize"));
+  expect(JSON.parse(f.remote.get("changesets/index.json")!)[0].state).toBe("closed");
+  await f.run("pull_request", pull("closed", true));
+  expect(JSON.parse(f.remote.get("changesets/index.json")!)[0].state).toBe("merged");
 });
 
 it("appends and updates PR entries without duplicating IDs; uses changes CLI and saves matching footer", async () => {
@@ -150,7 +205,8 @@ it.each([false, true])("updates all PR heads on closed (merged=%s), retains file
   expect(f.remote.has("changesets/pr-3-ccccccc.json")).toBe(true);
   expect(f.deps.analyzer).not.toHaveBeenCalled();
   await f.run("pull_request", pull("reopened"));
-  expect(JSON.parse(f.remote.get("changesets/index.json")!)[0].state).toBe("open");
+  // GitHub cannot reopen a merged PR, so only a closed one returns to open.
+  expect(JSON.parse(f.remote.get("changesets/index.json")!)[0].state).toBe(merged ? "merged" : "open");
 });
 
 it("retries once after a concurrent push and preserves the fetched entry and file", async () => {

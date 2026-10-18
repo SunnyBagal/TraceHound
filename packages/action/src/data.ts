@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { readManifest, upsertManifest } from "../../analyzer/src/manifest.ts";
+import { readManifest, repoIdOf, reposOf, upsertManifest } from "../../analyzer/src/manifest.ts";
 import { ChangeSet, Snapshot, SnapshotManifest } from "../../analyzer/src/schema.ts";
 
 const BRANCH = "tracehound-data";
@@ -31,7 +31,15 @@ export interface DataDependencies {
   analyzer: (args: string[]) => Result;
   log: (message: string) => void;
 }
-interface Update { snapshot?: Snapshot; changeset?: ChangeSet; entry?: ChangeEntry }
+interface Update {
+  snapshot?: Snapshot; changeset?: ChangeSet; entry?: ChangeEntry;
+  /** Whether a snapshot may replace the repo's recorded latest SHA; absent always advances. */
+  advance?: (recorded: string) => boolean;
+  /** A reopened event is the one open event that may replace `closed`. */
+  reopened?: boolean;
+}
+// A re-run of an older event must never move a change set entry back to an earlier state.
+const RANK: Record<ChangeEntry["state"], number> = { open: 0, closed: 1, merged: 2 };
 
 export function parseReviewFooter(body: string): Record<string, unknown> | undefined {
   try {
@@ -55,7 +63,11 @@ export async function applyUpdate(dir: string, update: Update): Promise<string[]
     const relative = `${s.repo.commitSha}/${s.analyzerVersion}.json`;
     const files = [`snapshots/${relative}`, "snapshots/index.json"];
     await json(path.join(dir, files[0]!), s);
-    await json(path.join(dir, files[1]!), upsertManifest(readManifest(path.join(dir, "snapshots")), {
+    const manifest = readManifest(path.join(dir, "snapshots"));
+    const recorded = manifest && reposOf(manifest).repos.find((r) => r.id === repoIdOf(s.repo.name))?.latest.sha;
+    // A re-run or late event keeps its snapshot file but never moves latest backwards.
+    if (recorded && recorded !== s.repo.commitSha && update.advance && !update.advance(recorded)) return [files[0]!];
+    await json(path.join(dir, files[1]!), upsertManifest(manifest, {
       repo: s.repo.name, sha: s.repo.commitSha, analyzerVersion: s.analyzerVersion,
       path: relative, createdAt: s.generatedAt,
     }, { repoUrl: s.repo.url }));
@@ -69,7 +81,7 @@ export async function applyUpdate(dir: string, update: Update): Promise<string[]
   if (entry.state !== "open") {
     let changed = false;
     for (const previous of entries) {
-      if (previous.repo === entry.repo && previous.pr === entry.pr && previous.state !== entry.state) {
+      if (previous.repo === entry.repo && previous.pr === entry.pr && RANK[entry.state] > RANK[previous.state]) {
         previous.state = entry.state;
         changed = true;
       }
@@ -79,7 +91,9 @@ export async function applyUpdate(dir: string, update: Update): Promise<string[]
     return ["changesets/index.json"];
   }
   const previous = entries.findIndex((e) => e.id === entry.id && e.repo === entry.repo);
-  const merged = { ...(previous >= 0 ? entries[previous] : {}), ...entry };
+  const kept = previous >= 0 ? entries[previous]! : undefined;
+  const state = !kept || kept.state === "open" || (kept.state === "closed" && update.reopened) ? entry.state : kept.state;
+  const merged = { ...kept, ...entry, state };
   if (previous < 0) entries.push(merged);
   else entries[previous] = merged;
   const relative = `changesets/${entry.id}.json`;
@@ -124,6 +138,7 @@ export async function runData(
         headSha: sha, baseSha: pr.base.sha,
         state: event.action === "closed" ? (pr.merged ? "merged" : "closed") : "open",
       };
+      update.reopened = event.action === "reopened";
     }
     temp = await mkdtemp(path.join(tmpdir(), "tracehound-data-"));
     if (!pr || event.action !== "closed") {
@@ -183,6 +198,12 @@ export async function runData(
     git(["remote", "add", "origin", `${server.origin}/${repo}.git`]);
     git(["config", "user.name", "github-actions[bot]"]);
     git(["config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"]);
+    if (!pr) {
+      // Move latest only to a descendant of the recorded latest or to the current default-branch tip.
+      update.advance = (recorded) => (SHA.test(recorded)
+        && deps.git(workspace, ["merge-base", "--is-ancestor", recorded, sha]).code === 0)
+        || checked(deps.git(dir, ["ls-remote", "origin", `refs/heads/${event.repository.default_branch}`])).split("\t")[0] === sha;
+    }
     for (let attempt = 0; attempt < 2; attempt++) {
       const remote = deps.git(dir, ["ls-remote", "--exit-code", "origin", `refs/heads/${BRANCH}`]);
       if (remote.code === 0) {

@@ -64,6 +64,11 @@ without credentials, so a private repository needs the example's `fetch-depth: 0
 It also contains the parsed `reviewFooter` when this run successfully posted a review with
 a matching `tracehound:v1` footer. Closing a PR marks every recorded head of that PR `merged`
 or `closed`; reopening updates the current head to `open`. Files are retained.
+States never move backwards, so a re-run of an older event cannot undo a newer one: `merged`
+beats `closed`, `closed` beats `open`, and only a `reopened` event returns a `closed` entry to
+`open`. A push moves the manifest's `latest` only when its commit descends from the recorded
+latest or is the default branch's current tip; otherwise its snapshot file is written and
+`snapshots/index.json` is left alone.
 
 Both analyzer commands use the installing repository's `tracehound.json` when present.
 Repositories without TypeScript sources and failed analyzer runs write nothing and log one
