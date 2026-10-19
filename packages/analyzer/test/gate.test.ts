@@ -206,6 +206,32 @@ describe("gate", () => {
     expect(ruleFor(candidate({ category: "style" }))).toBe("style");
     expect(ruleFor(candidate({ category: "correctness" }))).toBeUndefined();
   });
+  const styleRegressions = JSON.parse(readFileSync(new URL("./fixtures/gate/style-regressions.json", import.meta.url), "utf8")) as { body: string; kept: boolean }[];
+  it.each(styleRegressions)("style regression: $body", ({ body, kept }) => {
+    const finding = candidate({ body });
+    const result = gateFindings([finding], context());
+    expect(result.kept).toEqual(kept ? [finding] : []);
+    expect(result.dropped.map((drop) => drop.rule)).toEqual(kept ? [] : ["style"]);
+    expect(nitMatch(body) === undefined).toBe(kept);
+  });
+  it.each([
+    "crash", "throws", "throw", "exception", "TypeError", "null", "undefined", "NaN", "panic", "fail", "fails", "error", "wrong", "incorrect",
+    "broken", "breaks", "never", "always", "leak", "race", "overflow", "off-by-one", "injection", "XSS", "unauthorized", "bypass", "data loss",
+    "deadlock", "infinite loop", "regression", "is never set", "returns an empty list instead of the saved records",
+  ])("style: runtime signal %s protects a nit-shaped report", (signal) => {
+    const body = `Consider the runtime defect: ${signal}.`;
+    expect(nitMatch(body)).toBeUndefined();
+    expect(ruleFor(candidate({ body }))).toBeUndefined();
+  });
+  it.each([
+    { category: "contract" }, { source: "contract" }, { source: "tsc" },
+    { source: "contract", category: "style" }, { source: "tsc", category: "style" },
+  ])("style: contract/compiler findings are exempt: %j", (patch) => {
+    expect(ruleFor(candidate({ body: "Consider renaming this variable for clarity.", ...patch }))).toBeUndefined();
+  });
+  it("style: explicit style category still drops defect-shaped prose without an exemption", () => {
+    expect(ruleFor(candidate({ category: "style", body: styleRegressions[0]!.body }))).toBe("style");
+  });
   const nits = JSON.parse(readFileSync(new URL("./fixtures/gate/nits.json", import.meta.url), "utf8")) as { id: string; positive: string; negative: string }[];
   it("style: every reviewed pattern has a fixture", () => {
     expect(nits.map((f) => f.id)).toEqual(nitPatterns.map((p) => p.id));

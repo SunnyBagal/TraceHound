@@ -21,13 +21,15 @@ Whole-file rules take precedence over hunk filtering. A whitespace entry in `dro
 | `not-in-diff` | Findings outside added or context lines of retained hunks, including null lines: no PR location; contract and tsc sources instead require their path to exist at head. |
 | `evidence-missing` | Findings with absent or empty evidence when requireEvidence is true: requested substantiation is missing. |
 | `evidence-mismatch` | Findings with any empty, invalid or unmatched quote: every citation must match trimmed head-file lines, with its first line within ±3 of the cited 1-based line; multiline quotes must match consecutively. |
-| `style` | Style-category findings or reviewed naming, formatting, typo, comments/docs, readability, consider, nit, import-order, magic-number or unused-import-only patterns: reserve review attention for functional issues. |
+| `style` | Style-category findings, or reviewed nit patterns only when no runtime defect signal matches: preserve bug reports even when they use words such as consider or typo; contract-category and contract/tsc-source findings are always exempt from style filtering. |
 | `suppressed` | Findings accepted by any injected suppression fingerprint matcher: honor explicit suppressions; persistence and fingerprint generation are deferred to codex-09. |
 | `duplicate` | Findings agreeing on normalized path and non-null lines within 3, using scripts/bench/agree-rule.ts: retain the highest votes, then highest severity, then earliest input. |
 | `severity-floor` | Findings with an explicit severity below minSeverity: honor the requested floor; unspecified severity passes. |
 | `cap` | Findings beyond maxPerPr, ranked by votes, severity, then input order: honor the requested review limit. |
 
 Severities rank low < medium < high < critical. Missing votes rank as zero; missing severity ranks below low for ranking only. Duplicate selection visits ranked candidates and compares each to retained winners; a discarded candidate cannot discard another candidate. This handles overlapping three-line neighborhoods deterministically and preserves idempotence. Selected findings retain their original objects, fields, and input order. Reapplying the gate to `kept` yields the same `kept` and no new drops with the same head reader and suppression matchers.
+
+The reviewed `defectSignals` list in `gate/nits.ts` covers crash, throw/throws, exception, TypeError, null, undefined, NaN, panic, fail/fails, error, wrong, incorrect, broken/breaks, never, always, leak, race, overflow, off-by-one, injection, XSS, unauthorized, bypass, data loss, deadlock, infinite loop, regression, is never set, and returns … instead of. Matching is case-insensitive and uses word boundaries. These general-purpose signals protect nit-shaped runtime reports; an explicit style category still drops unless a contract/compiler exemption applies.
 
 With options unset and suppressions empty, S6 applies prefiltered, not-in-diff, evidence-mismatch when evidence is present, style, and duplicate. The CLI currently supplies an empty suppression array. Neither stage calls a model or uses the network.
 

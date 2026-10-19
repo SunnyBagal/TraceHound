@@ -93,7 +93,10 @@ export function gateFindings(candidates: readonly Candidate[], ctx: GateContext)
   });
   apply("evidence-missing", (f) => options.requireEvidence && !f.evidence?.length ? "evidence is required" : undefined);
   apply("evidence-mismatch", (f) => f.evidence?.some((e) => !evidenceMatches(e, ctx.readFileAt)) ? "a cited quote does not match the head file within 3 lines" : undefined);
-  apply("style", (f) => f.category === "style" ? "style category" : nitMatch(f.body));
+  apply("style", (f) => {
+    if (f.category === "contract" || f.source === "contract" || f.source === "tsc") return undefined;
+    return f.category === "style" ? "style category" : nitMatch(f.body);
+  });
   apply("suppressed", (f) => ctx.suppressions.some((s) => s.matches(f)) ? "matches a suppression fingerprint" : undefined);
 
   const compare = (a: Entry, b: Entry) => (b.finding.votes ?? 0) - (a.finding.votes ?? 0)
