@@ -51,6 +51,7 @@ if (command === "bench") {
   if (existsSync(envFile) && !process.env.NEBIUS_API_KEY) process.loadEnvFile(envFile);
   const { main } = await import("./review/verify-ctx-cli.ts");
   process.exitCode = await main(rest);
+} else if (command === "verify-evidence") { process.exitCode = await (await import("./review/verify-evidence-cli.ts")).main(rest);
 } else if (command === "changes") {
   const { main } = await import("./changes/cli.ts");
   main(rest);
