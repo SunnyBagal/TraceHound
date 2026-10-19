@@ -205,3 +205,55 @@ describe("verify-evidence-v1 run", () => {
     expect(VERIFY_CTX_PROMPT_SHA256).toMatch(/^75703fc6/);
   });
 });
+
+describe("065 driver: means, adoption rules, drop-log matching (scripts/bench/evidence.ts)", async () => {
+  const { adoptA, adoptB, means, outcomesOf, pipelineVerdict } = await import("../../../scripts/bench/evidence.ts");
+  const counts = (tp: number, fp: number, fn: number) => ({ comments: tp + fp, tp, fp, duplicates: 0, lowMatched: 0, fn, goldenCounted: tp + fn });
+  // two runs: P 0.4 / 0.5, R 0.4 / 0.5
+  const base = means([
+    { label: "1", v1: counts(4, 6, 6), x1: counts(5, 5, 5) },
+    { label: "2", v1: counts(5, 5, 5), x1: counts(5, 5, 5) },
+  ]);
+
+  it("means are plain means of the per-run micro values", () => {
+    expect(base.v1.p).toBeCloseTo(0.45, 12);
+    expect(base.v1.f).toBeCloseTo(0.45, 12);
+    expect(base.x1.f).toBeCloseTo(0.5, 12);
+  });
+
+  it("A: precision strictly above, F at least under v1 and x1", () => {
+    const same = adoptA(base, base);
+    expect(same.checks.precisionV1.pass).toBe(false);
+    expect(same.checks.fV1.pass && same.checks.fX1.pass).toBe(true);
+    const better = { v1: { ...base.v1, p: base.v1.p + 0.001 }, x1: base.x1 };
+    expect(adoptA(better, base).adopted).toBe(true);
+    expect(adoptA({ v1: better.v1, x1: { ...base.x1, f: base.x1.f - 0.001 } }, base).adopted).toBe(false);
+  });
+
+  it("B: F +3.0 and P +8.0 points under v1, F at least under x1; margins exactly at the bar pass", () => {
+    const at = { v1: { ...base.v1, f: base.v1.f + 0.03, p: base.v1.p + 0.08 }, x1: base.x1 };
+    expect(adoptB(at, base).adopted).toBe(true);
+    expect(adoptB({ ...at, v1: { ...at.v1, f: base.v1.f + 0.0299 } }, base).checks.fMarginV1.pass).toBe(false);
+    expect(adoptB({ ...at, v1: { ...at.v1, p: base.v1.p + 0.0799 } }, base).checks.pMarginV1.pass).toBe(false);
+    expect(adoptB({ ...at, x1: { ...base.x1, f: base.x1.f - 0.01 } }, base).adopted).toBe(false);
+    expect(pipelineVerdict(true, true)).toMatch(/^B, with A's rules/);
+    expect(pipelineVerdict(false, false)).toMatch(/^LOSS/);
+  });
+
+  it("drop-log outcomes match by file, path, line and body, each detail comment once", () => {
+    const detail = {
+      detail: [
+        { reviewFile: "0.json", status: "SCORED", comments: [
+          { path: "a.ts", line: 1, body: "x", outcome: "tp" },
+          { path: "a.ts", line: 1, body: "x", outcome: "fp" },
+          { path: "b.ts", line: 2, body: "y", outcome: "duplicate" },
+        ] },
+        { reviewFile: "1.json", status: "JUDGE_FAILED", comments: [{ path: "a.ts", line: 1, body: "x" }] },
+      ],
+    };
+    const f = { path: "a.ts", line: 1, body: "x" };
+    expect(outcomesOf(detail, "0.json", [f, f, f, { path: "b.ts", line: 2, body: "y" }])).toEqual(["tp", "fp", null, "duplicate"]);
+    expect(outcomesOf(detail, "1.json", [f])).toEqual([null]);
+    expect(outcomesOf(detail, "9.json", [f])).toEqual([null]);
+  });
+});
