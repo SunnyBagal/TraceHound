@@ -1,0 +1,9 @@
+{
+  "repo": "https://github.com/example-org/widgets",
+  "pr_number": 101,
+  "base": "1111111111111111111111111111111111111111",
+  "head": "2222222222222222222222222222222222222222",
+  "nwo": "example-org/widgets",
+  "title": "Clamp the page size",
+  "body": "Hand-made fixture, not ReviewBench data."
+}
