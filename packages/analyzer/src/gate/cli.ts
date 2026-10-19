@@ -1,8 +1,10 @@
 import { readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { loadConfig } from "../config.ts";
+import { cleanGitEnv } from "../git-env.ts";
 import { parseDiff } from "../review/diff.ts";
 import { gateFindings } from "./gate.ts";
 import type { Candidate, GateOptions } from "./gate.ts";
@@ -11,7 +13,7 @@ const severity = z.enum(["low", "medium", "high", "critical"]);
 const candidate = z.object({
   path: z.string().min(1), line: z.number().int().positive().nullable(), body: z.string().min(1),
   source: z.string().optional(), votes: z.number().int().nonnegative().optional(),
-  evidence: z.array(z.object({ path: z.string().min(1), line: z.number().int().positive(), quote: z.string() })).optional(),
+  evidence: z.array(z.object({ path: z.string().min(1), line: z.number().int().positive(), quote: z.string(), side: z.enum(["base", "head"]).optional() })).optional(),
   scenario: z.string().optional(), severity: severity.optional(), category: z.string().optional(),
 }).passthrough();
 
@@ -31,6 +33,24 @@ export function headReader(repo: string): (file: string) => string | undefined {
   };
 }
 
+/** Read committed blob text locally; never run a shell, external diff helper or textconv. */
+export function baseReader(repo: string, sha: string): (file: string) => string | undefined {
+  if (!/^[a-f0-9]{7,64}$/i.test(sha)) throw new Error("base must be a commit SHA");
+  const root = realpathSync(repo);
+  const git = (args: string[]) => execFileSync("git", ["-C", root, ...args], {
+    env: cleanGitEnv(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024,
+  });
+  const commit = git(["rev-parse", "--verify", `${sha}^{commit}`]).trim();
+  return (file) => {
+    if (!file || path.isAbsolute(file) || file.split(/[\\/]/).includes("..")) return undefined;
+    try {
+      return git(["show", "--no-ext-diff", "--no-textconv", `${commit}:${file}`]);
+    } catch {
+      return undefined;
+    }
+  };
+}
+
 /** Reject declared test-set identities without reading or contacting any repository. */
 function forbiddenRepository(input: Record<string, unknown>): boolean {
   const identity = [input.repository, input.repo, input.repo_full_name, input.url, input.html_url];
@@ -40,11 +60,11 @@ function forbiddenRepository(input: Record<string, unknown>): boolean {
 export function main(argv: string[]): number {
   try {
     const { values } = parseArgs({ args: argv, options: {
-      pr: { type: "string" }, findings: { type: "string" }, repo: { type: "string" }, out: { type: "string" },
+      pr: { type: "string" }, findings: { type: "string" }, repo: { type: "string" }, out: { type: "string" }, base: { type: "string" },
       "require-evidence": { type: "boolean" }, "min-severity": { type: "string" }, "max-per-pr": { type: "string" },
     } });
     if (!values.pr || !values.findings || !values.repo || !values.out) {
-      console.error("usage: tracehound gate --pr <input.json> --findings <file.json> --repo <head checkout> --out <file.json> [--require-evidence] [--min-severity medium] [--max-per-pr N]");
+      console.error("usage: tracehound gate --pr <input.json> --findings <file.json> --repo <head checkout> --out <file.json> [--base <sha>] [--require-evidence] [--min-severity medium] [--max-per-pr N]");
       return 1;
     }
     const options: GateOptions = { requireEvidence: values["require-evidence"] ?? false };
@@ -64,7 +84,8 @@ export function main(argv: string[]): number {
     if (!findings) throw new Error("missing findings");
     options.ignore = loadConfig(values.repo).config.review?.ignore ?? [];
     const result = gateFindings(findings as Candidate[], {
-      diff: parseDiff(input.diff), readFileAt: headReader(values.repo), suppressions: [], options,
+      diff: parseDiff(input.diff), readFileAt: headReader(values.repo),
+      readBaseFileAt: values.base === undefined ? undefined : baseReader(values.repo, values.base), suppressions: [], options,
     });
     const counts: Record<string, number> = {};
     for (const { rule } of result.dropped) counts[rule] = (counts[rule] ?? 0) + 1;

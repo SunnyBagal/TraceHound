@@ -10,6 +10,7 @@ import { gateFindings } from "../src/gate/gate.ts";
 import type { Candidate, GateContext } from "../src/gate/gate.ts";
 import { nitMatch, nitPatterns } from "../src/gate/nits.ts";
 import { headReader, main } from "../src/gate/cli.ts";
+import { cleanGitEnv } from "../src/git-env.ts";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/gate/prefilter.json", import.meta.url), "utf8")) as {
   lockfiles: string[]; generated: string[]; snapshots: string[];
@@ -72,6 +73,7 @@ describe("gate CLI", () => {
   const directories: string[] = [];
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
   });
   function setup(findings: unknown = { findings: [candidate()] }, pr: unknown = { title: "Synthetic input", diff: diff()[0]!.text }) {
@@ -153,6 +155,66 @@ describe("gate CLI", () => {
     expect(cli.result().kept).toEqual([candidate()]);
     expect(run.stdout).toBe("");
   });
+  function baseRepo() {
+    const finding = candidate({ path: "tracked.ts", source: "contract", evidence: [
+      { path: "tracked.ts", line: 1, quote: "removedKey", side: "base" },
+      { path: "tracked.ts", line: 1, quote: "newKey", side: "head" },
+    ] });
+    const cli = setup({ findings: [finding] });
+    const git = (...args: string[]) => {
+      const run = spawnSync("git", ["-C", cli.repo, "-c", "user.name=Gate Fixture", "-c", "user.email=gate@example.invalid",
+        "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", ...args], { env: cleanGitEnv(), encoding: "utf8" });
+      expect(run.status, run.stderr).toBe(0);
+      return run.stdout.trim();
+    };
+    git("init", "-q");
+    writeFileSync(path.join(cli.repo, "tracked.ts"), "removedKey\n");
+    git("add", "--", "tracked.ts");
+    git("commit", "-qm", "Synthetic base");
+    const sha = git("rev-parse", "HEAD");
+    writeFileSync(path.join(cli.repo, "tracked.ts"), "newKey\n");
+    return { ...cli, sha, finding };
+  }
+  it("reads base-side evidence with --base while keeping explicit head sides intact", () => {
+    const cli = baseRepo();
+    expect(main([...cli.args, "--base", cli.sha, "--require-evidence"])).toBe(0);
+    expect(cli.result()).toEqual({ kept: [cli.finding], dropped: [], counts: {} });
+    cli.finding.evidence![0]!.quote = "absent in base";
+    writeFileSync(cli.records, JSON.stringify({ findings: [cli.finding] }));
+    expect(main([...cli.args, "--base", cli.sha])).toBe(0);
+    expect(cli.result().counts).toEqual({ "evidence-mismatch": 1 });
+  });
+  it("uses cleanGitEnv for base reads even with hostile repo/config environment variables", () => {
+    const cli = baseRepo();
+    vi.stubEnv("GIT_DIR", path.join(cli.repo, "nonexistent.git"));
+    vi.stubEnv("GIT_CONFIG_COUNT", "1");
+    vi.stubEnv("GIT_CONFIG_KEY_0", "core.bare");
+    vi.stubEnv("GIT_CONFIG_VALUE_0", "true");
+    expect(main([...cli.args, "--base", cli.sha])).toBe(0);
+    expect(cli.result().kept).toEqual([cli.finding]);
+  });
+  it("reports skipped base checks without --base and still checks head evidence", () => {
+    const cli = baseRepo();
+    expect(main(cli.args)).toBe(0);
+    expect(cli.result()).toMatchObject({ kept: [cli.finding], dropped: [], counts: {}, skipped: [
+      { rule: "evidence-mismatch", detail: expect.stringMatching(/base.*skipped.*no base reader/i) },
+    ] });
+    cli.finding.evidence![1]!.quote = "not at head";
+    writeFileSync(cli.records, JSON.stringify({ findings: [cli.finding] }));
+    expect(main(cli.args)).toBe(0);
+    expect(cli.result().counts).toEqual({ "evidence-mismatch": 1 });
+  });
+  it.each(["--help", "HEAD", "abcdef0:tracked.ts", "0000000"])("rejects invalid or unresolved base SHA %s", (sha) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const cli = baseRepo();
+    expect(main([...cli.args, `--base=${sha}`])).toBe(1);
+  });
+  it("rejects invalid evidence side instead of silently using the head", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const cli = baseRepo();
+    writeFileSync(cli.records, JSON.stringify({ findings: [{ ...cli.finding, evidence: [{ path: "tracked.ts", line: 1, quote: "newKey", side: "other" }] }] }));
+    expect(main(cli.args)).toBe(1);
+  });
 });
 
 const candidate = (patch: Partial<Candidate> = {}): Candidate => ({ path: "src/cart.ts", line: 1, body: "An empty cart charges the default amount.", ...patch });
@@ -169,10 +231,10 @@ describe("gate", () => {
     expect(ruleFor(candidate(), context({ diff: files }))).toBeUndefined();
     expect(ruleFor(candidate({ line: 10 }), context({ diff: files }))).toBe("not-in-diff");
   });
-  it("not-in-diff: validates added/context lines, rejecting removed, deleted, absent and null locations", () => {
+  it("not-in-diff: validates added/context lines, rejecting removed, deleted and absent locations", () => {
     const files = parseDiff(diff()[0]!.header + "@@ -1,2 +1,2 @@\n same\n-old\n+new\n");
     for (const line of [1, 2]) expect(ruleFor(candidate({ line }), context({ diff: files }))).toBeUndefined();
-    for (const line of [0, 3, null]) expect(ruleFor(candidate({ line }), context({ diff: files }))).toBe("not-in-diff");
+    for (const line of [0, 3]) expect(ruleFor(candidate({ line }), context({ diff: files }))).toBe("not-in-diff");
     expect(ruleFor(candidate({ path: "missing.ts" }))).toBe("not-in-diff");
     const deleted = parseDiff("diff --git a/src/cart.ts b/src/cart.ts\n--- a/src/cart.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-old\n");
     expect(ruleFor(candidate(), context({ diff: deleted }))).toBe("not-in-diff");
@@ -180,7 +242,42 @@ describe("gate", () => {
   it.each(["contract", "tsc"])("not-in-diff: %s exemption requires a head file", (source) => {
     expect(ruleFor(candidate({ source, line: null }), context({ diff: [] }))).toBeUndefined();
     expect(ruleFor(candidate({ source, path: "absent.ts", line: null }))).toBe("not-in-diff");
-    expect(ruleFor(candidate({ source: "other", line: null }))).toBe("not-in-diff");
+    expect(ruleFor(candidate({ source: "other", path: "absent.ts", line: null }))).toBe("not-in-diff");
+  });
+  it("not-in-diff: keeps null-line file comments on retained diff paths", () => {
+    const finding = candidate({ path: "./src/cart.ts", line: null });
+    expect(gateFindings([finding], context())).toEqual({ kept: [finding], dropped: [] });
+  });
+  it("not-in-diff: drops null-line comments on paths absent from the retained diff", () => {
+    expect(ruleFor(candidate({ path: "missing.ts", line: null }))).toBe("not-in-diff");
+    expect(ruleFor(candidate({ line: null }), context({ diff: [] }))).toBe("not-in-diff");
+    expect(ruleFor(candidate({ path: "yarn.lock", line: null }), context({ diff: diff("yarn.lock") }))).toBe("prefiltered");
+  });
+  // Shape copied from PR #47's ContractCandidate/ContractEvidence; no contracts module import.
+  interface ContractEvidenceFixture { path: string; line: number; quote: string; side: "base" | "head" }
+  interface ContractCandidateFixture {
+    path: string; line: number; body: string; source: "tsc" | "contract";
+    evidence: [change: ContractEvidenceFixture, staleUse: ContractEvidenceFixture];
+    severity: "high"; category: "contract";
+  }
+  const contract = JSON.parse(readFileSync(new URL("./fixtures/gate/contract-candidate.json", import.meta.url), "utf8")) as ContractCandidateFixture;
+  const contractContext = () => context({ diff: [], readFileAt: (path) => path === "src/cart.ts" ? "load(cartKey);\n" : undefined });
+  it("evidence-mismatch: validates the exact ContractCandidate shape against separate base and head readers", () => {
+    const ctx = { ...contractContext(), readBaseFileAt: (path: string) => path === "src/keys.ts" ? 'export const cartKey = "cart:v1";\n' : undefined };
+    expect(gateFindings([contract], ctx)).toEqual({ kept: [contract], dropped: [] });
+    expect(gateFindings([contract], { ...ctx, readBaseFileAt: () => "wrong base" }).dropped[0]).toMatchObject({ rule: "evidence-mismatch", detail: expect.stringContaining("base") });
+    expect(gateFindings([contract], { ...ctx, readBaseFileAt: () => undefined }).dropped[0]?.rule).toBe("evidence-mismatch");
+    expect(gateFindings([contract], { ...ctx, readFileAt: () => "wrong head" }).dropped[0]).toMatchObject({ rule: "evidence-mismatch", detail: expect.stringContaining("head") });
+  });
+  it("evidence-mismatch: skips base quotes without a reader, records detail, and preserves candidate identity", () => {
+    const result = gateFindings([contract], contractContext());
+    expect(result.kept).toEqual([contract]);
+    expect(result.kept[0]).toBe(contract);
+    expect(result.dropped).toEqual([]);
+    expect(result).toMatchObject({ skipped: [{ finding: contract, rule: "evidence-mismatch", detail: expect.stringMatching(/base.*skipped.*no base reader/i) }] });
+    const again = gateFindings(result.kept, contractContext());
+    expect(again).toEqual(result);
+    expect(gateFindings([contract], { ...contractContext(), readFileAt: () => "wrong head" }).dropped[0]?.rule).toBe("evidence-mismatch");
   });
   it("evidence-missing: opt-in, missing or empty evidence fails; cited evidence passes", () => {
     const ctx = context({ options: { requireEvidence: true } });

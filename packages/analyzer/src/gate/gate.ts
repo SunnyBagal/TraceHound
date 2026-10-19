@@ -12,7 +12,7 @@ export interface Candidate {
   body: string;
   source?: string;
   votes?: number;
-  evidence?: { path: string; line: number; quote: string }[];
+  evidence?: { path: string; line: number; quote: string; side?: "base" | "head" }[];
   scenario?: string;
   severity?: Severity;
   category?: string;
@@ -29,6 +29,7 @@ export interface GateOptions extends PrefilterOptions {
 export interface GateContext {
   diff: readonly DiffFile[];
   readFileAt(path: string): string | undefined;
+  readBaseFileAt?(path: string): string | undefined;
   suppressions: readonly Suppression[];
   options?: GateOptions;
   /** Supply the S1 result when already computed; otherwise it is computed from diff. */
@@ -39,12 +40,14 @@ export type GateRule = "prefiltered" | "not-in-diff" | "evidence-missing" | "evi
 export interface GateResult {
   kept: Candidate[];
   dropped: { finding: Candidate; rule: GateRule; detail: string }[];
+  /** Checks skipped for lack of a base reader; these are not finding drops. */
+  skipped?: { finding: Candidate; rule: "evidence-mismatch"; detail: string }[];
 }
 
 const severityRank: Record<Severity, number> = { low: 1, medium: 2, high: 3, critical: 4 };
 const rank = (finding: Candidate) => finding.severity === undefined ? 0 : severityRank[finding.severity];
 
-/** A quote's first line must start within ±3 of the cited 1-based head line. */
+/** A quote's first line must start within ±3 of the cited 1-based revision line. */
 function evidenceMatches(evidence: NonNullable<Candidate["evidence"]>[number], read: GateContext["readFileAt"]): boolean {
   if (!Number.isInteger(evidence.line) || evidence.line < 1 || !evidence.quote.trim()) return false;
   const text = read(norm(evidence.path));
@@ -76,6 +79,7 @@ export function gateFindings(candidates: readonly Candidate[], ctx: GateContext)
   type Entry = { finding: Candidate; index: number };
   let entries: Entry[] = candidates.map((finding, index) => ({ finding, index }));
   const dropped: GateResult["dropped"] = [];
+  const skipped: NonNullable<GateResult["skipped"]> = [];
   const apply = (rule: GateRule, reason: (finding: Candidate) => string | undefined) => {
     entries = entries.filter(({ finding }) => {
       const detail = reason(finding);
@@ -89,10 +93,22 @@ export function gateFindings(candidates: readonly Candidate[], ctx: GateContext)
     if (f.source === "contract" || f.source === "tsc") {
       return ctx.readFileAt(norm(f.path)) === undefined ? "exempt source path is absent at head" : undefined;
     }
-    return f.line !== null && linesByPath.get(norm(f.path))?.has(f.line) ? undefined : "line is not added or context in the retained diff";
+    if (f.line === null) return keptPaths.has(norm(f.path)) ? undefined : "file-level comment path is absent from the retained diff";
+    return linesByPath.get(norm(f.path))?.has(f.line) ? undefined : "line is not added or context in the retained diff";
   });
   apply("evidence-missing", (f) => options.requireEvidence && !f.evidence?.length ? "evidence is required" : undefined);
-  apply("evidence-mismatch", (f) => f.evidence?.some((e) => !evidenceMatches(e, ctx.readFileAt)) ? "a cited quote does not match the head file within 3 lines" : undefined);
+  apply("evidence-mismatch", (f) => {
+    let mismatch: string | undefined;
+    for (const [index, evidence] of (f.evidence ?? []).entries()) {
+      const read = evidence.side === "base" ? ctx.readBaseFileAt : ctx.readFileAt;
+      if (!read) {
+        skipped.push({ finding: f, rule: "evidence-mismatch", detail: `base-side evidence ${index + 1} skipped: no base reader supplied` });
+      } else if (!evidenceMatches(evidence, read)) {
+        mismatch ??= `a cited quote does not match the ${evidence.side ?? "head"} file within 3 lines`;
+      }
+    }
+    return mismatch;
+  });
   apply("style", (f) => {
     if (f.category === "contract" || f.source === "contract" || f.source === "tsc") return undefined;
     return f.category === "style" ? "style category" : nitMatch(f.body);
@@ -118,5 +134,5 @@ export function gateFindings(candidates: readonly Candidate[], ctx: GateContext)
       return false;
     });
   }
-  return { kept: entries.map(({ finding }) => finding), dropped };
+  return { kept: entries.map(({ finding }) => finding), dropped, ...(skipped.length ? { skipped } : {}) };
 }

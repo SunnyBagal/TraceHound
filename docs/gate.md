@@ -13,14 +13,14 @@
 
 Whole-file rules take precedence over hunk filtering. A whitespace entry in `dropped` can coexist with that path in `kept`, even when all its hunks were removed. The post-gate treats only wholly removed paths as `prefiltered`.
 
-`gateFindings(candidates, ctx)` returns `{ kept, dropped: [{ finding, rule, detail }] }`. The context supplies the parsed diff, `readFileAt(path)` for the head checkout, a suppressions array, options, and optionally an already computed S1 result. Otherwise the gate computes S1 itself. Rules run in this order:
+`gateFindings(candidates, ctx)` returns `{ kept, dropped: [{ finding, rule, detail }] }`, plus optional `skipped` diagnostics for unchecked base evidence. The context supplies the parsed diff, `readFileAt(path)` for the head checkout, optional `readBaseFileAt(path)`, a suppressions array, options, and optionally an already computed S1 result. Otherwise the gate computes S1 itself. Rules run in this order:
 
 | S6 rule id | What it drops and why |
 | --- | --- |
 | `prefiltered` | Findings on paths wholly removed by S1: excluded review material. |
-| `not-in-diff` | Findings outside added or context lines of retained hunks, including null lines: no PR location; contract and tsc sources instead require their path to exist at head. |
+| `not-in-diff` | Numbered findings outside added or context lines of retained hunks, or null-line file comments whose path is absent from the retained diff: no PR location; contract and tsc sources instead require their path to exist at head. |
 | `evidence-missing` | Findings with absent or empty evidence when requireEvidence is true: requested substantiation is missing. |
-| `evidence-mismatch` | Findings with any empty, invalid or unmatched quote: every citation must match trimmed head-file lines, with its first line within ±3 of the cited 1-based line; multiline quotes must match consecutively. |
+| `evidence-mismatch` | Findings with any empty, invalid or unmatched checked quote: base-side citations use the base reader; head-side or unspecified citations use head; each first line must be within ±3 of its cited 1-based revision line, with multiline quotes matching consecutively. Base citations are skipped with a detail when no base reader is supplied. |
 | `style` | Style-category findings, or reviewed nit patterns only when no runtime defect signal matches: preserve bug reports even when they use words such as consider or typo; contract-category and contract/tsc-source findings are always exempt from style filtering. |
 | `suppressed` | Findings accepted by any injected suppression fingerprint matcher: honor explicit suppressions; persistence and fingerprint generation are deferred to codex-09. |
 | `duplicate` | Findings agreeing on normalized path and non-null lines within 3, using scripts/bench/agree-rule.ts: retain the highest votes, then highest severity, then earliest input. |
@@ -35,9 +35,11 @@ With options unset and suppressions empty, S6 applies prefiltered, not-in-diff, 
 
 ```sh
 pnpm tracehound gate --pr input.json --findings findings.json --repo /path/to/head --out gated.json
-pnpm tracehound gate --pr input.json --findings findings.json --repo /path/to/head --out gated.json --require-evidence --min-severity medium --max-per-pr 5
+pnpm tracehound gate --pr input.json --findings findings.json --repo /path/to/head --out gated.json --base <sha> --require-evidence --min-severity medium --max-per-pr 5
 ```
 
-The PR JSON needs a string `diff`, matching recorded reviewer inputs. Findings accept `{ "findings": [{ "path", "line", "body" }] }`, the pool-verify-v1 `{ "comments": [...] }` envelope, or a bare array. Optional candidate fields are source, votes, evidence, scenario, severity and category; extra finding fields are preserved. Evidence items have path, line and quote. Lines are positive integers or null for findings; evidence lines are positive integers. The compatibility fixture is synthetic and contains no benchmark material. Declared excluded repository identities are rejected.
+The PR JSON needs a string `diff`, matching recorded reviewer inputs. Findings accept `{ "findings": [{ "path", "line", "body" }] }`, the pool-verify-v1 `{ "comments": [...] }` envelope, or a bare array. Optional candidate fields are source, votes, evidence, scenario, severity and category; extra finding fields are preserved. Evidence items have path, line, quote and optional side (`base` or `head`, defaulting to head). Lines are positive integers or null for findings; evidence lines are positive integers. Null lines denote file-level comments on retained diff paths. The compatibility fixtures are synthetic and contain no benchmark material. Declared excluded repository identities are rejected.
 
 Output is `{ kept, dropped, counts }`; counts aggregate dropped findings by S6 rule id, including only rules that fired. The cap accepts a non-negative safe integer, including zero. The head reader refuses absolute paths, traversal and symlinks escaping the checkout. Invalid input exits with status 1 without echoing file contents. Action integration and real dev-output evaluation are deferred; pool-verify-v1 is unchanged.
+
+`--base <sha>` accepts an existing commit SHA (7–64 hexadecimal characters, including abbreviated SHAs), resolves it once, and reads blobs with local `git show <sha>:<path>`. All Git calls use `cleanGitEnv()`; no shell, network, textconv or external diff helper is used. Absolute paths and traversal are rejected. A supplied reader that cannot find a file produces an evidence mismatch. With no base reader, each base citation is left unchecked and reported in optional `skipped: [{ finding, rule: "evidence-mismatch", detail }]`; detail states that base evidence was skipped because no base reader was supplied. These diagnostics preserve candidate identity and do not increment dropped-finding counts. Head evidence is always checked, including alongside skipped base citations.
