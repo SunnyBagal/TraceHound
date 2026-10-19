@@ -1,0 +1,12 @@
+{
+  "path": "src/cart.ts",
+  "line": 1,
+  "body": "What breaks: the caller still reads the removed cart key. Where: src/cart.ts:1, which this pull request did not edit. Evidence: the change at src/keys.ts:1 (base) removes cartKey; the use at src/cart.ts:1 still loads cartKey.",
+  "source": "contract",
+  "evidence": [
+    { "path": "src/keys.ts", "line": 1, "quote": "export const cartKey = \"cart:v1\";", "side": "base" },
+    { "path": "src/cart.ts", "line": 1, "quote": "load(cartKey);", "side": "head" }
+  ],
+  "severity": "high",
+  "category": "contract"
+}

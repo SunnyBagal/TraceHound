@@ -1,0 +1,6 @@
+[
+  { "body": "This dereferences `user` which can be null after the change; consider guarding it or the request crashes with a TypeError.", "kept": true },
+  { "body": "Typo in the env var name: `DATABSE_URL` is never set, so the pool connects to localhost in production.", "kept": true },
+  { "body": "Consider renaming this variable for clarity.", "kept": false },
+  { "body": "nit: trailing whitespace", "kept": false }
+]

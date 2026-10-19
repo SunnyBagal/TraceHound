@@ -1,0 +1,5 @@
+{
+  "lockfiles": ["pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lock", "bun.lockb", "Cargo.lock", "poetry.lock", "Gemfile.lock", "go.sum", "composer.lock"],
+  "generated": ["dist/app.js", "pkg/build/app.js", "out/a.js", ".next/a.js", "coverage/a.json", "vendor/a.go", "node_modules/pkg/a.js", "app.min.js", "app.min.css", "app.js.map", "rpc.pb.go", "rpc_pb2.py"],
+  "snapshots": ["test/__snapshots__/a.ts", "test/a.snap"]
+}
