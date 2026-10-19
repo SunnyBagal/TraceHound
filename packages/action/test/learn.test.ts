@@ -2,6 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { runAction, type Dependencies, type Options, type PullEvent, type ReviewPayload } from "../src/action.ts";
 import { readFeedback, serializeFeedback } from "../src/learn.ts";
 import { fingerprint } from "../../analyzer/src/learn/fingerprint.ts";
+import { feedbackFixture } from "../../analyzer/test/fixtures/learn/api.ts";
+import { collectFeedback } from "../src/learn.ts";
+import { applyUpdate } from "../src/data.ts";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
 
 const finding = { path: "src/profile.ts", line: 20, body: "null dereference of user in getProfile" };
 const sql = { ...finding, body: "SQL injection: name is concatenated into the query in getProfile" };
@@ -16,6 +24,7 @@ afterEach(() => vi.unstubAllEnvs());
 
 function fake(comments = [finding, sql], status = 200) {
   const posts: ReviewPayload[] = [];
+  const head = { sha: "abc123" };
   const api = vi.fn<typeof fetch>(async (url, init) => {
     const endpoint = String(url);
     if (endpoint.includes("/contents/feedback/rejected.json?ref=tracehound-data")) {
@@ -25,17 +34,51 @@ function fake(comments = [finding, sql], status = 200) {
     }
     if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return new Response("{}", { status: 201 }); }
     if (new Headers(init?.headers).get("Accept") === "application/vnd.github.diff") return new Response(diff);
-    return Response.json({ head: { sha: "abc123" } });
+    return Response.json({ head });
   });
   const deps: Dependencies = { fetch: api, runReviewer: vi.fn(), checkRepoHead: vi.fn(), log: vi.fn(),
     runPipeline: vi.fn(async () => ({ comments, sources: comments.map((_, i) => i === 0 ? "diff" as const : "ctx" as const),
       review: { model: "fake-nemotron", chunkFailed: 0 }, pipeline: { pool: 3, kept: comments.length } })),
     runFixes: vi.fn(async findings => ({ suggestions: findings.map(() => null), counts: { attempted: findings.length, valid: 0, rejected: findings.length } })) };
-  return { deps, api, posts };
+  return { deps, api, posts, head };
 }
 const record = (body: string) => JSON.parse(/^<!-- tracehound:v1 (.*) -->$/.exec(body.split("\n").at(-1)!)![1]!);
 
 describe("learning post-filter", () => {
+  it("replays the demo: post, maintainer thumbs down, collect/store, push, suppress the repeated defect", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "tracehound-demo-replay-"));
+    try {
+      const fixture = feedbackFixture(), candidates = [{ ...finding }], f = fake(candidates);
+      const reactions = "/repos/example/widget/pulls/comments/10/reactions?per_page=100&page=1";
+      fixture.entries[reactions] = [];
+      const store = async () => applyUpdate(dir, { feedback: await collectFeedback("example/widget", fixture.options, fixture.deps) });
+      await store();
+      const fetch = f.deps.fetch;
+      f.deps.fetch = async (url, init) => String(url).includes("/contents/")
+        ? Response.json({ encoding: "base64", content: Buffer.from(await readFile(path.join(dir, "feedback/rejected.json"))).toString("base64") })
+        : fetch(url, init);
+      await runAction(event, { ...options, learn: "on" }, f.deps);
+      expect(f.posts[0]!.comments).toHaveLength(1);
+      fixture.entries[reactions] = [fixture.reaction];
+      await store();
+      f.head.sha = "next456";
+      candidates[0]!.body = "Possible null dereference: user may be undefined in getProfile";
+      await runAction({ ...event, pull_request: { ...event.pull_request, head: { ...event.pull_request.head, sha: f.head.sha } } },
+        { ...options, learn: "on" }, f.deps);
+      expect(f.posts[1]!.comments).toEqual([]);
+      expect(f.posts[1]!.body).toContain("1 findings suppressed by maintainer feedback (details in footer).");
+      expect(record(f.posts[1]!.body).suppressed[0].matchedComment).toBe(fixture.root.html_url);
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+  it("documents a syntactically valid demo script and the required data-before-review ordering", async () => {
+    const doc = await readFile(new URL("../../../docs/learn.md", import.meta.url), "utf8");
+    const script = /```bash\n([\s\S]*?)\n```/.exec(doc)?.[1];
+    expect(script).toBeDefined();
+    const syntax = spawnSync("bash", ["-n"], { input: script, encoding: "utf8", env: cleanGitEnv() });
+    expect(syntax.status, syntax.stderr).toBe(0);
+    expect(doc).toContain("needs: data");
+    expect(doc).toContain("This changes what is posted; it is not measured by the benchmark.");
+  });
   it("filters after verification, before fixes and cap, preserving source alignment", async () => {
     const f = fake();
     await runAction(event, { ...options, learn: "on", fixes: "on", maxComments: 1 }, f.deps);

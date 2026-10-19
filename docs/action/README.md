@@ -153,6 +153,15 @@ The entire hidden line and its JSON stay below 8,000 characters. If the line wou
 `findings` is omitted and `findingsTruncated: true` is set; aggregate counts remain. HTML delimiters
 in strings are JSON-escaped to keep the hidden comment intact.
 
+## Maintainer feedback
+
+Set `learn: 'on'` with `pool-verify-v1` to suppress findings similar to comments maintainers
+rejected. It defaults to `'off'`, preserving posted output byte for byte. The contents-write
+data job collects feedback; the read-only review job applies it and records each suppression
+in the footer. Run data before review (`review.needs: data`) for feedback to apply on the next
+push. [Learning setup, reset, conventions CLI, and scripted demo](../learn.md).
+This changes what is posted; it is not measured by the benchmark.
+
 ## Behavior and limits
 
 - Fork pull requests are skipped: repository secrets are unavailable to forks. Keep the example's
