@@ -10,7 +10,7 @@ export function feedbackFixture() {
     body: "false positive", created_at: "2026-10-03T00:00:00Z" };
   const review = { ...root, id: 2, node_id: "review2", body: `TraceHound\n\n${footer}`,
     html_url: "https://github.com/example/widget/pull/3#pullrequestreview-2" };
-  const thread = { isResolved: false, resolvedBy: { login: "owner" }, comments: { nodes: [{ databaseId: 10 }] } };
+  const thread = { isResolved: false, resolvedBy: { login: "owner" }, comments: { nodes: [{ fullDatabaseId: "10" }] } };
   const entries: Record<string, unknown> = {
     "/repos/example/widget/pulls?state=all&sort=updated&direction=desc&per_page=30": [{ number: 3, updated_at: "2026-10-10T00:00:00Z" }],
     "/repos/example/widget/pulls/3/reviews?per_page=100&page=1": [review],

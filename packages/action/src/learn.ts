@@ -13,7 +13,7 @@ interface Comment {
 }
 interface Thread {
   isResolved: boolean; resolvedBy: User | null;
-  comments: { nodes: { databaseId: number }[] };
+  comments: { nodes: { fullDatabaseId: string | number }[] };
 }
 interface Commit { sha: string }
 interface CommitFile { filename: string; previous_filename?: string; status: string; patch?: string }
@@ -109,7 +109,7 @@ async function threads(api: GitHub, repo: string, pr: number): Promise<Thread[]>
     const result: { repository: { pullRequest: { reviewThreads: Connection<Thread> } } } = await api.graphql(
       `query FeedbackThreads($owner:String!,$name:String!,$pr:Int!,$after:String) {
         repository(owner:$owner,name:$name) { pullRequest(number:$pr) { reviewThreads(first:100,after:$after) {
-          nodes { isResolved resolvedBy { login } comments(first:1) { nodes { databaseId } } } ${PAGE}
+          nodes { isResolved resolvedBy { login } comments(first:1) { nodes { fullDatabaseId } } } ${PAGE}
         } } }
       }`, { owner, name, pr, after });
     const connection = result.repository.pullRequest.reviewThreads;
@@ -201,7 +201,7 @@ export async function collectFeedback(repo: string, options: LearnOptions, deps:
     };
     for (const comment of [...own, ...owned.filter(review => bodyFindings(review.body).length)]) {
       const signals: Signal[] = [];
-      const thread = resolved.find(thread => thread.comments.nodes[0]?.databaseId === comment.id);
+      const thread = resolved.find(thread => String(thread.comments.nodes[0]?.fullDatabaseId) === String(comment.id));
       if (thread?.isResolved && await maintainer(thread.resolvedBy) && await unchanged(comment)) {
         // GraphQL has no resolvedAt. Treat resolution as an inferred baseline; explicit later
         // signals take precedence, rather than pretending collection time is resolution time.

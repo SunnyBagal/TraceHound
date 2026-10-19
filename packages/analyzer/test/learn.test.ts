@@ -112,6 +112,12 @@ describe("maintainer feedback collection (local GitHub API fixtures)", () => {
     f.entries["/repos/example/widget/pulls/comments/10/reactions?per_page=100&page=1"] = [];
     expect(await collect(f)).toMatchObject([{ reason: "resolved-unchanged" }]);
   });
+  it("matches resolved-thread IDs beyond the GraphQL 32-bit integer range", async () => {
+    const f = feedbackFixture(); f.thread.isResolved = true; f.root.id = 4_294_967_296;
+    f.thread.comments.nodes[0]!.fullDatabaseId = String(f.root.id);
+    f.entries[`/repos/example/widget/pulls/comments/${f.root.id}/reactions?per_page=100&page=1`] = [];
+    expect(await collect(f)).toMatchObject([{ commentId: f.root.id, reason: "resolved-unchanged" }]);
+  });
   it("a maintainer good catch reply un-rejects the same comment", async () => {
     const f = feedbackFixture();
     f.entries["/repos/example/widget/pulls/3/comments?per_page=100&page=1"] = [f.root, { ...f.reply, body: "Good catch!" }];
