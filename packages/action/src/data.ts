@@ -7,6 +7,8 @@ import { pathToFileURL } from "node:url";
 import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
 import { readManifest, repoIdOf, reposOf, upsertManifest } from "../../analyzer/src/manifest.ts";
 import { ChangeSet, Snapshot, SnapshotManifest } from "../../analyzer/src/schema.ts";
+import type { RejectedFingerprint } from "../../analyzer/src/learn/suppress.ts";
+import { collectFeedback, serializeFeedback } from "./learn.ts";
 
 const BRANCH = "tracehound-data";
 const SHA = /^[a-f0-9]{40}$/;
@@ -33,9 +35,11 @@ export interface DataDependencies {
   /** git in the temporary data-branch clone: isolated config and the token's auth header. */
   branchGit: (cwd: string, args: string[]) => Result;
   analyzer: (args: string[]) => Result;
+  feedback?: (repo: string) => Promise<RejectedFingerprint[]>;
   log: (message: string) => void;
 }
 interface Update {
+  feedback?: RejectedFingerprint[];
   snapshot?: Snapshot; changeset?: ChangeSet; entry?: ChangeEntry;
   /** Whether a snapshot may replace the repo's recorded latest SHA; absent always advances. */
   advance?: (recorded: string) => boolean;
@@ -68,6 +72,13 @@ async function json(file: string, value: unknown): Promise<void> {
 
 /** Re-read indexes on every attempt so concurrent events retain each other's entries. */
 export async function applyUpdate(dir: string, update: Update): Promise<string[]> {
+  if (update.feedback !== undefined) {
+    const { feedback, ...rest } = update;
+    const file = "feedback/rejected.json";
+    await mkdir(path.join(dir, "feedback"), { recursive: true });
+    await writeFile(path.join(dir, file), serializeFeedback(feedback));
+    return [file, ...(rest.snapshot || rest.entry ? await applyUpdate(dir, rest) : [])];
+  }
   if (update.snapshot) {
     const s = update.snapshot;
     const relative = `${s.repo.commitSha}/${s.analyzerVersion}.json`;
@@ -141,7 +152,11 @@ export async function runData(
     }
     const workspace = env.TRACEHOUND_REPO_DIR || env.GITHUB_WORKSPACE;
     if (!workspace || !env.GITHUB_TOKEN) throw new Error("Missing environment");
-    const update: Update = {};
+    let update: Update = {};
+    if (deps.feedback) {
+      try { update.feedback = await deps.feedback(repo); }
+      catch { deps.log("TraceHound data: feedback collection failed; previous feedback retained."); }
+    }
     if (pr) {
       update.entry = {
         id: `pr-${pr.number}-${sha.slice(0, 7)}`, repo, pr: pr.number, title: pr.title,
@@ -151,6 +166,9 @@ export async function runData(
       update.reopened = event.action === "reopened";
     }
     temp = await mkdtemp(path.join(tmpdir(), "tracehound-data-"));
+    const analysisDir = path.join(temp, "analysis");
+    // Feedback is an independent update kind: graph skips/failures must not lose feedback.
+    const prepareGraph = async () => {
     if (!pr || event.action !== "closed") {
       if (checked(deps.git(workspace, ["rev-parse", "HEAD"])).trim() !== sha) throw new Error("Wrong checkout");
       const files = checked(deps.git(workspace, ["ls-files", "-z"])).split("\0");
@@ -161,11 +179,11 @@ export async function runData(
       const config = path.join(workspace, "tracehound.json");
       const args = ["--repo", workspace, ...(existsSync(config) ? ["--config", config] : [])];
       if (!pr) {
-        checked(deps.analyzer(["cli.ts", ...args, "--naming", "heuristic", "--out", path.join(temp, "analysis")]));
-        const manifest = SnapshotManifest.parse(readManifest(path.join(temp, "analysis")));
+        checked(deps.analyzer(["cli.ts", ...args, "--naming", "heuristic", "--out", analysisDir]));
+        const manifest = SnapshotManifest.parse(readManifest(analysisDir));
         if (!manifest.latest || manifest.latest.sha !== sha
           || !/^[\w.-]+$/.test(manifest.latest.analyzerVersion)) throw new Error("Invalid snapshot output");
-        update.snapshot = Snapshot.parse(JSON.parse(await readFile(path.join(temp, "analysis", sha,
+        update.snapshot = Snapshot.parse(JSON.parse(await readFile(path.join(analysisDir, sha,
           `${manifest.latest.analyzerVersion}.json`), "utf8")));
         if (!update.snapshot.files.some((file) => file.language === "ts")) {
           deps.log("TraceHound data: no TypeScript sources; skipped.");
@@ -196,6 +214,17 @@ export async function runData(
           if (footer?.headSha === sha) update.entry!.reviewFooter = footer;
         }
       }
+    }
+    };
+    try {
+      if (await prepareGraph() === 0) {
+        if (update.feedback === undefined) return 0;
+        update = { feedback: update.feedback };
+      }
+    } catch (error) {
+      if (update.feedback === undefined) throw error;
+      deps.log("TraceHound data: graph failed; writing feedback only.");
+      update = { feedback: update.feedback };
     }
     const dir = path.join(temp, "branch");
     await mkdir(dir);
@@ -275,6 +304,8 @@ export function createDataDependencies(env: NodeJS.ProcessEnv): DataDependencies
     analyzer: ([script, ...args]) => run(process.execPath,
       [path.resolve(import.meta.dirname, "../../analyzer/src", script!), ...args],
       path.resolve(import.meta.dirname, "../../.."), clean),
+    feedback: (repo) => collectFeedback(repo, { token: env.GITHUB_TOKEN ?? "",
+      apiUrl: env.GITHUB_API_URL || "https://api.github.com" }, { fetch }),
     log: console.log,
   };
 }

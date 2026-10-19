@@ -6,6 +6,8 @@ import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { SCHEMA_VERSION, CHANGESET_SCHEMA_VERSION, FileFacts, Snapshot, SnapshotManifest, type ChangeSet } from "../../analyzer/src/schema.ts";
 import { upsertManifest } from "../../analyzer/src/manifest.ts";
+import { fingerprint } from "../../analyzer/src/learn/fingerprint.ts";
+import { serializeFeedback } from "../src/learn.ts";
 import { applyUpdate, createDataDependencies, dataMain, parseReviewFooter, runData, workspaceEnv, type ChangeEntry,
   type DataDependencies, type DataEvent } from "../src/data.ts";
 
@@ -28,6 +30,8 @@ const changeset: ChangeSet = { schemaVersion: CHANGESET_SCHEMA_VERSION, analyzer
   stats: { declarations: { ...zero, formatting: 0, unchanged: 0 }, edges: { added: 0, removed: 0, unchanged: 0 },
     files: zero, calls: { base: calls, head: calls }, runtimeMs: 0 } };
 const entry = (id = "pr-3-aaaaaaa"): ChangeEntry => ({ id, repo: repository.full_name, pr: 3, title: "A change", headSha: sha, baseSha: mergeBase, state: "open" });
+const rejection = { ...fingerprint({ path: "src/a.ts", body: "null dereference" }), repo: "example/widget",
+  pr: 3, commentId: 10, reason: "reaction", url: "https://github.com/example/widget/pull/3#discussion_r10" };
 const dirs: string[] = [];
 afterEach(async () => { await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))); });
 async function temp() { const dir = await mkdtemp(path.join(tmpdir(), "tracehound-data-test-")); dirs.push(dir); return dir; }
@@ -89,6 +93,58 @@ async function fake() {
     run: (name: string, event: DataEvent, extra: NodeJS.ProcessEnv = {}) => runData(name, event,
       { GITHUB_TOKEN: "fake-unused", TRACEHOUND_REPO_DIR: workspace, ...extra }, deps) };
 }
+
+it("feedback kind replaces the full list deterministically, including an empty reset", async () => {
+  const dir = await temp();
+  const earlier = { ...rejection, pr: 2, commentId: 9 };
+  expect(await applyUpdate(dir, { feedback: [rejection, earlier] })).toEqual(["feedback/rejected.json"]);
+  const file = path.join(dir, "feedback/rejected.json");
+  const bytes = readFileSync(file, "utf8");
+  expect(bytes).toBe(serializeFeedback([earlier, rejection]));
+  await applyUpdate(dir, { feedback: [earlier, rejection] });
+  expect(readFileSync(file, "utf8")).toBe(bytes);
+  await applyUpdate(dir, { feedback: [] });
+  expect(readFileSync(file, "utf8")).toBe("[]\n");
+});
+
+it("collects once and writes feedback with graph data through the existing push retry", async () => {
+  const f = await fake(); f.reject();
+  f.deps.feedback = vi.fn(async () => [rejection]);
+  await f.run("pull_request", pull());
+  expect(f.deps.feedback).toHaveBeenCalledExactlyOnceWith("example/widget");
+  expect(f.remote.get("feedback/rejected.json")).toBe(serializeFeedback([rejection]));
+  expect(JSON.parse(f.remote.get("changesets/index.json")!).map((e: ChangeEntry) => e.pr)).toEqual([4, 3]);
+  expect(vi.mocked(f.deps.branchGit).mock.calls.filter(([, args]) => args[0] === "push")).toHaveLength(2);
+});
+
+it("does not erase prior feedback when collection fails; graph history still updates", async () => {
+  const f = await fake(); f.seed("feedback/rejected.json", [rejection]);
+  const before = f.remote.get("feedback/rejected.json");
+  f.deps.feedback = async () => { throw new Error("SECRET"); };
+  await f.run("push", push);
+  expect(f.remote.get("feedback/rejected.json")).toBe(before);
+  expect(f.remote.has("snapshots/index.json")).toBe(true);
+  expect(JSON.stringify(vi.mocked(f.deps.log).mock.calls)).not.toContain("SECRET");
+});
+
+it.each(["no-ts", "analyzer-failure"])("writes feedback even on a graph %s", async mode => {
+  const f = await fake(); f.deps.feedback = async () => [rejection];
+  if (mode === "analyzer-failure") vi.mocked(f.deps.analyzer).mockReturnValue({ code: 1, stdout: "SECRET" });
+  else {
+    const original = f.deps.git;
+    f.deps.git = vi.fn((cwd, args) => args[0] === "ls-files" ? { code: 0, stdout: "app.py\0" } : original(cwd, args));
+  }
+  await f.run("push", push);
+  expect([...f.remote.keys()]).toEqual(["feedback/rejected.json"]);
+});
+
+it("feedback-only close reuses idempotence and does not retry auth failures", async () => {
+  const f = await fake(); f.deps.feedback = async () => [];
+  const original = f.deps.branchGit;
+  f.deps.branchGit = vi.fn((cwd, args) => args[0] === "push" ? { code: 128, stdout: "SECRET" } : original(cwd, args));
+  await f.run("pull_request", pull("closed"));
+  expect(vi.mocked(f.deps.branchGit).mock.calls.filter(([, args]) => args[0] === "push")).toHaveLength(1);
+});
 
 it("creates an orphan branch and writes a viewer-valid snapshot manifest", async () => {
   const f = await fake();
