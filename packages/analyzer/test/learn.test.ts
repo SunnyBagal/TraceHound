@@ -1,11 +1,75 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { cleanGitEnv } from "../src/git-env.ts";
 import { fingerprint, similar, SAME_EXTENSION_JACCARD, SAME_PATH_JACCARD } from "../src/learn/fingerprint.ts";
 import { FeedbackSuppression } from "../src/learn/suppress.ts";
 import { collectFeedback, patchTouches, serializeFeedback } from "../../action/src/learn.ts";
 import { feedbackFixture } from "./fixtures/learn/api.ts";
+import { appliesTo, main as conventionsMain, readConventions } from "../src/learn/conventions.ts";
 
 const finding = { path: "src/profile.ts", line: 20, body: "null dereference of user in getProfile" };
 const rephrased = { ...finding, body: "Possible null dereference: user may be undefined in getProfile" };
+const dirs: string[] = [];
+afterEach(() => { dirs.splice(0).forEach(dir => rmSync(dir, { recursive: true, force: true })); vi.restoreAllMocks(); });
+function tempRepo() { const dir = mkdtempSync(path.join(tmpdir(), "tracehound-learn-")); dirs.push(dir); return dir; }
+function save(repo: string, file: string, text: string) {
+  mkdirSync(path.dirname(path.join(repo, file)), { recursive: true }); writeFileSync(path.join(repo, file), text);
+}
+
+describe("read-only conventions", () => {
+  it("reads the supported files in deterministic order and scopes instructions to changed paths", () => {
+    const repo = tempRepo();
+    for (const file of ["AGENTS.md", "CLAUDE.md", ".cursor/BUGBOT.md", ".github/copilot-instructions.md", ".tracehound/rules.md"]) save(repo, file, file);
+    save(repo, ".github/instructions/b.instructions.md", '---\napplyTo: "**/*.py"\n---\nPython rules');
+    save(repo, ".github/instructions/a.instructions.md", '---\napplyTo: "src/**/*.ts"\n---\nTS rules');
+    save(repo, ".github/instructions/ignored.md", "unscoped");
+    save(repo, ".github/instructions/missing.instructions.md", "missing frontmatter");
+    const result = readConventions(repo, ["src/profile.ts"]);
+    expect(result.files.map(file => file.path)).toEqual(["AGENTS.md", "CLAUDE.md", ".cursor/BUGBOT.md",
+      ".github/copilot-instructions.md", ".github/instructions/a.instructions.md", ".tracehound/rules.md"]);
+    expect(result.text).toContain("TS rules"); expect(result.text).not.toContain("Python rules");
+    expect(readConventions(repo, ["src/profile.ts"])).toEqual(result);
+  });
+  it("honors per-file and total caps with each cut noted", () => {
+    const repo = tempRepo();
+    save(repo, "AGENTS.md", "a".repeat(5000)); save(repo, "CLAUDE.md", "b".repeat(5000));
+    save(repo, ".tracehound/rules.md", "c".repeat(5000));
+    const result = readConventions(repo, []);
+    expect(result.files[0]!.chars).toBe(4000);
+    expect(result.files.every(file => file.chars <= 4000)).toBe(true);
+    expect(result.text.length).toBeLessThanOrEqual(8000);
+    expect(result.text.match(/cut: 4,000/g)).toHaveLength(3);
+    expect(result.text.match(/cut: 8,000/g)).toHaveLength(2);
+  });
+  it("ignores absent files and symlinks escaping the head checkout", () => {
+    const repo = tempRepo(), outside = tempRepo(); save(outside, "private.md", "outside");
+    symlinkSync(path.join(outside, "private.md"), path.join(repo, "AGENTS.md"));
+    mkdirSync(path.join(repo, ".github"));
+    symlinkSync(outside, path.join(repo, ".github/instructions"));
+    expect(readConventions(repo, [])).toEqual({ files: [], text: "" });
+    expect(readFileSync(path.join(outside, "private.md"), "utf8")).toBe("outside");
+  });
+  it("matches comma-separated globs, brace alternatives, CRLF and normalized changed paths", () => {
+    expect(appliesTo('---\r\napplyTo: "src/**/*.{ts,tsx},lib/*.js"\r\n---\r\nrules', ["./src\\profile.ts"])).toBe(true);
+    expect(appliesTo("---\napplyTo: '**/*.py'\n---\nrules", ["src/profile.ts"])).toBe(false);
+    expect(appliesTo("applyTo: '**/*.ts'", ["src/profile.ts"])).toBe(false);
+  });
+  it("the one-line bin dispatch writes conventions JSON without model or network access", () => {
+    const repo = tempRepo(), out = path.join(repo, "out.json"); save(repo, "AGENTS.md", "Repo conventions");
+    const result = spawnSync(process.execPath, [path.resolve(import.meta.dirname, "../src/bin.ts"), "conventions",
+      "--repo", repo, "--changed", "src/profile.ts,src/other.py", "--out", out], { env: cleanGitEnv(), encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(readFileSync(out, "utf8"))).toEqual(readConventions(repo, ["src/profile.ts", "src/other.py"]));
+    expect(readFileSync(path.join(repo, "AGENTS.md"), "utf8")).toBe("Repo conventions");
+  });
+  it("rejects missing CLI arguments without reading repo contents", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(conventionsMain([])).toBe(1);
+  });
+});
 
 describe("explainable feedback suppression", () => {
   it("suppresses a rephrased defect with source PR, comment, URL and reason", () => {
