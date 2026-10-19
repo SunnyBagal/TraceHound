@@ -3248,3 +3248,28 @@ $5.41. Cal.com was not opened.
 **Rejected:** adopting vote-k3of5 on the v1 result alone, because the pre-registered rule requires
 x1 too. Also rejected: changing k or the cap after seeing results, which would mean selecting on
 the same dev set again.
+
+## 065 · Evidence verifier + deterministic gate (dev only): a loss
+**Context:** 064 showed that one dev run proves nothing, so every comparison here uses the mean over
+the same five dev runs (1, 2r, 4, 5, 6). verify-ctx-v1 answers keep or drop with no evidence. The
+hypothesis was that a verifier that has to prove a finding, plus the deterministic gate (#45) that
+checks the proof, would raise precision more than it costs recall. Brief: `docs/prompts/065-evidence-gate.md`.
+**Choice:** verify-evidence-v1 (`src/review/verify-evidence*.ts`, `tracehound verify-evidence`):
+verify-ctx-v1's per-finding context and user message, unchanged, with a new system prompt (sha256
+`004be1d6…`). It asks for keep or drop, 1–3 exact quoted lines, a one-sentence scenario, a severity
+and a category. Super, reasoning on, temperature 0. A keep must cite; a drop may cite nothing (a
+verifier that cannot quote is told to drop). The plan (`docs/bench/evidence-plan.md`, `9bfb3eb`)
+was pushed before any model call. Variants: A = pool-verify-v1 → `gate` (defaults); B = pool-raw →
+verify-evidence-v1 → `gate --require-evidence --min-severity medium`; B-all without the floor;
+C = `tracehound contracts`. The gate ran in a temporary worktree at each head, with `--base` the
+merge base.
+**Result (`docs/bench/evidence.md`):** baseline mean v1 F 42.3% / P 40.5%, x1 F 51.3%. A: v1 F 41.6%
+/ P 40.3%, x1 F 50.4%; it dropped 11 of 478 comments (10 duplicates, 3 of them TP), so it fails all
+three conditions. B: v1 F 38.3% / P 37.2% (−4.0 / −3.3 points against +3.0 / +8.0 needed), x1 F 45.7%;
+it fails all three. **Neither is adopted; pool-verify-v1 stays.** The verifier kept 61% of the pool,
+far more than verify-ctx-v1, and the gate's evidence rules dropped TPs at about the pool's own TP rate
+(13 of 59 under v1). C made 0 findings on the 40 dev pull requests (the typed stage ran on keycloak
+only). VERIFY_FAILED 29 of 862. Spend $2.65. Cal.com was not opened.
+**Rejected:** tuning the verify-evidence-v1 prompt to drop more after seeing these scores, which would
+select on the same dev set again. Also rejected: requiring a quote on a drop, which would only turn
+drops into invalid replies.

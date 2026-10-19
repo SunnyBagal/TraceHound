@@ -254,6 +254,7 @@ it (decision 050).
   stopped at the cap and was not done. Spend $5.31. `docs/bench/test-results.md`.
 - **Benchmark results page (decision 063):** `docs/bench/results.md` (3rd of six blind, 5th dev; README section `## PR reviewer benchmark`).
 - **Vote across runs (decision 064, dev only): a loss.** vote-k3of5 over dev runs 1, 2r, 4–6: v1 F 47.8% vs 5-run mean 42.3% (P 53.3% vs 40.5%) but x1 F 50.4% < mean 51.3%; pool-verify-v1 stays (`docs/bench/vote.md`, `scripts/bench/vote.ts`; runner takes `--set dev --run 4|5|6`).
+- **Evidence verifier + gate (decision 065, dev only): a loss.** verify-evidence-v1 (`tracehound verify-evidence`, must quote the failing code) then `gate`, 5-run means: B v1 F 38.3% / P 37.2% and gate-only A F 41.6% / P 40.3%, against pool-verify-v1's 42.3% / 40.5%; contracts made 0 dev findings; pool-verify-v1 stays (`docs/bench/evidence.md`, `scripts/bench/evidence.ts`).
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).
   The nemotron decider is Nano, reasoning off, temperature 0, over deterministic facts only; it
   validates ids, retries once, then falls back to lexical visibly. **Frozen as `decider-v1`**

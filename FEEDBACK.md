@@ -660,3 +660,18 @@ was re-run.
 - **Docs/console:** not consulted, and no defect observed.
 - Opinion: one transient `fetch failed` in about 790 long reasoning-on calls is a low rate. A
   request id in client-side failures would help match them to server logs.
+
+## 2026-10-19 · job 065 (evidence verifier + gate, dev only)
+- **Called:** Nebius Token Factory chat completions, `nvidia/nemotron-3-super-120b-a12b` (reasoning
+  on; the verifier and bench-judge-v1) and `Qwen/Qwen3-235B-A22B-Instruct-2507` (bench-judge-x1).
+- **Counts:** 1,002 verifier requests, all successful (response-cache reads off). There were 998
+  judge requests (499 per judge), of which 828 came from the local cache, so 170 were sent; all
+  succeeded and 0 pull requests were JUDGE_FAILED. Estimated spend $2.651 (verifier $2.564, judging
+  $0.087).
+- **Failures:** 0 failed requests, 0 HTTP errors and 0 network failures. 140 first replies did not
+  fit the requested JSON shape and were retried once; 29 retries were still invalid (28 not valid
+  JSON, 1 off-schema field). These are model output, not API errors.
+- **Latency:** verifier, client-measured per call: median 6.2 s, max 115.8 s.
+- **Docs/console:** not consulted, and no defect observed.
+- Opinion: a JSON-mode or schema-constrained output option for reasoning-on Super would remove most
+  retries.
