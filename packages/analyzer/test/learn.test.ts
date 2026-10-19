@@ -1,8 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { fingerprint, similar, SAME_EXTENSION_JACCARD, SAME_PATH_JACCARD } from "../src/learn/fingerprint.ts";
+import { FeedbackSuppression } from "../src/learn/suppress.ts";
 
 const finding = { path: "src/profile.ts", line: 20, body: "null dereference of user in getProfile" };
 const rephrased = { ...finding, body: "Possible null dereference: user may be undefined in getProfile" };
+
+describe("explainable feedback suppression", () => {
+  it("suppresses a rephrased defect with source PR, comment, URL and reason", () => {
+    const rejected = { ...fingerprint(finding), repo: "example/widget", pr: 4, commentId: 12,
+      reason: "reaction", url: "https://github.com/example/widget/pull/4#discussion_r12" };
+    const items = [rejected];
+    const suppression = new FeedbackSuppression(items);
+    items.length = 0;
+    rejected.tokens.length = 0;
+    expect(suppression.matches(rephrased)).toBe(true);
+    expect(suppression.explain(rephrased)).toMatchObject({ pr: 4, commentId: 12, reason: "reaction", url: rejected.url });
+    expect(suppression.matches({ ...finding, body: "SQL injection: name is concatenated into the query in getProfile" })).toBe(false);
+    expect(suppression.matches({ ...rephrased, path: "src/profile.py" })).toBe(false);
+    expect(suppression.explain({ ...finding, body: "different issue" })).toBeUndefined();
+  });
+});
 
 describe("learning fingerprints", () => {
   it("normalizes paths and keeps a sorted lowercase word set without code, numbers or stop words", () => {
