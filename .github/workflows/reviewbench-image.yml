@@ -1,0 +1,82 @@
+name: ReviewBench image
+
+# Builds and pushes TraceHound's ReviewBench agent image (Dockerfile.reviewbench,
+# docs/bench/reviewbench.md), following ReviewBench's onboarding example: the job pushes with its
+# own GITHUB_TOKEN. The step summary names the digest to register; ReviewBench pulls by digest only.
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['rb/**']
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: reviewbench-image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/sunnybagal/tracehound-reviewbench
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Never needs NEBIUS_API_KEY: the adapter's tests use fake stages and block the network.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # version from package.json "packageManager"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Adapter tests and typecheck (scripts/reviewbench is outside the workspace packages)
+        run: |
+          pnpm exec vitest run --config scripts/reviewbench/vitest.config.ts
+          pnpm exec tsc -p scripts/reviewbench
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.reviewbench
+          platforms: linux/amd64
+          push: true
+          # One plain image manifest, so the digest is the image itself.
+          provenance: false
+          sbom: false
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+
+      - name: Digest and visibility
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          ref="$IMAGE@$DIGEST"
+          {
+            echo "### ReviewBench image"
+            echo
+            echo "Register this digest: \`$ref\`"
+            echo
+            echo "Built from \`$GITHUB_SHA\` on \`$GITHUB_REF_NAME\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+          # The workflow cannot change package visibility; check whether an anonymous pull works.
+          docker logout ghcr.io
+          if docker manifest inspect "$ref" > /dev/null 2>&1; then
+            echo "Package is public: anonymous pulls work, no GHCR_PULL_TOKEN needed." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Package is private: set it to Public in the package settings (Danger Zone → Change visibility), or register a GHCR_PULL_TOKEN." >> "$GITHUB_STEP_SUMMARY"
+          fi
