@@ -1,6 +1,7 @@
 import { newSideLines, parseDiff } from "../../analyzer/src/review/diff.ts";
 import type { FindingSource, PipelineCounts, PipelineOutput } from "./pipeline.ts";
 import type { Fix, FixOutput } from "./fix.ts";
+import { filterFeedback, readFeedback, type SuppressedFinding } from "./learn.ts";
 
 export type Reviewer = "pool-verify-v1" | "review-diff-v1";
 
@@ -43,6 +44,7 @@ export interface Options {
   reviewer?: Reviewer;
   repoDir?: string;
   fixes?: "on" | "off";
+  learn?: "on" | "off";
 }
 
 export interface Dependencies {
@@ -94,7 +96,7 @@ export function buildInput(event: PullEvent, diff: string): ReviewerInput {
 
 const footer = "These comments are model-generated and unverified.";
 const location = (finding: Finding) => `${finding.path}:${finding.line}\n${finding.body}`;
-export interface ReviewData { fixes: FixOutput; sources: FindingSource[] }
+export interface ReviewData { fixes: FixOutput; sources: FindingSource[]; suppressed?: SuppressedFinding[] }
 
 function fixBody(finding: Finding, fix: Fix | null | undefined, plain: boolean): string {
   if (!fix) return finding.body;
@@ -111,6 +113,7 @@ function reviewFooter(findings: Finding[], commit: string, pipeline: PipelineCou
   const record: Record<string, unknown> = {
     version: 1, pipeline: "pool-verify-v1", headSha: commit,
     ...pipeline, posted: findings.length, fixes: data.fixes.counts,
+    ...(data.suppressed && { suppressed: data.suppressed }),
     findings: findings.map((finding, i) => ({
       path: finding.path, line: finding.line,
       ...(data.fixes.suggestions[i] && { startLine: data.fixes.suggestions[i]!.startLine }),
@@ -156,6 +159,7 @@ export function buildReview(
     }
   }
   if (findings.length > maxComments) body.push(`${findings.length - maxComments} findings omitted by max-comments.`);
+  if (data?.suppressed) body.push(`${data.suppressed.length} findings suppressed by maintainer feedback (details in footer).`);
   body.push(footer);
   if (data && pipeline) body.push(reviewFooter(posted, commit, pipeline, data));
   return { commit_id: commit, event: "COMMENT", body: body.join("\n\n"), comments };
@@ -181,6 +185,9 @@ function readOutput(output: unknown): { comments: Finding[]; model?: string; fai
 
 /** All effects are injected: tests never run the real reviewer or GitHub API. */
 export async function runAction(event: PullEvent, options: Options, deps: Dependencies): Promise<void> {
+  // The composite passes this env input directly; cli.ts and the frozen pipeline stay unchanged.
+  const learn = options.learn ?? process.env.TRACEHOUND_LEARN ?? "off";
+  if (learn !== "on" && learn !== "off") throw new Error("Invalid learn input");
   const reviewer = options.reviewer ?? "pool-verify-v1";
   if (reviewer !== "pool-verify-v1" && reviewer !== "review-diff-v1") {
     throw new Error("Invalid reviewer");
@@ -233,7 +240,14 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     deps.log("TraceHound: reviewer reported failed chunks; nothing posted.");
     return;
   }
-  if (!output.comments.length) {
+  let suppressed: SuppressedFinding[] | undefined;
+  if (learn === "on" && reviewer === "pool-verify-v1" && output.comments.length) {
+    const filtered = filterFeedback(output.comments, await readFeedback(event.repository.full_name, options, deps));
+    output.comments = filtered.kept;
+    sources = filtered.indexes.map(index => sources[index]!);
+    suppressed = filtered.suppressed;
+  }
+  if (!output.comments.length && !suppressed?.length) {
     deps.log("TraceHound: reviewer returned no findings; nothing posted.");
     return;
   }
@@ -248,6 +262,11 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
       data = { sources, fixes: { suggestions: posted.map(() => null),
         counts: { attempted: posted.length, valid: 0, rejected: posted.length } } };
     }
+  }
+  if (suppressed !== undefined) {
+    data ??= { sources, fixes: { suggestions: output.comments.slice(0, options.maxComments).map(() => null),
+      counts: { attempted: 0, valid: 0, rejected: 0 } } };
+    data.suppressed = suppressed;
   }
   const payload = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, false, reviewer, pipeline, data);
   if (options.dryRun) {
