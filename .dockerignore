@@ -1,0 +1,18 @@
+# Only Dockerfile.reviewbench builds from the repository root (harness/sandbox.Dockerfile builds from
+# harness/). Everything is out except what the ReviewBench image needs; no .env, no .tracehound/
+# cache or ledger, no tests.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!config/prices.json
+!packages/analyzer/package.json
+!packages/analyzer/src
+!packages/action/package.json
+!packages/action/src
+!viewer/package.json
+!scripts/bench/agree-rule.ts
+!scripts/reviewbench/*.ts
+scripts/reviewbench/*.test.ts
+scripts/reviewbench/test-setup.ts
+scripts/reviewbench/vitest.config.ts
