@@ -179,6 +179,32 @@ describe("maintainer feedback collection (local GitHub API fixtures)", () => {
     f.entries["/repos/example/widget/pulls/3/comments?per_page=100&page=1"] = [f.root, { ...f.reply, in_reply_to_id: 99, body: "fixed" }];
     expect(await collect(f)).toHaveLength(1);
   });
+  it("does not confuse a review permalink with a longer review ID sharing its prefix", async () => {
+    const f = feedbackFixture();
+    f.review.body = `TraceHound\n\n${finding.path}:500\n${finding.body}\n\nThese comments are model-generated and unverified.\n\n${f.footer}`;
+    f.entries["/repos/example/widget/pulls/3/comments?per_page=100&page=1"] = [];
+    f.reviewReactions.push({ id: "r1", content: "THUMBS_DOWN", createdAt: f.reaction.created_at, user: f.reaction.user });
+    f.entries["/repos/example/widget/issues/3/comments?per_page=100&page=1"] = [{ ...f.reply, body: `${f.review.html_url}0 good catch` }];
+    expect(await collect(f)).toMatchObject([{ commentId: 2, reason: "reaction" }]);
+    f.entries["/repos/example/widget/issues/3/comments?per_page=100&page=1"] = [{ ...f.reply, body: `[this review](${f.review.html_url}) good catch` }];
+    expect(await collect(f)).toEqual([]);
+  });
+  it("paginates replies so a later acceptance on page two wins", async () => {
+    const f = feedbackFixture();
+    f.entries["/repos/example/widget/pulls/3/comments?per_page=100&page=1"] = [f.root,
+      ...Array.from({ length: 99 }, (_, i) => ({ ...f.reply, id: 100 + i, body: "neutral discussion" }))];
+    f.entries["/repos/example/widget/pulls/3/comments?per_page=100&page=2"] = [{ ...f.reply, body: "fixed" }];
+    expect(await collect(f)).toEqual([]);
+    expect(f.calls).toContain("/repos/example/widget/pulls/3/comments?per_page=100&page=2");
+  });
+  it("paginates reactions so a maintainer thumbs up on page two wins", async () => {
+    const f = feedbackFixture();
+    f.entries["/repos/example/widget/pulls/comments/10/reactions?per_page=100&page=1"] = [f.reaction,
+      ...Array.from({ length: 99 }, (_, i) => ({ ...f.reaction, id: 100 + i, content: "heart" }))];
+    f.entries["/repos/example/widget/pulls/comments/10/reactions?per_page=100&page=2"] = [{ ...f.reaction,
+      id: 200, content: "+1", created_at: "2026-10-04T00:00:00Z" }];
+    expect(await collect(f)).toEqual([]);
+  });
   it("does not fetch PRs older than 60 days", async () => {
     const f = feedbackFixture();
     f.entries["/repos/example/widget/pulls?state=all&sort=updated&direction=desc&per_page=30"] = [{ number: 3, updated_at: "2026-08-01T00:00:00Z" }];

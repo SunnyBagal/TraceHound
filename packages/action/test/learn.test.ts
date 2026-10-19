@@ -148,4 +148,16 @@ describe("learning post-filter", () => {
     const payload = JSON.parse(vi.mocked(f.deps.log).mock.calls[0]![0]);
     expect(record(payload.body).suppressed).toHaveLength(1);
   });
+  it("retains identical suppression provenance on the 422 body-only retry", async () => {
+    const f = fake(); const fetch = f.deps.fetch; let posted = 0;
+    f.deps.fetch = async (url, init) => {
+      const result = await fetch(url, init);
+      return init?.method === "POST" && posted++ === 0 ? new Response("", { status: 422 }) : result;
+    };
+    await runAction(event, { ...options, learn: "on" }, f.deps);
+    expect(f.posts).toHaveLength(2);
+    expect(f.posts[1]!.comments).toEqual([]);
+    expect(record(f.posts[1]!.body).suppressed).toEqual(record(f.posts[0]!.body).suppressed);
+    expect(f.posts[1]!.body).toContain(sql.body);
+  });
 });

@@ -40,6 +40,11 @@ function phrase(body: string, phrases: string[]): string | undefined {
   return phrases.find(text => new RegExp(`(?:^|[^\\p{L}\\p{N}_])${text}(?=$|[^\\p{L}\\p{N}_])`, "iu").test(body));
 }
 
+function refersToReview(body: string, url: string): boolean {
+  const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`${escaped}(?=$|[\\s\\]\\)>"'.,!?])`).test(body);
+}
+
 /** Only location blocks emitted by buildReview are findings; summary prose is never learned. */
 export function bodyFindings(body: string): { path: string; body: string }[] {
   const content = body.split("\n\nThese comments are model-generated and unverified.")[0]!;
@@ -225,7 +230,7 @@ export async function collectFeedback(repo: string, options: LearnOptions, deps:
         } while (after);
       }
       const replies = own.includes(comment) ? comments.filter(reply => reply.in_reply_to_id === comment.id)
-        : issueReplies.filter(reply => reply.body.includes(comment.html_url));
+        : issueReplies.filter(reply => refersToReview(reply.body, comment.html_url));
       for (const reply of replies) {
         const reason = phrase(reply.body, REJECT_PHRASES), accepted = phrase(reply.body, ACCEPT_PHRASES);
         if ((!reason && !accepted) || !await maintainer(reply.user)) continue;
