@@ -1,7 +1,7 @@
 // The ReviewBench container entrypoint (AGENT_CONTRACT.md in review-bench/ReviewBench @ 12e9d1a). One
-// container per pull request: read /work/pr/pr.json and the diff, run one of three pipelines on
+// container per pull request: read /work/pr/pr.json and the diff, run one of four pipelines on
 // /work/repo at RB_HEAD, write RB_OUT. Settings (RB_CONFIG_*):
-//   RB_CONFIG_PIPELINE  pool-verify-v1 (default; the Action's pipeline) | pool-raw | pool-raw-x2
+//   RB_CONFIG_PIPELINE  pool-verify-v1 (default; the Action's pipeline) | pool-raw | pool-raw-x2 | pool-raw-missed
 //   RB_CONFIG_MODEL     model id for every stage (default: Super, as benchmarked)
 //   RB_MODEL_BASE_URL   the registered model API URL; becomes NEBIUS_BASE_URL for the stages
 // A pull request never fails because of the reviewer: any error, invalid output or the 25-minute
@@ -19,18 +19,19 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import type { Finding, ReviewerInput } from "../../packages/action/src/action.ts";
 import { checkRepoHead, poolFindings, runPipeline, type Execute } from "../../packages/action/src/pipeline.ts";
+import { agrees } from "../bench/agree-rule.ts";
 import { DEFAULT_BASE_URL } from "../../packages/analyzer/src/llm/client.ts";
 import { SpendLedger } from "../../packages/analyzer/src/llm/ledger.ts";
 import { MAX_FINDINGS, toFindings, toInput, unionFindings } from "./adapter.ts";
 import { outputProblem, type RbOutput, type RbPrJson } from "./format.ts";
 
-export const PIPELINES = ["pool-verify-v1", "pool-raw", "pool-raw-x2"] as const;
+export const PIPELINES = ["pool-verify-v1", "pool-raw", "pool-raw-x2", "pool-raw-missed"] as const;
 export type PipelineName = (typeof PIPELINES)[number];
 /** pool-verify-v1's benchmarked model for every stage (scripts/bench/run-test-set.ts REVIEW_MODEL). */
 export const DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b";
 /** Under ReviewBench's default 30 minutes per pull request. */
 export const WALL_LIMIT_MS = 25 * 60_000;
-/** pool-raw-x2 stops a pass this long before the limit, so a finished first pass is still written. */
+/** pool-raw-x2 stops a pass, and pool-raw-missed its missed-issue pass, this long before the limit, so a finished pool is still written. */
 export const X2_MARGIN_MS = 60_000;
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
@@ -199,9 +200,49 @@ export async function poolRawX2(input: ReviewerInput, c: RunContext): Promise<Fi
   return unionFindings(passes);
 }
 
+/**
+ * pool-raw, then one missed-issue pass (review-missed-v1, P008 amendment 2) on the same model, shown
+ * the pool. The result is the pool, then each missed finding that agrees (decision 058's rule) with
+ * no pool finding, so MAX_FINDINGS cuts missed findings first. The pass gets the time left minus
+ * X2_MARGIN_MS; if it fails or runs out of time the result is the pool alone: it never fails a pull
+ * request that pool-raw would have passed.
+ */
+export async function poolRawMissed(input: ReviewerInput, c: RunContext): Promise<Finding[]> {
+  const pool = await poolRaw(input, c);
+  const left = c.deadline - X2_MARGIN_MS - c.now();
+  if (left <= 0) {
+    c.log("missed: failed (no time left)");
+    return pool;
+  }
+  const stop = new AbortController();
+  const timer = setTimeout(() => stop.abort(), left);
+  const exec = c.makeExec(AbortSignal.any([c.signal, stop.signal]));
+  const directory = await mkdtemp(path.join(tmpdir(), "tracehound-rb-missed-"));
+  try {
+    const inputPath = path.join(directory, "input.json");
+    const poolPath = path.join(directory, "pool.json");
+    const out = path.join(directory, "review-missed.json");
+    await writeFile(inputPath, JSON.stringify(input), { mode: 0o600 });
+    await writeFile(poolPath, JSON.stringify({ comments: pool }), { mode: 0o600 });
+    await exec(process.execPath, [BIN, "review-missed", "--pr", inputPath, "--findings", poolPath, "--repo", c.repo, "--head", c.head,
+      "--out", out, "--model", c.model], { cwd: ROOT, env: c.env, maxBuffer: 4 * 1024 * 1024 });
+    const missed = readReview("review-missed", JSON.parse(await readFile(out, "utf8")));
+    const added = missed.filter(finding => !pool.some(p => agrees(p, finding)));
+    c.log(`pool ${pool.length}, missed ${missed.length}, new ${added.length}`);
+    return [...pool, ...added];
+  } catch (error) {
+    c.log(`missed: failed (${stop.signal.aborted ? `timed out after ${Math.round(left / 1000)} s` : reason(error, c.env)})`);
+    return pool;
+  } finally {
+    clearTimeout(timer);
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 export function runSelected(pipeline: PipelineName, input: ReviewerInput, c: RunContext): Promise<Finding[]> {
   if (pipeline === "pool-verify-v1") return poolVerify(input, c);
   if (pipeline === "pool-raw") return poolRaw(input, c);
+  if (pipeline === "pool-raw-missed") return poolRawMissed(input, c);
   return poolRawX2(input, c);
 }
 

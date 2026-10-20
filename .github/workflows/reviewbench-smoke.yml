@@ -5,7 +5,9 @@ name: ReviewBench smoke
 # findings files' format, as try-agent.sh does, and uploads them. It never runs ReviewBench's judge,
 # and its sparse checkout never fetches golden/ (docs/bench/reviewbench.md, blindness rule).
 # The adapter exits 0 even when every model call failed, so the job also fails when any adapter
-# status line is not status=ok, or when no pull request got a finding.
+# status line is not status=ok, or when no pull request got a finding. With pool-raw-missed it also
+# fails when a log has no "pool N, missed M, new K" line: the adapter falls back to the pool when
+# the missed-issue pass fails, so status=ok alone would not show the pass ran.
 # Spends a few cents of Nebius credit from the NEBIUS_API_KEY secret.
 on:
   workflow_dispatch:
@@ -16,7 +18,7 @@ on:
       pipeline:
         description: RB_CONFIG_PIPELINE
         type: choice
-        options: [pool-raw, pool-verify-v1, pool-raw-x2]
+        options: [pool-raw, pool-verify-v1, pool-raw-x2, pool-raw-missed]
         default: pool-raw
       model:
         description: RB_CONFIG_MODEL
@@ -72,8 +74,8 @@ jobs:
         run: |
           set +e
           mkdir -p smoke && cd smoke
-          echo "| index | pull request | model | exit | status | findings | cost_usd | wall s |" > summary.md
-          echo "|---|---|---|---|---|---|---|---|" >> summary.md
+          echo "| index | pull request | model | exit | status | findings | missed pass | cost_usd | wall s |" > summary.md
+          echo "|---|---|---|---|---|---|---|---|---|" >> summary.md
           failed=0
           total=0
           for pr in 0 4; do
@@ -93,9 +95,17 @@ jobs:
             applied=$(grep -o 'model=[^ ]*' "log-$pr.txt" | head -1)
             if [ "$code" -ne 0 ]; then echo "::error::index $pr: try-agent.sh exited $code"; failed=1; fi
             if [ "$status" != "ok" ]; then echo "::error::index $pr: adapter status is '${status:-missing}', not ok"; failed=1; fi
+            missed=-
+            if [ "$PIPELINE" = "pool-raw-missed" ]; then
+              missed=$(grep -o 'pool [0-9]*, missed [0-9]*, new [0-9]*' "log-$pr.txt" | tail -1)
+              if [ -z "$missed" ]; then
+                missed=$(grep -o 'missed: failed.*' "log-$pr.txt" | tail -1)
+                echo "::error::index $pr: the missed-issue pass did not finish (${missed:-no missed line})"; failed=1
+              fi
+            fi
             total=$(( total + ${found:-0} ))
             cell=${status:--}
-            echo "| $pr | $name | ${applied#model=} | $code | ${cell//|/\\|} | ${found:--} | ${cost:--} | $wall |" >> summary.md
+            echo "| $pr | $name | ${applied#model=} | $code | ${cell//|/\\|} | ${found:--} | ${missed//|/\\|} | ${cost:--} | $wall |" >> summary.md
           done
           if [ "$total" -eq 0 ]; then echo "::error::no pull request got a finding"; failed=1; fi
           { echo "### ReviewBench smoke ($PIPELINE, $MODEL)"; echo; echo "Image: \`$IMAGE\`"; echo; cat summary.md; echo; echo "Findings in total: $total; result: $([ $failed -eq 0 ] && echo green || echo red)"; } >> "$GITHUB_STEP_SUMMARY"

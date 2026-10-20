@@ -8,7 +8,7 @@ import type { Execute } from "../../packages/action/src/pipeline.ts";
 import { REVIEW_MODEL } from "../bench/run-test-set.ts";
 import { MAX_FINDINGS, repoPath, toFindings, toInput, unionFindings } from "./adapter.ts";
 import {
-  abortableExec, DEFAULT_MODEL, main, poolRaw, poolRawX2, readReview, readSettings, runSelected,
+  abortableExec, DEFAULT_MODEL, main, poolRaw, poolRawMissed, poolRawX2, readReview, readSettings, runSelected,
   X2_MARGIN_MS, type MainDeps, type RunContext,
 } from "./entry.ts";
 import { outputProblem } from "./format.ts";
@@ -59,7 +59,7 @@ describe("settings", () => {
     expect(DEFAULT_MODEL).toBe(REVIEW_MODEL);
   });
 
-  it.each(["pool-verify-v1", "pool-raw"])("accepts %s and a model label", pipeline => {
+  it.each(["pool-verify-v1", "pool-raw", "pool-raw-missed"])("accepts %s and a model label", pipeline => {
     const { env } = contract({ RB_CONFIG_PIPELINE: pipeline, RB_CONFIG_MODEL: "some/model" });
     expect(readSettings(env)).toMatchObject({ pipeline, model: "some/model" });
   });
@@ -70,7 +70,7 @@ describe("settings", () => {
   });
 
   it.each([
-    ["unknown pipeline", { RB_CONFIG_PIPELINE: "pool-verify-v2" }, /RB_CONFIG_PIPELINE must be one of pool-verify-v1, pool-raw, pool-raw-x2, got "pool-verify-v2"/],
+    ["unknown pipeline", { RB_CONFIG_PIPELINE: "pool-verify-v2" }, /RB_CONFIG_PIPELINE must be one of pool-verify-v1, pool-raw, pool-raw-x2, pool-raw-missed, got "pool-verify-v2"/],
     ["review-diff-v1 is not offered", { RB_CONFIG_PIPELINE: "review-diff-v1" }, /RB_CONFIG_PIPELINE/],
     ["missing key", { NEBIUS_API_KEY: undefined }, /NEBIUS_API_KEY is not set/],
     ["missing RB_OUT", { RB_OUT: undefined }, /RB_OUT is not set/],
@@ -203,15 +203,19 @@ describe("never fails a pull request", () => {
   });
 });
 
-/** Fake stages: git, review, review-ctx and verify-ctx write files the way the CLIs do. */
+/** Fake stages: git, review, review-ctx, review-missed and verify-ctx write files the way the CLIs do. */
 function fakeStages(outputs: {
   review: Finding[]; "review-ctx": Finding[]; keep?: (f: Finding) => boolean;
+  /** review-missed's own findings; the pool file it was given is kept in `missedPool`. */
+  "review-missed"?: Finding[];
   /** One CHUNK_FAILED chunk with this failure string in that stage's output, as review.ts records it. */
   chunkFailure?: { command: "review" | "review-ctx"; failure: string };
 }) {
   const commands: string[] = [];
   const models: string[] = [];
   const failures = new Set<string>();
+  const missedPool: Finding[][] = [];
+  let reviewerInput = "";
   const exec = vi.fn<Execute>(async (file, args, options) => {
     if (file === "git") {
       commands.push("git");
@@ -234,6 +238,13 @@ function fakeStages(outputs: {
       await writeFile(value("--kept"), JSON.stringify({ verify, comments: kept }));
       return {};
     }
+    if (command === "review-missed") {
+      expect(await readFile(value("--pr"), "utf8")).toBe(reviewerInput);
+      missedPool.push(JSON.parse(await readFile(value("--findings"), "utf8")).comments);
+      await writeFile(value("--out"), JSON.stringify({ comments: outputs["review-missed"] ?? [], review: { model: "m", chunkFailed: 0 } }));
+      return {};
+    }
+    reviewerInput = await readFile(value("--pr"), "utf8");
     const comments = outputs[command as "review" | "review-ctx"];
     const failed = outputs.chunkFailure?.command === command
       ? { chunkFailed: 1, chunks: [{ index: 0, status: "CHUNK_FAILED", failure: outputs.chunkFailure.failure }] }
@@ -241,7 +252,7 @@ function fakeStages(outputs: {
     await writeFile(value("--out"), JSON.stringify({ comments, review: { model: "m", ...failed } }));
     return {};
   });
-  return { exec, commands, models, failures };
+  return { exec, commands, models, failures, missedPool };
 }
 
 function context(exec: Execute, overrides: Partial<RunContext> = {}): RunContext {
@@ -327,6 +338,82 @@ describe("pipelines", () => {
     await expect(poolRawX2(input, c)).rejects.toThrow(/no pass finished/);
     expect(lines).toEqual(["pass 1: skipped, no time left", "pass 2: skipped, no time left"]);
     expect(s.exec).not.toHaveBeenCalled();
+  });
+
+  it("pool-raw-missed runs review-missed on the pool with the same model and adds only findings that agree with none", async () => {
+    const pool = [...diffFindings, ctxFindings[1]!];
+    const missed = [finding(32, "missed, agrees with diff b"), finding(80, "missed and new"), finding(10, "other file", "src/other.ts")];
+    const s = fakeStages({ review: diffFindings, "review-ctx": ctxFindings, "review-missed": missed });
+    const lines: string[] = [];
+    expect(await poolRawMissed(input, context(s.exec, { log: l => lines.push(l) }))).toEqual([...pool, missed[1], missed[2]]);
+    expect(s.missedPool).toEqual([pool]);
+    expect(s.commands.sort()).toEqual(["git", "review", "review-ctx", "review-missed"]);
+    expect(s.models).toEqual(["chosen/model", "chosen/model", "chosen/model"]);
+    expect(lines).toContain("pool 3, missed 3, new 2");
+    expect(await runSelected("pool-raw-missed", input, context(s.exec))).toEqual([...pool, missed[1], missed[2]]);
+  });
+
+  it("pool-raw-missed returns exactly the pool when the missed stage fails or reports a failed chunk", async () => {
+    const pool = [...diffFindings, ctxFindings[1]!];
+    const s = fakeStages({ review: diffFindings, "review-ctx": ctxFindings, "review-missed": [finding(80, "new")] });
+    s.failures.add("review-missed");
+    const lines: string[] = [];
+    expect(await poolRawMissed(input, context(s.exec, { log: l => lines.push(l) }))).toEqual(pool);
+    expect(lines).toContain("missed: failed (private subprocess error)");
+
+    const chunkFailed: Execute = async (file, args, options) => {
+      if (args[1] !== "review-missed") return s.exec(file, args, options);
+      const out = args[args.indexOf("--out") + 1]!;
+      await writeFile(out, JSON.stringify({ comments: [finding(80, "new")], review: { model: "m", chunkFailed: 1, chunks: [{ failure: "invalid reply" }] } }));
+      return {};
+    };
+    lines.length = 0;
+    expect(await poolRawMissed(input, context(chunkFailed, { log: l => lines.push(l) }))).toEqual(pool);
+    expect(lines).toContain("missed: failed (review-missed: failed chunks (first: invalid reply))");
+  });
+
+  it("pool-raw-missed stops the missed stage at the margin before the limit and returns exactly the pool", async () => {
+    const pool = [...diffFindings, ctxFindings[1]!];
+    const s = fakeStages({ review: diffFindings, "review-ctx": ctxFindings, "review-missed": [finding(80, "new")] });
+    let missedSignal: AbortSignal | undefined;
+    const makeExec = (signal: AbortSignal): Execute => async (file, args, options) => {
+      if (args[1] !== "review-missed") return s.exec(file, args, options);
+      missedSignal = signal;
+      return new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("killed"))));
+    };
+    const lines: string[] = [];
+    const c = context(s.exec, { deadline: Date.now() + X2_MARGIN_MS + 100, makeExec, log: l => lines.push(l) });
+    expect(await poolRawMissed(input, c)).toEqual(pool);
+    expect(missedSignal?.aborted).toBe(true);
+    expect(c.signal.aborted).toBe(false);
+    expect(lines.at(-1)).toMatch(/^missed: failed \(timed out after \d+ s\)$/);
+
+    // No time left at all: the stage is not started.
+    const now = Date.now();
+    const late = fakeStages({ review: diffFindings, "review-ctx": ctxFindings });
+    lines.length = 0;
+    expect(await poolRawMissed(input, context(late.exec, { deadline: now + X2_MARGIN_MS, now: () => now, log: l => lines.push(l) }))).toEqual(pool);
+    expect(late.commands).not.toContain("review-missed");
+    expect(lines).toContain("missed: failed (no time left)");
+  });
+
+  it("pool-raw-missed fails a pull request only where pool-raw does", async () => {
+    const s = fakeStages({ review: diffFindings, "review-ctx": ctxFindings });
+    s.failures.add("review");
+    await expect(poolRawMissed(input, context(s.exec))).rejects.toThrow(/private subprocess error/);
+    expect(s.commands).not.toContain("review-missed");
+  });
+
+  it("pool-raw-missed puts pool findings first, so the 40-finding cap cuts missed findings", async () => {
+    const c = contract({ RB_CONFIG_PIPELINE: "pool-raw-missed" });
+    const reviewed = Array.from({ length: MAX_FINDINGS }, (_, i) => finding(10 * (i + 1), `pool ${i}`));
+    const s = fakeStages({ review: reviewed, "review-ctx": [], "review-missed": [finding(5000, "missed new"), finding(6000, "missed new 2")] });
+    const d = deps(undefined);
+    expect(await main(c.env, { ...d, makeExec: () => s.exec })).toBe(0);
+    const file = c.read();
+    expect(file.findings.map((f: { message: string }) => f.message)).toEqual(reviewed.map(f => f.body));
+    expect(d.lines).toContain(`pool ${MAX_FINDINGS}, missed 2, new 2`);
+    expect(d.lines.at(-1)).toMatch(/^status=ok findings=40 dropped_no_line=0 dropped_empty=0 capped=2 /);
   });
 
   it("unions passes with decision 058's agreement rule", () => {
