@@ -14,6 +14,12 @@ it("defaults fixes on and passes the input through TRACEHOUND_FIXES", async () =
   expect(manifest).toContain("TRACEHOUND_FIXES: ${{ inputs.fixes }}");
 });
 
+it("defaults learning off and passes only its input to the review hook", async () => {
+  const manifest = await readFile(manifestUrl, "utf8");
+  expect(manifest).toMatch(/learn:\n(?:[^\n]*\n)*?    default: 'off'/);
+  expect(manifest).toContain("TRACEHOUND_LEARN: ${{ inputs.learn }}");
+});
+
 it("pins pnpm to the version declared by TraceHound's root package", async () => {
   const manifest = await readFile(manifestUrl, "utf8");
   const rootPackage = JSON.parse(await readFile(packageUrl, "utf8")) as { packageManager: string };
