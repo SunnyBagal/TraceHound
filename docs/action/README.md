@@ -161,23 +161,37 @@ files, plus stale route, queue, Redis, environment-variable, and event keys. It 
 call, installs no dependencies in the PR checkout, and executes no script from the PR's code.
 The checker uses TraceHound's bundled TypeScript and reads detached base/head worktrees.
 
-The stage has a **90-second total time budget**, including history lookup and any base fetch.
+The stage has a **90-second execution budget**, including history lookup and any base fetch.
+On timeout, children receive SIGTERM first, then a 5-second grace before SIGKILL if still running.
+The stage waits for child termination before returning; if its killed fetch left `shallow.lock`,
+it removes only that lock and logs the cleanup. A base fetch starts only with at least 30 seconds
+remaining. The analyzer receives the remaining whole seconds minus a 10-second cleanup reserve;
+it is skipped as a timeout if that leaves fewer than 5 seconds.
 Missing history is fetched without credentials, unshallowing when necessary; private repos
 should use `fetch-depth: 0`. It compares against the merge base, never an advanced base tip.
 A timeout, error, or invalid report logs `contracts: failed (<reason>)` and leaves model
 findings intact. The existing `max-comments: '0'` whole-review skip is retained for data jobs.
 
-Findings on commentable diff lines are prefixed `Contract:` and capped at 10 inline comments,
-separately from `max-comments` for model findings. Other findings, including inline overflow,
-appear under **Files you didn't edit that depend on this change**, with up to 10 linked
+Contract findings are always body findings with the current analyzer: it reports only files
+the PR did not edit. They appear after the model disclaimer under
+**Files you didn't edit that depend on this change**, with up to 10 linked
 `path:line` entries at the head SHA, a one-line reason each, and `and N more` for overflow.
-A contract replaces a model finding on the same path within ±3 lines. Contracts bypass
+These entries do not count against `max-comments` for model findings. The retained inline
+delivery, inline cap, and ±3-line deduplication paths cannot trigger with today's analyzer output.
+Contracts bypass
 maintainer-feedback suppression and model fix generation. Neither the deterministic gate
 nor an additional evidence verifier is wired into this stage.
 
 Enabled runs add `contracts: { status: "ok" | "failed", inline, body, ms }` to the footer;
-counts describe displayed contract entries, separate from pipeline/model counts. Body-only
-retries move inline contracts into the bounded linked section and update those counts.
+valid reports also include `typed: "complete" | "skipped-no-tsconfig" | "skipped-budget" | "skipped-error"`.
+Skipped typed checks retain keyed findings with status `ok` and log
+`contracts: typed check skipped (<reason>); key checks only.` Counts describe displayed
+contract entries, separate from pipeline/model counts; `inline` is currently always zero.
+The hidden footer remains the review's last line.
+If `repo-dir` is empty or `git rev-parse --git-dir` fails, the stage logs
+`contracts: skipped (no checkout)`, adds no section or footer field, and
+leaves the posted output byte-identical to `contracts: 'off'`. This supports
+`review-diff-v1` without a checkout; `pool-verify-v1` still requires one.
 To disable the stage, set `contracts: 'off'` in the Action's `with:` block. Off skips the checker
 and preserves the previous posted bytes, including leaving the existing footer unchanged
 rather than adding an `off` field. The composite passes the input as `TRACEHOUND_CONTRACTS`.
