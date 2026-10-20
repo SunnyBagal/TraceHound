@@ -55,6 +55,38 @@ differs: it leaves each stage on its own CLI default, Nano for the two reviewers
 verifier (`docs/action/README.md`). `RB_MODEL_BASE_URL`, the registered model API URL, becomes
 `NEBIUS_BASE_URL` for the stages.
 
+The other candidate model is `nvidia/Nemotron-3.5-Super-VL`. `config/prices.json` prices it at
+$0.30 / $0.90 per 1M tokens, the same as 3 Super (Nebius blog of 16 Oct 2026 and the Token Factory
+model page). Without that entry it would be priced at the $5 / $15 placeholder. One review
+reservation (60,000 diff characters, about 20,008 tokens by the client's estimate, plus
+`max_tokens` 32,000) would then be $0.58 instead of $0.0348. Two concurrent reservations in one
+process, or a few chunks in a row, or verify-ctx-v1's four concurrent calls, would cross the
+default per-process cap `TRACEHOUND_BUDGET_RUN_USD=1`. The call would be refused, and the never-fail
+wrapper would write zero findings with exit 0. `scripts/reviewbench/prices.test.ts` checks both
+candidate models against the real table and the analyzer's own `Budget`.
+
+Reasoning on 3.5: every stage sends `chat_template_kwargs: { enable_thinking: true }` (`REASONING_ON`,
+`packages/analyzer/src/review/review.ts:15`), the flag NVIDIA's 3.5 Super VL model card documents;
+nothing changes for 3.5. Reasoning tokens share `max_tokens`: 32,000 per reviewer call, 16,000 per
+verifier call. The chunk records keep no `finish_reason`, so a reply truncated by that limit shows
+up as an invalid reply: after the one retry the chunk is `CHUNK_FAILED` with that failure string.
+pool-raw (like pool-verify-v1) then fails the pull request, writes `[]`, and the status line says
+`status=failed: review: failed chunks (first: …)`. In the verifier a truncated reply becomes
+VERIFY_FAILED and the finding is kept.
+
+## Pre-registered candidates
+
+The candidates are fixed in advance by the brain's
+[P008](https://github.com/SunnyBagal/tracehound-brain/blob/main/decisions/P008-reviewbench-preregistration.md):
+
+1. pool-verify-v1 on 3 Super (`pipeline=pool-verify-v1`, `model=nvidia/nemotron-3-super-120b-a12b`)
+2. pool-raw on 3 Super (`pipeline=pool-raw`, `model=nvidia/nemotron-3-super-120b-a12b`)
+3. pool-raw-x2 on 3 Super (`pipeline=pool-raw-x2`, `model=nvidia/nemotron-3-super-120b-a12b`)
+4. pool-verify-v1 on 3.5 (`pipeline=pool-verify-v1`, `model=nvidia/Nemotron-3.5-Super-VL`)
+5. pool-raw on 3.5 (`pipeline=pool-raw`, `model=nvidia/Nemotron-3.5-Super-VL`)
+
+Candidate 6 (`pool-raw-missed`) arrives in rb-02.
+
 ## Never fail a pull request
 
 ReviewBench's runs are all or nothing: one pull request that never succeeds fails the whole run. So:
@@ -69,9 +101,11 @@ ReviewBench's runs are all or nothing: one pull request that never succeeds fail
   `pool-raw-x2` outside the image, no `NEBIUS_API_KEY`, or a missing `RB_OUT` / `RB_HEAD` /
   `RB_PR_NUMBER`. That is deliberate: a misconfigured run stops on its first pull request instead
   of publishing hundreds of empty reviews.
-- Not caught: a wrong key or model id. Every chunk then fails, so every pull request gets `[]`. The
-  log line says `failed chunks (first: request failed: HTTP 401 …)` for pool-raw and pool-raw-x2, and the stage
-  count lines show `CHUNK_FAILED` for all three. Read the smoke test's status lines before a full run.
+- Not caught here: a wrong key, a wrong model id or a refused (over-budget) call. Every chunk then
+  fails, so every pull request gets `[]` with exit 0. The status line says
+  `status=failed: review: failed chunks (first: request failed: HTTP 401 …)` for pool-raw and
+  pool-raw-x2, and the stage count lines show `CHUNK_FAILED` for all three. The smoke workflow fails
+  on exactly this (any status other than `ok`, or no findings at all), so run it before a full run.
 - Very large pull requests can hit the limit: the reviewers take 60,000-character chunks one after
   another, and a request may take up to 10 minutes. Those get `[]`.
 
@@ -83,6 +117,11 @@ The run allows only the model API host. The stages call only `NEBIUS_BASE_URL` (
 code from `packages/action/src/action.ts`, `cli.ts`, `fix.ts` or `data.ts`, so posting a review, fix
 suggestions and graph history cannot run (a test checks the imports).
 
+The image never reads or writes a data branch, and runs with no learned memory.
+`scripts/reviewbench/imports.test.ts` fails if any `scripts/reviewbench/*.ts` imports `data.ts`,
+`fix.ts` or a file whose name contains `learn`, or if anything the image runs (the adapter and the
+three stage commands it spawns) reaches one through its imports.
+
 Our git spawns drop `GIT_CONFIG_*` (`cleanGitEnv`, decision 032). ReviewBench uses exactly those
 variables to mark `/work/repo` safe, so the image sets `safe.directory '*'` in the system git config.
 The image runs as root, like ReviewBench's example, so it can write the mounted `/work/out` whoever
@@ -91,8 +130,9 @@ owns it. No secret is in the image; `.dockerignore` admits only the files the pi
 ## Blindness rule
 
 Our submission configuration is pre-registered, so nobody who builds or tunes it may see the answer
-key. Never open, read, grep or copy anything under ReviewBench's `golden/` directory, and never look
-at its judge or classifier prompts. A session that reads the answer key voids the result. The smoke
+key. Never open, read, grep or copy anything under ReviewBench's `golden/` directory or any test-set
+pull request's expected issues, and never look at its judge or classifier prompts. Never open the
+`linea-seeded`, `recall-seeded` or `tracehound-seeds` repositories. A session that reads the answer key voids the result. The smoke
 workflow fetches only `scripts/try-agent.sh` and `corpus/test/test.json` (a sparse checkout without
 blobs) and checks that `golden/` is absent. It never runs ReviewBench's judge, and reports findings
 counts and wall time, never scores. Scores come from the portal.
@@ -107,6 +147,9 @@ ReviewBench's judge runs on their keys. Prices are the third-party rates in `con
 | pool-verify-v1 | median $0.0317, max $0.2308 (measured, 40 dev PRs, decision 059) | about $21 at the median; $152 if every PR cost the dev max |
 | pool-raw | about $0.018 (estimate: pool-verify-v1 minus the verifier) | about $12 |
 | pool-raw-x2 | about $0.036 (estimate: twice pool-raw) | about $24 |
+
+3.5 Super has the same prices. Its reasoning length on these prompts is not measured yet, so the
+per-PR figures for candidates 4 and 5 are the 3 Super ones until the smoke test reports `cost_usd`.
 
 The pool-raw estimate: verify-ctx-v1 cost $0.32 for 143 findings in decision 058 ($0.0022 each), and
 the dev pool averaged 6.1 findings per pull request (243 over 40, decision 059), so the verifier was
@@ -127,10 +170,14 @@ only per-PR record is `cost_usd=` in the container log.
    workflow cannot change package visibility: to make it public, open the package's settings on
    GitHub (Danger Zone → Change visibility → Public).
 2. Run "ReviewBench smoke" with that digest. It runs `try-agent.sh` on test-set indices 0
-   (TypeScript) and 4 (Python) with `-e NEBIUS_API_KEY`, `-e RB_MODEL_BASE_URL=…` and
-   `-e RB_CONFIG_PIPELINE` (default `pool-raw`). The summary table gives, per pull request, the
-   exit code, findings count, wall time and the adapter's status line; the artifact has the
-   findings files and logs. `workflow_dispatch` runs only once the workflow file is on `main`.
+   (TypeScript) and 4 (Python) with `-e NEBIUS_API_KEY`, `-e RB_MODEL_BASE_URL=…`,
+   `-e RB_CONFIG_PIPELINE` (input `pipeline`, default `pool-raw`) and `-e RB_CONFIG_MODEL` (input
+   `model`: `nvidia/nemotron-3-super-120b-a12b`, the default, or `nvidia/Nemotron-3.5-Super-VL`).
+   - The summary table gives, per pull request, the model applied, exit code, status,
+     findings count, `cost_usd` and wall time; the artifact has the findings files and logs.
+   - The job fails on a non-zero exit, on any status other than `status=ok`, or when no pull
+     request got a finding. The adapter itself exits 0 in all of those cases.
+   - `workflow_dispatch` runs only once the workflow file is on `main`.
 3. Register in the portal:
 
 | Field | Value |
@@ -138,11 +185,24 @@ only per-PR record is `cost_usd=` in the container log.
 | Image digest | the digest from step 1 |
 | Model API URL | `https://api.tokenfactory.us-central1.nebius.com/v1` |
 | Secret names | `NEBIUS_API_KEY` (plus `GHCR_PULL_TOKEN` only if the package stays private) |
-| Configuration labels | `pipeline` = the pre-registered pipeline, `model` = `nvidia/nemotron-3-super-120b-a12b` |
+| Configuration labels | `pipeline` and `model` as in the candidate's row above |
 | Seconds per pull request | 1800 (the default; the adapter stops itself at 1500) |
 | Other egress hosts | none |
 
-Locally, from a ReviewBench clone (needs docker, git, jq):
+### After merge: the smoke procedure
+
+The smoke workflow appears only once it is on `main`. Run "ReviewBench image" on `main` and take the
+digest from its summary. Then run "ReviewBench smoke" three times with that digest:
+
+1. `pipeline=pool-raw`, `model=nvidia/nemotron-3-super-120b-a12b`
+2. `pipeline=pool-verify-v1`, `model=nvidia/nemotron-3-super-120b-a12b`
+3. `pipeline=pool-raw`, `model=nvidia/Nemotron-3.5-Super-VL`
+
+Each spends a few cents. All three must be green before any portal run.
+
+### Locally
+
+From a ReviewBench clone (needs docker, git, jq):
 `scripts/try-agent.sh <image> --pr 0 -e NEBIUS_API_KEY -e RB_MODEL_BASE_URL=https://api.tokenfactory.us-central1.nebius.com/v1 -e RB_CONFIG_PIPELINE=pool-raw`.
 Adapter tests: `pnpm exec vitest run --config scripts/reviewbench/vitest.config.ts` and
 `pnpm exec tsc -p scripts/reviewbench`. They sit outside the workspace packages, so `pnpm test` does
