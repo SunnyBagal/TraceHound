@@ -252,7 +252,7 @@ it (decision 050).
   pool-verify-v1 F was 51.3–58.3% over Cal.com runs 1–3 and 35.6% / 48.0% over dev runs 1–2.
   Dev run 2 was void (the session's background limit killed it) and was restarted as 2r. Dev run 3
   stopped at the cap and was not done. Spend $5.31. `docs/bench/test-results.md`.
-- **Benchmark results page (decision 063):** `docs/bench/results.md` (3rd of six blind, 5th dev; README section `## PR reviewer benchmark`).
+- **Benchmark results page (decisions 063, 066):** `docs/bench/results.md`: tied with Greptile and Cursor on the 10 blind PRs (no gap to a tool outside its 95% interval), 4th of 6 across all 50 under both judges, levers table; README section `## PR reviewer benchmark`. The viewer's `/benchmark` tables must equal results.md's tables (`viewer/test/benchmark.test.tsx`).
 - **Vote across runs (decision 064, dev only): a loss.** vote-k3of5 over dev runs 1, 2r, 4–6: v1 F 47.8% vs 5-run mean 42.3% (P 53.3% vs 40.5%) but x1 F 50.4% < mean 51.3%; pool-verify-v1 stays (`docs/bench/vote.md`, `scripts/bench/vote.ts`; runner takes `--set dev --run 4|5|6`).
 - **Evidence verifier + gate (decision 065, dev only): a loss.** verify-evidence-v1 (`tracehound verify-evidence`, must quote the failing code) then `gate`, 5-run means: B v1 F 38.3% / P 37.2% and gate-only A F 41.6% / P 40.3%, against pool-verify-v1's 42.3% / 40.5%; contracts made 0 dev findings; pool-verify-v1 stays (`docs/bench/evidence.md`, `scripts/bench/evidence.ts`).
 - **Localizer (decision 027):** `tracehound context --decider lexical|nemotron` (default lexical).

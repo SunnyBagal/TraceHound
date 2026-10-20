@@ -3285,3 +3285,56 @@ only). VERIFY_FAILED 29 of 862. Spend $2.65. Cal.com was not opened.
 **Rejected:** tuning the verify-evidence-v1 prompt to drop more after seeing these scores, which would
 select on the same dev set again. Also rejected: requiring a quote on a drop, which would only turn
 drops into invalid replies.
+
+## 066 · Results wording fixes, all-50 table, levers tried (docs only)
+**Context:** the cc-01 audit (#41, `docs/bench/audit-cc01.md`) recomputed every published number
+and found none wrong, but it found five wording overclaims in `docs/bench/results.md` (its T1–T5
+and its interval point). Since then 064 and 065 have both lost on dev, and five dev runs of
+pool-verify-v1 spread 12.4 F points under bench-judge-v1 (35.6–48.0%). The public results had to say
+this before anything else is built on them. Docs only, no new results: this job made no model call
+and used only counts already in the repo. Brief: `docs/prompts/066-results-docs.md`, plus the
+owner's rulings of 2026-10-20 after the first stop (below).
+**Choice:**
+- **The published claim:** on 10 blind pull requests, TraceHound is statistically tied with
+  Greptile and Cursor. Its run-1 F is above CodeRabbit's (58.3% vs 36.7%), but that is not stated
+  as a significant lead. It is 4th of 6 across all 50, and every loss is published. "3rd of six" is
+  no longer used as a ranking (results.md headline, README). Per-run ranks are labelled point
+  estimates.
+- **The audit's fixes** in results.md, plus one line in test-results.md, and a dated note under 061
+  (the old text is unchanged):
+  - pre-registered before any *TraceHound* Cal.com result existed;
+  - the headline is run 1 of three, all from `e7309a5`, whose frozen paths equal `review-freeze-1`;
+  - the judge is the same model (Nemotron 3 Super) as the reviewer and the verifier;
+  - x1 changes no decision but reverses prediction (a) in Cal.com runs 1 and 3 and drops run 3
+    to 5th;
+  - the interval statement. Its first draft, "Apart from CodeRabbit, every gap to the tools is
+    within noise", was corrected before the PR (owner's ruling): no gap to another tool is outside
+    its 95% interval, and the CodeRabbit gap is the clearest, ahead in 96% of resamples with an
+    interval that still includes 0 (audit §3.2).
+- **All 50 PRs, under both judges,** with two declared TraceHound rows:
+  - (i) dev run 1 + Cal.com run 1, the scorer-of-record line (v1 F 41.2%, x1 48.1%; the audit's
+    table);
+  - (ii) the dev 5-run mean TP/FP + Cal.com run 1, a variance check (v1 46.1%, x1 53.1%).
+
+  Both are 4th of 6 under both judges, and the headline uses row (i). The tables were recomputed from
+  counts in `scorer-checks.md`, `test-results.md`, `vote.md` and `evidence.md`. The tools' v1 sums
+  equal `scorer-validation.md`'s all-50 rows, and no published number disagreed.
+- **Precision levers tried on dev,** one table: 056, 057, 058, 059 (adopted), 064, 065. It is followed
+  by two statements. The adopted reviewer's run-to-run spread (35.6–48.0 F over 5 runs at
+  temperature 0) is larger than every effect we tried to measure. NVIDIA's model card and NIM
+  reference recommend temperature 1.0 and top_p 0.95 for text, and all our runs used 0, which is a
+  limit, not a tuned choice.
+- **Viewer** (owner's ruling, limited to `viewer/lib/benchmark.ts` and
+  `viewer/test/benchmark.test.tsx`):
+  - `BENCHMARK_TABLES` is synced with every results.md table, and the test that compares them stays;
+  - "all 50 PRs" may appear only in the all-50 tables' headings and captions;
+  - the page must never say "3rd of 6" or "3rd of six".
+**Rejected:**
+- Headlining whichever all-50 row is better: row (i) was the first and the pre-registered one.
+- Rewriting the old text of 061 or 063: dated notes only.
+- "Ahead of CodeRabbit" as a claim: both 95% intervals for that gap include 0.
+**Limits:**
+- The interval statements rest on the audit's comment-level bootstrap with a design-effect
+  correction, not a PR-level bootstrap (per-PR Cal.com counts are not in the repo).
+- The viewer page's prose (`viewer/app/benchmark/page.tsx`) still says "share a model family" and
+  cites decision 063. That file was outside this job's allowed files.
