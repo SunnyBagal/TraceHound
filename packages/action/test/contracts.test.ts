@@ -16,6 +16,7 @@ function fake(value: unknown = report(), shallow = false) {
   let missing = shallow; let output = "";
   const exec = vi.fn<ContractsExecute>(async (file, args) => {
     if (file === "git") {
+      if (args.includes("--git-dir")) return { stdout: ".git" };
       if (args.includes("merge-base")) { if (missing) { missing = false; throw new Error("private output"); } return { stdout: mergeBase }; }
       if (args.includes("--is-shallow-repository")) return { stdout: "true" };
       if (args.includes("--git-path")) return { stdout: "/checkout/.git/shallow.lock" };
@@ -30,6 +31,14 @@ function fake(value: unknown = report(), shallow = false) {
 }
 
 describe("contracts runner", () => {
+  it.each(["", "/not-a-checkout"])("acts as off without a checkout: %s", async repo => {
+    const exec = vi.fn<ContractsExecute>(() => Promise.reject(new Error("not a git repository")));
+    const log = vi.fn();
+    expect(await settleContracts(() => runContracts(repo, base, head, {}, exec), log)).toMatchObject({ status: "off", findings: [] });
+    expect(log).toHaveBeenCalledExactlyOnceWith("contracts: skipped (no checkout)");
+    if (repo) expect(exec.mock.calls[0]![1]).toEqual(["-C", repo, "rev-parse", "--git-dir"]);
+    expect(exec.mock.calls.some(([, args]) => args.includes("fetch"))).toBe(false);
+  });
   it("terminates a timed-out fetch before killing it and removes only its shallow lock", async () => {
     vi.useFakeTimers();
     const repo = await mkdtemp(path.join(tmpdir(), "contracts-lock-"));

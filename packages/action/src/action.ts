@@ -262,7 +262,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     return;
   }
   const contractsResult = await contractsTask;
-  const contracts: ContractDelivery | undefined = contractsMode === "on" ? { result: contractsResult,
+  const contracts: ContractDelivery | undefined = contractsMode === "on" && contractsResult.status !== "off" ? { result: contractsResult,
     repo: event.repository.full_name, serverUrl: options.serverUrl ?? "https://github.com" } : undefined;
   if (output.failed) {
     deps.log("TraceHound: reviewer reported failed chunks; nothing posted.");

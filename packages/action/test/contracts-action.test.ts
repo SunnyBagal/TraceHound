@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { bodyFindings } from "../src/learn.ts";
 import { parseReviewFooter } from "../src/data.ts";
+import { runContracts } from "../src/contracts.ts";
 
 const head = "b".repeat(40), base = "a".repeat(40);
 const event: PullEvent = { repository: { full_name: "example/widget" }, pull_request: { title: "Change exports", body: "", number: 4,
@@ -41,6 +42,15 @@ function fake(models = [model], contracts = ok(), statuses = [201]) {
 }
 
 describe("contracts alongside the reviewer", () => {
+  it.each(["", "/not-a-checkout"])("diff review without a checkout is byte-identical to contracts off: %s", async repoDir => {
+    const enabled = fake(), disabled = fake();
+    for (const f of [enabled, disabled]) vi.mocked(f.deps.runReviewer).mockResolvedValue({ comments: [model] });
+    enabled.deps.runContracts = (repo, base, head) => runContracts(repo, base, head, {}, () => Promise.reject(new Error("no git dir")));
+    await runAction(event, { ...options, repoDir, reviewer: "review-diff-v1" }, enabled.deps);
+    await runAction(event, { ...options, repoDir, reviewer: "review-diff-v1", contracts: "off" }, disabled.deps);
+    expect(JSON.stringify(enabled.posts)).toBe(JSON.stringify(disabled.posts));
+    expect(enabled.deps.log).toHaveBeenCalledWith("contracts: skipped (no checkout)");
+  });
   it("escapes generic types, Markdown, and mentions in body and inline contract reasons", async () => {
     const body = "Type 'Promise<User>' & key `@org/team` [removed] \\ source";
     const f = fake([], ok([{ ...contract, body }, { ...contract, path: "src/api.ts", line: 7, body }]));

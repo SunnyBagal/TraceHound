@@ -68,7 +68,8 @@ export async function runContracts(
   let directory: string | undefined, reason: ContractsFailure = "checkout";
   const ms = () => Math.max(0, Math.round(performance.now() - started));
   try {
-    if (!repo || !SHA.test(base) || !SHA.test(head)) throw new Error("Invalid checkout");
+    const noCheckout = (): ContractsResult => ({ status: "off", findings: [], ms: ms(), messages: ["contracts: skipped (no checkout)"] });
+    if (!repo) return noCheckout();
     const childEnv = contractsEnv(env);
     const run = async (file: string, args: string[]) => {
       const timeout = Math.max(1, CONTRACTS_BUDGET_MS - ms());
@@ -93,6 +94,9 @@ export async function runContracts(
       } finally { clearTimeout(timer); if (grace) clearTimeout(grace); }
     };
     const git = async (args: string[]) => (await run("git", ["-C", repo, ...args])).stdout.trim();
+    try { await git(["rev-parse", "--git-dir"]); }
+    catch { return noCheckout(); }
+    if (!SHA.test(base) || !SHA.test(head)) throw new Error("Invalid checkout");
     reason = "merge-base";
     let mergeBase: string;
     try { mergeBase = await git(["merge-base", base, head]); }
