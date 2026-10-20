@@ -1,5 +1,5 @@
 /** Aggregate tables only, transcribed from docs/bench/results.md at the pinned revision. */
-export const BENCHMARK_REVISION = "e4e3e3a8c4d46c270c6027dca564cfe3acb8bc52";
+export const BENCHMARK_REVISION = "e54ee63944c49961191b75436bd5cefff52cb6c1";
 export const BENCHMARK_SOURCE = `https://github.com/SunnyBagal/TraceHound/blob/${BENCHMARK_REVISION}/docs/bench/results.md`;
 export const BENCHMARK_TABLES = [
   {
