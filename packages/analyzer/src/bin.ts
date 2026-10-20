@@ -11,6 +11,7 @@
 //   bench    convert recorded reviews; score reviews against a golden file with an LLM judge (054)
 //   review   diff-only pull request reviewer, review-diff-v1 (055)
 //   review-ctx  the reviewer plus repository context at the pull request head, review-ctx-v1 (057)
+//   review-missed  one more pass shown the pooled findings, asking only for missed defects, review-missed-v1 (P008)
 //   verify   confidence for each finding of a review, verify-v1, and filtering at a threshold (056)
 //   verify-ctx  keep or drop each finding of a review, seeing repository context, verify-ctx-v1 (058)
 const [command, ...rest] = process.argv.slice(2);
@@ -36,6 +37,13 @@ if (command === "bench") {
   const envFile = new URL("../../../.env", import.meta.url).pathname;
   if (existsSync(envFile) && !process.env.NEBIUS_API_KEY) process.loadEnvFile(envFile);
   const { main } = await import("./review/ctx-cli.ts");
+  process.exitCode = await main(rest);
+} else if (command === "review-missed") {
+  // review-missed needs NEBIUS_API_KEY: load the workspace .env for this command only
+  const { existsSync } = await import("node:fs");
+  const envFile = new URL("../../../.env", import.meta.url).pathname;
+  if (existsSync(envFile) && !process.env.NEBIUS_API_KEY) process.loadEnvFile(envFile);
+  const { main } = await import("./review/missed-cli.ts");
   process.exitCode = await main(rest);
 } else if (command === "verify") {
   // verify run needs NEBIUS_API_KEY: load the workspace .env for this command only
