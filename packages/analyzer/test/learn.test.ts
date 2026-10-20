@@ -138,6 +138,16 @@ describe("maintainer feedback collection (local GitHub API fixtures)", () => {
     f.entries["/repos/example/widget/pulls/3/comments?per_page=100&page=1"] = [f.root, { ...f.reply, body: "Good catch!" }];
     expect(await collect(f)).toEqual([]);
   });
+  it.each(["not fixed", "isn't fixed", "ISN’T FIXED"])("a maintainer '%s' reply does not un-reject", async body => {
+    const f = feedbackFixture();
+    f.entries["/repos/example/widget/pulls/3/comments?per_page=100&page=1"] = [f.root, { ...f.reply, body: `This is ${body}.` }];
+    expect(await collect(f)).toMatchObject([{ commentId: 10, reason: "reaction" }]);
+  });
+  it.each(["Fixed!", "It was not fixed, but it is fixed now.", "It isn't fixed yet; good catch."])("an unnegated acceptance in '%s' un-rejects", async body => {
+    const f = feedbackFixture();
+    f.entries["/repos/example/widget/pulls/3/comments?per_page=100&page=1"] = [f.root, { ...f.reply, body }];
+    expect(await collect(f)).toEqual([]);
+  });
   it("a later thumbs up un-rejects; a still later thumbs down re-rejects", async () => {
     const f = feedbackFixture();
     f.entries["/repos/example/widget/pulls/comments/10/reactions?per_page=100&page=1"] = [f.reaction,

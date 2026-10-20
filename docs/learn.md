@@ -28,6 +28,8 @@ A comment is rejected by a qualifying user's:
   `wontfix`, `nit`, `ignore`, `not an issue`, or `by design` (`reply:<phrase>`).
 
 A qualifying 👍 or reply containing `fixed` or `good catch` removes that comment's rejection.
+Negated `not fixed` and `isn't fixed` phrases do not count as acceptance; an independent
+unnegated `fixed` or `good catch` in the same reply still does.
 The latest timestamped signal wins. Edited replies use their updated time. At equal timestamps,
 acceptance wins; other ties use stable signal IDs. A positive and negative phrase in one reply
 counts as acceptance. Signals on another comment do not affect this one. Review-body reactions

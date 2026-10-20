@@ -40,6 +40,11 @@ function phrase(body: string, phrases: string[]): string | undefined {
   return phrases.find(text => new RegExp(`(?:^|[^\\p{L}\\p{N}_])${text}(?=$|[^\\p{L}\\p{N}_])`, "iu").test(body));
 }
 
+function acceptance(body: string): string | undefined {
+  const unnegated = body.replace(/(?:^|[^\p{L}\p{N}_])(?:not|isn['’]t)\s+fixed(?=$|[^\p{L}\p{N}_])/giu, " ");
+  return phrase(unnegated, ACCEPT_PHRASES);
+}
+
 function refersToReview(body: string, url: string): boolean {
   const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`${escaped}(?=$|[\\s\\]\\)>"'.,!?])`).test(body);
@@ -232,7 +237,7 @@ export async function collectFeedback(repo: string, options: LearnOptions, deps:
       const replies = own.includes(comment) ? comments.filter(reply => reply.in_reply_to_id === comment.id)
         : issueReplies.filter(reply => refersToReview(reply.body, comment.html_url));
       for (const reply of replies) {
-        const reason = phrase(reply.body, REJECT_PHRASES), accepted = phrase(reply.body, ACCEPT_PHRASES);
+        const reason = phrase(reply.body, REJECT_PHRASES), accepted = acceptance(reply.body);
         if ((!reason && !accepted) || !await maintainer(reply.user)) continue;
         // An edited reply is ordered by its edit time. Positive wording wins within one reply.
         signals.push({ at: reply.updated_at ?? reply.created_at, id: `reply:${reply.id}`,
