@@ -17,6 +17,7 @@ const sql = { ...finding, body: "SQL injection: name is concatenated into the qu
 const rejection = { ...fingerprint(finding), repo: "example/widget", pr: 3, commentId: 10, reason: "reaction",
   url: "https://github.com/example/widget/pull/3#discussion_r10" };
 const options: Options = { apiUrl: "https://api.example.invalid", token: "fake-unused", model: "fake-nemotron",
+  contracts: "off",
   maxComments: 15, dryRun: false, fixes: "off" };
 const event: PullEvent = { repository: { full_name: "example/widget" }, pull_request: { title: "A change", body: "", number: 4,
   head: { sha: "abc123", repo: { full_name: "example/widget" } } } };

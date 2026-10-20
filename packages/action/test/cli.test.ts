@@ -2,9 +2,11 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { main } from "../src/cli.ts";
+import { main as actionMain } from "../src/cli.ts";
 import type { Dependencies } from "../src/action.ts";
 import { MissingHeadError } from "../src/pipeline.ts";
+// Existing payload assertions pin contracts off; contracts integration tests cover the on default.
+const main = (env: NodeJS.ProcessEnv, d: Dependencies) => actionMain({ TRACEHOUND_CONTRACTS: "off", ...env }, d);
 
 const directories: string[] = [];
 afterEach(async () => {

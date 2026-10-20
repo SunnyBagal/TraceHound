@@ -5,10 +5,12 @@ import { runReviewer } from "./reviewer.ts";
 import { checkRepoHead, MissingHeadError, runPipeline } from "./pipeline.ts";
 import { createFixClient, runFixes } from "./fix.ts";
 import { parseReviewFooter } from "./data.ts";
+import { runContracts } from "./contracts.ts";
 
 export async function main(
   env: NodeJS.ProcessEnv,
   deps: Dependencies = { fetch, runReviewer, checkRepoHead,
+    runContracts: (repo, base, head) => runContracts(repo, base, head, env),
     runFixes: (...args) => runFixes(...args, createFixClient()),
     runPipeline: (...args) => runPipeline(...args, console.log), log: console.log },
 ): Promise<number> {
@@ -55,6 +57,7 @@ export async function main(
       reviewer,
       fixes,
       contracts,
+      serverUrl: env.GITHUB_SERVER_URL || "https://github.com",
       repoDir: env.TRACEHOUND_REPO_DIR ?? "",
     }, { ...deps, ...(env.TRACEHOUND_REVIEW_FILE && { onReview: async (body: string) => {
       const footer = parseReviewFooter(body);
