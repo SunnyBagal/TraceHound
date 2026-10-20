@@ -9,9 +9,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
-import { buildClients, EXTRA_FROZEN_PATHS, FROZEN_PATHS, runTestSet, writeNew, type Deps } from "../../../scripts/bench/run-test-set.ts";
+import { ALLOWED_MODIFIED_067, buildClients, EXTRA_FROZEN_PATHS, FROZEN_PATHS, JUDGES, REVIEW_MODEL, runTestSet, writeNew, type Deps } from "../../../scripts/bench/run-test-set.ts";
 import { minMedMax, rowSpread, spreadReport } from "../../../scripts/bench/spread.ts";
 import {
+  CAP_067_USD,
   checkRun,
   DEV_REPOS,
   EXTRA_CAP_USD,
@@ -19,9 +20,14 @@ import {
   fetchTarget,
   isRequestFailure,
   ITEMS,
+  ITEMS_067,
+  modelRunDir,
+  modelSlug,
+  planDev067Item,
   planExtraItem,
   planItem,
   readItemStates,
+  readStates067,
   readStatesOf,
   requireTestRun,
   restartRefusal,
@@ -250,9 +256,13 @@ function inventedBench(): string {
 /** Answers by system prompt: review-diff-v1 finds line 2, review-ctx-v1 line 8 (ctx-only), the verifier keeps line 2's finding, the judge matches it to G1. */
 function fakeFetch(failReview: (repo: string, n: number) => boolean) {
   const calls: Record<string, Record<string, number>> = { review: {}, ctx: {}, verify: {}, judge: {} };
+  /** request model by stage, e.g. "review nvidia/…" */
+  const models = new Set<string>();
   const fetch = (async (_url: unknown, init?: { body?: unknown }) => {
     const req = JSON.parse(String(init?.body)) as ChatRequest;
     const sys = req.messages[0]!.content as string;
+    const stage = sys === REVIEW_SYSTEM_PROMPT ? "review" : sys === REVIEW_CTX_SYSTEM_PROMPT ? "review-ctx" : sys === VERIFY_CTX_SYSTEM_PROMPT ? "verify-ctx" : "judge";
+    models.add(`${stage} ${req.model}${stage === "judge" ? "" : ` max_tokens=${req.max_tokens} temperature=${req.temperature} thinking=${JSON.stringify(req.chat_template_kwargs)}`}`);
     const user = req.messages[1]!.content as string;
     const repo = /SECRET-TITLE-(\w+)/.exec(user)?.[1] ?? "?";
     const count = (k: string) => (calls[k]![repo] = (calls[k]![repo] ?? 0) + 1);
@@ -273,7 +283,7 @@ function fakeFetch(failReview: (repo: string, n: number) => boolean) {
     } else throw new Error("unexpected request");
     return new Response(JSON.stringify({ choices: [{ message: { content }, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: 50 } }), { status: 200 });
   }) as typeof globalThis.fetch;
-  return { fetch, calls };
+  return { fetch, calls, models };
 }
 
 describe("a dev repeat run on invented data", () => {
@@ -521,10 +531,10 @@ describe("dev runs 4–6 (decision 064)", () => {
     const out: string[] = [];
     const deps: Deps = { bench, stateDir: path.join(bench, ".state"), pricesFile: PRICES, env: { NEBIUS_API_KEY: "k", TRACEHOUND_TEST_RUN: "061" }, log: (l) => out.push(l), err: (l) => out.push(l), freezeCheck: () => ({ ok: true, head: "x" }) };
     expect(await runTestSet(["--set", "cal_dot_com", "--run", "4"], deps)).toBe(1);
-    expect(await runTestSet(["--set", "dev", "--run", "7"], deps)).toBe(1);
+    expect(await runTestSet(["--set", "dev", "--run", "10"], deps)).toBe(1); // 7–9 are 067's
     expect(await runTestSet(["--set", "dev", "--run", "5"], deps)).toBe(1); // order: run 4 first
     expect(out.join("\n")).toMatch(/refusing --run 4: 1, 2 or 3/);
-    expect(out.join("\n")).toMatch(/refusing --run 7: 1, 2 or 3/);
+    expect(out.join("\n")).toMatch(/refusing --run 10: 1, 2 or 3/);
     expect(out.join("\n")).toMatch(/dev run 4 has not run; the order is dev run 4, dev run 5, dev run 6/);
     expect(readdirSync(bench)).toEqual([]);
   });
@@ -582,6 +592,38 @@ describe("Cal.com's path is the tag's (decision 064)", () => {
       return t.replace(now, () => tag);
     }, text);
 
+  /** Undo each 067 edit (current text → 064's), each exactly once; every one is a no-op unless the run is dev 7–9. */
+  const undo067 = (text: string) =>
+    undo(text, [
+      ["// Decision 067 adds dev runs 7–9 and --model, for those runs only: the reviewer and verifier stages\n// use that model (prompts, temperature, reasoning, max_tokens unchanged; judges unchanged), and a\n// non-default model's records go to run-<n>-<model slug>/ with the model in run.json.\n", ""],
+      ["//   node scripts/bench/run-test-set.ts --set dev --run 7|8|9 [--model <id>] [--restart] [--bench <dir>]\n", ""],
+      ["  isDev067Run,\n", ""],
+      ["  ITEMS_067,\n  modelRunDir,\n  modelSlug,\n", ""],
+      ["  planDev067Item,\n", ""],
+      ["  readStates067,\n", ""],
+      ["  type Dev067Run,\n", ""],
+      [", model = REVIEW_MODEL): Promise<Attempt> {", "): Promise<Attempt> {"],
+      ["  const opts = { model, reasoning: REVIEW_REASONING };", "  const opts = { model: REVIEW_MODEL, reasoning: REVIEW_REASONING };"],
+      ["  const vopts = { model, reasoning: REVIEW_REASONING,", "  const vopts = { model: REVIEW_MODEL, reasoning: REVIEW_REASONING,"],
+      [text.match(/\n\/\*\*\n \* Decision 067's freeze check[\s\S]*?\n}\n/)![0], ""],
+      ["  let dev067: boolean;\n  let model: string;\n", ""],
+      [", model: { type: \"string\" } }, strict: true });", " }, strict: true });"],
+      ["    dev067 = isDev067Run(values.set, values.run);\n    if (values.model !== undefined && !dev067) throw new Error(\"refusing --model: it applies to --set dev --run 7|8|9 only (decision 067)\");\n    if (values.model === \"\") throw new Error(\"refusing --model: empty\");\n    model = values.model ?? REVIEW_MODEL;\n", ""],
+      ["extra || dev067 ? { set: \"dev\", run: Number(values.run) as DevExtraRun | Dev067Run }", "extra ? { set: \"dev\", run: Number(values.run) as DevExtraRun }"],
+      ["  const slug = model === REVIEW_MODEL ? null : modelSlug(model);\n", ""],
+      ["  const items = dev067 ? ITEMS_067 : extra ?", "  const items = extra ?"],
+      ["  const states = dev067 ? readStates067(bench, slug) : extra ?", "  const states = extra ?"],
+      ["voidRunReport(dev067 ? modelRunDir(bench, run as Dev067Run, slug) : runDir(bench, set, run), deps.stateDir)", "voidRunReport(runDir(bench, set, run), deps.stateDir)"],
+      ["  const plan = dev067 ? planDev067Item(run as Dev067Run, states, restart) : extra ?", "  const plan = extra ?"],
+      [": dev067 ? freezeCheck067() : freezeCheck(", ": freezeCheck("],
+      ["  const dir = dev067 ? modelRunDir(bench, run as Dev067Run, slug, restart) : runDir(", "  const dir = runDir("],
+      ['  const decision = dev067 ? "067" : extra ?', '  const decision = extra ?'],
+      [", ...(dev067 && { frozenPaths: FROZEN_PATHS, allowedModified: ALLOWED_MODIFIED_067 }) },", " },"],
+      ["      reviewModel: model,", "      reviewModel: REVIEW_MODEL,"],
+      ["      const a1 = await pipeline(reviewer, job.input, repoSrc, model);", "      const a1 = await pipeline(reviewer, job.input, repoSrc);"],
+      ["        used = await pipeline(reviewer, job.input, repoSrc, model);", "        used = await pipeline(reviewer, job.input, repoSrc);"],
+    ]);
+
   // sha256 of `git show review-freeze-1:scripts/bench/<file>` (CI checks out without tags)
   const TAG_TEST_SET = "0d9a75b58410f839628f49c80ad914d4877c980e94ee4687c4f7c8b318693fa8";
   const TAG_RUNNER = "863dc39c4893a27cade371845b0871dcb2b60ffaeea8246c7acba7ffdd2b382e";
@@ -590,7 +632,7 @@ describe("Cal.com's path is the tag's (decision 064)", () => {
     const now = src("test-set.ts");
     const marker = "\n// ---- dev runs 4–6 (decision 064) ----";
     expect(now.split(marker)).toHaveLength(2);
-    const before = undo(now.split(marker)[0]!, [["export type RunNumber = 1 | 2 | 3 | 4 | 5 | 6;", "export type RunNumber = 1 | 2 | 3;"]]);
+    const before = undo(now.split(marker)[0]!, [["export type RunNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;", "export type RunNumber = 1 | 2 | 3;"]]);
     expect(sha(before)).toBe(TAG_TEST_SET);
   });
 
@@ -618,7 +660,7 @@ describe("Cal.com's path is the tag's (decision 064)", () => {
       ["  printSummary(`${label} (decision ${decision})`, state,", "  printSummary(label, state,"],
       ["  log(`## ${label}`);", "  log(`## ${label} (decision 061)`);"],
     ];
-    expect(sha(undo(src("run-test-set.ts"), edits))).toBe(TAG_RUNNER);
+    expect(sha(undo(undo067(src("run-test-set.ts")), edits))).toBe(TAG_RUNNER);
   });
 
   it("a Cal.com run 1 on invented data: 061's decision, allowance, rows and heading", async () => {
@@ -642,14 +684,91 @@ describe("Cal.com's path is the tag's (decision 064)", () => {
     put(path.join(bench, "test/prs/cal_dot_com/0.json"), { number: 1, title: "SECRET-TITLE-cal_dot_com", body: "d", diff: git("diff", base, head) });
     put(path.join(bench, "golden/code_review_benchmarks/cal_dot_com.json"), [{ pr_title: "SECRET-TITLE-cal_dot_com", comments: [{ comment: "g", severity: "High" }] }]);
     for (const tool of TOOL_ROWS) put(path.join(bench, "reviews", tool, "cal_dot_com", "0.json"), { pr_title: "SECRET-TITLE-cal_dot_com", pr_number: 1, comments: [{ path: "src/a.ts", line: 2, body: "SECRET-BODY-diff" }] });
-    const { fetch } = fakeFetch(() => false);
+    const { fetch, models } = fakeFetch(() => false);
     const out: string[] = [];
     const deps: Deps = { bench, stateDir: path.join(bench, ".state"), pricesFile: PRICES, env: { NEBIUS_API_KEY: "k", TRACEHOUND_TEST_RUN: "061", TRACEHOUND_BUDGET_RUN_USD: "15" }, log: (l) => out.push(l), err: (l) => out.push(l), fetch, freezeCheck: () => ({ ok: true, head: "x" }) };
+    // 067: --model is refused on Cal.com, with nothing written
+    expect(await runTestSet(["--set", "cal_dot_com", "--run", "1", "--model", "nvidia/Nemotron-3.5-Super-VL"], deps)).toBe(1);
+    expect(existsSync(runDir(bench, "cal_dot_com", 1))).toBe(false);
     expect(await runTestSet(["--set", "cal_dot_com", "--run", "1"], deps)).toBe(0);
+    expect([...models].sort()).toEqual(PIPELINE_MODELS(REVIEW_MODEL));
     const run = JSON.parse(readFileSync(path.join(runDir(bench, "cal_dot_com", 1), "run.json"), "utf8"));
     expect(run).toMatchObject({ decision: "061", set: "cal_dot_com", run: 1, status: "complete", allowanceUSD: 15, trace: { head: "x", freezeTag: "review-freeze-1" } });
     expect(Object.keys(run.trace)).toEqual(["head", "freezeTag"]);
+    expect(run.config.reviewModel).toBe(REVIEW_MODEL);
     expect(readdirSync(path.join(runDir(bench, "cal_dot_com", 1), "scores", "judge-v1")).filter((f) => f.endsWith(".summary.json"))).toHaveLength(8);
     expect(out.join("\n")).toContain("## cal_dot_com run 1 (decision 061)");
+  });
+});
+
+// ---- decision 067: dev runs 7–9 with --model ----
+
+/** What the pipeline and both judges send, by stage, for a reviewer model: prompts' settings unchanged. */
+const PIPELINE_MODELS = (model: string) =>
+  [
+    ...([["review", 32000], ["review-ctx", 32000], ["verify-ctx", 16000]] as const).map(([stage, max]) => `${stage} ${model} max_tokens=${max} temperature=0 thinking={"enable_thinking":true}`),
+    ...JUDGES.map((j) => `judge ${j.model}`),
+  ].sort();
+
+describe("dev runs 7–9 with --model (decision 067)", () => {
+  const M = "nvidia/Nemotron-3.5-Super-VL";
+  const done = (costUSD: number): ItemState => ({ status: "complete", costUSD });
+
+  it("--model only with --set dev --run 7|8|9; refusals write nothing", async () => {
+    const bench = tmp("tracehound-067-refuse-");
+    const out: string[] = [];
+    const deps: Deps = { bench, stateDir: path.join(bench, ".state"), pricesFile: PRICES, env: { NEBIUS_API_KEY: "k", TRACEHOUND_TEST_RUN: "061" }, log: (l) => out.push(l), err: (l) => out.push(l), freezeCheck: () => ({ ok: true, head: "x" }) };
+    for (const args of [["--set", "dev", "--run", "2"], ["--set", "dev", "--run", "4"], ["--set", "cal_dot_com", "--run", "2"]]) expect(await runTestSet([...args, "--model", M], deps)).toBe(1);
+    expect(await runTestSet(["--set", "dev", "--run", "7", "--model", ""], deps)).toBe(1);
+    expect(await runTestSet(["--set", "dev", "--run", "8", "--model", M], deps)).toBe(1); // order: run 7 first
+    expect(await runTestSet(["--set", "dev", "--run", "10", "--model", M], deps)).toBe(1);
+    expect(out.join("\n")).toMatch(/refusing --model: it applies to --set dev --run 7\|8\|9 only/);
+    expect(out.join("\n")).toMatch(/dev run 7 has not run; the order is dev run 7, dev run 8, dev run 9/);
+    expect(readdirSync(bench)).toEqual([]);
+  });
+
+  it("slug, directories, order and cap per model", () => {
+    expect(modelSlug(M)).toBe("nvidia-nemotron-3-5-super-vl");
+    expect(modelRunDir("/b", 7, modelSlug(M))).toBe(path.join("/b", "reviews/dev-repeat/run-7-nvidia-nemotron-3-5-super-vl"));
+    expect(modelRunDir("/b", 7, modelSlug(M), true)).toBe(path.join("/b", "reviews/dev-repeat/run-7-nvidia-nemotron-3-5-super-vlr"));
+    expect(modelRunDir("/b", 8, null)).toBe(runDir("/b", "dev", 8));
+    expect(ITEMS_067.map((i) => `${i.set}:${i.run}`)).toEqual(["dev:7", "dev:8", "dev:9"]);
+    expect(CAP_067_USD).toBe(8);
+    expect(planDev067Item(7, [null, null, null])).toEqual({ ok: true, allowanceUSD: 8 });
+    expect(planDev067Item(9, [done(2), done(2.5), null])).toEqual({ ok: true, allowanceUSD: 3.5 });
+    expect(planDev067Item(8, [{ status: "stopped-at-cap", costUSD: 8 }, null, null])).toEqual({ ok: false, why: "not done: the cap stopped dev run 7" });
+    const bench = tmp("tracehound-067-states-");
+    put(path.join(modelRunDir(bench, 7, modelSlug(M)), "run.json"), { status: "complete", costUSD: 2 });
+    expect(readStates067(bench, modelSlug(M))).toEqual([{ status: "complete", costUSD: 2, firstScoreFiles: 0 }, null, null]);
+    expect(readStates067(bench, null)).toEqual([null, null, null]); // another model's runs are counted apart
+  });
+
+  it("the freeze check allows exactly these modified files", () => {
+    expect(ALLOWED_MODIFIED_067).toEqual(["config/prices.json", "packages/analyzer/src/bin.ts", "packages/analyzer/src/config.ts", "scripts/bench/run-test-set.ts", "scripts/bench/test-set.ts"]);
+  });
+
+  it("runs the pipeline with the model into run-7-<slug>/, judges unchanged, model and decision 067 in run.json", async () => {
+    const bench = inventedBench();
+    const { fetch, models } = fakeFetch(() => false);
+    const out: string[] = [];
+    const deps: Deps = { bench, stateDir: path.join(bench, ".state"), pricesFile: PRICES, env: { NEBIUS_API_KEY: "k", TRACEHOUND_BUDGET_RUN_USD: "15" }, log: (l) => out.push(l), err: (l) => out.push(l), fetch, freezeCheck: () => ({ ok: true, head: "x" }) };
+    expect(await runTestSet(["--set", "dev", "--run", "7", "--model", M], deps)).toBe(0);
+    expect([...models].sort()).toEqual(PIPELINE_MODELS(M));
+    const dir = path.join(bench, "reviews/dev-repeat/run-7-nvidia-nemotron-3-5-super-vl");
+    const run = JSON.parse(readFileSync(path.join(dir, "run.json"), "utf8"));
+    expect(run).toMatchObject({ decision: "067", set: "dev", run: 7, status: "complete", allowanceUSD: 8, config: { reviewModel: M, reasoning: "on", judges: JUDGES }, trace: { frozenPaths: FROZEN_PATHS, allowedModified: ALLOWED_MODIFIED_067 } });
+    expect(existsSync(runDir(bench, "dev", 7))).toBe(false);
+    for (const j of ["judge-v1", "judge-x1"]) expect(readdirSync(path.join(dir, "scores", j)).filter((f) => f.endsWith(".summary.json"))).toHaveLength(12);
+    expect(out.join("\n")).toContain("## dev run 7 (decision 067)");
+    for (const sec of SECRETS) expect(out.join("\n")).not.toContain(sec);
+    expect(await runTestSet(["--set", "dev", "--run", "7", "--model", M], deps)).toBe(1); // never twice
+  });
+
+  it("dev run 4 still sends the default model everywhere", async () => {
+    const bench = inventedBench();
+    const { fetch, models } = fakeFetch(() => false);
+    const deps: Deps = { bench, stateDir: path.join(bench, ".state"), pricesFile: PRICES, env: { NEBIUS_API_KEY: "k", TRACEHOUND_BUDGET_RUN_USD: "15" }, log: () => {}, err: () => {}, fetch, freezeCheck: () => ({ ok: true, head: "x" }) };
+    expect(await runTestSet(["--set", "dev", "--run", "4"], deps)).toBe(0);
+    expect([...models].sort()).toEqual(PIPELINE_MODELS(REVIEW_MODEL));
   });
 });
