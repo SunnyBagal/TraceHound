@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { runAction, type Dependencies, type Options, type PullEvent, type ReviewPayload } from "../src/action.ts";
 import { readFeedback, serializeFeedback } from "../src/learn.ts";
 import { fingerprint } from "../../analyzer/src/learn/fingerprint.ts";
+import { FeedbackSuppression } from "../../analyzer/src/learn/suppress.ts";
 import { feedbackFixture } from "../../analyzer/test/fixtures/learn/api.ts";
 import { collectFeedback } from "../src/learn.ts";
 import { applyUpdate } from "../src/data.ts";
@@ -135,6 +136,22 @@ describe("learning post-filter", () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ encoding: "base64",
       content: Buffer.from(JSON.stringify([{ ...rejection, repo: "other/repo" }])).toString("base64") }));
     expect(await readFeedback("example/widget", options, { fetch })).toEqual([]);
+  });
+  it("reads legacy feedback without ids as an empty identifier set and restricts it to the same path", async () => {
+    const { ids: _ids, ...legacy } = rejection;
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ encoding: "base64",
+      content: Buffer.from(JSON.stringify([legacy])).toString("base64") }));
+    const feedback = await readFeedback("example/widget", options, { fetch });
+    expect(feedback).toEqual([{ ...legacy, ids: [] }]);
+    const suppression = new FeedbackSuppression(feedback);
+    expect(suppression.matches(finding)).toBe(true);
+    expect(suppression.matches({ ...finding, path: "src/other.ts" })).toBe(false);
+  });
+  it("retains stored ids and rejects malformed identifier arrays", async () => {
+    const current = { ...rejection, ids: ["user"] };
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ encoding: "base64",
+      content: Buffer.from(JSON.stringify([current, { ...rejection, ids: null }, { ...rejection, ids: [42] }])).toString("base64") }));
+    expect(await readFeedback("example/widget", options, { fetch })).toEqual([current]);
   });
   it("legacy review-diff-v1 does not read feedback", async () => {
     const f = fake([finding]); vi.mocked(f.deps.runReviewer).mockResolvedValue({ comments: [finding] });

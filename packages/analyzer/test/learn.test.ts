@@ -72,6 +72,21 @@ describe("read-only conventions", () => {
 });
 
 describe("explainable feedback suppression", () => {
+  const rejected = { path: "src/user.ts", line: 20,
+    body: "Possible null dereference: `user` may be undefined in getProfile" };
+  it.each([
+    ["same file, different variable", { ...rejected, body: rejected.body.replace("`user`", "`order`") }, false],
+    ["another .ts file, different identifiers", { ...rejected, path: "src/auth/session.ts",
+      body: "Possible null dereference: `token` may be undefined in `validate`" }, false],
+    ["another .ts file, same identifiers and text", { ...rejected, path: "src/other.ts" }, true],
+    ["no code spans, same file", finding, true],
+    ["no code spans, another file", { ...finding, path: "src/other.ts" }, false],
+  ])("%s → suppressed=%s", (name, candidate, expected) => {
+    const original = name.startsWith("no code spans") ? finding : rejected;
+    const suppression = new FeedbackSuppression([{ ...fingerprint(original), repo: "example/widget", pr: 3,
+      commentId: 10, reason: "reaction", url: "https://github.com/example/widget/pull/3#discussion_r10" }]);
+    expect(suppression.matches(candidate)).toBe(expected);
+  });
   it("suppresses a rephrased defect with source PR, comment, URL and reason", () => {
     const rejected = { ...fingerprint(finding), repo: "example/widget", pr: 4, commentId: 12,
       reason: "reaction", url: "https://github.com/example/widget/pull/4#discussion_r12" };
@@ -240,25 +255,37 @@ describe("maintainer feedback collection (local GitHub API fixtures)", () => {
 describe("learning fingerprints", () => {
   it("normalizes paths and keeps a sorted lowercase word set without code, numbers or stop words", () => {
     expect(fingerprint({ path: "./src\\Profile.TS", body: "The NULL null dereference at 123: `user.secret` and ``code here``." }))
-      .toEqual({ path: "src/Profile.TS", ext: ".ts", tokens: ["dereference", "null"] });
+      .toEqual({ path: "src/Profile.TS", ext: ".ts", tokens: ["dereference", "null"], ids: ["code", "here", "secret", "user"] });
+  });
+  it("extracts a sorted lowercase identifier set, splitting punctuation and keeping digits and underscores", () => {
+    expect(fingerprint({ path: "src/user.ts", body: "Risk in `User.ID_2 + x[42]` and ``ID_2::getProfile()``; prose is unchanged." }))
+      .toEqual({ path: "src/user.ts", ext: ".ts", tokens: ["prose", "risk", "unchanged"], ids: ["42", "getprofile", "id_2", "user"] });
   });
   it.each([
     ["same defect, same file", rephrased, true],
     ["different defect, same file", { ...finding, body: "SQL injection: name is concatenated into the query in getProfile" }, false],
     ["same defect, different extension", { ...rephrased, path: "src/profile.py" }, false],
-    ["same words, same extension", { ...finding, path: "src/other.ts" }, true],
+    ["same words, same extension, no identifiers", { ...finding, path: "src/other.ts" }, false],
   ])("%s → %s", (_case, candidate, expected) => {
     expect(similar(fingerprint(finding), fingerprint(candidate))).toBe(expected);
   });
   it("uses inclusive named thresholds and treats empty sets/extensions conservatively", () => {
     expect(SAME_PATH_JACCARD).toBe(0.5);
     expect(SAME_EXTENSION_JACCARD).toBe(0.7);
-    const a = { path: "a.ts", ext: ".ts", tokens: ["a", "b"] };
+    const a = { path: "a.ts", ext: ".ts", tokens: ["a", "b"], ids: ["user"] };
     expect(similar(a, { ...a, tokens: ["a"] })).toBe(true);
     expect(similar(a, { ...a, path: "b.ts", tokens: ["a"] })).toBe(false);
     expect(similar({ ...a, tokens: [] }, { ...a, tokens: [] })).toBe(false);
     expect(similar({ ...a, path: "a", ext: "" }, { ...a, path: "b", ext: "" })).toBe(false);
     expect(similar({ ...a, tokens: ["a", "b", "c", "d", "e", "f", "g"] },
       { ...a, path: "b.ts", tokens: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"] })).toBe(true);
+  });
+  it("requires a shared identifier for cross-file matching and permits either side without ids only on the same path", () => {
+    const a = fingerprint({ ...finding, body: "Possible null dereference: `user` may be undefined" });
+    const noIds = { ...a, ids: [] };
+    expect(similar(a, noIds)).toBe(true); expect(similar(noIds, a)).toBe(true);
+    expect(similar(a, { ...noIds, path: "src/other.ts" })).toBe(false);
+    expect(similar({ ...noIds, path: "src/other.ts" }, a)).toBe(false);
+    expect(similar(a, { ...a, ids: ["order"] })).toBe(false);
   });
 });

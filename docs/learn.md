@@ -46,8 +46,10 @@ cannot establish unchanged lines, so they never produce this inferred rejection.
 
 The contents-write data job rewrites the complete `feedback/rejected.json` list on
 `tracehound-data` each time collection succeeds. Each entry has `repo`, `pr`, `commentId`,
-`reason`, `url`, and a fingerprint `{ path, ext, tokens }`. Tokens are a sorted lowercase word
-set, with code spans, numbers, punctuation, and a fixed stop-word list removed. Source text,
+`reason`, `url`, and a fingerprint `{ path, ext, tokens, ids }`. Tokens are a sorted lowercase word
+set, with code spans, numbers, punctuation, and a fixed stop-word list removed. `ids` preserves
+the contents of code spans: split on anything outside `[A-Za-z0-9_]`, lowercase the parts,
+keep parts of at least two characters, deduplicate, and sort. Source text,
 user identities, tokens/keys for authentication, and embeddings are not stored. Fingerprint
 words and paths still reveal comment content: this branch has the repository's visibility.
 
@@ -59,7 +61,11 @@ The existing single concurrent-push retry, secret isolation, and `cleanGitEnv` r
 
 Findings match when their token-set Jaccard similarity is at least **0.5 on the same path**, or
 **0.7 with the same nonempty extension**. There is no semantic inference, stemming, or
-cross-extension match. The first matching stored entry explains the suppression.
+cross-extension match. If both fingerprints have identifiers but share none, they never match.
+Matching across files also requires a shared identifier. If either side has no identifiers,
+only the same-path rule can match. Older stored entries without `ids` are read as `ids: []`,
+so they can only suppress findings on the same path. The thresholds are unchanged.
+The first matching stored entry explains the suppression.
 
 ## Enable and reset
 

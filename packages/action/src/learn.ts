@@ -266,8 +266,10 @@ export async function readFeedback(repo: string, options: LearnOptions, deps: Le
   if (!Array.isArray(items)) throw new Error("Invalid feedback list");
   return items.filter((item): item is RejectedFingerprint => item && item.repo === repo && typeof item.path === "string"
     && typeof item.ext === "string" && Array.isArray(item.tokens) && item.tokens.every((word: unknown) => typeof word === "string")
+    && (item.ids === undefined || (Array.isArray(item.ids) && item.ids.every((id: unknown) => typeof id === "string")))
     && Number.isSafeInteger(item.pr) && item.pr > 0 && Number.isSafeInteger(item.commentId) && item.commentId > 0
-    && typeof item.reason === "string" && typeof item.url === "string");
+    && typeof item.reason === "string" && typeof item.url === "string")
+    .map(item => ({ ...item, ids: item.ids ?? [] }));
 }
 
 export interface SuppressedFinding { path: string; line: number | null; matchedComment: string; reason: string }

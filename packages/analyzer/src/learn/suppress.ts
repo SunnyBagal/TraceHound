@@ -14,7 +14,7 @@ export class FeedbackSuppression implements Suppression {
 
   constructor(rejected: readonly RejectedFingerprint[]) {
     // Own the array and word sets so callers cannot change matching after construction.
-    this.rejected = rejected.map(item => ({ ...item, tokens: [...item.tokens] }));
+    this.rejected = rejected.map(item => ({ ...item, tokens: [...item.tokens], ids: [...item.ids] }));
   }
 
   explain(finding: Candidate): RejectedFingerprint | undefined {
