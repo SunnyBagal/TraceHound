@@ -15,9 +15,11 @@ TraceHound's pull-request reviewer (pool-verify-v1, decision 059) and five recor
 tools were scored against `ai-code-review-evaluations/golden_comments` @ `3f2c8ab` (5 repos × 10
 pull requests; 054): four repos are the dev set, Cal.com is the blind test set. The scorer of
 record is an LLM judge, bench-judge-v1 (Nemotron Super, temperature 0); a second judge,
-bench-judge-x1 (Qwen3-235B-A22B-Instruct-2507, same prompt), is reported alongside and changes
-nothing (060). The blind test was pre-registered before any Cal.com result existed (061) and ran
-once from frozen code, tag `review-freeze-1` → `6b4276e` (062).
+bench-judge-x1 (Qwen3-235B-A22B-Instruct-2507, same prompt), is reported alongside (060). x1
+changes no decision, but it changes results: it reverses prediction (a) in Cal.com runs 1 and 3,
+and drops run 3 to 5th. The blind test was pre-registered before any TraceHound Cal.com result
+existed (061); the five tools' Cal.com scores were already in the repo (054). The headline is run 1
+of three, all from `e7309a5`, whose frozen paths are identical to tag `review-freeze-1` (062).
 
 Metrics are micro-averaged precision (P), recall (R) and F over the Medium-or-higher golden
 comments (n). A matched Low golden comment counts as nothing; duplicates are neither TP nor FP.
@@ -39,6 +41,9 @@ Under bench-judge-v1 (scorer of record), with bench-judge-x1's F alongside:
 
 review-diff-v1 (the diff-only reviewer, 055) and pool-raw (the unfiltered candidate pool, 059)
 are stages of the same pipeline, declared as secondary rows in 061. 0 JUDGE_FAILED in run 1.
+
+Apart from CodeRabbit, every gap to the tools is within noise
+([audit-cc01 §3](audit-cc01.md#3-what-a-critic-would-compute)).
 
 ## 3. Rank in every run
 
@@ -92,7 +97,8 @@ Cal.com spread over three runs, F min / median / max, bench-judge-v1: pool-verif
 
 - **Prediction (b) was wrong** (above).
 - **Under bench-judge-x1, review-diff-v1 alone (60.0%) scores above pool-verify-v1 (58.3%) on
-  Cal.com run 1**, so prediction (a) holds only under the scorer of record.
+  Cal.com run 1**, so prediction (a) holds only under the scorer of record. Under bench-judge-x1 it
+  is also reversed in Cal.com run 3 (pool-verify-v1 47.3%, review-diff-v1 52.6%).
 - **Under bench-judge-x1, Cal.com run 3 ranks 5th** (47.3%).
 - **Dev run 2 was void.** The relay session's 2-hour limit on background commands killed the
   process at pull request 30 of 40, after $1.4429; it was never scored. It was restarted once as
@@ -109,7 +115,7 @@ Cal.com spread over three runs, F min / median / max, bench-judge-v1: pool-verif
 From 061:
 - There is one pre-registered primary run. The repeats measure spread; they are not extra chances.
 - The configuration was the fourth reviewer variant chosen on the same dev set.
-- The judge is the same model family as the reviewer (060: the gap is small).
+- The judge is the same model (Nemotron 3 Super) as the reviewer and the verifier.
 - The golden set was built from the tools' comments (060).
 - n is small (a test set of 10 pull requests, n = 23).
 - The pull requests have been public since 2025, so models may have seen them.

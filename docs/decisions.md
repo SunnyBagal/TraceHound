@@ -3166,6 +3166,18 @@ did not read, list, fetch, clone, review or score anything for Cal.com. Prompt:
 
 Amended before merge (061a, 17 Oct, Sunny's decision), before any Cal.com call: one restart for a crashed run; fetches before the freeze tag.
 
+**Note, 2026-10-20 (decision 066; wording only, the text above is unchanged; audit
+`docs/bench/audit-cc01.md` §1):**
+- "written before anyone has seen a Cal.com result" (Context): it was written before any
+  TraceHound Cal.com result existed. The five tools' Cal.com scores were in the repo from 054
+  (`docs/bench/scorer-validation.md`).
+- "is reported alongside for every row and changes nothing" (Scorer of record): x1 changed no
+  decision, but it changed results. It reverses prediction (a) in Cal.com runs 1 and 3, and drops
+  run 3 to 5th (`docs/bench/test-results.md`).
+- "The judge is the same model family as the reviewer (060: the gap is small)" (Limits): the judge
+  is the same model (Nemotron 3 Super) as the reviewer and the verifier. 060 drew no conclusion
+  about the size of the gap, and pool-verify-v1's precision gap (v1 − x1) was −11.6 points.
+
 ## 062 · Result: the Cal.com test-set run (decision 061, as amended by 061a)
 **Context:** this job ran 061's pre-registered plan, using `docs/bench/test-plan.md`'s commands in
 order. The two Cal.com fetches came first (10 saved, 0 unmatched golden, diffs 10/10). Then the

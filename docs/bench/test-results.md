@@ -159,7 +159,7 @@ Run 1 stayed under the planned $6.
 Copied from 061:
 - There is one pre-registered primary run. The repeats measure spread; they are not extra chances.
 - The configuration was the fourth reviewer variant chosen on the same dev set.
-- The judge is the same model family as the reviewer (060: the gap is small).
+- The judge is the same model (Nemotron 3 Super) as the reviewer and the verifier.
 - The golden set was built from the tools' comments (060).
 - n is small (a test set of 10 pull requests, n = 23).
 - The pull requests have been public since 2025, so models may have seen them.
