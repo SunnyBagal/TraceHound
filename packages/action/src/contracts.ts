@@ -156,12 +156,16 @@ export async function settleContracts(run: (() => Promise<ContractsResult>) | un
 }
 
 export interface ContractDelivery { result: ContractsResult; repo: string; serverUrl: string }
+function escapeContractText(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/[\\[\]`]/g, "\\$&").replace(/@/g, "@\u200b");
+}
 export function placeContracts(findings: Finding[], diff: string, bodyOnly = false) {
   const lines = new Map(parseDiff(diff).filter(file => file.newPath !== null).map(file => [file.newPath!, newSideLines(file)]));
   const inline: (Finding & { line: number; side: "RIGHT" })[] = [], body: Finding[] = [];
   for (const finding of findings) {
     if (!bodyOnly && inline.length < CONTRACT_LIMIT && finding.line !== null && lines.get(finding.path)?.has(finding.line)) {
-      inline.push({ ...finding, line: finding.line, side: "RIGHT", body: `Contract: ${finding.body}` });
+      inline.push({ ...finding, line: finding.line, side: "RIGHT", body: `Contract: ${escapeContractText(finding.body)}` });
     } else body.push(finding);
   }
   return { inline, body: body.slice(0, CONTRACT_LIMIT), more: Math.max(0, body.length - CONTRACT_LIMIT) };
@@ -170,12 +174,11 @@ export function placeContracts(findings: Finding[], diff: string, bodyOnly = fal
 const encodeSegment = (part: string) => encodeURIComponent(part).replace(/[!'()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 export function contractsSection(findings: Finding[], more: number, delivery: ContractDelivery, head: string): string | undefined {
   if (!findings.length && !more) return undefined;
-  const label = (text: string) => text.replace(/[\\[\]]/g, "\\$&").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const repoUrl = `${delivery.serverUrl.replace(/\/$/, "")}/${delivery.repo.split("/").map(encodeSegment).join("/")}`;
   const entries = findings.map(finding => {
     const url = `${repoUrl}/blob/${encodeSegment(head)}/${finding.path.split("/").map(encodeSegment).join("/")}${finding.line ? `#L${finding.line}` : ""}`;
     const reason = finding.body.split(/\s+Where:/)[0]!.replace(/\s+/g, " ").trim();
-    return `- [${label(`${finding.path}:${finding.line}`)}](${url}): ${reason}`;
+    return `- [${escapeContractText(`${finding.path}:${finding.line}`)}](${url}): ${escapeContractText(reason)}`;
   });
   return ["## Files you didn't edit that depend on this change", ...entries, ...(more ? [`and ${more} more`] : [])].join("\n");
 }

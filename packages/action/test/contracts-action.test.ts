@@ -41,6 +41,16 @@ function fake(models = [model], contracts = ok(), statuses = [201]) {
 }
 
 describe("contracts alongside the reviewer", () => {
+  it("escapes generic types, Markdown, and mentions in body and inline contract reasons", async () => {
+    const body = "Type 'Promise<User>' & key `@org/team` [removed] \\ source";
+    const f = fake([], ok([{ ...contract, body }, { ...contract, path: "src/api.ts", line: 7, body }]));
+    await runAction(event, options, f.deps);
+    const escaped = "Type 'Promise&lt;User&gt;' &amp; key \\`@\u200borg/team\\` \\[removed\\] \\\\ source";
+    expect(f.posts[0]!.body).toContain(`: ${escaped}`);
+    expect(f.posts[0]!.comments[0]!.body).toBe(`Contract: ${escaped}`);
+    expect(f.posts[0]!.body).not.toContain("@org/team");
+    expect(f.posts[0]!.comments[0]!.body).not.toContain("@org/team");
+  });
   it("separates deterministic contracts from body model feedback and keeps the footer last", async () => {
     const f = fake();
     await runAction(event, options, f.deps);
