@@ -204,7 +204,11 @@ describe("never fails a pull request", () => {
 });
 
 /** Fake stages: git, review, review-ctx and verify-ctx write files the way the CLIs do. */
-function fakeStages(outputs: { review: Finding[]; "review-ctx": Finding[]; keep?: (f: Finding) => boolean }) {
+function fakeStages(outputs: {
+  review: Finding[]; "review-ctx": Finding[]; keep?: (f: Finding) => boolean;
+  /** One CHUNK_FAILED chunk with this failure string in that stage's output, as review.ts records it. */
+  chunkFailure?: { command: "review" | "review-ctx"; failure: string };
+}) {
   const commands: string[] = [];
   const models: string[] = [];
   const failures = new Set<string>();
@@ -231,7 +235,10 @@ function fakeStages(outputs: { review: Finding[]; "review-ctx": Finding[]; keep?
       return {};
     }
     const comments = outputs[command as "review" | "review-ctx"];
-    await writeFile(value("--out"), JSON.stringify({ comments, review: { model: "m", chunkFailed: 0 } }));
+    const failed = outputs.chunkFailure?.command === command
+      ? { chunkFailed: 1, chunks: [{ index: 0, status: "CHUNK_FAILED", failure: outputs.chunkFailure.failure }] }
+      : { chunkFailed: 0 };
+    await writeFile(value("--out"), JSON.stringify({ comments, review: { model: "m", ...failed } }));
     return {};
   });
   return { exec, commands, models, failures };
@@ -264,6 +271,15 @@ describe("pipelines", () => {
     const s = fakeStages({ review: diffFindings, "review-ctx": ctxFindings });
     s.failures.add("review-ctx");
     await expect(poolRaw(input, context(s.exec))).rejects.toThrow(/private subprocess error/);
+  });
+
+  it("puts a failed chunk's failure string in the status line (a truncated reply is CHUNK_FAILED)", async () => {
+    const c = contract({ RB_CONFIG_PIPELINE: "pool-raw" });
+    const s = fakeStages({ review: diffFindings, "review-ctx": ctxFindings, chunkFailure: { command: "review", failure: "invalid reply" } });
+    const d = deps(undefined);
+    expect(await main(c.env, { ...d, makeExec: () => s.exec })).toBe(0);
+    expect(c.read().findings).toEqual([]);
+    expect(d.lines.at(-1)).toMatch(/^status=failed: review: failed chunks \(first: invalid reply\) findings=0 /);
   });
 
   it("pool-verify-v1 is the Action's runPipeline: both reviewers, then verify-ctx keeps or drops", async () => {
