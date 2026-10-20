@@ -72,7 +72,7 @@ describe("contracts runner", () => {
       expect(f.exec.mock.calls.some(([, args]) => args.includes("fetch"))).toBe(false);
     } finally { vi.restoreAllMocks(); }
   });
-  it("passes the merge base and a 90-second budget to the trusted CLI, removes credentials and cleans temp files", async () => {
+  it("passes the merge base and remaining budget to the trusted CLI, removes credentials and cleans temp files", async () => {
     const f = fake();
     const result = await runContracts("/checkout", base, head, { GIT_DIR: "/wrong", GIT_CONFIG_COUNT: "1",
       GIT_CONFIG_KEY_0: "http.extraheader", GIT_CONFIG_VALUE_0: "fake-secret", GITHUB_TOKEN: "fake-secret",
@@ -81,13 +81,38 @@ describe("contracts runner", () => {
     const [file, args, options] = f.exec.mock.calls.find(([file]) => file !== "git")!;
     expect(file).toBe(process.execPath);
     expect(args).toEqual([expect.stringContaining("packages/analyzer/src/bin.ts"), "contracts", "--repo", "/checkout",
-      "--base", mergeBase, "--head", head, "--out", f.output(), "--budget-s", "90"]);
+      "--base", mergeBase, "--head", head, "--out", f.output(), "--budget-s", expect.stringMatching(/^(79|80)$/)]);
     expect(options.cwd).not.toBe("/checkout");
     expect(options.env).not.toHaveProperty("GITHUB_TOKEN"); expect(options.env).not.toHaveProperty("NEBIUS_API_KEY");
     expect(options.env).not.toHaveProperty("GIT_DIR"); expect(options.env).not.toHaveProperty("GIT_CONFIG_VALUE_0");
     expect(options.env.GIT_CONFIG_GLOBAL).toBe("/runner-config");
     expect(options.timeout).toBeLessThanOrEqual(CONTRACTS_BUDGET_MS);
     await expect(access(f.output())).rejects.toThrow();
+  });
+  it("shrinks the analyzer budget after a slow merge-base", async () => {
+    const f = fake(); let now = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    const exec: ContractsExecute = (file, args, options) => {
+      if (args.includes("merge-base")) now = 24_000;
+      return f.exec(file, args, options);
+    };
+    try {
+      expect((await runContracts("/checkout", base, head, {}, exec)).status).toBe("ok");
+      const args = f.exec.mock.calls.find(([file]) => file !== "git")![1];
+      expect(args[args.indexOf("--budget-s") + 1]).toBe("56");
+    } finally { vi.restoreAllMocks(); }
+  });
+  it("skips the analyzer when fewer than five budget seconds remain after cleanup reserve", async () => {
+    const f = fake(); let now = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    const exec: ContractsExecute = (file, args, options) => {
+      if (args.includes("merge-base")) now = 76_000;
+      return f.exec(file, args, options);
+    };
+    try {
+      expect(await runContracts("/checkout", base, head, {}, exec)).toMatchObject({ status: "failed", reason: "timeout" });
+      expect(f.exec.mock.calls.every(([file]) => file === "git")).toBe(true);
+    } finally { vi.restoreAllMocks(); }
   });
   it("unshallows and fetches the base without credentials before retrying merge-base", async () => {
     const f = fake(report(), true);

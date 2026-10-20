@@ -114,11 +114,13 @@ export async function runContracts(
       mergeBase = await git(["merge-base", base, head]);
     }
     if (!SHA.test(mergeBase)) throw new Error("Invalid merge base");
+    const budgetSeconds = Math.floor((CONTRACTS_BUDGET_MS - (performance.now() - started) - 10_000) / 1_000);
+    if (budgetSeconds < 5) { timedOut = true; throw new Error("Insufficient analyzer budget"); }
     directory = await mkdtemp(path.join(tmpdir(), "tracehound-contracts-"));
     const out = path.join(directory, "contracts.json");
     reason = "error";
     await run(process.execPath, [path.join(root, "packages/analyzer/src/bin.ts"), "contracts", "--repo", repo,
-      "--base", mergeBase, "--head", head, "--out", out, "--budget-s", "90"]);
+      "--base", mergeBase, "--head", head, "--out", out, "--budget-s", String(budgetSeconds)]);
     reason = "invalid-output";
     if ((await stat(out)).size > 4 * 1024 * 1024) throw new Error("Oversized contracts report");
     const value: unknown = JSON.parse(await readFile(out, "utf8"));
