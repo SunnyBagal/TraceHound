@@ -121,11 +121,21 @@ describe("learning post-filter", () => {
       comments: [{ ...finding, side: "RIGHT" }] };
     expect(JSON.stringify(f.posts[0])).toBe(JSON.stringify(legacy));
   });
-  it("missing feedback branch or file is an empty list", async () => {
+  it.each(["on", "off"] as const)("missing feedback branch or file adds no suppression noise with fixes %s", async fixes => {
     const f = fake([finding], 404);
-    await runAction(event, { ...options, learn: "on" }, f.deps);
+    await runAction(event, { ...options, learn: "on", fixes }, f.deps);
     expect(f.posts[0]!.comments).toHaveLength(1);
-    expect(record(f.posts[0]!.body).suppressed).toEqual([]);
+    expect(f.posts[0]!.body).not.toContain("findings suppressed by maintainer feedback");
+    if (fixes === "on") expect(record(f.posts[0]!.body)).not.toHaveProperty("suppressed");
+    else expect(f.posts[0]!.body).not.toContain("tracehound:v1");
+  });
+  it.each(["on", "off"] as const)("unmatched feedback adds no body or footer noise with fixes %s", async fixes => {
+    const enabled = fake([sql]), disabled = fake([sql]);
+    await runAction(event, { ...options, learn: "on", fixes }, enabled.deps);
+    await runAction(event, { ...options, learn: "off", fixes }, disabled.deps);
+    expect(JSON.stringify(enabled.posts[0])).toBe(JSON.stringify(disabled.posts[0]));
+    expect(enabled.posts[0]!.body).not.toContain("findings suppressed by maintainer feedback");
+    if (fixes === "on") expect(record(enabled.posts[0]!.body)).not.toHaveProperty("suppressed");
   });
   it("does not treat permission/network errors as an empty feedback file", async () => {
     const f = fake([finding], 403);

@@ -91,10 +91,13 @@ Every drop appears in the hidden footer as:
 {"suppressed":[{"path":"src/profile.ts","line":20,"matchedComment":"https://github.com/example/widget/pull/3#discussion_r10","reason":"reaction"}]}
 ```
 
-The review body adds `N findings suppressed by maintainer feedback (details in footer).`
+When at least one finding is suppressed, the review body adds
+`N findings suppressed by maintainer feedback (details in footer).`
 Even if every finding is suppressed, an explanatory review is posted with zero inline
-comments. With learning enabled, the footer exists even when `fixes: 'off'`; pipeline counts
-still describe the unmodified verifier output. With no verifier findings, no review is posted.
+comments. When findings are suppressed, the footer exists even when `fixes: 'off'`; pipeline
+counts still describe the unmodified verifier output. With no suppressions, neither the
+suppression body line nor a `suppressed: []` field is added, and fixes-off runs keep their
+usual footer-free payload. With no verifier findings, no review is posted.
 
 Collection must finish before review to use feedback on the very next push. The example's
 separate jobs otherwise run concurrently. In the installing repository's workflow add

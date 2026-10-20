@@ -113,7 +113,7 @@ function reviewFooter(findings: Finding[], commit: string, pipeline: PipelineCou
   const record: Record<string, unknown> = {
     version: 1, pipeline: "pool-verify-v1", headSha: commit,
     ...pipeline, posted: findings.length, fixes: data.fixes.counts,
-    ...(data.suppressed && { suppressed: data.suppressed }),
+    ...(data.suppressed?.length && { suppressed: data.suppressed }),
     findings: findings.map((finding, i) => ({
       path: finding.path, line: finding.line,
       ...(data.fixes.suggestions[i] && { startLine: data.fixes.suggestions[i]!.startLine }),
@@ -159,7 +159,7 @@ export function buildReview(
     }
   }
   if (findings.length > maxComments) body.push(`${findings.length - maxComments} findings omitted by max-comments.`);
-  if (data?.suppressed) body.push(`${data.suppressed.length} findings suppressed by maintainer feedback (details in footer).`);
+  if (data?.suppressed?.length) body.push(`${data.suppressed.length} findings suppressed by maintainer feedback (details in footer).`);
   body.push(footer);
   if (data && pipeline) body.push(reviewFooter(posted, commit, pipeline, data));
   return { commit_id: commit, event: "COMMENT", body: body.join("\n\n"), comments };
@@ -263,7 +263,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
         counts: { attempted: posted.length, valid: 0, rejected: posted.length } } };
     }
   }
-  if (suppressed !== undefined) {
+  if (suppressed?.length) {
     data ??= { sources, fixes: { suggestions: output.comments.slice(0, options.maxComments).map(() => null),
       counts: { attempted: 0, valid: 0, rejected: 0 } } };
     data.suppressed = suppressed;
