@@ -1,13 +1,19 @@
-# PR reviewer benchmark: results (decision 063)
+# PR reviewer benchmark: results (decisions 063, 066)
 
-On the pre-registered blind test, TraceHound ranked 3rd of six under the scorer of record, behind
-Augment and Cursor, ahead of Greptile, Copilot and CodeRabbit. On the dev set it ranked 5th of six.
-Run-to-run spread at temperature 0 is larger than the margins the reviewer was chosen on, so treat
-single-run ranks as approximate.
+On 10 blind pull requests (Cal.com run 1, n = 23), TraceHound is statistically tied with Greptile
+and Cursor. Its run-1 F was 58.3% against CodeRabbit's 36.7%, but that is not a significant lead.
+No gap to another tool is outside its 95% interval. The CodeRabbit gap is the clearest: TraceHound
+is ahead in 96% of resamples, but its interval still includes 0
+([audit-cc01 §3.2](audit-cc01.md#32-bootstrap-95-ci-over-prs-for-the-calcom-f-difference)).
+Across all 50 pull requests it is 4th of 6 under both judges ([section 5](#5-all-50-prs)). Every
+loss is published ([section 7](#7-every-loss-and-void-run)). The order in the blind table (section
+2) is a point estimate, not a ranking.
 
-Every number on this page is copied from decisions 054–062, `docs/bench/test-results.md` and
-`docs/bench/pool-verify.md` (dev tool rows: `docs/bench/scorer-checks.md`, decision 060). Counts
-only; no review or golden comment text is in this repository.
+Every number on this page is copied from decisions 054–065, `docs/bench/test-results.md`,
+`docs/bench/pool-verify.md`, `docs/bench/vote.md` and `docs/bench/evidence.md` (dev tool rows:
+`docs/bench/scorer-checks.md`, decision 060; all-50 tool rows: `docs/bench/scorer-validation.md`,
+decision 054), or computed from their counts (the ranks in section 3, the tables in section 5).
+Counts only; no review or golden comment text is in this repository.
 
 ## 1. What was measured
 
@@ -42,8 +48,9 @@ Under bench-judge-v1 (scorer of record), with bench-judge-x1's F alongside:
 review-diff-v1 (the diff-only reviewer, 055) and pool-raw (the unfiltered candidate pool, 059)
 are stages of the same pipeline, declared as secondary rows in 061. 0 JUDGE_FAILED in run 1.
 
-Apart from CodeRabbit, every gap to the tools is within noise
-([audit-cc01 §3](audit-cc01.md#3-what-a-critic-would-compute)).
+No gap to another tool is outside its 95% interval. The CodeRabbit gap is the clearest: TraceHound
+is ahead in 96% of resamples, but its interval still includes 0
+([audit-cc01 §3.2](audit-cc01.md#32-bootstrap-95-ci-over-prs-for-the-calcom-f-difference)).
 
 ## 3. Rank in every run
 
@@ -52,14 +59,15 @@ judged once, on their recorded reviews (v1: augment 73.2, cursor 66.7, greptile 
 46.2, coderabbit 36.7; x1: augment 73.2, cursor 66.7, greptile 55.0, copilot 50.8, coderabbit
 37.5).
 
-| Cal.com run | bench-judge-v1 | bench-judge-x1 |
+| Cal.com run | bench-judge-v1: F, point-estimate rank | bench-judge-x1: F, point-estimate rank |
 |---|---|---|
 | 1 (headline) | 58.3%, 3rd | 58.3%, 3rd |
 | 2 | 51.3%, 3rd (n = 21, one JUDGE_FAILED) | 57.1%, 3rd |
 | 3 | 52.8%, 3rd | 47.3%, 5th (below greptile 55.0 and copilot 50.8) |
 
 3rd in 5 of 6 run × judge cells, 5th in one. Under v1 the margin over greptile (50.0%) was 1.3
-to 8.3 points.
+to 8.3 points. These ranks are point estimates, not a ranking: no gap to another tool is outside its
+95% interval (audit-cc01 §3.2).
 
 ## 4. Dev set (40 pull requests, n = 74)
 
@@ -83,7 +91,52 @@ Dev spread over the two runs, F min / median / max (median = mean of two):
 Cal.com spread over three runs, F min / median / max, bench-judge-v1: pool-verify-v1 51.3 / 52.8 /
 58.3%, review-diff-v1 38.5 / 42.6 / 53.8%, pool-raw 40.0 / 44.1 / 51.6%.
 
-## 5. Predictions (061), scored
+## 5. All 50 PRs
+
+All five repos together (40 dev + 10 Cal.com pull requests), micro-averaged over the 97 golden
+comments of Medium or higher (74 dev + 23 Cal.com). FN = 97 − TP.
+
+- **Tools, one row each:** dev counts (`scorer-checks.md`, 060) plus Cal.com run 1 counts
+  (`test-results.md`). Under bench-judge-v1 these sums equal the all-50 rows in
+  `scorer-validation.md:24-28` (054).
+- **TraceHound (pool-verify-v1), two rows, declared as such:**
+  - **(i) scorer-of-record line:** dev run 1 + Cal.com run 1. These are the first runs and the
+    pre-registered ones. This is the audit's table (audit-cc01 §3.1), and it is the row the
+    headline uses.
+  - **(ii) variance check:** TP and FP averaged over dev runs 1, 2r, 4, 5 and 6 (`vote.md`,
+    `evidence.md`), plus Cal.com run 1. Its counts are fractional because they are means. Dev means:
+    v1 TP 32.8 / FP 48.2 / FN 41.2; x1 TP 38.4 / FP 37.0 / FN 35.6.
+- Each TraceHound row is ranked against the five tools only, not against the other TraceHound row.
+
+### All 50 PRs, bench-judge-v1 (scorer of record)
+
+| reviewer | rank of 6 | TP | FP | FN | P (n) | R (n) | F |
+|---|---|---|---|---|---|---|---|
+| Augment | 1 | 56 | 16 | 41 | 77.8% (56/72) | 57.7% (56/97) | 66.3% |
+| Cursor | 2 | 42 | 17 | 55 | 71.2% (42/59) | 43.3% (42/97) | 53.8% |
+| Greptile | 3 | 45 | 40 | 52 | 52.9% (45/85) | 46.4% (45/97) | 49.5% |
+| **TraceHound (i): dev run 1 + Cal.com run 1 (scorer-of-record line)** | 4 | 40 | 57 | 57 | 41.2% (40/97) | 41.2% (40/97) | **41.2%** |
+| TraceHound (ii): dev 5-run mean + Cal.com run 1 (variance check) | 4 | 46.8 | 59.2 | 50.2 | 44.2% (46.8/106) | 48.2% (46.8/97) | 46.1% |
+| CodeRabbit | 5 | 41 | 67 | 56 | 38.0% (41/108) | 42.3% (41/97) | 40.0% |
+| Copilot | 6 | 43 | 104 | 54 | 29.3% (43/147) | 44.3% (43/97) | 35.2% |
+
+### All 50 PRs, bench-judge-x1 (report only)
+
+| reviewer | rank of 6 | TP | FP | FN | P (n) | R (n) | F |
+|---|---|---|---|---|---|---|---|
+| Augment | 1 | 56 | 17 | 41 | 76.7% (56/73) | 57.7% (56/97) | 65.9% |
+| Cursor | 2 | 45 | 11 | 52 | 80.4% (45/56) | 46.4% (45/97) | 58.8% |
+| Greptile | 3 | 49 | 32 | 48 | 60.5% (49/81) | 50.5% (49/97) | 55.1% |
+| **TraceHound (i): dev run 1 + Cal.com run 1 (scorer-of-record line)** | 4 | 45 | 45 | 52 | 50.0% (45/90) | 46.4% (45/97) | **48.1%** |
+| TraceHound (ii): dev 5-run mean + Cal.com run 1 (variance check) | 4 | 52.4 | 48.0 | 44.6 | 52.2% (52.4/100.4) | 54.0% (52.4/97) | 53.1% |
+| CodeRabbit | 5 | 45 | 58 | 52 | 43.7% (45/103) | 46.4% (45/97) | 45.0% |
+| Copilot | 6 | 50 | 91 | 47 | 35.5% (50/141) | 51.5% (50/97) | 42.0% |
+
+Both TraceHound rows are 4th of 6 under both judges. Row (ii) is higher than row (i) because dev
+run 1 is the lowest of the five dev runs (`vote.md`), but it does not change the rank. The tools were
+judged once, on their recorded reviews, so their rows carry no run-to-run spread.
+
+## 6. Predictions (061), scored
 
 - **(a) pool-verify-v1's Cal.com F is above review-diff-v1's: right.** Run 1, bench-judge-v1:
   58.3% vs 53.8%. (Under bench-judge-x1 it is the other way round: 58.3% vs 60.0%.)
@@ -93,7 +146,7 @@ Cal.com spread over three runs, F min / median / max, bench-judge-v1: pool-verif
 - **(c) pool-verify-v1's Cal.com F is not within 5 points of its dev F (outside 30.6–40.6%):
   right.** 58.3%, 22.7 points above the dev 35.6%.
 
-## 6. Every loss and void run
+## 7. Every loss and void run
 
 - **Prediction (b) was wrong** (above).
 - **Under bench-judge-x1, review-diff-v1 alone (60.0%) scores above pool-verify-v1 (58.3%) on
@@ -110,7 +163,7 @@ Cal.com spread over three runs, F min / median / max, bench-judge-v1: pool-verif
 - **Ledger gap:** across dev run 3 the ledger rose $0.7694, $0.0113 more than its run.json
   ($0.7581). The gap is reported, not explained.
 
-## 7. Limits
+## 8. Limits
 
 From 061:
 - There is one pre-registered primary run. The repeats measure spread; they are not extra chances.
@@ -132,7 +185,7 @@ Added by 062:
 - Cal.com is one TypeScript repo. pool-verify-v1's run 1 F there (58.3%) is above its F on every
   dev repo (27.3% to 44.4%), so the absolute numbers say little about other repos.
 
-## 8. Cost
+## 9. Cost
 
 Per pull request on Cal.com (all pipeline stages plus both judges): median $0.0391 / $0.0422 /
 $0.0432 in runs 1 / 2 / 3, so about $0.04; max $0.0859. Wall time median 123–158 s, max 312 s.
