@@ -4,7 +4,8 @@ TraceHound's existing pull request reviewer, packaged as a ReviewBench agent. Re
 (`review-bench/ReviewBench` @ `12e9d1a`, MIT) starts one container per pull request from an image on
 ghcr.io, mounts the pull request, and reads a findings file; the contract is its
 `AGENT_CONTRACT.md`. This image changes nothing about how TraceHound reviews: prompts, models and
-pipelines are main's (decisions 055, 057, 058, 059).
+pipelines are main's (decisions 055, 057, 058, 059). The one addition is candidate 6's
+missed-issue pass (`review-missed-v1`, P008 amendment 2); the Action does not run this stage.
 
 - Image: `ghcr.io/sunnybagal/tracehound-reviewbench`, `linux/amd64`, built by
   `.github/workflows/reviewbench-image.yml` from `Dockerfile.reviewbench`; registered by digest.
@@ -21,7 +22,8 @@ pipelines are main's (decisions 055, 057, 058, 059).
    `pipeline=pool-raw model=nvidia/nemotron-3-super-120b-a12b base_url=https://… limit_min=25 max_findings=40`.
    The contract asks for this: a label whose value never appears in the output is reported as unread.
 3. Runs the selected pipeline in-process on `/work/repo` at `RB_HEAD`: the same stage commands the
-   Action runs (`tracehound review`, `review-ctx`, `verify-ctx`) as child processes, through
+   Action runs (`tracehound review`, `review-ctx`, `verify-ctx`, plus `review-missed` for
+   pool-raw-missed) as child processes, through
    `packages/action/src/pipeline.ts`. Each stage's count line (chunks, findings, drops, calls, cost)
    is echoed to stderr. Finding text never is.
 4. Writes `RB_OUT`:
@@ -44,6 +46,7 @@ pipelines are main's (decisions 055, 057, 058, 059).
 | `pool-verify-v1` (default) | What the Action runs: head check, review-diff-v1 and review-ctx-v1 in parallel, the pool (decision 059), verify-ctx-v1 on the pool; the kept findings. This is `runPipeline`, unchanged. |
 | `pool-raw` | pool-verify-v1 without its last stage: the same two reviewer commands with the same arguments, then `poolFindings`. No verifier. |
 | `pool-raw-x2` | pool-raw twice with the same prompts, then the union, deduplicated with `scripts/bench/agree-rule.ts` `agrees` (the first of agreeing findings is kept, across the whole union). The response cache is cleared before the second pass, or it would replay the first; that is why this value runs only in the image (`TRACEHOUND_RB_IMAGE=1`). Each pass is all or nothing, like pool-raw; the union is over the passes that finished. A pass still running one minute before the limit is stopped, so a finished first pass is still written. |
+| `pool-raw-missed` | pool-raw, then one missed-issue pass, `tracehound review-missed` (`review-missed-v1`), on the same model. The pass gets the pool as `{ comments }` and, per diff chunk, sees the chunk, review-ctx-v1's context block and a numbered list of the pooled findings on that chunk's files (`path:line: body`, each body cut at 400 characters, `(none)` if there are none), and is asked only for defects the list does not contain. The result is the pool, then each missed finding that agrees (decision 058's rule, `agrees`) with no pool finding; the log says `pool N, missed M, new K`. Pool findings come first, so the 40-finding cap cuts missed findings first. The pass gets the time left minus one minute; if it fails (any failed chunk counts) or runs out of time, the result is the pool alone and the log says `missed: failed (<reason>)`. It never fails a pull request that pool-raw would have passed. |
 
 Any other value exits 2 with the list of accepted values.
 
@@ -85,7 +88,28 @@ The candidates are fixed in advance by the brain's
 4. pool-verify-v1 on 3.5 (`pipeline=pool-verify-v1`, `model=nvidia/Nemotron-3.5-Super-VL`)
 5. pool-raw on 3.5 (`pipeline=pool-raw`, `model=nvidia/Nemotron-3.5-Super-VL`)
 
-Candidate 6 (`pool-raw-missed`) arrives in rb-02.
+6. pool-raw-missed (`pipeline=pool-raw-missed`), on the model of whichever of candidates 2 and 5
+   scores higher on grounded F1 (a tie within 2.0 points goes to 3 Super), so it runs last. It is
+   chosen only if it beats the best of 1–5 by at least 3.0 points (P008 amendment 2).
+
+### Candidate 6: the missed-issue pass
+
+`tracehound review-missed --pr <input.json> --findings <pool.json> --repo <git dir> --head <sha>
+--out <file> [--model <id>] [--reasoning on|off]` (`packages/analyzer/src/review/missed.ts`,
+`prompt-missed.ts`, `missed-cli.ts`). It is review-ctx-v1's reviewer (`reviewPullWithContext`,
+unchanged): the same chunking, context block, reply validation, one retry, `CHUNK_FAILED`, line
+checks against the diff, `REASONING_ON`, temperature 0 and `max_tokens` 32,000. Only the system
+prompt is swapped and the pooled-findings list appended to each chunk's user message. Its output is
+review-ctx-v1's format with only the pass's own findings.
+
+- Prompt `review-missed-v1`, frozen, sha256
+  `a5a2115f559b82de82c51ee2629e30b05c37ebe0e528e5a02b3de753b42053bc`
+  (`REVIEW_MISSED_PROMPT_SHA256`, pinned in `packages/analyzer/test/review-missed.test.ts`). It was
+  written from the idea (CR-Bench's missed-issue pass) and general defect categories only, with no
+  model call and without reading any benchmark data, and is recorded in P008 before any test run.
+- The three prompts it builds on are unchanged: review-diff-v1 `f77c2031…`, review-ctx-v1
+  `0c4dcdcf…`, verify-ctx-v1 `75703fc6…` (the same test pins them).
+- The Action does not run this stage; it keeps pool-verify-v1.
 
 ## Never fail a pull request
 
@@ -120,7 +144,7 @@ suggestions and graph history cannot run (a test checks the imports).
 The image never reads or writes a data branch, and runs with no learned memory.
 `scripts/reviewbench/imports.test.ts` fails if any `scripts/reviewbench/*.ts` imports `data.ts`,
 `fix.ts` or a file whose name contains `learn`, or if anything the image runs (the adapter and the
-three stage commands it spawns) reaches one through its imports.
+four stage commands it spawns) reaches one through its imports.
 
 Our git spawns drop `GIT_CONFIG_*` (`cleanGitEnv`, decision 032). ReviewBench uses exactly those
 variables to mark `/work/repo` safe, so the image sets `safe.directory '*'` in the system git config.
@@ -147,9 +171,19 @@ ReviewBench's judge runs on their keys. Prices are the third-party rates in `con
 | pool-verify-v1 | median $0.0317, max $0.2308 (measured, 40 dev PRs, decision 059) | about $21 at the median; $152 if every PR cost the dev max |
 | pool-raw | about $0.018 (estimate: pool-verify-v1 minus the verifier) | about $12 |
 | pool-raw-x2 | about $0.036 (estimate: twice pool-raw) | about $24 |
+| pool-raw-missed | about $0.027 (estimate: about 1.5× pool-raw, one extra call per chunk) | about $18 |
 
 3.5 Super has the same prices. Its reasoning length on these prompts is not measured yet, so the
 per-PR figures for candidates 4 and 5 are the 3 Super ones until the smoke test reports `cost_usd`.
+
+The pool-raw-missed estimate: pool-raw makes two reviewer calls per chunk and the missed-issue pass
+one more, with a larger input (the chunk, the context block and the pooled-findings list), so about
+1.5× pool-raw. P008's figure for the final run, about $33, scales pool-verify-v1's measured $21
+instead, so it is the more cautious one; both are estimates until the smoke test reports
+`cost_usd`. `scripts/reviewbench/prices.test.ts` checks that two
+concurrent review-missed reservations at the largest input (a full chunk, a full context block, a
+cut description and 60 pooled findings at the 400-character cut) fit under the default $1 run cap
+on both candidate models.
 
 The pool-raw estimate: verify-ctx-v1 cost $0.32 for 143 findings in decision 058 ($0.0022 each), and
 the dev pool averaged 6.1 findings per pull request (243 over 40, decision 059), so the verifier was
@@ -192,13 +226,16 @@ only per-PR record is `cost_usd=` in the container log.
 ### After merge: the smoke procedure
 
 The smoke workflow appears only once it is on `main`. Run "ReviewBench image" on `main` and take the
-digest from its summary. Then run "ReviewBench smoke" three times with that digest:
+digest from its summary. Then run "ReviewBench smoke" once per row below with that digest:
 
 1. `pipeline=pool-raw`, `model=nvidia/nemotron-3-super-120b-a12b`
 2. `pipeline=pool-verify-v1`, `model=nvidia/nemotron-3-super-120b-a12b`
 3. `pipeline=pool-raw`, `model=nvidia/Nemotron-3.5-Super-VL`
+4. `pipeline=pool-raw-missed`, `model=nvidia/nemotron-3-super-120b-a12b` (once rb-02 is merged and
+   the image rebuilt). Besides the usual checks, the job fails when a log has no
+   `pool N, missed M, new K` line, because a failed pass falls back to the pool with `status=ok`.
 
-Each spends a few cents. All three must be green before any portal run.
+Each spends a few cents. All must be green before any portal run.
 
 ### Locally
 
