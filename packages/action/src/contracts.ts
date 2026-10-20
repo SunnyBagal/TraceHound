@@ -8,22 +8,24 @@ import type { Finding } from "./action.ts";
 import { newSideLines, parseDiff } from "../../analyzer/src/review/diff.ts";
 
 export const CONTRACTS_BUDGET_MS = 90_000;
+export const CONTRACTS_KILL_GRACE_MS = 5_000;
 export const CONTRACT_LIMIT = 10;
 const root = path.resolve(import.meta.dirname, "../../..");
 const SHA = /^[a-f0-9]{40}$/;
-const execute = promisify(execFile);
+const execute: ContractsExecute = (file, args, options) => promisify(execFile)(file, args, { ...options, timeout: 0 });
 export type ContractsFailure = "timeout" | "error" | "invalid-output" | "merge-base" | "checkout" | "unavailable";
 export interface ContractsResult {
   status: "ok" | "failed" | "off";
   findings: Finding[];
   ms: number;
   reason?: ContractsFailure;
+  messages?: string[];
 }
 export interface ContractsSummary { status: ContractsResult["status"]; inline: number; body: number; ms: number }
 export type ContractsExecute = (file: string, args: string[], options: {
   cwd: string; env: NodeJS.ProcessEnv; encoding: "utf8"; maxBuffer: number;
-  signal: AbortSignal; timeout: number; killSignal: "SIGKILL";
-}) => Promise<{ stdout: string }>;
+  timeout: number; killSignal: "SIGTERM";
+}) => Promise<{ stdout: string }> & { child?: { kill(signal: NodeJS.Signals): boolean } };
 
 export function contractsEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const clean = cleanGitEnv(env);
@@ -59,24 +61,56 @@ export function readContractsReport(value: unknown, base: string, head: string):
 export async function runContracts(
   repo: string, base: string, head: string, env: NodeJS.ProcessEnv = process.env, exec: ContractsExecute = execute,
 ): Promise<ContractsResult> {
-  const started = performance.now(), signal = AbortSignal.timeout(CONTRACTS_BUDGET_MS);
+  const started = performance.now(), messages: string[] = [];
+  let timedOut = false, forceKilled = false;
   let directory: string | undefined, reason: ContractsFailure = "checkout";
   const ms = () => Math.max(0, Math.round(performance.now() - started));
   try {
     if (!repo || !SHA.test(base) || !SHA.test(head)) throw new Error("Invalid checkout");
     const childEnv = contractsEnv(env);
-    const run = (file: string, args: string[]) => exec(file, args, { cwd: root, env: childEnv, encoding: "utf8",
-      signal, timeout: Math.max(1, CONTRACTS_BUDGET_MS - ms()), killSignal: "SIGKILL", maxBuffer: 4 * 1024 * 1024 });
+    const run = async (file: string, args: string[]) => {
+      const timeout = Math.max(1, CONTRACTS_BUDGET_MS - ms());
+      const task = exec(file, args, { cwd: root, env: childEnv, encoding: "utf8", timeout,
+        killSignal: "SIGTERM", maxBuffer: 4 * 1024 * 1024 });
+      let grace: ReturnType<typeof setTimeout> | undefined;
+      let expire!: (error: Error) => void;
+      const deadline = new Promise<never>((_, reject) => { expire = reject; });
+      const timer = setTimeout(() => {
+        timedOut = true;
+        task.child?.kill("SIGTERM");
+        grace = setTimeout(() => {
+          forceKilled = true;
+          if (task.child) task.child.kill("SIGKILL");
+          else expire(new Error("Contracts timeout"));
+        }, CONTRACTS_KILL_GRACE_MS);
+      }, timeout);
+      try {
+        const result = await Promise.race([task, deadline]);
+        if (timedOut) throw new Error("Contracts timeout");
+        return result;
+      } finally { clearTimeout(timer); if (grace) clearTimeout(grace); }
+    };
     const git = async (args: string[]) => (await run("git", ["-C", repo, ...args])).stdout.trim();
     reason = "merge-base";
     let mergeBase: string;
     try { mergeBase = await git(["merge-base", base, head]); }
     catch {
+      if (timedOut || CONTRACTS_BUDGET_MS - ms() < 30_000) throw new Error("Insufficient fetch budget");
       const shallow = await git(["rev-parse", "--is-shallow-repository"]) === "true";
+      const lock = path.resolve(repo, await git(["rev-parse", "--git-path", "shallow.lock"]));
+      const lockExisted = await stat(lock).then(() => true, () => false);
+      if (CONTRACTS_BUDGET_MS - ms() < 30_000) throw new Error("Insufficient fetch budget");
       // Preserve runner config such as safe.directory, but never let this fetch use auth.
       const server = env.GITHUB_SERVER_URL || "https://github.com";
-      await git(["-c", "credential.helper=", "-c", "core.askPass=", "-c", "http.extraHeader=",
-        "-c", `http.${server}/.extraheader=`, "fetch", "--no-tags", ...(shallow ? ["--unshallow"] : []), "origin", base]);
+      try {
+        await git(["-c", "credential.helper=", "-c", "core.askPass=", "-c", "http.extraHeader=",
+          "-c", `http.${server}/.extraheader=`, "fetch", "--no-tags", ...(shallow ? ["--unshallow"] : []), "origin", base]);
+      } finally {
+        if (forceKilled && !lockExisted && await stat(lock).then(() => true, () => false)) {
+          await rm(lock);
+          messages.push("contracts: removed shallow.lock after killed fetch");
+        }
+      }
       mergeBase = await git(["merge-base", base, head]);
     }
     if (!SHA.test(mergeBase)) throw new Error("Invalid merge base");
@@ -96,7 +130,8 @@ export async function runContracts(
     return { status: "ok", findings, ms: ms() };
   } catch (error) {
     const killed = error && typeof error === "object" && "killed" in error && error.killed;
-    return { status: "failed", findings: [], ms: ms(), reason: signal.aborted || killed ? "timeout" : reason };
+    return { status: "failed", findings: [], ms: ms(), reason: timedOut || killed ? "timeout" : reason,
+      ...(messages.length && { messages }) };
   } finally {
     if (directory) await rm(directory, { recursive: true, force: true }).catch(() => {});
   }
@@ -110,9 +145,10 @@ export async function settleContracts(run: (() => Promise<ContractsResult>) | un
   let result: ContractsResult;
   try {
     result = await Promise.race([Promise.resolve().then(() => run ? run() : failed("unavailable")),
-      new Promise<ContractsResult>(resolve => { timer = setTimeout(() => resolve(failed("timeout")), CONTRACTS_BUDGET_MS); })]);
+      new Promise<ContractsResult>(resolve => { timer = setTimeout(() => resolve(failed("timeout")), CONTRACTS_BUDGET_MS + CONTRACTS_KILL_GRACE_MS + 100); })]);
   } catch { result = failed("error"); }
   finally { if (timer) clearTimeout(timer); }
+  for (const message of result.messages ?? []) log(message);
   if (result.status === "failed") log(`contracts: failed (${result.reason ?? "error"})`);
   return result;
 }

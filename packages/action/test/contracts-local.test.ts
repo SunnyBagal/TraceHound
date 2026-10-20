@@ -35,7 +35,7 @@ it("runs the real checker at the merge base, finds an untouched consumer, and ne
     const baseTip = git("rev-parse", "HEAD"); git("switch", "-q", "feature");
     const calls: string[][] = [];
     const execute = promisify(execFile);
-    const exec: ContractsExecute = async (file, args, options) => { calls.push([file, ...args]); return execute(file, args, options); };
+    const exec: ContractsExecute = (file, args, options) => { calls.push([file, ...args]); return execute(file, args, { ...options, timeout: 0 }); };
     const result = await runContracts(repo, baseTip, head, env, exec);
     expect(result.status).toBe("ok");
     expect(result.findings).toEqual(expect.arrayContaining([expect.objectContaining({ path: "src/consumer.ts", line: 1 })]));

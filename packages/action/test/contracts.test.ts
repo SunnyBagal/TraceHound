@@ -1,4 +1,6 @@
-import { access, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CONTRACTS_BUDGET_MS, readContractsReport, runContracts, settleContracts, type ContractsExecute } from "../src/contracts.ts";
 
@@ -16,6 +18,7 @@ function fake(value: unknown = report(), shallow = false) {
     if (file === "git") {
       if (args.includes("merge-base")) { if (missing) { missing = false; throw new Error("private output"); } return { stdout: mergeBase }; }
       if (args.includes("--is-shallow-repository")) return { stdout: "true" };
+      if (args.includes("--git-path")) return { stdout: "/checkout/.git/shallow.lock" };
       if (args.includes("fetch")) return { stdout: "" };
       throw new Error("Unexpected git");
     }
@@ -27,6 +30,48 @@ function fake(value: unknown = report(), shallow = false) {
 }
 
 describe("contracts runner", () => {
+  it("terminates a timed-out fetch before killing it and removes only its shallow lock", async () => {
+    vi.useFakeTimers();
+    const repo = await mkdtemp(path.join(tmpdir(), "contracts-lock-"));
+    await mkdir(path.join(repo, ".git"));
+    const lock = path.join(repo, ".git/shallow.lock"), other = path.join(repo, ".git/index.lock");
+    const order: string[] = [];
+    const exec: ContractsExecute = (file, args) => {
+      if (args.includes("fetch")) {
+        let reject!: (error: Error) => void;
+        const task = new Promise<{ stdout: string }>((_, fail) => { reject = fail; });
+        return Object.assign(task, { child: { kill(signal: string) {
+          order.push(signal);
+          if (signal === "SIGKILL") reject(new Error("killed"));
+          return true;
+        } } });
+      }
+      if (args.includes("merge-base")) return Promise.reject(new Error("missing"));
+      return Promise.resolve({ stdout: args.includes("--git-path") ? lock : "true" });
+    };
+    try {
+      const result = runContracts(repo, base, head, {}, exec);
+      await vi.advanceTimersByTimeAsync(0);
+      await writeFile(lock, "fetch lock"); await writeFile(other, "other lock");
+      await vi.advanceTimersByTimeAsync(CONTRACTS_BUDGET_MS);
+      expect(order).toEqual(["SIGTERM"]);
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(order).toEqual(["SIGTERM"]);
+      order.push("waited 5s");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await result).toMatchObject({ status: "failed", reason: "timeout", messages: ["contracts: removed shallow.lock after killed fetch"] });
+      expect(order).toEqual(["SIGTERM", "waited 5s", "SIGKILL"]);
+      await expect(access(lock)).rejects.toThrow(); await expect(access(other)).resolves.toBeUndefined();
+    } finally { await rm(repo, { recursive: true, force: true }); }
+  });
+  it("does not start a base fetch with less than 30 seconds remaining", async () => {
+    const f = fake(report(), true);
+    vi.spyOn(performance, "now").mockReturnValueOnce(0).mockReturnValue(61_000);
+    try {
+      expect(await runContracts("/checkout", base, head, {}, f.exec)).toMatchObject({ status: "failed", reason: "merge-base" });
+      expect(f.exec.mock.calls.some(([, args]) => args.includes("fetch"))).toBe(false);
+    } finally { vi.restoreAllMocks(); }
+  });
   it("passes the merge base and a 90-second budget to the trusted CLI, removes credentials and cleans temp files", async () => {
     const f = fake();
     const result = await runContracts("/checkout", base, head, { GIT_DIR: "/wrong", GIT_CONFIG_COUNT: "1",
@@ -73,7 +118,7 @@ describe("contracts runner", () => {
   it("bounds even an injected runner that never settles", async () => {
     vi.useFakeTimers(); const log = vi.fn();
     const result = settleContracts(() => new Promise(() => {}), log);
-    await vi.advanceTimersByTimeAsync(CONTRACTS_BUDGET_MS);
+    await vi.advanceTimersByTimeAsync(CONTRACTS_BUDGET_MS + 5_100);
     expect(await result).toMatchObject({ status: "failed", findings: [], reason: "timeout" });
     expect(log).toHaveBeenCalledExactlyOnceWith("contracts: failed (timeout)");
   });

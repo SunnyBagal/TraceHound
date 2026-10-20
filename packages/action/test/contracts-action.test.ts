@@ -107,7 +107,7 @@ describe("contracts alongside the reviewer", () => {
   it("a hung runner times out while the normal review still posts", async () => {
     vi.useFakeTimers(); const f = fake(); f.deps.runContracts = () => new Promise(() => {});
     const running = runAction(event, options, f.deps);
-    await vi.advanceTimersByTimeAsync(CONTRACTS_BUDGET_MS);
+    await vi.advanceTimersByTimeAsync(CONTRACTS_BUDGET_MS + 5_100);
     await running;
     expect(f.posts).toHaveLength(1); expect(record(f.posts[0]!.body).contracts.status).toBe("failed");
   });
