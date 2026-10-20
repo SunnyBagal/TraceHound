@@ -45,6 +45,7 @@ export interface Options {
   repoDir?: string;
   fixes?: "on" | "off";
   learn?: "on" | "off";
+  contracts?: "on" | "off";
 }
 
 export interface Dependencies {

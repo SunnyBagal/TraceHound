@@ -140,3 +140,12 @@ it.each(["yes", "", "ON"])("rejects invalid fixes input %j before effects", asyn
   expect(d.runFixes).not.toHaveBeenCalled();
   expect(d.fetch).not.toHaveBeenCalled();
 });
+
+it.each(["yes", "", "ON"])("rejects invalid contracts input %j before effects", async contracts => {
+  const d = deps();
+  expect(await main({ NEBIUS_API_KEY: "fake-unused", GITHUB_EVENT_NAME: "pull_request", GITHUB_TOKEN: "fake-unused",
+    GITHUB_EVENT_PATH: "/unused", TRACEHOUND_CONTRACTS: contracts }, d)).toBe(1);
+  expect(d.log).toHaveBeenCalledWith("TraceHound: contracts must be on or off.");
+  expect(d.fetch).not.toHaveBeenCalled();
+  expect(d.runPipeline).not.toHaveBeenCalled();
+});

@@ -31,6 +31,11 @@ export async function main(
   }
   const dryRun = env.TRACEHOUND_DRY_RUN ?? "false";
   const fixes = env.TRACEHOUND_FIXES ?? "on";
+  const contracts = env.TRACEHOUND_CONTRACTS ?? "on";
+  if (contracts !== "on" && contracts !== "off") {
+    deps.log("TraceHound: contracts must be on or off.");
+    return 1;
+  }
   if (fixes !== "on" && fixes !== "off") {
     deps.log("TraceHound: fixes must be on or off.");
     return 1;
@@ -49,6 +54,7 @@ export async function main(
       dryRun: dryRun === "true",
       reviewer,
       fixes,
+      contracts,
       repoDir: env.TRACEHOUND_REPO_DIR ?? "",
     }, { ...deps, ...(env.TRACEHOUND_REVIEW_FILE && { onReview: async (body: string) => {
       const footer = parseReviewFooter(body);
