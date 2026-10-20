@@ -247,7 +247,7 @@ it (decision 050).
   n; the fetches run before the freeze tag. Commands: `docs/bench/test-plan.md`.
 - **Cal.com test-set result (decision 062, 2026-10-17):** from `review-freeze-1` (tag on `6b4276e`).
   Cal.com run 1 (n = 23), bench-judge-v1: pool-verify-v1 P 56.0% / R 60.9% / F 58.3%,
-  review-diff-v1 F 53.8%. pool-verify-v1 ranks 3rd of six: augment 73.2%, cursor 66.7%, greptile
+  review-diff-v1 F 53.8%. pool-verify-v1 was 3rd of six on run 1 (a point estimate; see decision 066): augment 73.2%, cursor 66.7%, greptile
   50.0%, copilot 46.2%, coderabbit 36.7%. Predictions: (a) right, (b) wrong, (c) right. Spread:
   pool-verify-v1 F was 51.3–58.3% over Cal.com runs 1–3 and 35.6% / 48.0% over dev runs 1–2.
   Dev run 2 was void (the session's background limit killed it) and was restarted as 2r. Dev run 3

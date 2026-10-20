@@ -155,7 +155,7 @@ over dev runs 1, 2r, 4, 5 and 6. All values are under bench-judge-v1 unless mark
 The run-to-run spread of the adopted reviewer (35.6–48.0 F over 5 runs at temperature 0) is larger
 than every effect we tried to measure. NVIDIA recommends temperature 1.0 for this model: its model
 card recommends temperature 1.0 and top_p 0.95 for text
-([model card](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16),
+([model card](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16),
 [NIM reference](https://docs.api.nvidia.com/nim/reference/nvidia-nemotron-3-super-120b-a12b)). All
 our runs used 0, which is a limit, not a tuned choice.
 
