@@ -28,7 +28,7 @@ function fake(models = [model], contracts = ok(), statuses = [201]) {
     }])).toString("base64") });
     if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return new Response("{}", { status: statuses.shift() ?? 201 }); }
     if (new Headers(init?.headers).get("Accept") === "application/vnd.github.diff") return new Response(diff);
-    return Response.json({ head: current, base: { sha: base } });
+    return Response.json({ head: current, base: { sha: "d".repeat(40) } });
   });
   const deps: Dependencies = { fetch: api, log: vi.fn(), checkRepoHead: vi.fn(), runReviewer: vi.fn(),
     runPipeline: vi.fn(async () => ({ comments: models, sources: models.map(() => "ctx" as const),
@@ -59,10 +59,11 @@ describe("contracts alongside the reviewer", () => {
   it("limits contracts independently of the model cap and includes the body overflow count", async () => {
     const findings = [...Array.from({ length: 12 }, (_, i) => ({ ...contract, path: "src/api.ts", line: i + 1 })),
       ...Array.from({ length: 12 }, (_, i) => ({ ...contract, path: `src/consumer${i}.ts` }))];
-    const f = fake([model, { ...model, path: "another.ts" }], ok(findings));
+    const inlineModel = { ...model, path: "src/api.ts", line: 20 };
+    const f = fake([inlineModel, { ...model, path: "another.ts" }], ok(findings));
     await runAction(event, { ...options, maxComments: 1 }, f.deps);
-    expect(f.posts[0]!.comments).toHaveLength(10);
-    expect(f.posts[0]!.body).toContain("src/model.ts:1\nModel finding");
+    expect(f.posts[0]!.comments).toHaveLength(11);
+    expect(f.posts[0]!.comments[0]).toEqual({ ...inlineModel, side: "RIGHT" });
     expect(f.posts[0]!.body).not.toContain("another.ts");
     expect(f.posts[0]!.body).toContain("and 4 more");
     expect(record(f.posts[0]!.body).contracts).toMatchObject({ inline: 10, body: 10 });
@@ -138,5 +139,20 @@ describe("contracts alongside the reviewer", () => {
         GITHUB_EVENT_PATH: file, TRACEHOUND_REPO_DIR: "/checkout", TRACEHOUND_FIXES: "off" }, f.deps)).toBe(0);
       expect(f.deps.runContracts).toHaveBeenCalledWith("/checkout", base, head);
     } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+  it("supports the legacy diff reviewer with contracts and accurate source metadata", async () => {
+    const f = fake(); vi.mocked(f.deps.runReviewer).mockResolvedValue({ comments: [model] });
+    await runAction(event, { ...options, reviewer: "review-diff-v1" }, f.deps);
+    const footer = record(f.posts[0]!.body);
+    expect(footer.pipeline).toBe("review-diff-v1");
+    expect(footer.findings[0].source).toBe("diff");
+    expect(footer).not.toHaveProperty("pool"); expect(footer.contracts.body).toBe(1);
+  });
+  it("contracts off preserves the legacy diff reviewer payload byte for byte", async () => {
+    const f = fake(); vi.mocked(f.deps.runReviewer).mockResolvedValue({ comments: [{ ...model, path: "src/api.ts", line: 7 }] });
+    await runAction(event, { ...options, reviewer: "review-diff-v1", contracts: "off" }, f.deps);
+    expect(JSON.stringify(f.posts[0])).toBe(JSON.stringify({ commit_id: head, event: "COMMENT",
+      body: "TraceHound · review-diff-v1 · fake · 1 findings\n\nThese comments are model-generated and unverified.",
+      comments: [{ ...model, path: "src/api.ts", line: 7, side: "RIGHT" }] }));
   });
 });

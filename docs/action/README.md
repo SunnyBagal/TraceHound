@@ -153,6 +153,35 @@ The entire hidden line and its JSON stay below 8,000 characters. If the line wou
 `findings` is omitted and `findingsTruncated: true` is set; aggregate counts remain. HTML delimiters
 in strings are JSON-escaped to keep the hidden comment intact.
 
+## Cross-file contracts
+
+`contracts` defaults to `'on'`. Alongside the reviewer, `tracehound contracts` deterministically
+compares the merge base with the PR head: typed exports and new TypeScript errors in dependent
+files, plus stale route, queue, Redis, environment-variable, and event keys. It makes no model
+call, installs no dependencies in the PR checkout, and executes no script from the PR's code.
+The checker uses TraceHound's bundled TypeScript and reads detached base/head worktrees.
+
+The stage has a **90-second total time budget**, including history lookup and any base fetch.
+Missing history is fetched without credentials, unshallowing when necessary; private repos
+should use `fetch-depth: 0`. It compares against the merge base, never an advanced base tip.
+A timeout, error, or invalid report logs `contracts: failed (<reason>)` and leaves model
+findings intact. The existing `max-comments: '0'` whole-review skip is retained for data jobs.
+
+Findings on commentable diff lines are prefixed `Contract:` and capped at 10 inline comments,
+separately from `max-comments` for model findings. Other findings, including inline overflow,
+appear under **Files you didn't edit that depend on this change**, with up to 10 linked
+`path:line` entries at the head SHA, a one-line reason each, and `and N more` for overflow.
+A contract replaces a model finding on the same path within ±3 lines. Contracts bypass
+maintainer-feedback suppression and model fix generation. Neither the deterministic gate
+nor an additional evidence verifier is wired into this stage.
+
+Enabled runs add `contracts: { status: "ok" | "failed", inline, body, ms }` to the footer;
+counts describe displayed contract entries, separate from pipeline/model counts. Body-only
+retries move inline contracts into the bounded linked section and update those counts.
+To disable the stage, set `contracts: 'off'` in the Action's `with:` block. Off skips the checker
+and preserves the previous posted bytes, including leaving the existing footer unchanged
+rather than adding an `off` field. The composite passes the input as `TRACEHOUND_CONTRACTS`.
+
 ## Maintainer feedback
 
 Set `learn: 'on'` with `pool-verify-v1` to suppress findings similar to comments maintainers

@@ -253,6 +253,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
       output = readOutput(result);
     } else {
       output = readOutput(await deps.runReviewer(buildInput(event, diff), options.model));
+      sources = output.comments.map(() => "diff");
     }
   } catch {
     await contractsTask;
