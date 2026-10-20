@@ -6,8 +6,9 @@ No gap to another tool is outside its 95% interval. The CodeRabbit gap is the cl
 is ahead in 96% of resamples, but its interval still includes 0
 ([audit-cc01 §3.2](audit-cc01.md#32-bootstrap-95-ci-over-prs-for-the-calcom-f-difference)).
 Across all 50 pull requests it is 4th of 6 under both judges ([section 5](#5-all-50-prs)). Every
-loss is published ([section 7](#7-every-loss-and-void-run)). The order in the blind table (section
-2) is a point estimate, not a ranking.
+loss is published ([section 8](#8-every-loss-and-void-run)). The order in the blind table (section
+2) is a point estimate, not a ranking. Run-to-run spread at temperature 0 is larger than every
+effect we tried to measure ([section 6](#6-precision-levers-tried-on-dev)).
 
 Every number on this page is copied from decisions 054–065, `docs/bench/test-results.md`,
 `docs/bench/pool-verify.md`, `docs/bench/vote.md` and `docs/bench/evidence.md` (dev tool rows:
@@ -136,7 +137,29 @@ Both TraceHound rows are 4th of 6 under both judges. Row (ii) is higher than row
 run 1 is the lowest of the five dev runs (`vote.md`), but it does not change the rank. The tools were
 judged once, on their recorded reviews, so their rows carry no run-to-run spread.
 
-## 6. Predictions (061), scored
+## 6. Precision levers tried on dev
+
+Every idea tried after the diff-only baseline review-diff-v1 (055: F 32.2% / P 25.6% on dev
+run 1). 056–059 are single dev runs (40 pull requests, n = 74). 064 and 065 compare 5-run means
+over dev runs 1, 2r, 4, 5 and 6. All values are under bench-judge-v1 unless marked x1.
+
+| decision | idea | bar | result (F / P on dev) | verdict |
+|---|---|---|---|---|
+| 056 verify-v1 | A second Super pass gives each review-diff-v1 finding a confidence of 1–5; findings below a threshold are dropped. | The threshold with the highest dev F, ties to the higher; no bar against the baseline. | Threshold 1, which keeps every finding: 32.2% / 25.6%. Thresholds 2–5: F 32.1, 31.2, 29.2, 29.1%; P 29.5, 30.0, 31.7, 44.4%. | No gain: the rule chose the threshold that removes nothing. |
+| 057 review-ctx-v1 | The reviewer also sees repository context: the changed files and git grep references. | None pre-registered; compared with review-diff-v1 (32.2% / 25.6%). | 31.8% / 36.2% | F did not move. Used later only as a second source for 059's pool. |
+| 058 verify-ctx-v1 | A verifier that sees repository context answers keep or drop for each review-diff-v1 finding. | F ≥ 35.0% | 32.8% / 38.9% | Loss; not used on its own. |
+| 059 pool-verify-v1 | Pool review-diff-v1's findings with review-ctx-v1's ctx-only findings, then filter with verify-ctx-v1. | F ≥ 35.0% | Run 1: 35.6% / 36.1%. 5-run mean (064): 42.3% / 40.5%. | **Adopted**, at a 0.6-point margin on run 1. |
+| 064 vote | Keep only findings that recur across five independent runs (best variant: vote-k3of5). | v1 F ≥ the baseline's 5-run mean + 5.0 points; v1 P above the baseline's mean; x1 F ≥ the baseline's x1 mean. | vote-k3of5: 47.8% / 53.3%, against the baseline's 42.3% / 40.5%; x1 F 50.4%, against 51.3%. | Loss: fails the x1 condition. |
+| 065 evidence verifier + gate | B: a verifier that must quote the failing code, then a deterministic gate that checks the quote. A: the gate alone, on pool-verify-v1. | A: mean P above the baseline's, and mean F at least the baseline's under v1 and x1. B: mean v1 F +3.0 points, mean v1 P +8.0 points, mean x1 F at least the baseline's. | 5-run means: A 41.6% / 40.3%; B 38.3% / 37.2%; baseline 42.3% / 40.5%. | Loss: A and B both fail every condition. |
+
+The run-to-run spread of the adopted reviewer (35.6–48.0 F over 5 runs at temperature 0) is larger
+than every effect we tried to measure. NVIDIA recommends temperature 1.0 for this model: its model
+card recommends temperature 1.0 and top_p 0.95 for text
+([model card](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16),
+[NIM reference](https://docs.api.nvidia.com/nim/reference/nvidia-nemotron-3-super-120b-a12b)). All
+our runs used 0, which is a limit, not a tuned choice.
+
+## 7. Predictions (061), scored
 
 - **(a) pool-verify-v1's Cal.com F is above review-diff-v1's: right.** Run 1, bench-judge-v1:
   58.3% vs 53.8%. (Under bench-judge-x1 it is the other way round: 58.3% vs 60.0%.)
@@ -146,7 +169,7 @@ judged once, on their recorded reviews, so their rows carry no run-to-run spread
 - **(c) pool-verify-v1's Cal.com F is not within 5 points of its dev F (outside 30.6–40.6%):
   right.** 58.3%, 22.7 points above the dev 35.6%.
 
-## 7. Every loss and void run
+## 8. Every loss and void run
 
 - **Prediction (b) was wrong** (above).
 - **Under bench-judge-x1, review-diff-v1 alone (60.0%) scores above pool-verify-v1 (58.3%) on
@@ -163,7 +186,7 @@ judged once, on their recorded reviews, so their rows carry no run-to-run spread
 - **Ledger gap:** across dev run 3 the ledger rose $0.7694, $0.0113 more than its run.json
   ($0.7581). The gap is reported, not explained.
 
-## 8. Limits
+## 9. Limits
 
 From 061:
 - There is one pre-registered primary run. The repeats measure spread; they are not extra chances.
@@ -185,7 +208,7 @@ Added by 062:
 - Cal.com is one TypeScript repo. pool-verify-v1's run 1 F there (58.3%) is above its F on every
   dev repo (27.3% to 44.4%), so the absolute numbers say little about other repos.
 
-## 9. Cost
+## 10. Cost
 
 Per pull request on Cal.com (all pipeline stages plus both judges): median $0.0391 / $0.0422 /
 $0.0432 in runs 1 / 2 / 3, so about $0.04; max $0.0859. Wall time median 123–158 s, max 312 s.

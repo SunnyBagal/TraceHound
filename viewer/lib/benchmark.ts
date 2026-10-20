@@ -74,4 +74,17 @@ export const BENCHMARK_TABLES = [
       ["Copilot", "6", "50", "91", "47", "35.5% (50/141)", "51.5% (50/97)", "42.0%"],
     ],
   },
+  {
+    title: "Precision levers tried on dev",
+    note: "Every idea tried after the diff-only baseline. The adopted reviewer's run-to-run spread (35.6–48.0 F over 5 runs at temperature 0) is larger than every effect measured.",
+    headers: ["decision", "idea", "bar", "result (F / P on dev)", "verdict"],
+    rows: [
+      ["056 verify-v1", "A second Super pass gives each review-diff-v1 finding a confidence of 1–5; findings below a threshold are dropped.", "The threshold with the highest dev F, ties to the higher; no bar against the baseline.", "Threshold 1, which keeps every finding: 32.2% / 25.6%. Thresholds 2–5: F 32.1, 31.2, 29.2, 29.1%; P 29.5, 30.0, 31.7, 44.4%.", "No gain: the rule chose the threshold that removes nothing."],
+      ["057 review-ctx-v1", "The reviewer also sees repository context: the changed files and git grep references.", "None pre-registered; compared with review-diff-v1 (32.2% / 25.6%).", "31.8% / 36.2%", "F did not move. Used later only as a second source for 059's pool."],
+      ["058 verify-ctx-v1", "A verifier that sees repository context answers keep or drop for each review-diff-v1 finding.", "F ≥ 35.0%", "32.8% / 38.9%", "Loss; not used on its own."],
+      ["059 pool-verify-v1", "Pool review-diff-v1's findings with review-ctx-v1's ctx-only findings, then filter with verify-ctx-v1.", "F ≥ 35.0%", "Run 1: 35.6% / 36.1%. 5-run mean (064): 42.3% / 40.5%.", "Adopted, at a 0.6-point margin on run 1."],
+      ["064 vote", "Keep only findings that recur across five independent runs (best variant: vote-k3of5).", "v1 F ≥ the baseline's 5-run mean + 5.0 points; v1 P above the baseline's mean; x1 F ≥ the baseline's x1 mean.", "vote-k3of5: 47.8% / 53.3%, against the baseline's 42.3% / 40.5%; x1 F 50.4%, against 51.3%.", "Loss: fails the x1 condition."],
+      ["065 evidence verifier + gate", "B: a verifier that must quote the failing code, then a deterministic gate that checks the quote. A: the gate alone, on pool-verify-v1.", "A: mean P above the baseline's, and mean F at least the baseline's under v1 and x1. B: mean v1 F +3.0 points, mean v1 P +8.0 points, mean x1 F at least the baseline's.", "5-run means: A 41.6% / 40.3%; B 38.3% / 37.2%; baseline 42.3% / 40.5%.", "Loss: A and B both fail every condition."],
+    ],
+  },
 ] as const;
