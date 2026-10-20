@@ -128,9 +128,13 @@ describe("contracts runner", () => {
     const f = fake(value);
     expect(await runContracts("/checkout", base, head, {}, f.exec)).toMatchObject({ status: "failed", findings: [], reason: "invalid-output" });
   });
-  it.each(["budget", "error"])("does not deliver partial findings when typed checking skipped for %s", async skipped => {
-    const f = fake({ ...report(), typed: { skipped, reason: "private detail" } });
-    expect(await runContracts("/checkout", base, head, {}, f.exec)).toMatchObject({ status: "failed", findings: [], reason: skipped === "budget" ? "timeout" : "error" });
+  it.each(["budget", "error"])("keeps keyed findings when typed checking skipped for %s", async skipped => {
+    const f = fake({ ...report(), typed: { skipped, reason: "private detail" }, findings: [{ ...candidate, source: "contract" }] });
+    const log = vi.fn();
+    expect(await settleContracts(() => runContracts("/checkout", base, head, {}, f.exec), log)).toMatchObject({
+      status: "ok", typed: `skipped-${skipped}`, findings: [{ path: candidate.path, line: 3, body: candidate.body }],
+    });
+    expect(log).toHaveBeenCalledExactlyOnceWith(`contracts: typed check skipped (${skipped}); key checks only.`);
   });
   it("still permits keyed findings when the repo has no tsconfig", () => {
     expect(readContractsReport({ ...report(), typed: { skipped: "no-tsconfig" } }, mergeBase, head)).toHaveLength(1);

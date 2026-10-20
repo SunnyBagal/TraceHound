@@ -174,7 +174,8 @@ export function buildReview(
     comments.push(...placed.inline);
     const section = contractsSection(placed.body, placed.more, contracts, commit);
     if (section) body.push(section);
-    contractSummary = { status: contracts.result.status, inline: placed.inline.length, body: placed.body.length, ms: contracts.result.ms };
+    contractSummary = { status: contracts.result.status, inline: placed.inline.length, body: placed.body.length, ms: contracts.result.ms,
+      ...(contracts.result.typed && { typed: contracts.result.typed }) };
   }
   body.push(footer);
   if (data && (pipeline || contracts)) body.push(reviewFooter(posted, commit, pipeline, data, reviewer, contractSummary));

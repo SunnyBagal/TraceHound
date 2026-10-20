@@ -15,7 +15,7 @@ const model: Finding = { path: "src/model.ts", line: 1, body: "Model finding" };
 const contract: Finding = { path: "src/consumer.ts", line: 3, body: "What breaks: missing export. Where: src/consumer.ts:3. Evidence: source and use." };
 const options: Options = { token: "fake-unused", apiUrl: "https://api.example.invalid", model: "fake", repoDir: "/checkout",
   maxComments: 15, dryRun: false, fixes: "off" };
-const ok = (findings = [contract]): ContractsResult => ({ status: "ok", findings, ms: 12 });
+const ok = (findings = [contract]): ContractsResult => ({ status: "ok", findings, ms: 12, typed: "complete" });
 const record = (body: string) => JSON.parse(/^<!-- tracehound:v1 (.*) -->$/.exec(body.split("\n").at(-1)!)![1]!);
 afterEach(() => vi.useRealTimers());
 
@@ -39,6 +39,11 @@ function fake(models = [model], contracts = ok(), statuses = [201]) {
 }
 
 describe("contracts alongside the reviewer", () => {
+  it("records whether typed checking completed in the contracts footer", async () => {
+    const f = fake();
+    await runAction(event, options, f.deps);
+    expect(record(f.posts[0]!.body).contracts.typed).toBe("complete");
+  });
   it("runs concurrently and passes the event base even if the API's base tip advanced", async () => {
     const f = fake(); let release!: (value: ContractsResult) => void;
     f.deps.runContracts = vi.fn(() => new Promise<ContractsResult>(resolve => { release = resolve; }));
@@ -54,7 +59,7 @@ describe("contracts alongside the reviewer", () => {
     expect(f.posts[0]!.comments).toEqual([{ ...contract, path: "src/api.ts", line: 7, body: `Contract: ${contract.body}`, side: "RIGHT" }]);
     expect(f.posts[0]!.body).toContain("## Files you didn't edit that depend on this change");
     expect(f.posts[0]!.body).toContain(`[src/consumer.ts:3](https://github.com/example/widget/blob/${head}/src/consumer.ts#L3): What breaks: missing export.`);
-    expect(record(f.posts[0]!.body).contracts).toEqual({ status: "ok", inline: 1, body: 1, ms: 12 });
+    expect(record(f.posts[0]!.body).contracts).toEqual({ status: "ok", inline: 1, body: 1, ms: 12, typed: "complete" });
   });
   it("limits contracts independently of the model cap and includes the body overflow count", async () => {
     const findings = [...Array.from({ length: 12 }, (_, i) => ({ ...contract, path: "src/api.ts", line: i + 1 })),

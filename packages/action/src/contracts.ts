@@ -14,14 +14,16 @@ const root = path.resolve(import.meta.dirname, "../../..");
 const SHA = /^[a-f0-9]{40}$/;
 const execute: ContractsExecute = (file, args, options) => promisify(execFile)(file, args, { ...options, timeout: 0 });
 export type ContractsFailure = "timeout" | "error" | "invalid-output" | "merge-base" | "checkout" | "unavailable";
+export type ContractsTyped = "complete" | "skipped-no-tsconfig" | "skipped-budget" | "skipped-error";
 export interface ContractsResult {
   status: "ok" | "failed" | "off";
   findings: Finding[];
   ms: number;
   reason?: ContractsFailure;
   messages?: string[];
+  typed?: ContractsTyped;
 }
-export interface ContractsSummary { status: ContractsResult["status"]; inline: number; body: number; ms: number }
+export interface ContractsSummary { status: ContractsResult["status"]; inline: number; body: number; ms: number; typed?: ContractsTyped }
 export type ContractsExecute = (file: string, args: string[], options: {
   cwd: string; env: NodeJS.ProcessEnv; encoding: "utf8"; maxBuffer: number;
   timeout: number; killSignal: "SIGTERM";
@@ -44,7 +46,7 @@ export function readContractsReport(value: unknown, base: string, head: string):
     || typeof object(report.timings).totalMs !== "number" || !Number.isFinite(object(report.timings).totalMs)
     || (object(report.timings).totalMs as number) < 0) throw new Error("Invalid contracts report");
   object(report.keyed); object(report.dependents);
-  if (!(typed.complete === true || typed.skipped === "no-tsconfig")) throw new Error("Incomplete contracts report");
+  if (!(typed.complete === true || ["no-tsconfig", "budget", "error"].includes(String(typed.skipped)))) throw new Error("Incomplete contracts report");
   return report.findings.map(value => {
     const finding = object(value);
     if (typeof finding.path !== "string" || !finding.path.trim() || /[\0\r\n\\]/.test(finding.path)
@@ -125,11 +127,8 @@ export async function runContracts(
     if ((await stat(out)).size > 4 * 1024 * 1024) throw new Error("Oversized contracts report");
     const value: unknown = JSON.parse(await readFile(out, "utf8"));
     const typed = object(object(value).typed);
-    if (typed.skipped === "budget" || typed.skipped === "error") {
-      return { status: "failed", findings: [], ms: ms(), reason: typed.skipped === "budget" ? "timeout" : "error" };
-    }
     const findings = readContractsReport(value, mergeBase, head);
-    return { status: "ok", findings, ms: ms() };
+    return { status: "ok", findings, ms: ms(), typed: typed.complete === true ? "complete" : `skipped-${typed.skipped}` as ContractsTyped };
   } catch (error) {
     const killed = error && typeof error === "object" && "killed" in error && error.killed;
     return { status: "failed", findings: [], ms: ms(), reason: timedOut || killed ? "timeout" : reason,
@@ -151,6 +150,7 @@ export async function settleContracts(run: (() => Promise<ContractsResult>) | un
   } catch { result = failed("error"); }
   finally { if (timer) clearTimeout(timer); }
   for (const message of result.messages ?? []) log(message);
+  if (result.typed?.startsWith("skipped-")) log(`contracts: typed check skipped (${result.typed.slice("skipped-".length)}); key checks only.`);
   if (result.status === "failed") log(`contracts: failed (${result.reason ?? "error"})`);
   return result;
 }
