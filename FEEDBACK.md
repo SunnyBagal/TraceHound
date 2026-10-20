@@ -675,3 +675,17 @@ was re-run.
 - **Docs/console:** not consulted, and no defect observed.
 - Opinion: a JSON-mode or schema-constrained output option for reasoning-on Super would remove most
   retries.
+
+## 2026-10-20 · job 067 (Nemotron 3.5 Super on dev, stopped at the first run)
+- **Called:** Nebius Token Factory chat completions, model `nvidia/Nemotron-3.5-Super-VL` (reasoning
+  on, `chat_template_kwargs.enable_thinking=true`, temperature 0), plus one `GET /v1/models`.
+- **Counts:** 35 chat requests between 14:49:18Z and 14:50:17Z, 0 successes, 35 failures; $0 spent.
+  The models listing succeeded.
+- **Failures:** every chat request returned `HTTP 404: The model `nvidia/Nemotron-3.5-Super-VL` does
+  not exist.` The same id is listed by `GET /v1/models` on the same key and base URL, next to
+  `nvidia/nemotron-3-super-120b-a12b`, which works.
+- **Latency:** not measured (the failures returned within seconds).
+- **Docs/console:** the models listing advertises an id that chat completions rejects as not
+  existing. The console was not consulted.
+- What would have helped: an error saying why a listed model can't be called (not enabled for the
+  account, wrong endpoint for a VL model, or not yet deployed) rather than "does not exist".
