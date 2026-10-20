@@ -1,0 +1,39 @@
+# TraceHound as a ReviewBench agent (AGENT_CONTRACT.md in review-bench/ReviewBench @ 12e9d1a).
+# docs/bench/reviewbench.md says what it runs. Build from the repository root:
+#   docker build --platform linux/amd64 -f Dockerfile.reviewbench -t tracehound-reviewbench .
+# .dockerignore lets in only what the pipeline needs. No secret is baked in: NEBIUS_API_KEY comes
+# from the run's secrets, and RB_MODEL_BASE_URL (the registered model API URL) becomes
+# NEBIUS_BASE_URL in scripts/reviewbench/entry.ts. The image runs as root, like ReviewBench's own
+# example, so it can write the mounted /work/out whoever owns it.
+FROM --platform=linux/amd64 node:24.22.0-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
+
+# git: review-ctx-v1 and verify-ctx-v1 read the head commit with `git show` / `git grep`. Our git
+# spawns drop GIT_CONFIG_* (cleanGitEnv, decision 032), which is how ReviewBench marks /work/repo
+# safe, so the image marks every directory safe itself.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && git config --system --add safe.directory '*'
+
+WORKDIR /app
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/analyzer/package.json packages/analyzer/
+COPY packages/action/package.json packages/action/
+COPY viewer/package.json viewer/
+RUN corepack enable \
+ && pnpm install --frozen-lockfile --prod=false --ignore-scripts --filter @tracehound/analyzer... --filter @tracehound/action... \
+ && pnpm store prune
+
+COPY config/prices.json config/
+COPY packages/analyzer/src packages/analyzer/src
+COPY packages/action/src packages/action/src
+COPY scripts/bench/agree-rule.ts scripts/bench/
+COPY scripts/reviewbench/*.ts scripts/reviewbench/
+
+# TRACEHOUND_RB_IMAGE: each container is fresh, so pool-raw-x2 may clear the response cache.
+ENV TRACEHOUND_RB_IMAGE=1 NODE_NO_WARNINGS=1
+LABEL org.opencontainers.image.source="https://github.com/SunnyBagal/TraceHound" \
+      org.opencontainers.image.description="TraceHound pull request reviewer as a ReviewBench agent" \
+      org.opencontainers.image.licenses="MIT"
+ENTRYPOINT ["node", "/app/scripts/reviewbench/entry.ts"]

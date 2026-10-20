@@ -1,0 +1,112 @@
+name: ReviewBench smoke
+
+# Runs the image on two pull requests of ReviewBench's 25-PR test set with ReviewBench's own
+# scripts/try-agent.sh at 12e9d1a: index 0 (TypeScript) and index 4 (Python). It checks the
+# findings files' format, as try-agent.sh does, and uploads them. It never runs ReviewBench's judge,
+# and its sparse checkout never fetches golden/ (docs/bench/reviewbench.md, blindness rule).
+# The adapter exits 0 even when every model call failed, so the job also fails when any adapter
+# status line is not status=ok, or when no pull request got a finding.
+# Spends a few cents of Nebius credit from the NEBIUS_API_KEY secret.
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Image by digest, from the ReviewBench image workflow's summary (ghcr.io/sunnybagal/tracehound-reviewbench@sha256:…)
+        required: true
+      pipeline:
+        description: RB_CONFIG_PIPELINE
+        type: choice
+        options: [pool-raw, pool-verify-v1, pool-raw-x2]
+        default: pool-raw
+      model:
+        description: RB_CONFIG_MODEL
+        type: choice
+        options: [nvidia/nemotron-3-super-120b-a12b, nvidia/Nemotron-3.5-Super-VL]
+        default: nvidia/nemotron-3-super-120b-a12b
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  REVIEWBENCH_SHA: 12e9d1aadbe7ddf4a480c6bd4ffb6ae37c7bcb67
+  # packages/analyzer/src/llm/client.ts DEFAULT_BASE_URL; the portal's model API URL is the same.
+  MODEL_BASE_URL: https://api.tokenfactory.us-central1.nebius.com/v1
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Check the image reference
+        env:
+          IMAGE: ${{ inputs.image }}
+        run: |
+          [[ "$IMAGE" =~ ^ghcr\.io/sunnybagal/tracehound-reviewbench@sha256:[0-9a-f]{64}$ ]] \
+            || { echo "::error::image must be ghcr.io/sunnybagal/tracehound-reviewbench@sha256:<64 hex>"; exit 1; }
+
+      - name: ReviewBench at 12e9d1a, only try-agent.sh and the test-set list
+        run: |
+          git init -q reviewbench
+          cd reviewbench
+          git remote add origin https://github.com/review-bench/ReviewBench.git
+          git sparse-checkout set --no-cone /scripts/try-agent.sh /corpus/test/test.json
+          git fetch -q --depth 1 --filter=blob:none origin "$REVIEWBENCH_SHA"
+          git checkout -q FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$REVIEWBENCH_SHA"
+          test ! -e golden
+          ls -R scripts corpus
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: try-agent.sh on test-set indices 0 and 4
+        env:
+          IMAGE: ${{ inputs.image }}
+          PIPELINE: ${{ inputs.pipeline }}
+          MODEL: ${{ inputs.model }}
+          NEBIUS_API_KEY: ${{ secrets.NEBIUS_API_KEY }}
+        run: |
+          set +e
+          mkdir -p smoke && cd smoke
+          echo "| index | pull request | model | exit | status | findings | cost_usd | wall s |" > summary.md
+          echo "|---|---|---|---|---|---|---|---|" >> summary.md
+          failed=0
+          total=0
+          for pr in 0 4; do
+            start=$(date +%s)
+            bash ../reviewbench/scripts/try-agent.sh "$IMAGE" --pr "$pr" \
+              -e NEBIUS_API_KEY -e RB_MODEL_BASE_URL="$MODEL_BASE_URL" \
+              -e RB_CONFIG_PIPELINE="$PIPELINE" -e RB_CONFIG_MODEL="$MODEL" \
+              2>&1 | tee "log-$pr.txt"
+            code=${PIPESTATUS[0]}
+            wall=$(( $(date +%s) - start ))
+            name=$(sed -n 's/^== \[[0-9]*\] \([^ ]*\).*/\1/p' "log-$pr.txt" | head -1)
+            # The adapter's last line: status=<ok | failed: reason | …> findings=N … cost_usd=X wall_s=Y
+            line=$(grep -o 'status=.* findings=[0-9]* dropped_no_line=.*' "log-$pr.txt" | tail -1)
+            status=$(sed -n 's/^status=\(.*\) findings=[0-9]* dropped_no_line=.*/\1/p' <<< "$line")
+            found=$(sed -n 's/.* findings=\([0-9]*\) dropped_no_line=.*/\1/p' <<< "$line")
+            cost=$(sed -n 's/.* cost_usd=\([^ ]*\).*/\1/p' <<< "$line")
+            applied=$(grep -o 'model=[^ ]*' "log-$pr.txt" | head -1)
+            if [ "$code" -ne 0 ]; then echo "::error::index $pr: try-agent.sh exited $code"; failed=1; fi
+            if [ "$status" != "ok" ]; then echo "::error::index $pr: adapter status is '${status:-missing}', not ok"; failed=1; fi
+            total=$(( total + ${found:-0} ))
+            cell=${status:--}
+            echo "| $pr | $name | ${applied#model=} | $code | ${cell//|/\\|} | ${found:--} | ${cost:--} | $wall |" >> summary.md
+          done
+          if [ "$total" -eq 0 ]; then echo "::error::no pull request got a finding"; failed=1; fi
+          { echo "### ReviewBench smoke ($PIPELINE, $MODEL)"; echo; echo "Image: \`$IMAGE\`"; echo; cat summary.md; echo; echo "Findings in total: $total; result: $([ $failed -eq 0 ] && echo green || echo red)"; } >> "$GITHUB_STEP_SUMMARY"
+          exit $failed
+
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: reviewbench-smoke-findings
+          path: |
+            smoke/findings/
+            smoke/summary.md
+            smoke/log-*.txt
+          if-no-files-found: warn

@@ -1,0 +1,13 @@
+diff --git a/src/page.ts b/src/page.ts
+index 3b18e51..9f2c7a4 100644
+--- a/src/page.ts
++++ b/src/page.ts
+@@ -1,5 +1,7 @@
+ export const MAX_PAGE = 100;
+ 
+ export function pageSize(requested: number): number {
+-  return requested;
++  if (requested > MAX_PAGE) return MAX_PAGE;
++  if (requested < 0) return 0;
++  return requested;
+ }
