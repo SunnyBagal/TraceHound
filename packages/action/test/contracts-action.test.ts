@@ -5,6 +5,8 @@ import { main } from "../src/cli.ts";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { bodyFindings } from "../src/learn.ts";
+import { parseReviewFooter } from "../src/data.ts";
 
 const head = "b".repeat(40), base = "a".repeat(40);
 const event: PullEvent = { repository: { full_name: "example/widget" }, pull_request: { title: "Change exports", body: "", number: 4,
@@ -39,6 +41,15 @@ function fake(models = [model], contracts = ok(), statuses = [201]) {
 }
 
 describe("contracts alongside the reviewer", () => {
+  it("separates deterministic contracts from body model feedback and keeps the footer last", async () => {
+    const f = fake();
+    await runAction(event, options, f.deps);
+    const body = f.posts[0]!.body;
+    expect(bodyFindings(body)).toEqual([{ path: model.path, body: model.body }]);
+    expect(body.indexOf("These comments are model-generated and unverified.")).toBeLessThan(body.indexOf("## Files you didn't edit"));
+    expect(parseReviewFooter(body)).toMatchObject({ headSha: head, contracts: { body: 1 } });
+    expect(body.split("\n").at(-1)).toMatch(/^<!-- tracehound:v1 .* -->$/);
+  });
   it("records whether typed checking completed in the contracts footer", async () => {
     const f = fake();
     await runAction(event, options, f.deps);

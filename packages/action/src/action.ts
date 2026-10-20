@@ -168,6 +168,7 @@ export function buildReview(
   }
   if (findings.length > maxComments) body.push(`${findings.length - maxComments} findings omitted by max-comments.`);
   if (data?.suppressed?.length) body.push(`${data.suppressed.length} findings suppressed by maintainer feedback (details in footer).`);
+  body.push(footer);
   let contractSummary: ContractsSummary | undefined;
   if (contracts) {
     const placed = placeContracts(contracts.result.findings, diff, bodyOnly);
@@ -177,7 +178,6 @@ export function buildReview(
     contractSummary = { status: contracts.result.status, inline: placed.inline.length, body: placed.body.length, ms: contracts.result.ms,
       ...(contracts.result.typed && { typed: contracts.result.typed }) };
   }
-  body.push(footer);
   if (data && (pipeline || contracts)) body.push(reviewFooter(posted, commit, pipeline, data, reviewer, contractSummary));
   return { commit_id: commit, event: "COMMENT", body: body.join("\n\n"), comments };
 }
