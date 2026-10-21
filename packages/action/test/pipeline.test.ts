@@ -12,6 +12,7 @@ const event: PullEvent = { repository: { full_name: "example/widget" }, pull_req
   ...input, head: { sha: "abc123", repo: { full_name: "example/widget" } },
 } };
 const options: Options = { token: "fake-unused", apiUrl: "https://api.example.invalid", model: "fake-model",
+  contracts: "off",
   repoDir: "/fake/repo", maxComments: 15, dryRun: false };
 
 function deferred() {
