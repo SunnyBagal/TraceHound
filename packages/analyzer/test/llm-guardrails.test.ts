@@ -1,3 +1,6 @@
+import { mkdtempSync, readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { Budget, BudgetExceededError, capsFromEnv, DEFAULT_CAPS } from "../src/llm/budget.ts";
 import { ResponseCache } from "../src/llm/cache.ts";
@@ -199,6 +202,45 @@ describe("per-model base URL", () => {
     expect(await urlFor("someone/unlisted")).toEqual([`${CENTRAL}/chat/completions`]);
     expect(baseUrlFor("nvidia/nemotron-3.5-super-vl", CENTRAL)).toBe(CENTRAL);
     expect(baseUrlFor("constructor", CENTRAL)).toBe(CENTRAL);
+  });
+
+  it("sends two models from one client to their own regions, with separate cache entries", async () => {
+    const f = recordingFetch();
+    const { client, dir } = fakeClient(f.impl);
+    const cache = new ResponseCache(path.join(dir, "cache"));
+    await client.chat(request(SUPER_3), { purpose: "p" });
+    await client.chat(request(SUPER_35), { purpose: "p" });
+    expect(f.urls).toEqual([`${CENTRAL}/chat/completions`, `${NORTH}/chat/completions`]);
+    expect(ResponseCache.key(SUPER_3, request(SUPER_3))).not.toBe(ResponseCache.key(SUPER_35, request(SUPER_35)));
+    expect(readdirSync(path.join(dir, "cache")).sort()).toEqual(
+      [`${ResponseCache.key(SUPER_3, request(SUPER_3))}.json`, `${ResponseCache.key(SUPER_35, request(SUPER_35))}.json`].sort());
+    expect(cache.get(ResponseCache.key(SUPER_35, request(SUPER_35)))).toEqual(ok().body);
+    // Both repeats are cache hits: no third request.
+    expect((await client.chat(request(SUPER_3), { purpose: "p" })).cached).toBe(true);
+    expect((await client.chat(request(SUPER_35), { purpose: "p" })).cached).toBe(true);
+    expect(f.urls).toHaveLength(2);
+  });
+
+  it("keeps the cache key free of the base URL, so 3 Super entries written before routing still match", async () => {
+    // sha256(model + "\0" + request JSON), the key since the cache existed; pinned for 3 Super.
+    expect(ResponseCache.key(SUPER_3, request(SUPER_3))).toBe("33a8b4bc683815fd1671a7a1de06d76ac502e3e8c0e464ab7cb84ba7075d1c8f");
+    const dir = mkdtempSync(path.join(tmpdir(), "tracehound-test-"));
+    new ResponseCache(path.join(dir, "cache")).put("33a8b4bc683815fd1671a7a1de06d76ac502e3e8c0e464ab7cb84ba7075d1c8f", ok("old").body);
+    for (const baseUrl of [undefined, CENTRAL, NORTH]) {
+      const f = recordingFetch();
+      const { client } = fakeClient(f.impl, { dir, baseUrl, offline: true });
+      expect(await client.chat(request(SUPER_3), { purpose: "p" })).toMatchObject({ cached: true, content: "old" });
+      expect(f.urls).toEqual([]);
+    }
+  });
+
+  it("writes no base URL into the ledger", async () => {
+    const f = recordingFetch();
+    const { client, ledger } = fakeClient(f.impl);
+    await client.chat(request(SUPER_35), { purpose: "p" });
+    const [entry] = ledger.entries();
+    expect(entry).toMatchObject({ model: SUPER_35 });
+    expect(JSON.stringify(entry)).not.toMatch(/https?:|tokenfactory/);
   });
 
   it("keeps GET /models on the configured base URL", async () => {
