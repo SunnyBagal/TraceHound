@@ -1,7 +1,10 @@
 // Decision 067's scoring (scripts/bench/dev-3-5.ts): the adoption rule and the paired bootstrap, on
 // invented counts. No files, no network.
 import { describe, expect, it } from "vitest";
-import { bootstrap, meanF, mulberry32, verdict, type RunScores } from "../../../scripts/bench/dev-3-5.ts";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { attemptsUsage, bootstrap, meanF, mulberry32, verdict, type RunScores } from "../../../scripts/bench/dev-3-5.ts";
 import { zeroCounts, type Counts } from "../src/bench/score.ts";
 
 type Pr = { tp: number; fp: number; fn: number };
@@ -43,5 +46,16 @@ describe("dev-3-5 scoring (decision 067)", () => {
     expect(verdict(base, at(1, 1, 0)).pass).toMatchObject({ f: true, precision: true }); // P 0.5, R 1
     expect(verdict(base, at(53, 47, 47, prs(1, 2, 1))).pass.x1).toBe(false);
     expect(verdict(base, at(60, 61, 1)).pass.precision).toBe(false);
+  });
+  it("attemptsUsage: a run the cap stopped before some repos counts the pull requests it has", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "tracehound-067-usage-"));
+    const u = { inputTokens: 10, outputTokens: 20, costUSD: 0.01 };
+    mkdirSync(path.join(dir, "attempts", "sentry"), { recursive: true });
+    const attempt = { diff: { review: { usage: u } }, ctx: { review: { usage: u } }, diffVerdicts: { verify: { usage: u } }, ctxOnlyVerdicts: { verify: { usage: u } } };
+    writeFileSync(path.join(dir, "attempts", "sentry", "0.attempt-1.json"), JSON.stringify(attempt));
+    const out = attemptsUsage(dir);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.inputTokens).toBe(40);
+    expect(out[0]!.outputTokens).toBe(80);
   });
 });

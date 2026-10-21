@@ -150,10 +150,11 @@ type Attempt = { diff: { review: { usage: Usage } }; ctx: { review: { usage: Usa
 const addU = (a: Usage, b: Usage): Usage => ({ inputTokens: a.inputTokens + b.inputTokens, outputTokens: a.outputTokens + b.outputTokens, costUSD: a.costUSD + b.costUSD });
 const Z: Usage = { inputTokens: 0, outputTokens: 0, costUSD: 0 };
 
-/** Per pull request (every attempt counted), for a run directory with attempts/. */
-function attemptsUsage(dir: string): Usage[] {
+/** Per pull request (every attempt counted), for a run directory with attempts/; a repo a capped run never reached has none. */
+export function attemptsUsage(dir: string): Usage[] {
   const out: Usage[] = [];
   for (const repo of DEV_REPOS) {
+    if (!existsSync(join(dir, "attempts", repo))) continue;
     const files = readdirSync(join(dir, "attempts", repo));
     const prs = [...new Set(files.map((f) => f.replace(/\.attempt-\d\.json$/, "")))];
     for (const pr of prs) {
