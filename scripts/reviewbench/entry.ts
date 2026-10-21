@@ -3,7 +3,8 @@
 // /work/repo at RB_HEAD, write RB_OUT. Settings (RB_CONFIG_*):
 //   RB_CONFIG_PIPELINE  pool-verify-v1 (default; the Action's pipeline) | pool-raw | pool-raw-x2 | pool-raw-missed
 //   RB_CONFIG_MODEL     model id for every stage (default: Super, as benchmarked)
-//   RB_MODEL_BASE_URL   the registered model API URL; becomes NEBIUS_BASE_URL for the stages
+//   RB_MODEL_BASE_URL   the registered model API URL; becomes NEBIUS_BASE_URL for the stages (the
+//                       client sends 3.5 Super VL to us-north1 whatever Token Factory region it names)
 // A pull request never fails because of the reviewer: any error, invalid output or the 25-minute
 // limit writes a valid file with no findings and exits 0. Only a configuration error (unknown
 // pipeline, missing key or contract variable) exits non-zero, before any model call, so a
@@ -20,7 +21,7 @@ import { promisify } from "node:util";
 import type { Finding, ReviewerInput } from "../../packages/action/src/action.ts";
 import { checkRepoHead, poolFindings, runPipeline, type Execute } from "../../packages/action/src/pipeline.ts";
 import { agrees } from "../bench/agree-rule.ts";
-import { DEFAULT_BASE_URL } from "../../packages/analyzer/src/llm/client.ts";
+import { baseUrlFor, DEFAULT_BASE_URL } from "../../packages/analyzer/src/llm/client.ts";
 import { SpendLedger } from "../../packages/analyzer/src/llm/ledger.ts";
 import { MAX_FINDINGS, toFindings, toInput, unionFindings } from "./adapter.ts";
 import { outputProblem, type RbOutput, type RbPrJson } from "./format.ts";
@@ -308,9 +309,10 @@ export async function main(env: NodeJS.ProcessEnv = process.env, deps: MainDeps 
     log(`configuration error: ${mask(error.message, env)}`);
     return 2;
   }
-  // The stages read NEBIUS_BASE_URL (packages/analyzer/src/llm/client.ts) from the env they inherit.
+  // The stages read NEBIUS_BASE_URL (packages/analyzer/src/llm/client.ts) from the env they inherit;
+  // the client then routes each model to its region (baseUrlFor), so the line shows that URL.
   if (env.RB_MODEL_BASE_URL?.trim()) env.NEBIUS_BASE_URL = env.RB_MODEL_BASE_URL.trim();
-  print(`pipeline=${s.pipeline} model=${s.model} base_url=${env.NEBIUS_BASE_URL || DEFAULT_BASE_URL} `
+  print(`pipeline=${s.pipeline} model=${s.model} base_url=${baseUrlFor(s.model, env.NEBIUS_BASE_URL || DEFAULT_BASE_URL)} `
     + `limit_min=${limitMs / 60_000} max_findings=${MAX_FINDINGS} attempt=${env.RB_ATTEMPT ?? "1"}`);
 
   const before = spent();
