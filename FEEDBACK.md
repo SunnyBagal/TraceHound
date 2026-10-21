@@ -675,3 +675,18 @@ was re-run.
 - **Docs/console:** not consulted, and no defect observed.
 - Opinion: a JSON-mode or schema-constrained output option for reasoning-on Super would remove most
   retries.
+
+## 2026-10-21 · Token Factory regions for 3.5 Super VL and 3 Super (job 067; client fix)
+- **Called:** this session made no Nebius calls. The facts below are from job 067 and a manual check
+  on 20 Oct: Token Factory chat completions and `GET /v1/models` on us-central1
+  (`https://api.tokenfactory.us-central1.nebius.com/v1`) and us-north1
+  (`https://api.tokenfactory.us-north1.nebius.com/v1`).
+- **us-central1:** `GET /v1/models` lists `nvidia/Nemotron-3.5-Super-VL`, but chat completions for
+  that id return HTTP 404 "does not exist" (35 of 35 calls in job 067, 20 Oct).
+- **us-north1:** the same id answers (one call, 20 Oct). `nvidia/nemotron-3-super-120b-a12b` returns
+  `model_not_found` there.
+- **Docs/console:** the console's code sample for 3.5 Super VL shows us-north1.
+- **What would have helped:** a `/v1/models` per region that lists only the models callable there, or
+  a region field on each entry.
+- Opinion: a model list that names a model which the same endpoint then answers 404 for is
+  misleading. A region field would have shown the right host before the first call.

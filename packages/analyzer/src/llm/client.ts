@@ -6,6 +6,33 @@ import { costUSD, estimateInputTokens, priceFor, type PriceTable } from "./price
 
 export const DEFAULT_BASE_URL = "https://api.tokenfactory.us-central1.nebius.com/v1";
 
+/**
+ * Models Token Factory serves only from another region. us-central1's GET /models lists 3.5 Super
+ * VL, but its chat completions answer 404 "does not exist"; us-north1 answers, and has no 3 Super.
+ * Exact, case-sensitive ids, as Nebius matches them.
+ */
+export const MODEL_BASE_URLS: Readonly<Record<string, string>> = {
+  "nvidia/Nemotron-3.5-Super-VL": "https://api.tokenfactory.us-north1.nebius.com/v1",
+};
+
+const TOKEN_FACTORY_HOST = /^api\.tokenfactory\.[a-z0-9-]+\.nebius\.com$/;
+
+/**
+ * The base URL a request for `model` goes to: the model's region from MODEL_BASE_URLS when the
+ * configured URL is a Token Factory host, else the configured URL unchanged. Any other host (a
+ * proxy, a test server) is never rewritten.
+ */
+export function baseUrlFor(model: string, configured: string): string {
+  if (!Object.hasOwn(MODEL_BASE_URLS, model)) return configured;
+  let host: string;
+  try {
+    host = new URL(configured).hostname;
+  } catch {
+    return configured;
+  }
+  return TOKEN_FACTORY_HOST.test(host) ? MODEL_BASE_URLS[model]! : configured;
+}
+
 /** OpenAI-style tool call as returned in `message.tool_calls`. */
 export interface ToolCall {
   id: string;
@@ -98,8 +125,10 @@ export class TokenFactoryClient {
     };
   }
 
-  #url(p: string) {
-    return `${this.#opts.baseUrl.replace(/\/$/, "")}${p}`;
+  /** `model` picks the region (baseUrlFor); without it, the configured base URL. */
+  #url(p: string, model?: string) {
+    const base = model === undefined ? this.#opts.baseUrl : baseUrlFor(model, this.#opts.baseUrl);
+    return `${base.replace(/\/$/, "")}${p}`;
   }
 
   #headers() {
@@ -151,7 +180,7 @@ export class TokenFactoryClient {
     try {
       let res: Response;
       try {
-        res = await this.#opts.fetch(this.#url("/chat/completions"), {
+        res = await this.#opts.fetch(this.#url("/chat/completions", request.model), {
           method: "POST",
           headers: this.#headers(),
           body: JSON.stringify(request),
