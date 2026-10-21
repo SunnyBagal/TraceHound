@@ -200,11 +200,13 @@ export function freezeCheck(paths: string[] = FROZEN_PATHS): { ok: boolean; why?
 
 /**
  * Decision 067's freeze check: nothing under FROZEN_PATHS that the tag has may differ from it,
- * except these files (the runner and its gates, the Nemotron 3.5 price, and two analyzer files no
- * pipeline stage imports: the CLI dispatcher and the config schema); files added since the tag are
- * allowed (no tag file imports them). No uncommitted changes under FROZEN_PATHS.
+ * except these files (the runner and its gates, the Nemotron 3.5 price, two analyzer files no
+ * pipeline stage imports: the CLI dispatcher and the config schema, and the LLM client, whose only
+ * change since the tag is #55's region routing: the 3.5 Super VL id goes to us-north1, every other
+ * model, the judges included, to the configured URL); files added since the tag are allowed (no tag
+ * file imports them). No uncommitted changes under FROZEN_PATHS.
  */
-export const ALLOWED_MODIFIED_067 = Object.freeze(["config/prices.json", "packages/analyzer/src/bin.ts", "packages/analyzer/src/config.ts", "scripts/bench/run-test-set.ts", "scripts/bench/test-set.ts"]);
+export const ALLOWED_MODIFIED_067 = Object.freeze(["config/prices.json", "packages/analyzer/src/bin.ts", "packages/analyzer/src/config.ts", "packages/analyzer/src/llm/client.ts", "scripts/bench/run-test-set.ts", "scripts/bench/test-set.ts"]);
 export function freezeCheck067(): { ok: boolean; why?: string; head: string } {
   const git = (args: string[]) => spawnSync("git", ["-C", REPO_ROOT, ...args], { encoding: "utf8", env: cleanGitEnv() });
   const head = git(["rev-parse", "HEAD"]).stdout.trim();

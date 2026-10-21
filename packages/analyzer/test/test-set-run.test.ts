@@ -41,7 +41,7 @@ import { JUDGE_SYSTEM_PROMPT } from "../src/bench/judge.ts";
 import { zeroCounts, type Counts } from "../src/bench/score.ts";
 import { cleanGitEnv } from "../src/git-env.ts";
 import { ResponseCache } from "../src/llm/cache.ts";
-import type { ChatRequest } from "../src/llm/client.ts";
+import { baseUrlFor, DEFAULT_BASE_URL, type ChatRequest } from "../src/llm/client.ts";
 import { REVIEW_CTX_SYSTEM_PROMPT } from "../src/review/prompt-ctx.ts";
 import { REVIEW_SYSTEM_PROMPT } from "../src/review/prompt.ts";
 import { VERIFY_CTX_SYSTEM_PROMPT } from "../src/review/verify-ctx-prompt.ts";
@@ -744,7 +744,13 @@ describe("dev runs 7–9 with --model (decision 067)", () => {
   });
 
   it("the freeze check allows exactly these modified files", () => {
-    expect(ALLOWED_MODIFIED_067).toEqual(["config/prices.json", "packages/analyzer/src/bin.ts", "packages/analyzer/src/config.ts", "scripts/bench/run-test-set.ts", "scripts/bench/test-set.ts"]);
+    expect(ALLOWED_MODIFIED_067).toEqual(["config/prices.json", "packages/analyzer/src/bin.ts", "packages/analyzer/src/config.ts", "packages/analyzer/src/llm/client.ts", "scripts/bench/run-test-set.ts", "scripts/bench/test-set.ts"]);
+  });
+
+  it("client.ts routes only the 3.5 id to us-north1: the reviewer and both judges keep the configured URL", () => {
+    expect(DEFAULT_BASE_URL).toBe("https://api.tokenfactory.us-central1.nebius.com/v1");
+    for (const model of [REVIEW_MODEL, ...JUDGES.map((j) => j.model)]) expect(baseUrlFor(model, DEFAULT_BASE_URL), model).toBe(DEFAULT_BASE_URL);
+    expect(baseUrlFor("nvidia/Nemotron-3.5-Super-VL", DEFAULT_BASE_URL)).toBe("https://api.tokenfactory.us-north1.nebius.com/v1");
   });
 
   it("runs the pipeline with the model into run-7-<slug>/, judges unchanged, model and decision 067 in run.json", async () => {
