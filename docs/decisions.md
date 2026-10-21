@@ -3338,3 +3338,29 @@ owner's rulings of 2026-10-20 after the first stop (below).
   correction, not a PR-level bootstrap (per-PR Cal.com counts are not in the repo).
 - The viewer page's prose (`viewer/app/benchmark/page.tsx`) still says "share a model family" and
   cites decision 063. That file was outside this job's allowed files.
+
+## 067 · Nemotron 3.5 Super as the reviewer and verifier model (dev only): adopted on 2 runs
+**Context:** the Action's default model had to be decided before freeze-2 (24 Oct). The question
+was whether `nvidia/Nemotron-3.5-Super-VL` raises F on the 40 dev pull requests when only the
+reviewer and verifier model changes (pool-verify-v1, same prompts, temperature 0, reasoning on, same
+`max_tokens`) and the judges stay the same. Briefs: `docs/prompts/067-dev-nemotron-3.5.md` (with
+resume 2, 067b).
+**Choice:** the plan, rule, baseline and fallback were frozen in `docs/bench/dev-3.5-plan.md` before
+the first call. The first run 7 got 35 × HTTP 404 because Token Factory serves the 3.5 id only from
+us-north1. #55 routes that one id there (`baseUrlFor`), and the judges stay on the configured URL,
+which a test pins. Amendment 1 (`164ead6`, pushed before any successful 3.5 call) added `client.ts`
+to the freeze check's allowed list (`9b265ca`), voided run 7 ($0) for a 061a restart, and replaced
+the stop rule with three conditions: all PRs at 0 findings, a request-error failure string, or more
+than 10 of 40 PRs with a failed reviewer chunk. Invalid-JSON chunks count as the candidate's result.
+**Result (`docs/bench/dev-3.5.md`):** runs 7r and 8 completed. The $8 cap stopped run 9 at PR 24, so
+the plan's 2-run fallback decides. Means are v1 P 54.8% / R 46.6% / F 50.4% and x1 F 55.1%, against
+the 3 Super 5-run means of 40.5% / 44.3% / 42.3% and 51.3%. All three conditions pass (F ≥ 45.28,
+P ≥ 40.52, x1 F ≥ 51.29). **3.5 Super is adopted as the Action's default.** Both 3.5 runs are above
+the best 3 Super run under v1. Paired bootstrap of the mean F difference: v1 +8.1 [+1.4, +14.4], x1
++3.9 [−4.2, +11.1]. The gain is precision (about half the FPs), not recall. Costs: median $0.063 per
+PR against $0.031, with about 2.5× the output tokens. 7 of 40 PRs per run have a chunk that returned
+invalid JSON twice (3 Super: 0–1), and 79 of 624 calls hit the 32,000-token limit. Spend $7.98.
+Cal.com was not opened.
+**Rejected:** raising `max_tokens` or changing the prompt to cut the JSON failures, because that is
+a new variant and would have to be judged on dev again. Also rejected: raising the cap to finish run
+9 after seeing runs 7r and 8, because the fallback was written for this case before the first call.

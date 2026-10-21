@@ -704,3 +704,23 @@ was re-run.
   a region field on each entry.
 - Opinion: a model list that names a model which the same endpoint then answers 404 for is
   misleading. A region field would have shown the right host before the first call.
+
+## 2026-10-21 · job 067b (Nemotron 3.5 Super on dev, us-north1)
+- **Called:** Token Factory chat completions. `nvidia/Nemotron-3.5-Super-VL` (reasoning on,
+  temperature 0) went to us-north1, routed by the client as described in the 21 Oct regions entry
+  above. The judges `nvidia/nemotron-3-super-120b-a12b` and `Qwen/Qwen3-235B-A22B-Instruct-2507` went
+  to us-central1. Calls ran between 16:42Z and 21:45Z.
+- **Counts:** 3.5 Super, 624 requests: 623 returned a response and 1 failed. Judges, 130 + 130
+  requests, all succeeded. Ledger spend $7.984 for the job.
+- **Failures:** 1 transport error, `fetch failed` (no HTTP status), which succeeded on our rerun. No
+  HTTP 4xx/5xx. No 404s once requests went to us-north1.
+- **Model output:** in the attempts used, 20 reviewer chunks and 3 verifier calls returned invalid
+  JSON twice in a row (runs of 40, 40 and 23 pull requests). Another 43 chunks (all attempts) were invalid on the
+  first reply and valid on the retry. 79 of the 624 responses had exactly 32,000 completion tokens
+  (the request's `max_tokens`).
+- **Latency:** a single 1-chunk probe took 16.2 s. Pipeline wall time per pull request had a median
+  of 121 s and 130 s in the two complete runs (several calls each).
+- **Docs/console:** nothing new beyond the 21 Oct regions entry.
+- **What would have helped:** a `finish_reason` of `length` that we could see per call in usage
+  logging, or a way to cap reasoning tokens apart from answer tokens. Opinion: a separate reasoning
+  budget would likely remove most of the invalid-JSON replies, which look like truncation.
