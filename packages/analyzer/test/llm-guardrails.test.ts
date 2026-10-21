@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Budget, BudgetExceededError, capsFromEnv, DEFAULT_CAPS } from "../src/llm/budget.ts";
 import { ResponseCache } from "../src/llm/cache.ts";
-import { CacheMissError, TokenFactoryClient, type ChatRequest } from "../src/llm/client.ts";
+import { baseUrlFor, CacheMissError, MODEL_BASE_URLS, TokenFactoryClient, type ChatRequest } from "../src/llm/client.ts";
 import { SpendLedger, summarize } from "../src/llm/ledger.ts";
 import { costUSD, priceFor } from "../src/llm/prices.ts";
 import { fakeClient, TEST_PRICES } from "./helpers.ts";
@@ -147,6 +147,65 @@ describe("TokenFactoryClient", () => {
     expect(await client.listModels()).toEqual(["nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"]);
     expect(ledger.entries()).toEqual([]);
     expect(budget.runSpent).toBe(0);
+  });
+});
+
+describe("per-model base URL", () => {
+  const SUPER_35 = "nvidia/Nemotron-3.5-Super-VL";
+  const SUPER_3 = "nvidia/nemotron-3-super-120b-a12b";
+  const CENTRAL = "https://api.tokenfactory.us-central1.nebius.com/v1";
+  const NORTH = "https://api.tokenfactory.us-north1.nebius.com/v1";
+
+  function recordingFetch() {
+    const urls: string[] = [];
+    const impl = (async (url: string) => {
+      urls.push(url);
+      return new Response(JSON.stringify(ok().body));
+    }) as unknown as typeof fetch;
+    return { impl, urls };
+  }
+
+  async function urlFor(model: string, baseUrl?: string) {
+    const f = recordingFetch();
+    const { client } = fakeClient(f.impl, { baseUrl });
+    await client.chat(request(model), { purpose: "p" });
+    return f.urls;
+  }
+
+  it("has one entry, 3.5 Super VL on us-north1", () => {
+    expect(MODEL_BASE_URLS).toEqual({ [SUPER_35]: NORTH });
+  });
+
+  it("sends 3.5 with the default base URL to us-north1", async () => {
+    expect(await urlFor(SUPER_35)).toEqual([`${NORTH}/chat/completions`]);
+  });
+
+  it("keeps 3 Super with the default base URL on us-central1", async () => {
+    expect(await urlFor(SUPER_3)).toEqual([`${CENTRAL}/chat/completions`]);
+  });
+
+  it("sends 3.5 to us-north1 when NEBIUS_BASE_URL is us-central1", async () => {
+    expect(await urlFor(SUPER_35, `${CENTRAL}/`)).toEqual([`${NORTH}/chat/completions`]);
+  });
+
+  it("never rewrites a base URL that is not a Token Factory host", async () => {
+    expect(await urlFor(SUPER_35, "https://models.example.invalid/v1")).toEqual(["https://models.example.invalid/v1/chat/completions"]);
+    expect(await urlFor(SUPER_35, "http://127.0.0.1:8080/v1")).toEqual(["http://127.0.0.1:8080/v1/chat/completions"]);
+    expect(baseUrlFor(SUPER_35, "https://api.tokenfactory.us-central1.nebius.com.example.invalid/v1")).toBe("https://api.tokenfactory.us-central1.nebius.com.example.invalid/v1");
+    expect(baseUrlFor(SUPER_35, "not a url")).toBe("not a url");
+  });
+
+  it("leaves an unknown model, a different case or an inherited key on the configured URL", async () => {
+    expect(await urlFor("someone/unlisted")).toEqual([`${CENTRAL}/chat/completions`]);
+    expect(baseUrlFor("nvidia/nemotron-3.5-super-vl", CENTRAL)).toBe(CENTRAL);
+    expect(baseUrlFor("constructor", CENTRAL)).toBe(CENTRAL);
+  });
+
+  it("keeps GET /models on the configured base URL", async () => {
+    const f = recordingFetch();
+    const { client } = fakeClient(f.impl);
+    await client.listModels();
+    expect(f.urls).toEqual([`${CENTRAL}/models`]);
   });
 });
 
