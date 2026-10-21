@@ -91,3 +91,29 @@ With the baseline above, the thresholds are: mean F (v1) ≥ 45.28%, mean P (v1)
 If the cap stops a run, the runs that completed decide, provided there are at least 2; the report
 says which runs that was. With fewer than 2 completed runs there is no verdict, and 3 Super stays.
 A run that crashes may be restarted once into `run-<N>-<slug>r/` (061a), which then stands for it.
+
+## Amendment 1 (21 Oct, before any successful 3.5 call)
+
+- The model id is unchanged. The 404s were a region problem, fixed in the client by #55 (main
+  `da13585`). This branch merged it at `d73af1f`.
+- The freeze check's allowed list gains `packages/analyzer/src/llm/client.ts` (commit `9b265ca`).
+  That file's only change since the tag is routing this one model id to us-north1. The judges'
+  routing is unchanged, as a test asserts (`test/test-set-run.test.ts`, "client.ts routes only the
+  3.5 id to us-north1").
+- The original run 7 is void (an infrastructure failure, $0). It is restarted once under 061a with
+  `--restart` into `run-7r-…`, which stands for run 7. Runs 8 and 9 follow.
+- **New stop rule before run 8**, which replaces "any PR has failed chunks". Stop if any of these
+  holds:
+  - every PR got 0 findings;
+  - any failure string is a request error (HTTP 4xx/5xx, or a budget refusal);
+  - more than 10 of the 40 PRs have a failed reviewer chunk.
+
+  Otherwise continue.
+- Failed chunks caused by invalid or truncated replies count as the candidate's result. Those PRs
+  are scored exactly as the scoring scripts score any PR whose reviewer failed, which is the rule
+  the baseline runs were scored with: a failed chunk contributes no findings
+  (`packages/analyzer/src/review/review.ts:4-5`), and the PR is scored on whatever comments remain,
+  with every Medium-or-higher golden comment no comment matched counted as a false negative (and no
+  judge request when it has no comments) (`packages/analyzer/src/bench/score.ts:54-58`, `:121-122`).
+- The adoption rule and thresholds are unchanged: v1 mean F ≥ 45.28, v1 mean P ≥ 40.52, x1 mean
+  F ≥ 51.29, plus the 2-run fallback if the cap stops a run.
