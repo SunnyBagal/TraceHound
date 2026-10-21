@@ -58,6 +58,16 @@ differs: it leaves each stage on its own CLI default, Nano for the two reviewers
 verifier (`docs/action/README.md`). `RB_MODEL_BASE_URL`, the registered model API URL, becomes
 `NEBIUS_BASE_URL` for the stages.
 
+Token Factory serves the two models from different regions: 3 Super (and Nano, Qwen) only from
+us-central1, and `nvidia/Nemotron-3.5-Super-VL` only from us-north1. us-central1's `GET /v1/models`
+lists 3.5, but its chat completions answer HTTP 404 "does not exist". The client routes per request
+(`MODEL_BASE_URLS` and `baseUrlFor` in `packages/analyzer/src/llm/client.ts`): when the base URL is a
+Token Factory host, a model in the table goes to the table's region, so 3.5 goes to
+`https://api.tokenfactory.us-north1.nebius.com/v1` while `RB_MODEL_BASE_URL` stays us-central1.
+Any other host is never rewritten. The settings line prints the URL the client resolves for
+`RB_CONFIG_MODEL`, so a 3.5 run logs us-north1. The response-cache key (model and request) has no
+URL in it and did not change.
+
 The other candidate model is `nvidia/Nemotron-3.5-Super-VL`. `config/prices.json` prices it at
 $0.30 / $0.90 per 1M tokens, the same as 3 Super (Nebius blog of 16 Oct 2026 and the Token Factory
 model page). Without that entry it would be priced at the $5 / $15 placeholder. One review
@@ -135,8 +145,8 @@ ReviewBench's runs are all or nothing: one pull request that never succeeds fail
 
 ## Network and GitHub
 
-The run allows only the model API host. The stages call only `NEBIUS_BASE_URL` (through the
-`HTTPS_PROXY` ReviewBench sets; `NODE_USE_ENV_PROXY=1` is theirs). git reads only local objects:
+The run allows only the model API hosts. The stages call only `NEBIUS_BASE_URL`, or us-north1 for
+3.5 (above), through the `HTTPS_PROXY` ReviewBench sets; `NODE_USE_ENV_PROXY=1` is theirs. git reads only local objects:
 `cat-file`, `show` and `grep` at `RB_HEAD`. Nothing calls GitHub. The entrypoint imports no runtime
 code from `packages/action/src/action.ts`, `cli.ts`, `fix.ts` or `data.ts`, so posting a review, fix
 suggestions and graph history cannot run (a test checks the imports).
@@ -221,7 +231,7 @@ only per-PR record is `cost_usd=` in the container log.
 | Secret names | `NEBIUS_API_KEY` (plus `GHCR_PULL_TOKEN` only if the package stays private) |
 | Configuration labels | `pipeline` and `model` as in the candidate's row above |
 | Seconds per pull request | 1800 (the default; the adapter stops itself at 1500) |
-| Other egress hosts | none |
+| Other egress hosts | `api.tokenfactory.us-north1.nebius.com`, for 3.5 (already on the registration's egress list, onboarding PR review-bench/ReviewBench#92) |
 
 ### After merge: the smoke procedure
 

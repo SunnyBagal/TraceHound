@@ -122,6 +122,26 @@ describe("input and output", () => {
     expect(d.lines.at(-1)).toMatch(/^status=ok findings=2 dropped_no_line=0 dropped_empty=0 capped=0 cost_usd=0\.0000 wall_s=\d+$/);
   });
 
+  it("prints the base URL the client resolves for the configured model", async () => {
+    const central = "https://api.tokenfactory.us-central1.nebius.com/v1";
+    const north = "https://api.tokenfactory.us-north1.nebius.com/v1";
+    const cases: [string | undefined, string | undefined, string][] = [
+      ["nvidia/Nemotron-3.5-Super-VL", central, north],
+      ["nvidia/Nemotron-3.5-Super-VL", undefined, north],
+      ["nvidia/nemotron-3-super-120b-a12b", central, central],
+      [undefined, undefined, central],
+      ["nvidia/Nemotron-3.5-Super-VL", "https://models.example.invalid/v1", "https://models.example.invalid/v1"],
+    ];
+    for (const [model, baseUrl, printed] of cases) {
+      const c = contract({ RB_CONFIG_PIPELINE: "pool-raw", RB_CONFIG_MODEL: model, RB_MODEL_BASE_URL: baseUrl });
+      const d = deps(async () => []);
+      expect(await main(c.env, d)).toBe(0);
+      expect(d.printed).toEqual([expect.stringContaining(` base_url=${printed} limit_min=`)]);
+      // The stages still get the registered URL; routing happens in the client.
+      expect(c.env.NEBIUS_BASE_URL).toBe(baseUrl);
+    }
+  });
+
   it("stands in the PR's address for an empty title and an empty string for a null body", () => {
     expect(toInput({ title: " ", body: null }, "d", 7, "o/r")).toEqual({ title: "o/r#7", body: "", number: 7, diff: "d" });
   });

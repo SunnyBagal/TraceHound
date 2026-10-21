@@ -2,9 +2,11 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { main } from "../src/cli.ts";
+import { main as actionMain } from "../src/cli.ts";
 import type { Dependencies } from "../src/action.ts";
 import { MissingHeadError } from "../src/pipeline.ts";
+// Existing payload assertions pin contracts off; contracts integration tests cover the on default.
+const main = (env: NodeJS.ProcessEnv, d: Dependencies) => actionMain({ TRACEHOUND_CONTRACTS: "off", ...env }, d);
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -139,4 +141,13 @@ it.each(["yes", "", "ON"])("rejects invalid fixes input %j before effects", asyn
     GITHUB_EVENT_PATH: "/unused", TRACEHOUND_FIXES: fixes }, d)).toBe(1);
   expect(d.runFixes).not.toHaveBeenCalled();
   expect(d.fetch).not.toHaveBeenCalled();
+});
+
+it.each(["yes", "", "ON"])("rejects invalid contracts input %j before effects", async contracts => {
+  const d = deps();
+  expect(await main({ NEBIUS_API_KEY: "fake-unused", GITHUB_EVENT_NAME: "pull_request", GITHUB_TOKEN: "fake-unused",
+    GITHUB_EVENT_PATH: "/unused", TRACEHOUND_CONTRACTS: contracts }, d)).toBe(1);
+  expect(d.log).toHaveBeenCalledWith("TraceHound: contracts must be on or off.");
+  expect(d.fetch).not.toHaveBeenCalled();
+  expect(d.runPipeline).not.toHaveBeenCalled();
 });

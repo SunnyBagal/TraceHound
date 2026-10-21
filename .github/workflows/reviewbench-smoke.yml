@@ -33,6 +33,7 @@ permissions:
 env:
   REVIEWBENCH_SHA: 12e9d1aadbe7ddf4a480c6bd4ffb6ae37c7bcb67
   # packages/analyzer/src/llm/client.ts DEFAULT_BASE_URL; the portal's model API URL is the same.
+  # Stays us-central1 for 3.5 too: the client routes 3.5 to us-north1 (MODEL_BASE_URLS).
   MODEL_BASE_URL: https://api.tokenfactory.us-central1.nebius.com/v1
 
 jobs:

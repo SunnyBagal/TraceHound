@@ -4,6 +4,12 @@ import { expect, it } from "vitest";
 const manifestUrl = new URL("../../../.github/actions/tracehound-review/action.yml", import.meta.url);
 const packageUrl = new URL("../../../package.json", import.meta.url);
 
+it("defaults contracts on and passes its input to the review CLI", async () => {
+  const manifest = await readFile(manifestUrl, "utf8");
+  expect(manifest).toMatch(/contracts:\n(?:[^\n]*\n)*?    default: 'on'/);
+  expect(manifest).toContain("TRACEHOUND_CONTRACTS: ${{ inputs.contracts }}");
+});
+
 it("does not resolve a pnpm package file against the target repository", async () => {
   expect(await readFile(manifestUrl, "utf8")).not.toContain("package_json_file");
 });
