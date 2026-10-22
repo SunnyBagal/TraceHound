@@ -7,7 +7,7 @@ inputs:
   model:
     description: Nemotron model ID (empty uses each stage's default)
     required: false
-    default: ''
+    default: 'nvidia/Nemotron-3.5-Super-VL'
   reviewer:
     description: Reviewer pipeline (pool-verify-v1 or review-diff-v1)
     required: false

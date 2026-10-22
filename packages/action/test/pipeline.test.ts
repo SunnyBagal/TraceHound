@@ -148,6 +148,14 @@ it("runs both reviewers before either finishes, then verifies the pool, using on
   await f.cleaned();
 });
 
+it.each(["nvidia/Nemotron-3.5-Super-VL", ""])("routes model %j to every selected stage or preserves CLI defaults when empty", async model => {
+  const f = fake();
+  expect(await runPipeline(input, model, "/fake/repo", "abc123", f.log, f.exec)).not.toBeNull();
+  expect(f.commands).toEqual(["review", "review-ctx", "verify-ctx"]);
+  expect(f.models).toEqual(model ? [model, model, model] : []);
+  await f.cleaned();
+});
+
 it("posts kept findings including VERIFY_FAILED, with pipeline counts and the max-comments cap", async () => {
   const f = fake();
   await runAction(event, { ...options, maxComments: 1 }, f.deps);
