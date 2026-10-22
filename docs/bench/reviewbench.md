@@ -43,17 +43,18 @@ missed-issue pass (`review-missed-v1`, P008 amendment 2); the Action does not ru
 
 | `RB_CONFIG_PIPELINE` | What runs |
 |---|---|
-| `pool-verify-v1` (default) | What the Action runs: head check, review-diff-v1 and review-ctx-v1 in parallel, the pool (decision 059), verify-ctx-v1 on the pool; the kept findings. This is `runPipeline`, unchanged. |
+| `pool-verify-v1` (default) | What the Action runs: head check, review-diff-v1 and review-ctx-v1 in parallel, the pool (decision 059), verify-ctx-v1 on the pool; the kept findings. Uses the Action's `runPipeline`, including partial results (decision 068). |
 | `pool-raw` | pool-verify-v1 without its last stage: the same two reviewer commands with the same arguments, then `poolFindings`. No verifier. |
-| `pool-raw-x2` | pool-raw twice with the same prompts, then the union, deduplicated with `scripts/bench/agree-rule.ts` `agrees` (the first of agreeing findings is kept, across the whole union). The response cache is cleared before the second pass, or it would replay the first; that is why this value runs only in the image (`TRACEHOUND_RB_IMAGE=1`). Each pass is all or nothing, like pool-raw; the union is over the passes that finished. A pass still running one minute before the limit is stopped, so a finished first pass is still written. |
-| `pool-raw-missed` | pool-raw, then one missed-issue pass, `tracehound review-missed` (`review-missed-v1`), on the same model. The pass gets the pool as `{ comments }` and, per diff chunk, sees the chunk, review-ctx-v1's context block and a numbered list of the pooled findings on that chunk's files (`path:line: body`, each body cut at 400 characters, `(none)` if there are none), and is asked only for defects the list does not contain. The result is the pool, then each missed finding that agrees (decision 058's rule, `agrees`) with no pool finding; the log says `pool N, missed M, new K`. Pool findings come first, so the 40-finding cap cuts missed findings first. The pass gets the time left minus one minute; if it fails (any failed chunk counts) or runs out of time, the result is the pool alone and the log says `missed: failed (<reason>)`. It never fails a pull request that pool-raw would have passed. |
+| `pool-raw-x2` | pool-raw twice with the same prompts, then the union, deduplicated with `scripts/bench/agree-rule.ts` `agrees` (the first of agreeing findings is kept, across the whole union). The response cache is cleared before the second pass, or it would replay the first; that is why this value runs only in the image (`TRACEHOUND_RB_IMAGE=1`). Each pass keeps successful chunks, like pool-raw; the union is over the passes that finished. A pass still running one minute before the limit is stopped, so a finished first pass is still written. |
+| `pool-raw-missed` | pool-raw, then one missed-issue pass, `tracehound review-missed` (`review-missed-v1`), on the same model. The pass gets the pool as `{ comments }` and, per diff chunk, sees the chunk, review-ctx-v1's context block and a numbered list of the pooled findings on that chunk's files (`path:line: body`, each body cut at 400 characters, `(none)` if there are none), and is asked only for defects the list does not contain. The result is the pool, then each missed finding that agrees (decision 058's rule, `agrees`) with no pool finding; the log says `pool N, missed M, new K`. Pool findings come first, so the 40-finding cap cuts missed findings first. The pass gets the time left minus one minute; if all its chunks fail, a process or output error occurs, or it runs out of time, the result is the pool alone and the log says `missed: failed (<reason>)`. Successful missed chunks are kept when others fail. It never fails a pull request that pool-raw would have passed. |
 
 Any other value exits 2 with the list of accepted values.
 
 `RB_CONFIG_MODEL` is the model id for every stage. The default is
-`nvidia/nemotron-3-super-120b-a12b` (Super, reasoning on, temperature 0): the configuration every
-pool-verify-v1 result was measured with (`scripts/bench/run-test-set.ts` `REVIEW_MODEL`; decisions
-059, 062) and the one the cost figures below come from. The Action with an empty `model` input
+`nvidia/nemotron-3-super-120b-a12b` (Super, reasoning on, temperature 0): the configuration the
+original pool-verify-v1 results were measured with (`scripts/bench/run-test-set.ts` `REVIEW_MODEL`;
+decisions 059, 062). The Action now defaults to 3.5 (067, 068); the adapter's default stays on 3 Super.
+The Action with an empty `model` input
 differs: it leaves each stage on its own CLI default, Nano for the two reviewers and Super for the
 verifier (`docs/action/README.md`). `RB_MODEL_BASE_URL`, the registered model API URL, becomes
 `NEBIUS_BASE_URL` for the stages.
@@ -83,8 +84,8 @@ Reasoning on 3.5: every stage sends `chat_template_kwargs: { enable_thinking: tr
 nothing changes for 3.5. Reasoning tokens share `max_tokens`: 32,000 per reviewer call, 16,000 per
 verifier call. The chunk records keep no `finish_reason`, so a reply truncated by that limit shows
 up as an invalid reply: after the one retry the chunk is `CHUNK_FAILED` with that failure string.
-pool-raw (like pool-verify-v1) then fails the pull request, writes `[]`, and the status line says
-`status=failed: review: failed chunks (first: …)`. In the verifier a truncated reply becomes
+That chunk contributes no findings; successful chunks remain in pool-raw and pool-verify-v1,
+matching decision 067's measured configuration. In the verifier a truncated reply becomes
 VERIFY_FAILED and the finding is kept.
 
 ## Pre-registered candidates
@@ -125,10 +126,19 @@ review-ctx-v1's format with only the pass's own findings.
 
 ReviewBench's runs are all or nothing: one pull request that never succeeds fails the whole run. So:
 
-- Any error, a failed chunk, invalid model output after the stages' own one retry, an unreadable
-  `pr.json` or diff, or the wall-clock limit writes a valid file with `"findings": []`, logs the
-  reason (first line, at most 300 characters, the key masked) and exits 0. An empty diff makes no
-  model call.
+- Failed reviewer chunks contribute no findings; successful chunks are retained in all four
+  pipelines (decision 068). A pool-raw pass fails from chunk failures only when all reviewer
+  chunks across both reviewers failed. pool-raw-x2 unions completed passes, including partial ones;
+  pool-raw-missed also retains successful missed-issue chunks. Process errors and invalid output
+  still fail a pass. If no usable pass remains, the wrapper writes no findings.
+- A partial result logs `status=ok partial=<failed>/<chunks>` before `findings=…`. Counts cover
+  validated reviewer chunks across attempted passes, including a failed pass in pool-raw-x2 or
+  a wholly failed missed-issue pass whose pool is retained; verifier failures are separate.
+  With no failed chunks, the status stays `status=ok`.
+- When no pass can be retained after process errors, every reviewer chunk failing, invalid stage
+  output, or the wall-clock limit, the wrapper writes a valid file with `"findings": []`, logs the
+  reason (first line, at most 300 characters, the key masked) and exits 0. An unreadable `pr.json`
+  or diff does the same. An empty diff makes no model call.
 - The wall-clock limit is 25 minutes, under ReviewBench's default of 30. At the limit every
   running stage process is killed (`SIGKILL` through an `AbortSignal`) before the file is written.
 - Only a configuration error exits non-zero (2), before any model call: an unknown pipeline,
@@ -137,9 +147,10 @@ ReviewBench's runs are all or nothing: one pull request that never succeeds fail
   of publishing hundreds of empty reviews.
 - Not caught here: a wrong key, a wrong model id or a refused (over-budget) call. Every chunk then
   fails, so every pull request gets `[]` with exit 0. The status line says
-  `status=failed: review: failed chunks (first: request failed: HTTP 401 …)` for pool-raw and
-  pool-raw-x2, and the stage count lines show `CHUNK_FAILED` for all three. The smoke workflow fails
-  on exactly this (any status other than `ok`, or no findings at all), so run it before a full run.
+  `status=failed: pool-raw: failed chunks (first: request failed: HTTP 401 …)` for pool-raw;
+  pool-raw-x2 reports no pass finished. Stage count lines show `CHUNK_FAILED`.
+  The smoke workflow rejects `status=failed`, missing or malformed statuses, and zero findings
+  across its PRs; it accepts both `status=ok` and `status=ok partial=…`.
 - Very large pull requests can hit the limit: the reviewers take 60,000-character chunks one after
   another, and a request may take up to 10 minutes. Those get `[]`.
 

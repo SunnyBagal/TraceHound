@@ -3364,3 +3364,25 @@ Cal.com was not opened.
 **Rejected:** raising `max_tokens` or changing the prompt to cut the JSON failures, because that is
 a new variant and would have to be judged on dev again. Also rejected: raising the cap to finish run
 9 after seeing runs 7r and 8, because the fallback was written for this case before the first call.
+
+## 068 · Nemotron 3.5 default with partial reviews on failed chunks
+**Context:** decision 067 adopted 3.5 on two completed dev runs. On each run, 7 of 40 PRs had a
+reviewer chunk return invalid JSON twice, but the benchmark retained every successful chunk's
+comments; only 3 of 40 PRs ended with no findings. The Action and ReviewBench adapter instead
+discarded all findings when any reviewer chunk failed, so their behavior did not match what was
+measured.
+**Choice:** default the Action's `model` input to `nvidia/Nemotron-3.5-Super-VL`, and retain partial
+results on failed reviewer chunks to match how 067 was measured. pool-verify-v1 returns no review
+when both reviewers fail every chunk, a process errors, or output is invalid. Successful chunks
+use the same pooling and verifier; `VERIFY_FAILED` findings remain kept. Partial reviews show the
+failed/total reviewer chunk count and record `chunkFailed: { diff: n, ctx: n }` in the footer.
+ReviewBench's pool-raw, pool-raw-x2 and pool-raw-missed retain successful chunks under the same
+rule and report `status=ok partial=<failed>/<chunks>`; the smoke check accepts that status.
+Explicit `model: ''` preserves per-stage CLI defaults. Fixes stay on 3 Super because that stage
+was not measured on 3.5. Analyzer CLI defaults, the benchmark's REVIEW_MODEL, prompts, token
+limits, cleanGitEnv and contractsEnv are unchanged. No model call or live check was made for this
+change; tests use synthetic stage output.
+**Rejected:**
+- Keep all-or-nothing reviews: with 3.5 this would post nothing on about 1 in 6 PRs, unlike the
+  configuration measured in 067.
+- Fall back to 3 Super on failure: that combination is unmeasured.
