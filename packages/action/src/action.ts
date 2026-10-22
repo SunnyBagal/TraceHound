@@ -118,7 +118,9 @@ function reviewFooter(findings: Finding[], commit: string, pipeline: PipelineCou
   reviewer: Reviewer, contracts?: ContractsSummary): string {
   const record: Record<string, unknown> = {
     version: 1, pipeline: reviewer, headSha: commit,
-    ...pipeline, posted: findings.length, fixes: data.fixes.counts,
+    ...(pipeline && { pool: pipeline.pool, kept: pipeline.kept,
+      ...(pipeline.chunkFailed && { chunkFailed: pipeline.chunkFailed }) }),
+    posted: findings.length, fixes: data.fixes.counts,
     ...(data.suppressed?.length && { suppressed: data.suppressed }),
     ...(contracts && { contracts }),
     findings: findings.map((finding, i) => ({
@@ -154,6 +156,10 @@ export function buildReview(
   const comments: ReviewPayload["comments"] = [];
   const body = [`TraceHound · ${reviewer} · ${model.replace(/\s+/g, " ")} · ${findings.length} findings`
     + (pipeline ? ` (pool ${pipeline.pool}, kept ${pipeline.kept})` : "")];
+  if (pipeline?.chunkFailed) {
+    const failed = pipeline.chunkFailed.diff + pipeline.chunkFailed.ctx;
+    body.push(`${failed} of ${pipeline.reviewerChunks} reviewer chunks failed (invalid model reply); this review is partial.`);
+  }
   const posted = findings.slice(0, maxComments);
   for (const [index, finding] of posted.entries()) {
     const fix = data?.fixes.suggestions[index];
@@ -264,7 +270,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
   const contractsResult = await contractsTask;
   const contracts: ContractDelivery | undefined = contractsMode === "on" && contractsResult.status !== "off" ? { result: contractsResult,
     repo: event.repository.full_name, serverUrl: options.serverUrl ?? "https://github.com" } : undefined;
-  if (output.failed) {
+  if (reviewer === "review-diff-v1" && output.failed) {
     deps.log("TraceHound: reviewer reported failed chunks; nothing posted.");
     return;
   }
@@ -304,7 +310,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
       counts: { attempted: 0, valid: 0, rejected: 0 } } };
     data.suppressed = suppressed;
   }
-  if (contracts) data ??= { sources, fixes: { suggestions: output.comments.slice(0, options.maxComments).map(() => null),
+  if (contracts || pipeline?.chunkFailed) data ??= { sources, fixes: { suggestions: output.comments.slice(0, options.maxComments).map(() => null),
     counts: { attempted: 0, valid: 0, rejected: 0 } } };
   let payload = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, false, reviewer, pipeline, data, contracts);
   if (options.dryRun) {

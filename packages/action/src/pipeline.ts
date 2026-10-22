@@ -13,7 +13,12 @@ export type Execute = (file: string, args: string[], options: {
   cwd: string; env: NodeJS.ProcessEnv; maxBuffer: number;
 }) => Promise<unknown>;
 
-export interface PipelineCounts { pool: number; kept: number }
+export interface PipelineCounts {
+  pool: number;
+  kept: number;
+  chunkFailed?: { diff: number; ctx: number };
+  reviewerChunks?: number;
+}
 export type FindingSource = "diff" | "ctx" | "both";
 export interface PipelineOutput {
   comments: Finding[];
@@ -107,8 +112,12 @@ export async function runPipeline(
       const output = object(await json(file));
       const review = object(output.review);
       const comments = findings(output.comments);
-      if (count(review.chunkFailed) > 0) throw new Error("Failed chunks");
-      return { comments, model: model(review.model) };
+      const chunkFailed = count(review.chunkFailed);
+      if (!Array.isArray(review.chunks) || chunkFailed > review.chunks.length) throw new Error("Invalid chunks");
+      const failed = review.chunks.filter(chunk => object(chunk).status === "CHUNK_FAILED").length;
+      if (failed !== chunkFailed || review.chunks.some(chunk => !["OK", "CHUNK_FAILED"].includes(String(object(chunk).status)))
+        || (chunkFailed > 0 && chunkFailed === review.chunks.length && comments.length > 0)) throw new Error("Invalid chunks");
+      return { comments, model: model(review.model), chunkFailed, chunks: review.chunks.length };
     });
     // Wait for both processes even on failure, so neither can outlive its temporary files.
     const results = await Promise.allSettled([
@@ -120,6 +129,9 @@ export async function runPipeline(
     if (ctxResult!.status === "rejected") throw ctxResult!.reason;
     const diff = diffResult!.value;
     const ctx = ctxResult!.value;
+    const chunkFailed = diff.chunkFailed + ctx.chunkFailed;
+    const reviewerChunks = diff.chunks + ctx.chunks;
+    if (chunkFailed > 0 && chunkFailed === reviewerChunks) throw new StageError("reviewers");
     const pool = poolFindings(diff.comments, ctx.comments);
     const sources = poolSources(diff.comments, ctx.comments);
     await stage("pool", () => writeFile(poolPath, JSON.stringify({
@@ -160,8 +172,9 @@ export async function runPipeline(
         keptSources.push(remainingSources.splice(index, 1)[0]!);
       }
       // Use the CLI's kept file directly, including its VERIFY_FAILED decisions.
-      return { comments, sources: keptSources, review: { model: [...new Set([diff.model, ctx.model, verifyModel])].join(", "), chunkFailed: 0 },
-        pipeline: { pool: pool.length, kept: comments.length } };
+      return { comments, sources: keptSources, review: { model: [...new Set([diff.model, ctx.model, verifyModel])].join(", "), chunkFailed },
+        pipeline: { pool: pool.length, kept: comments.length,
+          ...(chunkFailed > 0 && { chunkFailed: { diff: diff.chunkFailed, ctx: ctx.chunkFailed }, reviewerChunks }) } };
     });
   } catch (error) {
     const name = error instanceof StageError ? error.stage : "pool-verify-v1";
