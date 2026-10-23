@@ -3422,3 +3422,30 @@ JUDGE_FAILED, for $0.7228.
   066 had none. The sums are in `v2-calcom.md` and can be checked by hand.
 **Limits:** n = 23, one run, the second look, and the selection was on dev. 3 Super's three runs
 spread 7 F points, which is more than the gap between 3.5 and 3 Super here.
+
+**069b (2026-10-23): intervals for the v2 gaps (no model call, $0).** Brief:
+`docs/prompts/069b-v2-intervals.md`; plan `docs/bench/v2-intervals-plan.md` (`5e16e2b`, pushed
+16:07:42Z, before the first bootstrap at 16:09:13Z); result `docs/bench/v2-intervals.md`; script
+`scripts/bench/intervals.ts`.
+- **Choice:** the primary interval is a PR-level paired bootstrap (per-PR counts from the bench
+  folder's score files, 10,000 resamples, seed 69). "Ahead of" or "behind" is used only when its 95%
+  interval excludes 0, "statistically tied" otherwise, and ranks only as point estimates.
+- **Result:** on Cal.com (10 PRs), under both judges, v2 is statistically tied with Augment, Cursor,
+  Greptile, Copilot and 3 Super's run 1, and ahead of CodeRabbit (v1 +20.4 [+11.8, +34.3]). On all
+  50, under both judges, it is behind Augment (v1 −14.0 [−22.6, −4.7]), statistically tied with
+  Cursor and Greptile (x1 +0.3 [−9.5, +10.7]), and ahead of Copilot and CodeRabbit. Against 3 Super's
+  row (i), it is ahead under v1 (+11.0 [+1.8, +20.1]) and tied under x1. 0 JUDGE_FAILED dropped.
+- **Secondary (the audit's §3.2 (b)): not reproduced, skipped as pre-registered.** The v1
+  comment-level bounds matched to 0.0. Six inflated bounds were 0.1–0.2 off, and x1 Greptile's
+  lower bound was 0.4 off, against a 0.1 bar.
+- **Rejected:**
+  - Loosening the reproduction bar after seeing the check: it was fixed in the plan.
+  - Stratifying the all-50 resample by set: the plan fixed an unstratified resample first.
+- **Limits:**
+  - A 10-cluster bootstrap probably under-covers, and the intervals cover PR sampling only, not
+    run-to-run or judge spread.
+  - 24 gaps, with no multiplicity correction.
+  - The all-50 dev PRs are v2's selection set.
+  - `scripts/bench/intervals.ts` makes `freezeCheck069` fail from now on. That is acceptable, since
+    no further Cal.com run is allowed.
+  - `results.md`, the README and the viewer are unchanged.
