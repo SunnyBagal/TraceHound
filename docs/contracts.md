@@ -12,7 +12,8 @@ pnpm tracehound contracts --repo <git dir> --base <sha> --head <sha> --out <file
 The base side is the **merge base** of `--base` and `--head`, the same as a pull request's diff.
 The command makes two `git worktree`s (merge base and head) and removes them when it's done. It
 doesn't install the target repo's dependencies. When the source checkout has `node_modules`, they
-are symlinked into both worktrees read-only, as `tracehound changes` does. The output is
+are symlinked into both worktrees, as `tracehound changes` does; the symlinks don't make them
+read-only, and the analyzer only reads them. The output is
 `{ refs, typed, keyed, dependents, findings, timings }`. The code is in
 `packages/analyzer/src/contracts/`.
 
