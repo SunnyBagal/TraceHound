@@ -724,3 +724,21 @@ was re-run.
 - **What would have helped:** a `finish_reason` of `length` that we could see per call in usage
   logging, or a way to cap reasoning tokens apart from answer tokens. Opinion: a separate reasoning
   budget would likely remove most of the invalid-JSON replies, which look like truncation.
+
+## 2026-10-23 · job 069 (Nemotron 3.5 Super on the Cal.com test set, us-north1)
+- **Called:** Token Factory chat completions. `nvidia/Nemotron-3.5-Super-VL` (reasoning on,
+  temperature 0) went to us-north1, routed by the client. The judges `nvidia/nemotron-3-super-120b-a12b`
+  and `Qwen/Qwen3-235B-A22B-Instruct-2507` went to us-central1. Calls ran between 13:38Z and 14:02Z.
+- **Counts:** 3.5 Super, 64 requests (1 routing check + 63 in the run), all returned a response.
+  Judges, 14 + 14 requests sent (26 more were served from our cache), all succeeded. Ledger spend
+  $0.7285 for the job.
+- **Failures:** none at the HTTP or transport level.
+- **Model output:** one pull request had both of its reviewer chunks return invalid JSON on the reply
+  and on the retry (2 of 20 chunks). 10 of the 64 responses had exactly 32,000 completion tokens (the
+  request's `max_tokens`).
+- **Latency:** the 1-chunk routing check took 20.6 s. Pipeline wall time per pull request had a median
+  of 128 s and a max of 285 s (several calls each).
+- **Docs/console:** nothing new beyond the 21 Oct entries.
+- **What would have helped:** the same as on 21 Oct: a per-call `finish_reason` of `length`, or a
+  separate cap for reasoning tokens. Opinion: the invalid-JSON chunks again look like truncation at
+  `max_tokens`.
