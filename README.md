@@ -32,11 +32,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      # Pin to a reviewed commit SHA before enabling this in your repository.
-      - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@main
+      # review-freeze-2 is the frozen release. The default model runs every review stage (both
+      # reviewers and the verifier) on Nemotron 3.5 Super VL; fixes run on Nemotron 3 Super.
+      - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@review-freeze-2
         with:
           nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
-          model: nvidia/nemotron-3-super-120b-a12b # The benchmarked model; empty runs both reviewers on Nano.
 ```
 
 This is the review job of [the example workflow](docs/action/example-workflow.yml) without its
