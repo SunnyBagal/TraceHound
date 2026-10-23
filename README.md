@@ -90,17 +90,19 @@ limits: [docs/bench/results.md](docs/bench/results.md).
 
 ## Built with
 
-- **NVIDIA Nemotron 3 Super** (`nvidia/nemotron-3-super-120b-a12b`) via Nebius Token Factory,
-  for the reviewers, the verifier and the fix suggestions. Prices:
+- **NVIDIA Nemotron 3.5 Super** (`nvidia/Nemotron-3.5-Super-VL`) via Nebius Token Factory, for
+  both reviewers and the verifier. Decision 067 adopted it on 2 dev runs: v1 F 50.4 vs 42.3; the
+  second judge's interval includes 0. Decision 068 made it the Action's default, with partial
+  reviews when a chunk fails.
+- **NVIDIA Nemotron 3 Super** (`nvidia/nemotron-3-super-120b-a12b`) via Nebius Token Factory, for
+  the fix suggestions, which were not measured on 3.5. Prices:
   [config/prices.json](config/prices.json) (third-party rates, not yet checked in the Nebius
   console).
-- Nemotron 3.5 Super is being evaluated (decision 067).
 - TypeScript on Node 24, ts-morph and GitHub Actions. Pooling, the contract check and learning
   use no model.
 
 ## What's next
 
-- Decide on Nemotron 3.5 Super from decision 067's dev runs.
 - Measure what maintainer-feedback learning changes in posted reviews.
 
 ---
