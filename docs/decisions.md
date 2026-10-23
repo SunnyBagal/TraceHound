@@ -3386,3 +3386,39 @@ change; tests use synthetic stage output.
 - Keep all-or-nothing reviews: with 3.5 this would post nothing on about 1 in 6 PRs, unlike the
   configuration measured in 067.
 - Fall back to 3 Super on failure: that combination is unmeasured.
+
+## 069 · The v2 blind Cal.com run (second look at the test set)
+**Context:** freeze-2 (`review-freeze-2` → `0aeef06`) changed one thing that affects the bench since
+the first Cal.com look (062): every pool-verify-v1 stage runs on `nvidia/Nemotron-3.5-Super-VL` (067,
+068). P007 and architecture-v2 allow exactly one blind Cal.com run of v2, stated as the second look.
+Brief: `docs/prompts/069-v2-calcom.md`.
+**Choice:**
+- **Runner:** `--set cal_dot_com --run 4 --model nvidia/Nemotron-3.5-Super-VL` with
+  `TRACEHOUND_TEST_RUN=069` is the only new invocation. Any other model, run or gate is refused before
+  any call, and runs 1–3 still need 061; a test pins their code path to the tag's text. The model goes
+  to every stage, and the judges are unchanged. Records are in `test/run-4-<slug>/`, and the restart
+  directory is `run-4r-<slug>/`. The cap is $3, the run judges the three TraceHound rows only, and
+  `freezeCheck069` compares against `review-freeze-2`.
+- **Pre-registered** in `docs/bench/v2-calcom-plan.md` (`b2ec214`, pushed 13:38:03Z on 23 Oct)
+  before the first Cal.com 3.5 call (13:38:51Z). A one-call routing check on a dev pull request first
+  confirmed us-north1.
+**Result (`docs/bench/v2-calcom.md`, n = 23, one run):** complete, with 0 reruns, 0 restarts and 0
+JUDGE_FAILED, for $0.7228.
+- pool-verify-v1 (3.5) under v1: P 63.2% / R 52.2% / F 57.1%. Under x1: F 58.5%.
+- 3 Super's Cal.com runs 1–3 had F 51.3 / 52.8 / 58.3% under v1.
+- It is 3rd of six on F under both judges against run 1's tools (a point estimate).
+- Secondaries under v1: review-diff-v1 F 58.5%, pool-raw F 57.8%.
+- Predictions: (a) F ≥ 52.8% right, (b) P ≥ 55.6% right, (c) ≤ 3 of 10 with a failed chunk right
+  (1 of 10: both chunks of one pull request returned invalid JSON twice, so it was scored with no
+  findings).
+- No pull request had more than 10 kept findings.
+- All 50 (066's method, dev run 7r + Cal.com run 4): v1 F 52.2%, x1 55.4%, 3rd of 6 under both judges.
+  Under x1 it is 0.3 points above Greptile. Dev run 8 as the dev draw gives 51.7% / 56.5%.
+**Rejected:**
+- A second v2 Cal.com run, or any change based on this one: the plan allows one look.
+- Updating `results.md`, the README or the viewer in this job: that is a separate job, with its own
+  viewer test.
+- Committing an all-50 script under `scripts/bench`: it would have broken run 4's freeze check, and
+  066 had none. The sums are in `v2-calcom.md` and can be checked by hand.
+**Limits:** n = 23, one run, the second look, and the selection was on dev. 3 Super's three runs
+spread 7 F points, which is more than the gap between 3.5 and 3 Super here.
