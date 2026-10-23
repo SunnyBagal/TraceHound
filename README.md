@@ -1,5 +1,116 @@
 # TraceHound
 
+An open-source GitHub Action that reviews pull requests with NVIDIA Nemotron on Nebius Token Factory.
+
+## Try it
+
+Add a repository secret `NEBIUS_API_KEY` (your Token Factory key), then save this as
+`.github/workflows/tracehound-review.yml`:
+
+```yaml
+name: TraceHound review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, closed]
+
+permissions: {}
+
+jobs:
+  review:
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: tracehound-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      # review-freeze-2 is the frozen release. The default model runs every review stage (both
+      # reviewers and the verifier) on Nemotron 3.5 Super VL; fixes run on Nemotron 3 Super.
+      - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@review-freeze-2
+        with:
+          nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
+```
+
+This is the review job of [the example workflow](docs/action/example-workflow.yml) without its
+graph-history job. Pull requests from forks are skipped, because forks don't get repository
+secrets. Inputs, permissions and limits are in [docs/action/README.md](docs/action/README.md).
+
+## How it works
+
+```mermaid
+flowchart LR
+  PR["Pull request<br/>title, description, diff"] --> D["review-diff-v1<br/>reads the diff only"]
+  PR --> C["review-ctx-v1<br/>diff + repository context<br/>(hunk windows, git grep references)"]
+  D --> P["Pool<br/>every diff finding + context<br/>findings that agree with none"]
+  C --> P
+  P --> V["verify-ctx-v1<br/>keep or drop each finding,<br/>reading the code around it"]
+  V --> L["Maintainer feedback (learn)<br/>drops findings like ones maintainers<br/>rejected; off by default"]
+  L --> R["One COMMENT review<br/>line comments + fix suggestions"]
+  K["Cross-file contracts<br/>deterministic, no model"] -.-> R
+```
+
+- **Two generators** run in parallel on Nemotron: one sees only the diff, the other also sees
+  the changed files and the places that reference the changed names.
+- **Pool, then verifier:** the verifier sees each pooled finding with the code around it and keeps
+  or drops it. This three-stage pipeline is `pool-verify-v1` (decision 059).
+- **Cross-file contracts** (on by default; [docs/contracts.md](docs/contracts.md)): a
+  deterministic check that a renamed export, route, queue, Redis, env or event key still matches
+  the files the PR did not edit.
+- **Learning from maintainer feedback:** `learn: 'on'` suppresses findings similar to comments
+  maintainers rejected, and records each suppression in the review footer. It is off by default
+  and the benchmark does not measure it ([docs/learn.md](docs/learn.md)).
+
+Stages we tried and dropped, each a loss on the dev set:
+[064, vote across runs](docs/decisions.md#064--vote-across-runs-dev-only-a-loss) and
+[065, evidence verifier + gate](docs/decisions.md#065--evidence-verifier--deterministic-gate-dev-only-a-loss).
+Every lever we tried is in the [levers table](docs/bench/results.md#6-precision-levers-tried-on-dev).
+
+## Results
+
+[[RESULTS-TABLE]]
+
+[[CALCOM-V2]] (decision 069: v2 on Cal.com, the second look)
+
+[[REVIEWBENCH]]
+
+[[SEEDED-TEST]]
+
+The rule: every number links to its run record; every loss is published. Full results, losses and
+limits: [docs/bench/results.md](docs/bench/results.md).
+
+## Cost per pull request
+
+[[COST]]
+
+## Built with
+
+- **NVIDIA Nemotron 3.5 Super** (`nvidia/Nemotron-3.5-Super-VL`) via Nebius Token Factory, for
+  both reviewers and the verifier. Decision 067 adopted it on 2 dev runs: v1 F 50.4 vs 42.3; the
+  second judge's interval includes 0. Decision 068 made it the Action's default, with partial
+  reviews when a chunk fails.
+- **NVIDIA Nemotron 3 Super** (`nvidia/nemotron-3-super-120b-a12b`) via Nebius Token Factory, for
+  the fix suggestions, which were not measured on 3.5. Prices:
+  [config/prices.json](config/prices.json) (third-party rates, not yet checked in the Nebius
+  console).
+- TypeScript on Node 24, ts-morph and GitHub Actions. Pooling, the contract check and learning
+  use no model.
+
+## What's next
+
+- Measure what maintainer-feedback learning changes in posted reviews.
+
+---
+
+## Details
+
 TraceHound maps TypeScript codebases into evidence-backed component graphs: every edge on the
 canvas points back to a file, symbol and line range in the analyzed code, with the extractor that
 found it and how confidently the value was resolved (`proven` · `resolved-default` · `dynamic`).
