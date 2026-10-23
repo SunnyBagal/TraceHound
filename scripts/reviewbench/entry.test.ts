@@ -1,4 +1,5 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -122,6 +123,26 @@ describe("input and output", () => {
     expect(d.lines.at(-1)).toMatch(/^status=ok findings=2 dropped_no_line=0 dropped_empty=0 capped=0 cost_usd=0\.0000 wall_s=\d+$/);
   });
 
+  it("prints the base URL the client resolves for the configured model", async () => {
+    const central = "https://api.tokenfactory.us-central1.nebius.com/v1";
+    const north = "https://api.tokenfactory.us-north1.nebius.com/v1";
+    const cases: [string | undefined, string | undefined, string][] = [
+      ["nvidia/Nemotron-3.5-Super-VL", central, north],
+      ["nvidia/Nemotron-3.5-Super-VL", undefined, north],
+      ["nvidia/nemotron-3-super-120b-a12b", central, central],
+      [undefined, undefined, central],
+      ["nvidia/Nemotron-3.5-Super-VL", "https://models.example.invalid/v1", "https://models.example.invalid/v1"],
+    ];
+    for (const [model, baseUrl, printed] of cases) {
+      const c = contract({ RB_CONFIG_PIPELINE: "pool-raw", RB_CONFIG_MODEL: model, RB_MODEL_BASE_URL: baseUrl });
+      const d = deps(async () => []);
+      expect(await main(c.env, d)).toBe(0);
+      expect(d.printed).toEqual([expect.stringContaining(` base_url=${printed} limit_min=`)]);
+      // The stages still get the registered URL; routing happens in the client.
+      expect(c.env.NEBIUS_BASE_URL).toBe(baseUrl);
+    }
+  });
+
   it("stands in the PR's address for an empty title and an empty string for a null body", () => {
     expect(toInput({ title: " ", body: null }, "d", 7, "o/r")).toEqual({ title: "o/r#7", body: "", number: 7, diff: "d" });
   });
@@ -208,14 +229,18 @@ function fakeStages(outputs: {
   review: Finding[]; "review-ctx": Finding[]; keep?: (f: Finding) => boolean;
   /** review-missed's own findings; the pool file it was given is kept in `missedPool`. */
   "review-missed"?: Finding[];
-  /** One CHUNK_FAILED chunk with this failure string in that stage's output, as review.ts records it. */
-  chunkFailure?: { command: "review" | "review-ctx"; failure: string };
+  /** One CHUNK_FAILED chunk, plus an OK chunk unless all is set. */
+  chunkFailure?: { command: "review" | "review-ctx" | "review-missed"; failure: string; all?: boolean };
 }) {
   const commands: string[] = [];
   const models: string[] = [];
   const failures = new Set<string>();
   const missedPool: Finding[][] = [];
   let reviewerInput = "";
+  const chunksFor = (command: string) => outputs.chunkFailure?.command === command
+    ? { chunkFailed: 1, chunks: [{ status: "CHUNK_FAILED", failure: outputs.chunkFailure.failure },
+      ...(outputs.chunkFailure.all ? [] : [{ status: "OK" }])] }
+    : { chunkFailed: 0, chunks: [{ status: "OK" }] };
   const exec = vi.fn<Execute>(async (file, args, options) => {
     if (file === "git") {
       commands.push("git");
@@ -241,15 +266,12 @@ function fakeStages(outputs: {
     if (command === "review-missed") {
       expect(await readFile(value("--pr"), "utf8")).toBe(reviewerInput);
       missedPool.push(JSON.parse(await readFile(value("--findings"), "utf8")).comments);
-      await writeFile(value("--out"), JSON.stringify({ comments: outputs["review-missed"] ?? [], review: { model: "m", chunkFailed: 0 } }));
+      await writeFile(value("--out"), JSON.stringify({ comments: outputs["review-missed"] ?? [], review: { model: "m", ...chunksFor(command) } }));
       return {};
     }
     reviewerInput = await readFile(value("--pr"), "utf8");
     const comments = outputs[command as "review" | "review-ctx"];
-    const failed = outputs.chunkFailure?.command === command
-      ? { chunkFailed: 1, chunks: [{ index: 0, status: "CHUNK_FAILED", failure: outputs.chunkFailure.failure }] }
-      : { chunkFailed: 0 };
-    await writeFile(value("--out"), JSON.stringify({ comments, review: { model: "m", ...failed } }));
+    await writeFile(value("--out"), JSON.stringify({ comments, review: { model: "m", ...chunksFor(command) } }));
     return {};
   });
   return { exec, commands, models, failures, missedPool };
@@ -267,6 +289,15 @@ describe("pipelines", () => {
   const diffFindings = [finding(10, "diff a"), finding(30, "diff b")];
   const ctxFindings = [finding(12, "ctx agrees with diff a"), finding(50, "ctx only")];
 
+  it.each([
+    { chunkFailed: -1, chunks: [{ status: "OK" }] },
+    { chunkFailed: 0, chunks: [{ status: "CHUNK_FAILED" }] },
+    { chunkFailed: 2, chunks: [{ status: "CHUNK_FAILED" }] },
+    { chunkFailed: 1, chunks: [null] },
+  ])("rejects malformed chunk metadata %j", review => {
+    expect(() => readReview("review", { comments: [], review: { model: "m", ...review } })).toThrow(/invalid/);
+  });
+
   it("pool-raw runs both reviewers on the chosen model and pools them, with no verifier", async () => {
     const s = fakeStages({ review: diffFindings, "review-ctx": ctxFindings });
     expect(await poolRaw(input, context(s.exec))).toEqual([...diffFindings, ctxFindings[1]]);
@@ -274,23 +305,70 @@ describe("pipelines", () => {
     expect(s.models).toEqual(["chosen/model", "chosen/model"]);
   });
 
-  it("pool-raw fails as runPipeline does on a failed chunk or a failed stage", async () => {
-    expect(() => readReview("review", { comments: [], review: { model: "m", chunkFailed: 1 } })).toThrow(/^review: failed chunks$/);
-    expect(() => readReview("review", { comments: [], review: { model: "m", chunkFailed: 1, chunks: [{ status: "OK" },
-      { status: "CHUNK_FAILED", failure: "HTTP 401: unauthorized" }] } })).toThrow("review: failed chunks (first: HTTP 401: unauthorized)");
-    expect(() => readReview("review", { comments: [{ path: "a", line: 0, body: "x" }], review: { model: "m", chunkFailed: 0 } })).toThrow(/invalid finding/);
+  it("pool-raw rejects invalid output or a failed process, while readReview retains successful chunks", async () => {
+    expect(() => readReview("review", { comments: [], review: { model: "m", chunkFailed: 1 } })).toThrow(/^review: invalid output$/);
+    expect(readReview("review", { comments: diffFindings, review: { model: "m", chunkFailed: 1, chunks: [{ status: "OK" },
+      { status: "CHUNK_FAILED", failure: "invalid reply" }] } })).toEqual({ comments: diffFindings, failed: 1, chunks: 2, failure: "invalid reply" });
+    expect(() => readReview("review", { comments: [{ path: "a", line: 0, body: "x" }], review: { model: "m", chunkFailed: 0, chunks: [{ status: "OK" }] } })).toThrow(/invalid finding/);
     const s = fakeStages({ review: diffFindings, "review-ctx": ctxFindings });
     s.failures.add("review-ctx");
     await expect(poolRaw(input, context(s.exec))).rejects.toThrow(/private subprocess error/);
   });
 
-  it("puts a failed chunk's failure string in the status line (a truncated reply is CHUNK_FAILED)", async () => {
-    const c = contract({ RB_CONFIG_PIPELINE: "pool-raw" });
+  it.each(["pool-raw", "pool-raw-x2", "pool-raw-missed", "pool-verify-v1"])("%s keeps partial findings and reports failed/total chunks", async pipeline => {
+    vi.stubEnv("NEBIUS_API_KEY", KEY);
+    const c = contract({ RB_CONFIG_PIPELINE: pipeline, TRACEHOUND_RB_IMAGE: "1" });
     const s = fakeStages({ review: diffFindings, "review-ctx": ctxFindings, chunkFailure: { command: "review", failure: "invalid reply" } });
     const d = deps(undefined);
     expect(await main(c.env, { ...d, makeExec: () => s.exec })).toBe(0);
+    expect(c.read().findings.map((f: { message: string }) => f.message)).toEqual(["diff a", "diff b", "ctx only"]);
+    const partial = pipeline === "pool-raw-x2" ? "2/6" : pipeline === "pool-raw-missed" ? "1/4" : "1/3";
+    expect(d.lines.at(-1)).toContain(`status=ok partial=${partial} findings=3 `);
+  });
+
+  it("keeps the other reviewer when one fails every chunk", async () => {
+    const s = fakeStages({ review: [], "review-ctx": ctxFindings, chunkFailure: { command: "review", failure: "invalid reply", all: true } });
+    expect(await poolRaw(input, context(s.exec))).toEqual(ctxFindings);
+  });
+
+  it.each(["pool-raw", "pool-raw-x2", "pool-raw-missed", "pool-verify-v1"])("%s writes no findings with status=failed when every reviewer chunk failed", async pipeline => {
+    vi.stubEnv("NEBIUS_API_KEY", KEY);
+    const c = contract({ RB_CONFIG_PIPELINE: pipeline, TRACEHOUND_RB_IMAGE: "1" });
+    const s = fakeStages({ review: [], "review-ctx": [] });
+    const exec: Execute = async (file, args, options) => {
+      if (!["review", "review-ctx"].includes(args[1]!)) return s.exec(file, args, options);
+      await writeFile(args[args.indexOf("--out") + 1]!, JSON.stringify({ comments: [],
+        review: { model: "m", chunkFailed: 1, chunks: [{ status: "CHUNK_FAILED", failure: "invalid reply" }] } }));
+      return {};
+    };
+    const d = deps(undefined);
+    expect(await main(c.env, { ...d, makeExec: () => exec })).toBe(0);
     expect(c.read().findings).toEqual([]);
-    expect(d.lines.at(-1)).toMatch(/^status=failed: review: failed chunks \(first: invalid reply\) findings=0 /);
+    expect(d.lines.at(-1)).toMatch(/^status=failed: .* findings=0 /);
+    expect(s.commands).not.toContain("verify-ctx");
+    expect(s.commands).not.toContain("review-missed");
+  });
+
+  it("pool-raw-x2 retains a partial pass when the next pass fails every chunk", async () => {
+    const first = fakeStages({ review: diffFindings, "review-ctx": [], chunkFailure: { command: "review", failure: "invalid reply" } });
+    let pass = 1;
+    const exec: Execute = async (file, args, options) => {
+      if (pass === 1 || file === "git") return first.exec(file, args, options);
+      await writeFile(args[args.indexOf("--out") + 1]!, JSON.stringify({ comments: [],
+        review: { model: "m", chunkFailed: 1, chunks: [{ status: "CHUNK_FAILED" }] } }));
+      return {};
+    };
+    expect(await poolRawX2(input, context(exec, { clearCache: () => { pass = 2; } }))).toEqual(diffFindings);
+  });
+
+  it("pool-raw-missed keeps successful missed chunks and reports partial counts", async () => {
+    const c = contract({ RB_CONFIG_PIPELINE: "pool-raw-missed" });
+    const s = fakeStages({ review: diffFindings, "review-ctx": ctxFindings, "review-missed": [finding(80, "new")],
+      chunkFailure: { command: "review-missed", failure: "invalid reply" } });
+    const d = deps(undefined);
+    expect(await main(c.env, { ...d, makeExec: () => s.exec })).toBe(0);
+    expect(c.read().findings.map((f: { message: string }) => f.message)).toEqual(["diff a", "diff b", "ctx only", "new"]);
+    expect(d.lines.at(-1)).toContain("status=ok partial=1/4 findings=4 ");
   });
 
   it("pool-verify-v1 is the Action's runPipeline: both reviewers, then verify-ctx keeps or drops", async () => {
@@ -364,7 +442,7 @@ describe("pipelines", () => {
     const chunkFailed: Execute = async (file, args, options) => {
       if (args[1] !== "review-missed") return s.exec(file, args, options);
       const out = args[args.indexOf("--out") + 1]!;
-      await writeFile(out, JSON.stringify({ comments: [finding(80, "new")], review: { model: "m", chunkFailed: 1, chunks: [{ failure: "invalid reply" }] } }));
+      await writeFile(out, JSON.stringify({ comments: [], review: { model: "m", chunkFailed: 1, chunks: [{ status: "CHUNK_FAILED", failure: "invalid reply" }] } }));
       return {};
     };
     lines.length = 0;
@@ -421,6 +499,19 @@ describe("pipelines", () => {
     const b = [finding(13), finding(14), finding(null)];
     expect(unionFindings([a, b])).toEqual([a[0], a[2], b[1], b[2]]);
   });
+});
+
+it.each([
+  ["ok", 0], ["ok partial=1/3", 0], ["ok partial=2/6", 0],
+  ["failed: pool-raw: failed chunks", 1], ["", 1], ["empty diff", 1],
+  ["okay", 1], ["ok partial=oops", 1], ["ok partial=1/3 failed", 1],
+])("the smoke workflow status check handles %j", (status, exit) => {
+  const workflow = readFileSync(path.join(import.meta.dirname, "../../.github/workflows/reviewbench-smoke.yml"), "utf8");
+  const condition = /if (\[\[.*\]\]); then echo "::error::index \$pr: adapter status/.exec(workflow)?.[1];
+  expect(condition).toBeDefined();
+  const result = spawnSync("bash", ["-c", `status=$1\nif ${condition}; then exit 1; fi`, "smoke-status", status], { encoding: "utf8" });
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(exit);
 });
 
 describe("child processes", () => {

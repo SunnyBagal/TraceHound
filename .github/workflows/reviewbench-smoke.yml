@@ -5,7 +5,7 @@ name: ReviewBench smoke
 # findings files' format, as try-agent.sh does, and uploads them. It never runs ReviewBench's judge,
 # and its sparse checkout never fetches golden/ (docs/bench/reviewbench.md, blindness rule).
 # The adapter exits 0 even when every model call failed, so the job also fails when any adapter
-# status line is not status=ok, or when no pull request got a finding. With pool-raw-missed it also
+# status line is neither status=ok nor status=ok partial=N/M, or when no pull request got a finding. With pool-raw-missed it also
 # fails when a log has no "pool N, missed M, new K" line: the adapter falls back to the pool when
 # the missed-issue pass fails, so status=ok alone would not show the pass ran.
 # Spends a few cents of Nebius credit from the NEBIUS_API_KEY secret.
@@ -33,6 +33,7 @@ permissions:
 env:
   REVIEWBENCH_SHA: 12e9d1aadbe7ddf4a480c6bd4ffb6ae37c7bcb67
   # packages/analyzer/src/llm/client.ts DEFAULT_BASE_URL; the portal's model API URL is the same.
+  # Stays us-central1 for 3.5 too: the client routes 3.5 to us-north1 (MODEL_BASE_URLS).
   MODEL_BASE_URL: https://api.tokenfactory.us-central1.nebius.com/v1
 
 jobs:
@@ -87,14 +88,14 @@ jobs:
             code=${PIPESTATUS[0]}
             wall=$(( $(date +%s) - start ))
             name=$(sed -n 's/^== \[[0-9]*\] \([^ ]*\).*/\1/p' "log-$pr.txt" | head -1)
-            # The adapter's last line: status=<ok | failed: reason | …> findings=N … cost_usd=X wall_s=Y
+            # The adapter's last line: status=<ok [partial=N/M] | failed: reason | …> findings=N … cost_usd=X wall_s=Y
             line=$(grep -o 'status=.* findings=[0-9]* dropped_no_line=.*' "log-$pr.txt" | tail -1)
             status=$(sed -n 's/^status=\(.*\) findings=[0-9]* dropped_no_line=.*/\1/p' <<< "$line")
             found=$(sed -n 's/.* findings=\([0-9]*\) dropped_no_line=.*/\1/p' <<< "$line")
             cost=$(sed -n 's/.* cost_usd=\([^ ]*\).*/\1/p' <<< "$line")
             applied=$(grep -o 'model=[^ ]*' "log-$pr.txt" | head -1)
             if [ "$code" -ne 0 ]; then echo "::error::index $pr: try-agent.sh exited $code"; failed=1; fi
-            if [ "$status" != "ok" ]; then echo "::error::index $pr: adapter status is '${status:-missing}', not ok"; failed=1; fi
+            if [[ ! "$status" =~ ^ok(\ partial=[0-9]+/[0-9]+)?$ ]]; then echo "::error::index $pr: adapter status is '${status:-missing}', not ok"; failed=1; fi
             missed=-
             if [ "$PIPELINE" = "pool-raw-missed" ]; then
               missed=$(grep -o 'pool [0-9]*, missed [0-9]*, new [0-9]*' "log-$pr.txt" | tail -1)

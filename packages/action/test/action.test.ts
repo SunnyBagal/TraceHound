@@ -18,6 +18,7 @@ const diff = [
 ].join("\n");
 const finding = { path: "src/widget.ts", line: 9, body: "This still dereferences a missing widget." };
 const options: Options = {
+  contracts: "off",
   token: "fake-github-token", apiUrl: "https://api.example.invalid",
   model: "", maxComments: 15, dryRun: false,
   reviewer: "review-diff-v1",

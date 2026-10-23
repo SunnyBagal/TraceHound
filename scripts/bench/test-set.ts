@@ -14,7 +14,7 @@ export const TEST_SET = "cal_dot_com";
 export const DEV_REPOS = Object.freeze(["sentry", "grafana", "keycloak", "discourse"] as const);
 export const SETS = Object.freeze(["cal_dot_com", "dev"] as const);
 export type SetName = (typeof SETS)[number];
-export type RunNumber = 1 | 2 | 3 | 4 | 5 | 6;
+export type RunNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 /** Throws unless TRACEHOUND_TEST_RUN=061 is set. */
 export function requireTestRun(env: NodeJS.ProcessEnv): void {
@@ -248,5 +248,112 @@ export function planExtraItem(run: DevExtraRun, states: (ItemState | null)[], re
   }
   const allowanceUSD = EXTRA_CAP_USD - spent;
   if (allowanceUSD <= 0) return { ok: false, why: `not done: the cap is reached (spent $${spent.toFixed(4)} of $${EXTRA_CAP_USD})` };
+  return { ok: true, allowanceUSD };
+}
+
+// ---- dev runs 7–9, with a reviewer model chosen by --model (decision 067) ----
+// The same pipeline, rules and judges; only the model of the reviewer and verifier stages may differ.
+// Runs 7, 8, 9 in order under one $8 cap, counted per model: a non-default model's runs live in
+// run-<n>-<model slug>/ and have their own order and cap. A crashed run may be restarted once (061a).
+
+export const DEV_067_RUNS = Object.freeze([7, 8, 9] as const);
+export type Dev067Run = (typeof DEV_067_RUNS)[number];
+export const isDev067Run = (set: string | undefined, run: string | undefined) => set === "dev" && (DEV_067_RUNS as readonly number[]).map(String).includes(run ?? "");
+
+/** 067's Nebius cap, judging included. */
+export const CAP_067_USD = 8;
+export const ITEMS_067 = Object.freeze(DEV_067_RUNS.map((run) => Object.freeze({ set: "dev" as const, run, group: "dev-067", plannedUSD: 2 })));
+
+/** A model id as a directory name: "nvidia/Nemotron-3.5-Super-VL" → "nvidia-nemotron-3-5-super-vl". */
+export const modelSlug = (model: string) => model.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+/** run-<n>-<slug>/ (or run-<n>-<slug>r/ for its restart) for a non-default model; runDir's path when slug is null. */
+export const modelRunDir = (bench: string, run: Dev067Run, slug: string | null, restart = false) =>
+  slug === null ? runDir(bench, "dev", run, restart) : join(bench, "reviews/dev-repeat", `run-${run}-${slug}${restart ? "r" : ""}`);
+
+/** readStatesOf for runs 7–9 of one model. */
+export function readStates067(bench: string, slug: string | null): (ItemState | null)[] {
+  return ITEMS_067.map((i) => {
+    const dir = modelRunDir(bench, i.run, slug);
+    if (!existsSync(dir)) return null;
+    const first = readRunJson(dir);
+    const firstScoreFiles = scoreFileCount(dir);
+    const rdir = modelRunDir(bench, i.run, slug, true);
+    if (!existsSync(rdir)) return { status: first.status, costUSD: first.costUSD, firstScoreFiles };
+    const r = readRunJson(rdir);
+    return { status: r.status, costUSD: (r.voidCostUSD ?? first.costUSD) + r.costUSD, restarted: true, firstStatus: first.status, firstScoreFiles };
+  });
+}
+
+/** planExtraItem's rules for runs 7–9: one group, capped at CAP_067_USD. */
+export function planDev067Item(run: Dev067Run, states: (ItemState | null)[], restart = false): { ok: true; allowanceUSD: number } | { ok: false; why: string } {
+  const idx = ITEMS_067.findIndex((i) => i.run === run);
+  if (idx < 0) throw new Error(`no dev run ${run} in 067's list`);
+  if (states.length !== ITEMS_067.length) throw new Error(`planDev067Item: ${states.length} states for ${ITEMS_067.length} items`);
+  const name = (i: number) => `dev run ${ITEMS_067[i]!.run}`;
+  let spent = 0;
+  if (restart) {
+    const why = restartRefusal(states[idx] ?? null, `run-${run}`);
+    if (why) return { ok: false, why };
+    spent = states[idx]!.costUSD;
+  } else if (states[idx]) return { ok: false, why: `${name(idx)} already has a run directory` };
+  for (let i = 0; i < idx; i++) {
+    const s = states[i];
+    if (!s) return { ok: false, why: `${name(i)} has not run; the order is ${ITEMS_067.map((_, j) => name(j)).join(", ")}` };
+    if (s.status === "stopped-at-cap") return { ok: false, why: `not done: the cap stopped ${name(i)}` };
+    if (!restartRefusal(s, `run-${ITEMS_067[i]!.run}`)) return { ok: false, why: `${name(i)} crashed and may be restarted once: restart it first (--set dev --run ${ITEMS_067[i]!.run} --restart)` };
+    spent += s.costUSD;
+  }
+  const allowanceUSD = CAP_067_USD - spent;
+  if (allowanceUSD <= 0) return { ok: false, why: `not done: the cap is reached (spent $${spent.toFixed(4)} of $${CAP_067_USD})` };
+  return { ok: true, allowanceUSD };
+}
+
+// ---- Cal.com run 4, v2 (decision 069) ----
+// The one blind Cal.com run of v2, the second look at the test set: pool-verify-v1 at review-freeze-2
+// with every stage on Nemotron 3.5 Super VL. Only `--set cal_dot_com --run 4 --model <MODEL_069>` with
+// TRACEHOUND_TEST_RUN=069 reaches it; runs 1–3 still need 061 and checkRun, unchanged above. One item,
+// its own $3 cap; a crashed run may be restarted once (061a) into run-4r-<slug>/, which stands for run 4.
+
+export const TEST_RUN_ID_069 = "069";
+export const MODEL_069 = "nvidia/Nemotron-3.5-Super-VL";
+export const isCal069Run = (set: string | undefined, run: string | undefined) => set === TEST_SET && run === "4";
+
+/** Throws unless the model is MODEL_069 and TRACEHOUND_TEST_RUN=069 is set. */
+export function checkCal069(model: string | undefined, env: NodeJS.ProcessEnv): void {
+  if (model !== MODEL_069) throw new Error(`refusing --set ${TEST_SET} --run 4: it needs --model ${MODEL_069} (decision 069)`);
+  if (env[TEST_RUN_ENV] !== TEST_RUN_ID_069) throw new Error(`refusing --set ${TEST_SET} --run 4: it needs ${TEST_RUN_ENV}=${TEST_RUN_ID_069} in the environment (decision 069)`);
+}
+
+/** 069's Nebius cap, judging included. */
+export const CAP_069_USD = 3;
+export const ITEMS_069 = Object.freeze([Object.freeze({ set: "cal_dot_com" as const, run: 4 as const, group: "cal-069", plannedUSD: 1.5 })]);
+
+/** test/run-4-<slug>/, or test/run-4r-<slug>/ for its one restart. */
+export const cal069RunDir = (bench: string, restart = false) => join(bench, "test", `run-4${restart ? "r" : ""}-${modelSlug(MODEL_069)}`);
+
+/** readStatesOf for run 4. */
+export function readStates069(bench: string): (ItemState | null)[] {
+  const dir = cal069RunDir(bench);
+  if (!existsSync(dir)) return [null];
+  const first = readRunJson(dir);
+  const firstScoreFiles = scoreFileCount(dir);
+  const rdir = cal069RunDir(bench, true);
+  if (!existsSync(rdir)) return [{ status: first.status, costUSD: first.costUSD, firstScoreFiles }];
+  const r = readRunJson(rdir);
+  return [{ status: r.status, costUSD: (r.voidCostUSD ?? first.costUSD) + r.costUSD, restarted: true, firstStatus: first.status, firstScoreFiles }];
+}
+
+/** planDev067Item's rules for the one item: capped at CAP_069_USD, the void run's spend carried on a restart. */
+export function planCal069Item(states: (ItemState | null)[], restart = false): { ok: true; allowanceUSD: number } | { ok: false; why: string } {
+  if (states.length !== ITEMS_069.length) throw new Error(`planCal069Item: ${states.length} states for ${ITEMS_069.length} items`);
+  let spent = 0;
+  if (restart) {
+    const why = restartRefusal(states[0] ?? null, "run-4");
+    if (why) return { ok: false, why };
+    spent = states[0]!.costUSD;
+  } else if (states[0]) return { ok: false, why: `${TEST_SET} run 4 already has a run directory` };
+  const allowanceUSD = CAP_069_USD - spent;
+  if (allowanceUSD <= 0) return { ok: false, why: `not done: the cap is reached (spent $${spent.toFixed(4)} of $${CAP_069_USD})` };
   return { ok: true, allowanceUSD };
 }

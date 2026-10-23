@@ -2,6 +2,7 @@ import { newSideLines, parseDiff } from "../../analyzer/src/review/diff.ts";
 import type { FindingSource, PipelineCounts, PipelineOutput } from "./pipeline.ts";
 import type { Fix, FixOutput } from "./fix.ts";
 import { filterFeedback, readFeedback, type SuppressedFinding } from "./learn.ts";
+import { contractsSection, placeContracts, settleContracts, type ContractDelivery, type ContractsResult, type ContractsSummary } from "./contracts.ts";
 
 export type Reviewer = "pool-verify-v1" | "review-diff-v1";
 
@@ -11,6 +12,7 @@ export interface PullEvent {
     title: string;
     body: string | null;
     number: number;
+    base?: { sha: string };
     head: { sha: string; repo: { full_name: string } | null };
   };
 }
@@ -45,6 +47,8 @@ export interface Options {
   repoDir?: string;
   fixes?: "on" | "off";
   learn?: "on" | "off";
+  contracts?: "on" | "off";
+  serverUrl?: string;
 }
 
 export interface Dependencies {
@@ -54,6 +58,7 @@ export interface Dependencies {
   runPipeline: (input: ReviewerInput, model: string, repo: string, head: string) => Promise<PipelineOutput | null>;
   checkRepoHead: (repo: string, head: string) => Promise<void>;
   runFixes: (findings: Finding[], diff: string, repo: string, head: string) => Promise<FixOutput>;
+  runContracts?: (repo: string, base: string, head: string) => Promise<ContractsResult>;
   log: (message: string) => void;
 }
 
@@ -109,11 +114,15 @@ function fixBody(finding: Finding, fix: Fix | null | undefined, plain: boolean):
   return `${finding.body}\n\nSuggested fix (model-generated, not tested):\n${text}`;
 }
 
-function reviewFooter(findings: Finding[], commit: string, pipeline: PipelineCounts, data: ReviewData): string {
+function reviewFooter(findings: Finding[], commit: string, pipeline: PipelineCounts | undefined, data: ReviewData,
+  reviewer: Reviewer, contracts?: ContractsSummary): string {
   const record: Record<string, unknown> = {
-    version: 1, pipeline: "pool-verify-v1", headSha: commit,
-    ...pipeline, posted: findings.length, fixes: data.fixes.counts,
+    version: 1, pipeline: reviewer, headSha: commit,
+    ...(pipeline && { pool: pipeline.pool, kept: pipeline.kept,
+      ...(pipeline.chunkFailed && { chunkFailed: pipeline.chunkFailed }) }),
+    posted: findings.length, fixes: data.fixes.counts,
     ...(data.suppressed?.length && { suppressed: data.suppressed }),
+    ...(contracts && { contracts }),
     findings: findings.map((finding, i) => ({
       path: finding.path, line: finding.line,
       ...(data.fixes.suggestions[i] && { startLine: data.fixes.suggestions[i]!.startLine }),
@@ -140,12 +149,17 @@ export function buildReview(
   reviewer: Reviewer = "review-diff-v1",
   pipeline?: PipelineCounts,
   data?: ReviewData,
+  contracts?: ContractDelivery,
 ): ReviewPayload {
   const lines = new Map(parseDiff(diff).filter((file) => file.newPath !== null)
     .map((file) => [file.newPath!, newSideLines(file)]));
   const comments: ReviewPayload["comments"] = [];
   const body = [`TraceHound · ${reviewer} · ${model.replace(/\s+/g, " ")} · ${findings.length} findings`
     + (pipeline ? ` (pool ${pipeline.pool}, kept ${pipeline.kept})` : "")];
+  if (pipeline?.chunkFailed) {
+    const failed = pipeline.chunkFailed.diff + pipeline.chunkFailed.ctx;
+    body.push(`${failed} of ${pipeline.reviewerChunks} reviewer chunks failed (invalid model reply); this review is partial.`);
+  }
   const posted = findings.slice(0, maxComments);
   for (const [index, finding] of posted.entries()) {
     const fix = data?.fixes.suggestions[index];
@@ -161,7 +175,16 @@ export function buildReview(
   if (findings.length > maxComments) body.push(`${findings.length - maxComments} findings omitted by max-comments.`);
   if (data?.suppressed?.length) body.push(`${data.suppressed.length} findings suppressed by maintainer feedback (details in footer).`);
   body.push(footer);
-  if (data && pipeline) body.push(reviewFooter(posted, commit, pipeline, data));
+  let contractSummary: ContractsSummary | undefined;
+  if (contracts) {
+    const placed = placeContracts(contracts.result.findings, diff, bodyOnly);
+    comments.push(...placed.inline);
+    const section = contractsSection(placed.body, placed.more, contracts, commit);
+    if (section) body.push(section);
+    contractSummary = { status: contracts.result.status, inline: placed.inline.length, body: placed.body.length, ms: contracts.result.ms,
+      ...(contracts.result.typed && { typed: contracts.result.typed }) };
+  }
+  if (data && (pipeline || contracts)) body.push(reviewFooter(posted, commit, pipeline, data, reviewer, contractSummary));
   return { commit_id: commit, event: "COMMENT", body: body.join("\n\n"), comments };
 }
 
@@ -188,6 +211,8 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
   // The composite passes this env input directly; cli.ts and the frozen pipeline stay unchanged.
   const learn = options.learn ?? process.env.TRACEHOUND_LEARN ?? "off";
   if (learn !== "on" && learn !== "off") throw new Error("Invalid learn input");
+  const contractsMode = options.contracts ?? "on";
+  if (contractsMode !== "on" && contractsMode !== "off") throw new Error("Invalid contracts input");
   const reviewer = options.reviewer ?? "pool-verify-v1";
   if (reviewer !== "pool-verify-v1" && reviewer !== "review-diff-v1") {
     throw new Error("Invalid reviewer");
@@ -214,7 +239,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
   // Bind the fetched diff to the triggering head, even if another push arrived before this job.
   const diff = await (await github(endpoint, options, deps)).text();
   const current = await github(endpoint, options, deps, { accept: "application/vnd.github+json" });
-  const metadata = await current.json() as { head?: { sha?: string } };
+  const metadata = await current.json() as { head?: { sha?: string }; base?: { sha?: string } };
   if (metadata.head?.sha !== event.pull_request.head.sha) {
     deps.log("TraceHound: pull request head changed; stale event skipped.");
     return;
@@ -222,23 +247,40 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
   let output: ReturnType<typeof readOutput>;
   let pipeline: PipelineCounts | undefined;
   let sources: FindingSource[] = [];
+  const contractsTask = contractsMode === "on"
+    ? settleContracts(deps.runContracts && (() => deps.runContracts!(options.repoDir ?? "",
+      event.pull_request.base?.sha ?? metadata.base?.sha ?? "", event.pull_request.head.sha)), deps.log)
+    : Promise.resolve<ContractsResult>({ status: "off", findings: [], ms: 0 });
   try {
     if (reviewer === "pool-verify-v1") {
       const result = await deps.runPipeline(buildInput(event, diff), options.model, options.repoDir ?? "", event.pull_request.head.sha);
-      if (!result) return;
+      if (!result) { await contractsTask; return; }
       pipeline = result.pipeline;
       sources = result.sources;
       output = readOutput(result);
     } else {
       output = readOutput(await deps.runReviewer(buildInput(event, diff), options.model));
+      sources = output.comments.map(() => "diff");
     }
   } catch {
+    await contractsTask;
     deps.log("TraceHound: reviewer failed or returned invalid output; nothing posted.");
     return;
   }
-  if (output.failed) {
+  const contractsResult = await contractsTask;
+  const contracts: ContractDelivery | undefined = contractsMode === "on" && contractsResult.status !== "off" ? { result: contractsResult,
+    repo: event.repository.full_name, serverUrl: options.serverUrl ?? "https://github.com" } : undefined;
+  if (reviewer === "review-diff-v1" && output.failed) {
     deps.log("TraceHound: reviewer reported failed chunks; nothing posted.");
     return;
+  }
+  // Only model findings are deduplicated, capped, learned from, and sent to fix generation.
+  if (contractsResult.findings.length) {
+    const retained = output.comments.map((finding, index) => ({ finding, index })).filter(({ finding }) =>
+      !contractsResult.findings.some(contract => contract.path === finding.path && contract.line !== null && finding.line !== null
+        && Math.abs(contract.line - finding.line) <= 3));
+    output.comments = retained.map(({ finding }) => finding);
+    sources = retained.map(({ index }) => sources[index]!);
   }
   let suppressed: SuppressedFinding[] | undefined;
   if (learn === "on" && reviewer === "pool-verify-v1" && output.comments.length) {
@@ -247,7 +289,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     sources = filtered.indexes.map(index => sources[index]!);
     suppressed = filtered.suppressed;
   }
-  if (!output.comments.length && !suppressed?.length) {
+  if (!output.comments.length && !suppressed?.length && !contractsResult.findings.length) {
     deps.log("TraceHound: reviewer returned no findings; nothing posted.");
     return;
   }
@@ -268,7 +310,9 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
       counts: { attempted: 0, valid: 0, rejected: 0 } } };
     data.suppressed = suppressed;
   }
-  const payload = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, false, reviewer, pipeline, data);
+  if (contracts || pipeline?.chunkFailed) data ??= { sources, fixes: { suggestions: output.comments.slice(0, options.maxComments).map(() => null),
+    counts: { attempted: 0, valid: 0, rejected: 0 } } };
+  let payload = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, false, reviewer, pipeline, data, contracts);
   if (options.dryRun) {
     deps.log(JSON.stringify(payload, null, 2));
     return;
@@ -286,9 +330,10 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
   } catch (error) {
     if (!(error instanceof GitHubError) || error.status !== 422 || !payload.comments.length) throw error;
     deps.log("TraceHound: GitHub rejected inline comments; retrying as a body-only review.");
-    const fallback = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, true, reviewer, pipeline, data);
+    const fallback = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, true, reviewer, pipeline, data, contracts);
     if (!await canPost()) return;
     await github(`${endpoint}/reviews`, options, deps, { payload: fallback });
+    payload = fallback;
   }
   if (deps.onReview) {
     try { await deps.onReview(payload.body); }

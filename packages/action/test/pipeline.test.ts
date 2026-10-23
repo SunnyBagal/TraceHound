@@ -12,6 +12,7 @@ const event: PullEvent = { repository: { full_name: "example/widget" }, pull_req
   ...input, head: { sha: "abc123", repo: { full_name: "example/widget" } },
 } };
 const options: Options = { token: "fake-unused", apiUrl: "https://api.example.invalid", model: "fake-model",
+  contracts: "off",
   repoDir: "/fake/repo", maxComments: 15, dryRun: false };
 
 function deferred() {
@@ -56,7 +57,7 @@ function fake() {
     }
     if (errors.has(command)) throw new Error("private subprocess error");
     let output: unknown = { pr_title: input.title, pr_number: input.number, comments: [finding],
-      review: { model: "fake-model", chunkFailed: 0 } };
+      review: { model: "fake-model", chunkFailed: 0, chunks: [{ status: "OK" }] } };
     if (command === "review-ctx") output = { ...output as object, comments: [{ ...finding, line: null }] };
     if (command === "verify-ctx") {
       expect(commands.filter(c => c === "review" || c === "review-ctx")).toHaveLength(2);
@@ -147,6 +148,14 @@ it("runs both reviewers before either finishes, then verifies the pool, using on
   await f.cleaned();
 });
 
+it.each(["nvidia/Nemotron-3.5-Super-VL", ""])("routes model %j to every selected stage or preserves CLI defaults when empty", async model => {
+  const f = fake();
+  expect(await runPipeline(input, model, "/fake/repo", "abc123", f.log, f.exec)).not.toBeNull();
+  expect(f.commands).toEqual(["review", "review-ctx", "verify-ctx"]);
+  expect(f.models).toEqual(model ? [model, model, model] : []);
+  await f.cleaned();
+});
+
 it("posts kept findings including VERIFY_FAILED, with pipeline counts and the max-comments cap", async () => {
   const f = fake();
   await runAction(event, { ...options, maxComments: 1 }, f.deps);
@@ -156,6 +165,17 @@ it("posts kept findings including VERIFY_FAILED, with pipeline counts and the ma
   expect(f.posts[0]!.comments).toEqual([{ ...finding, side: "RIGHT" }]);
   expect(f.deps.runReviewer).not.toHaveBeenCalled();
   expect(f.commands[0]).toBe("git");
+  await f.cleaned();
+});
+
+it.each(["on", "off"] as const)("successful chunks keep the pre-068 payload byte-identical with fixes %s", async fixes => {
+  const f = fake();
+  await runAction(event, { ...options, fixes }, f.deps);
+  const body = "TraceHound · pool-verify-v1 · fake-model · 2 findings (pool 2, kept 2)"
+    + "\n\nsrc/widget.ts:null\nSynthetic defect\n\nThese comments are model-generated and unverified."
+    + (fixes === "on" ? '\n\n<!-- tracehound:v1 {"version":1,"pipeline":"pool-verify-v1","headSha":"abc123","pool":2,"kept":2,"posted":2,"fixes":{"attempted":2,"valid":0,"rejected":2},"findings":[{"path":"src/widget.ts","line":10,"source":"diff","hasSuggestion":false},{"path":"src/widget.ts","line":null,"source":"ctx","hasSuggestion":false}]} -->' : "");
+  expect(JSON.stringify(f.posts[0])).toBe(JSON.stringify({ commit_id: "abc123", event: "COMMENT", body,
+    comments: [{ ...finding, side: "RIGHT" }] }));
   await f.cleaned();
 });
 
@@ -190,13 +210,43 @@ it("posts only the CLI's kept subset and reports the original pool size", async 
 });
 
 describe("pipeline failure paths", () => {
-  it.each(["review", "review-ctx"])("%s failed chunks posts nothing", async command => {
+  it.each(["review", "review-ctx"])("%s partial chunks still posts successful findings and partial metadata", async command => {
     const f = fake();
-    f.overrides[command] = { comments: [finding], review: { model: "fake-model", chunkFailed: 1 } };
+    f.overrides[command] = { comments: [finding], review: { model: "fake-model", chunkFailed: 1,
+      chunks: [{ status: "CHUNK_FAILED" }, { status: "OK" }] } };
+    await runAction(event, options, f.deps);
+    expect(f.posts).toHaveLength(1);
+    expect(f.posts[0]!.comments).toEqual([{ ...finding, side: "RIGHT" }]);
+    expect(f.posts[0]!.body).toContain("1 of 3 reviewer chunks failed (invalid model reply); this review is partial.");
+    const footer = JSON.parse(/<!-- tracehound:v1 (.*) -->/.exec(f.posts[0]!.body)![1]!);
+    expect(footer.chunkFailed).toEqual(command === "review" ? { diff: 1, ctx: 0 } : { diff: 0, ctx: 1 });
+    expect(footer).not.toHaveProperty("reviewerChunks");
+    expect(f.commands).toContain("verify-ctx");
+    await f.cleaned();
+  });
+
+  it("uses the other reviewer's findings when one reviewer fails every chunk, including with fixes off", async () => {
+    const f = fake();
+    f.overrides.review = { comments: [], review: { model: "fake-model", chunkFailed: 1, chunks: [{ status: "CHUNK_FAILED" }] } };
+    await runAction(event, { ...options, fixes: "off" }, f.deps);
+    expect(f.posts).toHaveLength(1);
+    expect(f.posts[0]!.body).toContain("src/widget.ts:null\nSynthetic defect");
+    expect(f.posts[0]!.body).toContain("1 of 2 reviewer chunks failed (invalid model reply); this review is partial.");
+    expect(JSON.parse(/<!-- tracehound:v1 (.*) -->/.exec(f.posts[0]!.body)![1]!).chunkFailed).toEqual({ diff: 1, ctx: 0 });
+    expect(f.deps.runFixes).not.toHaveBeenCalled();
+    await f.cleaned();
+  });
+
+  it("posts nothing when both reviewers fail every chunk", async () => {
+    const f = fake();
+    for (const command of ["review", "review-ctx"]) {
+      f.overrides[command] = { comments: [], review: { model: "fake-model", chunkFailed: 2,
+        chunks: [{ status: "CHUNK_FAILED" }, { status: "CHUNK_FAILED" }] } };
+    }
     await runAction(event, options, f.deps);
     expect(f.posts).toEqual([]);
     expect(f.commands).not.toContain("verify-ctx");
-    expect(f.log).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(command === "review" ? "review-diff-v1" : "review-ctx-v1"));
+    expect(f.log).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("reviewers failed"));
     await f.cleaned();
   });
 
@@ -214,6 +264,8 @@ describe("pipeline failure paths", () => {
   it.each([
     ["review", "invalid json"], ["review-ctx", { comments: [{ ...finding, body: 3 }], review: { model: "fake", chunkFailed: 0 } }],
     ["review", { comments: [], review: { model: "fake" } }], ["verify-ctx", "invalid json"],
+    ["review", { comments: [], review: { model: "fake", chunkFailed: 1, chunks: [] } }],
+    ["review", { comments: [], review: { model: "fake", chunkFailed: 0, chunks: [{ status: "CHUNK_FAILED" }] } }],
     ["verify-ctx", { comments: [], verify: { model: "fake" } }], ["kept", "invalid json"],
     ["kept", { comments: [{ ...finding, path: "invented.ts" }], verify: { model: "fake-model", kept: 1 } }],
   ])("malformed %s output posts nothing", async (command, value) => {

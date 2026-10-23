@@ -7,7 +7,7 @@ inputs:
   model:
     description: Nemotron model ID (empty uses each stage's default)
     required: false
-    default: ''
+    default: 'nvidia/Nemotron-3.5-Super-VL'
   reviewer:
     description: Reviewer pipeline (pool-verify-v1 or review-diff-v1)
     required: false
@@ -24,6 +24,10 @@ inputs:
     description: Suppress findings similar to maintainer-rejected comments (on or off; pool-verify-v1 only)
     required: false
     default: 'off'
+  contracts:
+    description: Check deterministic cross-file contracts alongside the reviewer (on or off)
+    required: false
+    default: 'on'
   dry-run:
     description: Print the review JSON without posting (still runs the reviewer)
     required: false
@@ -59,6 +63,7 @@ runs:
         TRACEHOUND_MAX_COMMENTS: ${{ inputs.max-comments }}
         TRACEHOUND_FIXES: ${{ inputs.fixes }}
         TRACEHOUND_LEARN: ${{ inputs.learn }}
+        TRACEHOUND_CONTRACTS: ${{ inputs.contracts }}
         TRACEHOUND_DRY_RUN: ${{ inputs.dry-run }}
         TRACEHOUND_REVIEW_FILE: ${{ runner.temp }}/tracehound-review-${{ github.run_id }}-${{ github.run_attempt }}.json
       run: node packages/action/src/cli.ts

@@ -5,6 +5,7 @@ and each context finding that agrees with none of them using the shared agreemen
 It runs `verify-ctx-v1` on that pool and posts the verifier's kept findings, including `VERIFY_FAILED`,
 as one `COMMENT` review; this three-stage pipeline is `pool-verify-v1`.
 
+Reviewers and the verifier default to `nvidia/Nemotron-3.5-Super-VL`; fixes stay on 3 Super.
 All model calls use Nebius Token Factory. Findings on added
 or context lines appear as line comments on the right side of the diff. Findings outside the
 diff appear in the review body as `path:line` followed by their text. Every review names the
@@ -35,9 +36,9 @@ this repository's workflows, so adding this action does not enable model calls i
 | --- | --- | --- |
 | `nebius-api-key` | Required | Pass `${{ secrets.NEBIUS_API_KEY }}`. A missing key fails the action. |
 | `reviewer` | `pool-verify-v1` | Accepts `pool-verify-v1` or `review-diff-v1`. Other values fail before model calls. |
-| `model` | Each stage's CLI default | Optional Nemotron model ID, passed to every selected stage. An empty value preserves their individual defaults. |
+| `model` | `nvidia/Nemotron-3.5-Super-VL` | Nemotron model ID, passed to every reviewer and verifier stage through `--model`. Explicit `model: ''` preserves each stage's CLI default. Fixes always use 3 Super. |
 | `max-comments` | `15` | Maximum findings included in reviewer order, counting inline and body findings together. Extra findings are omitted with a count. `0` skips the reviewer. |
-| `fixes` | `on` | `on` or `off`. Adds fix proposals and dashboard metadata to `pool-verify-v1`. `off` preserves the previous review payload, without proposals or the metadata footer. |
+| `fixes` | `on` | `on` or `off`. Adds fix proposals and dashboard metadata to `pool-verify-v1`. `off` omits proposals; partial reviews still include metadata, as do enabled contracts. |
 | `dry-run` | `false` | `true` prints the proposed review payload as JSON and posts nothing. It still runs the reviewer and incurs its Nebius cost. |
 | `data-branch` | `off` | Set to `on` to write heuristic graph history to `tracehound-data`. Requires `contents: write`. |
 
@@ -125,12 +126,13 @@ If inline posting receives HTTP 422, the body-only retry includes the fix as a p
 If the original text contains three or more consecutive backticks, the retry replaces that diff
 with `fix withheld: unsafe to render` to avoid escaping the Markdown fence.
 Set `fixes: 'off'` in the action's `with:` block to disable this stage and preserve the legacy
-payload exactly, including omitting the metadata footer. `review-diff-v1` keeps its legacy behavior.
+payload exactly when no chunks fail and contracts are off, including omitting the metadata footer.
+Partial reviews still include their metadata footer. `review-diff-v1` keeps its legacy behavior.
 The composite action passes this setting as `TRACEHOUND_FIXES`.
 
 ## Dashboard footer
 
-When fixes are enabled for `pool-verify-v1`, each posted review body ends with one hidden line:
+When fixes are enabled for `pool-verify-v1`, or its review is partial, each posted review body ends with one hidden line:
 
 ```html
 <!-- tracehound:v1 {"version":1,"pipeline":"pool-verify-v1","headSha":"<PR head SHA>","pool":3,"kept":2,"posted":1,"fixes":{"attempted":1,"valid":1,"rejected":0},"findings":[{"path":"src/example.ts","line":12,"startLine":11,"source":"both","hasSuggestion":true}]} -->
@@ -142,6 +144,14 @@ count the full pipeline output; `posted` counts findings after the cap, includin
 can add a call). `valid` counts accepted proposals and `rejected` counts the rest, including no-safe-fix
 responses and source/model failures. No finding text or replacement text is included in the JSON.
 
+When either reviewer has failed chunks, the record also includes `chunkFailed: { diff: n, ctx: n }`,
+counting failed chunks separately for the diff and context reviewers. This field is omitted when
+nothing fails, preserving the previous output bytes. Partial reviews include it even with fixes off;
+in that case the fix counts are zero. The body adds one line:
+`N of M reviewer chunks failed (invalid model reply); this review is partial.`
+`M` counts all chunks across both reviewers. The verifier is unchanged: `VERIFY_FAILED` findings
+are still kept.
+
 `findings` follows posting order. `line` is the original finding's head line, possibly `null`;
 optional `startLine` is the start of an accepted fix range. `source` is `diff` for a diff-only finding,
 `ctx` for a context-only finding, or `both` for a diff finding that agrees with a context finding
@@ -152,6 +162,49 @@ can identify stale reviews. No-findings runs continue to post no review.
 The entire hidden line and its JSON stay below 8,000 characters. If the line would reach that size,
 `findings` is omitted and `findingsTruncated: true` is set; aggregate counts remain. HTML delimiters
 in strings are JSON-escaped to keep the hidden comment intact.
+
+## Cross-file contracts
+
+`contracts` defaults to `'on'`. Alongside the reviewer, `tracehound contracts` deterministically
+compares the merge base with the PR head: typed exports and new TypeScript errors in dependent
+files, plus stale route, queue, Redis, environment-variable, and event keys. It makes no model
+call, installs no dependencies in the PR checkout, and executes no script from the PR's code.
+The checker uses TraceHound's bundled TypeScript and reads detached base/head worktrees.
+
+The stage has a **90-second execution budget**, including history lookup and any base fetch.
+On timeout, children receive SIGTERM first, then a 5-second grace before SIGKILL if still running.
+The stage waits for child termination before returning; if its killed fetch left `shallow.lock`,
+it removes only that lock and logs the cleanup. A base fetch starts only with at least 30 seconds
+remaining. The analyzer receives the remaining whole seconds minus a 10-second cleanup reserve;
+it is skipped as a timeout if that leaves fewer than 5 seconds.
+Missing history is fetched without credentials, unshallowing when necessary; private repos
+should use `fetch-depth: 0`. It compares against the merge base, never an advanced base tip.
+A timeout, error, or invalid report logs `contracts: failed (<reason>)` and leaves model
+findings intact. The existing `max-comments: '0'` whole-review skip is retained for data jobs.
+
+Contract findings are always body findings with the current analyzer: it reports only files
+the PR did not edit. They appear after the model disclaimer under
+**Files you didn't edit that depend on this change**, with up to 10 linked
+`path:line` entries at the head SHA, a one-line reason each, and `and N more` for overflow.
+These entries do not count against `max-comments` for model findings. The retained inline
+delivery, inline cap, and ±3-line deduplication paths cannot trigger with today's analyzer output.
+Contracts bypass
+maintainer-feedback suppression and model fix generation. Neither the deterministic gate
+nor an additional evidence verifier is wired into this stage.
+
+Enabled runs add `contracts: { status: "ok" | "failed", inline, body, ms }` to the footer;
+valid reports also include `typed: "complete" | "skipped-no-tsconfig" | "skipped-budget" | "skipped-error"`.
+Skipped typed checks retain keyed findings with status `ok` and log
+`contracts: typed check skipped (<reason>); key checks only.` Counts describe displayed
+contract entries, separate from pipeline/model counts; `inline` is currently always zero.
+The hidden footer remains the review's last line.
+If `repo-dir` is empty or `git rev-parse --git-dir` fails, the stage logs
+`contracts: skipped (no checkout)`, adds no section or footer field, and
+leaves the posted output byte-identical to `contracts: 'off'`. This supports
+`review-diff-v1` without a checkout; `pool-verify-v1` still requires one.
+To disable the stage, set `contracts: 'off'` in the Action's `with:` block. Off skips the checker
+and preserves the previous posted bytes, including leaving the existing footer unchanged
+rather than adding an `off` field. The composite passes the input as `TRACEHOUND_CONTRACTS`.
 
 ## Maintainer feedback
 
@@ -169,17 +222,21 @@ This changes what is posted; it is not measured by the benchmark.
 - `review-diff-v1` retains the original diff-only behavior and does not require a target checkout.
   `pool-verify-v1` adds repository context through the existing context reviewer and verifier.
   Comments remain suggestions that may be wrong; verification is another model judgment.
-- On 40 dev pull requests using Nemotron Super, measured pipeline cost was about **$0.032 median,
-  $0.23 maximum** per pull request. Summed sequential wall time was **100 s median, 581 s maximum**;
-  this action overlaps the two reviewers, so those figures are not measured Action runtimes.
-  Prices are third-party estimates. See [pool-verify-v1 benchmark results](../bench/pool-verify.md)
-  for the numbers and limits. Cost varies with the selected model and pull request;
+- On the 40 dev pull requests, 3.5's measured pipeline cost was a median of about **$0.06 per PR**
+  versus **$0.03** for 3 Super ($0.063 versus $0.031), from
+  [decision 067's dev results](../bench/dev-3.5.md). The decision used two completed 3.5 runs;
+  these are dev measurements, not measured Action runtimes. Prices are third-party estimates.
+  Cost varies with the selected model and pull request;
   `max-comments` limits publishing and the added fix stage, not reviewer/verifier inference cost.
-  The figures above exclude fix proposals. The CLI defaults can differ from the
-  benchmark's Super configuration; use `model: nvidia/nemotron-3-super-120b-a12b` to select Super
-  for all three stages.
-- Stage failure (including a reviewer's reported failed chunk), malformed output, or no findings produces
-  a log line, posts nothing, and exits successfully. Missing credentials or GitHub API failures fail
+  The figures above exclude fix proposals. Fixes stay on 3 Super because that stage was not
+  measured on 3.5. Use `model: nvidia/nemotron-3-super-120b-a12b` to select 3 Super for reviewers
+  and the verifier, or explicit `model: ''` for the analyzer CLIs' individual defaults.
+- In `pool-verify-v1`, a failed reviewer chunk contributes no findings; successful chunks' comments
+  are pooled and verified as usual. This matches how decision 067 was measured. The pipeline
+  returns no review only if both reviewers failed every chunk, a process error occurs, or output
+  is invalid. No findings still means nothing is posted. A partial review includes the line and
+  footer counts described above. `review-diff-v1` retains its all-or-nothing chunk behavior.
+  These skips log a line and exit successfully. Missing credentials or GitHub API failures fail
   the action, as does a missing head commit for `pool-verify-v1`. Stage failures log the stage name
   and suppress error text to keep credentials out of logs.
 - If GitHub rejects inline comments with HTTP 422, the action retries once with the included findings

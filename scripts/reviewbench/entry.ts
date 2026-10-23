@@ -3,7 +3,8 @@
 // /work/repo at RB_HEAD, write RB_OUT. Settings (RB_CONFIG_*):
 //   RB_CONFIG_PIPELINE  pool-verify-v1 (default; the Action's pipeline) | pool-raw | pool-raw-x2 | pool-raw-missed
 //   RB_CONFIG_MODEL     model id for every stage (default: Super, as benchmarked)
-//   RB_MODEL_BASE_URL   the registered model API URL; becomes NEBIUS_BASE_URL for the stages
+//   RB_MODEL_BASE_URL   the registered model API URL; becomes NEBIUS_BASE_URL for the stages (the
+//                       client sends 3.5 Super VL to us-north1 whatever Token Factory region it names)
 // A pull request never fails because of the reviewer: any error, invalid output or the 25-minute
 // limit writes a valid file with no findings and exits 0. Only a configuration error (unknown
 // pipeline, missing key or contract variable) exits non-zero, before any model call, so a
@@ -20,7 +21,7 @@ import { promisify } from "node:util";
 import type { Finding, ReviewerInput } from "../../packages/action/src/action.ts";
 import { checkRepoHead, poolFindings, runPipeline, type Execute } from "../../packages/action/src/pipeline.ts";
 import { agrees } from "../bench/agree-rule.ts";
-import { DEFAULT_BASE_URL } from "../../packages/analyzer/src/llm/client.ts";
+import { baseUrlFor, DEFAULT_BASE_URL } from "../../packages/analyzer/src/llm/client.ts";
 import { SpendLedger } from "../../packages/analyzer/src/llm/ledger.ts";
 import { MAX_FINDINGS, toFindings, toInput, unionFindings } from "./adapter.ts";
 import { outputProblem, type RbOutput, type RbPrJson } from "./format.ts";
@@ -105,6 +106,8 @@ export interface RunContext {
   log: (line: string) => void;
   makeExec: (signal: AbortSignal) => Execute;
   clearCache: () => void;
+  /** Counts all validated reviewer chunks, including a pass whose chunks all failed. */
+  reportChunks?: (failed: number, chunks: number) => void;
 }
 
 /** What the Action runs (packages/action/src/cli.ts → runAction): the head check, then runPipeline. */
@@ -113,22 +116,26 @@ async function poolVerify(input: ReviewerInput, c: RunContext): Promise<Finding[
   await checkRepoHead(c.repo, c.head, exec);
   const result = await runPipeline(input, c.model, c.repo, c.head, c.log, exec);
   if (!result) throw new Error("pool-verify-v1 failed (stage named above)");
+  if (result.pipeline.chunkFailed) c.reportChunks?.(result.review.chunkFailed, result.pipeline.reviewerChunks!);
   c.log(`pool ${result.pipeline.pool}, kept ${result.pipeline.kept}`);
   return result.comments;
 }
 
-/** A reviewer stage's output file, checked as runPipeline checks it: valid findings, no failed chunk. */
-export function readReview(command: string, value: unknown): Finding[] {
+/** A reviewer stage's successful findings and validated chunk counts, as in runPipeline. */
+export function readReview(command: string, value: unknown): { comments: Finding[]; failed: number; chunks: number; failure?: string } {
   const output = value as { comments?: unknown; review?: { chunkFailed?: unknown; model?: unknown; chunks?: unknown } } | null;
   const comments = output?.comments;
-  if (!Array.isArray(comments) || typeof output?.review?.model !== "string") throw new Error(`${command}: invalid output`);
-  if (output.review.chunkFailed !== 0) {
-    // The chunk's recorded failure (an HTTP status, an invalid reply), never finding text.
-    const chunks = Array.isArray(output.review.chunks) ? output.review.chunks as { failure?: unknown }[] : [];
-    const failure = chunks.find(chunk => typeof chunk?.failure === "string")?.failure;
-    throw new Error(`${command}: failed chunks${failure ? ` (first: ${failure})` : ""}`);
-  }
-  return comments.map(item => {
+  const failed = output?.review?.chunkFailed;
+  if (!Array.isArray(comments) || typeof output?.review?.model !== "string" || !output.review.model.trim()
+    || typeof failed !== "number" || !Number.isSafeInteger(failed) || failed < 0
+    || !Array.isArray(output.review.chunks)) throw new Error(`${command}: invalid output`);
+  const chunks = output.review.chunks as { status?: unknown; failure?: unknown }[];
+  if (chunks.some(chunk => !chunk || !["OK", "CHUNK_FAILED"].includes(String(chunk.status)))
+    || chunks.filter(chunk => chunk.status === "CHUNK_FAILED").length !== failed
+    || (failed > 0 && failed === chunks.length && comments.length > 0)) throw new Error(`${command}: invalid chunks`);
+  // The chunk's recorded failure (an HTTP status, an invalid reply), never finding text.
+  const failure = chunks.find(chunk => chunk.status === "CHUNK_FAILED" && typeof chunk.failure === "string")?.failure;
+  const findings = comments.map(item => {
     const f = item as Partial<Finding> | null;
     if (!f || typeof f.path !== "string" || !f.path.trim() || typeof f.body !== "string" || !f.body.trim()
       || !(f.line === null || (typeof f.line === "number" && Number.isSafeInteger(f.line) && f.line > 0))) {
@@ -136,6 +143,17 @@ export function readReview(command: string, value: unknown): Finding[] {
     }
     return { path: f.path, line: f.line, body: f.body };
   });
+  return { comments: findings, failed, chunks: chunks.length, ...(typeof failure === "string" && { failure }) };
+}
+
+function reportPass(command: string, reviews: ReturnType<typeof readReview>[], c: RunContext): void {
+  const failed = reviews.reduce((sum, review) => sum + review.failed, 0);
+  const chunks = reviews.reduce((sum, review) => sum + review.chunks, 0);
+  c.reportChunks?.(failed, chunks);
+  if (failed > 0 && failed === chunks) {
+    const failure = reviews.find(review => review.failure)?.failure;
+    throw new Error(`${command}: failed chunks${failure ? ` (first: ${failure})` : ""}`);
+  }
 }
 
 /**
@@ -161,8 +179,9 @@ export async function poolRaw(input: ReviewerInput, c: RunContext): Promise<Find
     ]);
     if (diff!.status === "rejected") throw diff!.reason;
     if (ctx!.status === "rejected") throw ctx!.reason;
-    const pool = poolFindings(diff!.value, ctx!.value);
-    c.log(`pool ${pool.length} (review-diff-v1 ${diff!.value.length}, review-ctx-v1 ${ctx!.value.length})`);
+    reportPass("pool-raw", [diff!.value, ctx!.value], c);
+    const pool = poolFindings(diff!.value.comments, ctx!.value.comments);
+    c.log(`pool ${pool.length} (review-diff-v1 ${diff!.value.comments.length}, review-ctx-v1 ${ctx!.value.comments.length})`);
     return pool;
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -171,8 +190,8 @@ export async function poolRaw(input: ReviewerInput, c: RunContext): Promise<Find
 
 /**
  * pool-raw twice with the same prompts, then the union (unionFindings). The response cache is
- * cleared before the second pass, or it would replay the first. Each pass is all or nothing like
- * pool-raw; the union is over the passes that finished, and a pass still running X2_MARGIN_MS
+ * cleared before the second pass, or it would replay the first. Each pass keeps successful chunks
+ * like pool-raw; the union is over the passes that finished, and a pass still running X2_MARGIN_MS
  * before the limit is stopped.
  */
 export async function poolRawX2(input: ReviewerInput, c: RunContext): Promise<Finding[]> {
@@ -227,8 +246,9 @@ export async function poolRawMissed(input: ReviewerInput, c: RunContext): Promis
     await exec(process.execPath, [BIN, "review-missed", "--pr", inputPath, "--findings", poolPath, "--repo", c.repo, "--head", c.head,
       "--out", out, "--model", c.model], { cwd: ROOT, env: c.env, maxBuffer: 4 * 1024 * 1024 });
     const missed = readReview("review-missed", JSON.parse(await readFile(out, "utf8")));
-    const added = missed.filter(finding => !pool.some(p => agrees(p, finding)));
-    c.log(`pool ${pool.length}, missed ${missed.length}, new ${added.length}`);
+    reportPass("review-missed", [missed], c);
+    const added = missed.comments.filter(finding => !pool.some(p => agrees(p, finding)));
+    c.log(`pool ${pool.length}, missed ${missed.comments.length}, new ${added.length}`);
     return [...pool, ...added];
   } catch (error) {
     c.log(`missed: failed (${stop.signal.aborted ? `timed out after ${Math.round(left / 1000)} s` : reason(error, c.env)})`);
@@ -308,9 +328,10 @@ export async function main(env: NodeJS.ProcessEnv = process.env, deps: MainDeps 
     log(`configuration error: ${mask(error.message, env)}`);
     return 2;
   }
-  // The stages read NEBIUS_BASE_URL (packages/analyzer/src/llm/client.ts) from the env they inherit.
+  // The stages read NEBIUS_BASE_URL (packages/analyzer/src/llm/client.ts) from the env they inherit;
+  // the client then routes each model to its region (baseUrlFor), so the line shows that URL.
   if (env.RB_MODEL_BASE_URL?.trim()) env.NEBIUS_BASE_URL = env.RB_MODEL_BASE_URL.trim();
-  print(`pipeline=${s.pipeline} model=${s.model} base_url=${env.NEBIUS_BASE_URL || DEFAULT_BASE_URL} `
+  print(`pipeline=${s.pipeline} model=${s.model} base_url=${baseUrlFor(s.model, env.NEBIUS_BASE_URL || DEFAULT_BASE_URL)} `
     + `limit_min=${limitMs / 60_000} max_findings=${MAX_FINDINGS} attempt=${env.RB_ATTEMPT ?? "1"}`);
 
   const before = spent();
@@ -318,6 +339,8 @@ export async function main(env: NodeJS.ProcessEnv = process.env, deps: MainDeps 
   let timer: ReturnType<typeof setTimeout> | undefined;
   let findings: Finding[] = [];
   let status = "ok";
+  let failedChunks = 0;
+  let reviewerChunks = 0;
   try {
     const pr = JSON.parse(readFileSync(s.prJsonPath, "utf8")) as RbPrJson;
     const input = toInput(pr ?? {}, readFileSync(s.diffPath, "utf8"), s.prNumber, s.nwo);
@@ -332,6 +355,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env, deps: MainDeps 
         model: s.model, repo: s.repo, head: s.head, env, signal: controller.signal, deadline, now, log,
         makeExec: deps.makeExec ?? (signal => abortableExec(signal, log, env)),
         clearCache: deps.clearCache ?? (() => rmSync(path.join(STATE_DIR, "cache"), { recursive: true, force: true })),
+        reportChunks: (failed, chunks) => { failedChunks += failed; reviewerChunks += chunks; },
       }), timeout]);
     }
   } catch (error) {
@@ -364,6 +388,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env, deps: MainDeps 
     return 1;
   }
   const cost = spent() - before;
+  if (status === "ok" && failedChunks > 0) status += ` partial=${failedChunks}/${reviewerChunks}`;
   log(`status=${status} findings=${output.findings.length} dropped_no_line=${converted.dropped.noLine} `
     + `dropped_empty=${converted.dropped.empty} capped=${converted.capped} `
     + `cost_usd=${Number.isFinite(cost) ? cost.toFixed(4) : "unknown"} wall_s=${Math.round((now() - started) / 1000)}`);
