@@ -12,6 +12,7 @@
 //   review   diff-only pull request reviewer, review-diff-v1 (055)
 //   review-ctx  the reviewer plus repository context at the pull request head, review-ctx-v1 (057)
 //   review-missed  one more pass shown the pooled findings, asking only for missed defects, review-missed-v1 (P008)
+//   review-recall  recall-v3 for the ReviewBench image: two lenses per chunk, the missed pass, reduce (070)
 //   verify   confidence for each finding of a review, verify-v1, and filtering at a threshold (056)
 //   verify-ctx  keep or drop each finding of a review, seeing repository context, verify-ctx-v1 (058)
 const [command, ...rest] = process.argv.slice(2);
@@ -46,6 +47,14 @@ if (command === "bench") {
   if (existsSync(envFile) && !process.env.NEBIUS_API_KEY) process.loadEnvFile(envFile);
   const { main } = await import("./review/missed-cli.ts");
   process.exitCode = await main(rest);
+} else if (command === "review-recall") {
+  // review-recall needs NEBIUS_API_KEY: load the workspace .env for this command only
+  const { existsSync } = await import("node:fs");
+  const envFile = new URL("../../../.env", import.meta.url).pathname;
+  if (existsSync(envFile) && !process.env.NEBIUS_API_KEY) process.loadEnvFile(envFile);
+  const { main } = await import("./review/recall/cli.ts");
+  // exit at once: a call the wall-clock guard left behind must not keep the process alive
+  process.exit(await main(rest));
 } else if (command === "verify") {
   // verify run needs NEBIUS_API_KEY: load the workspace .env for this command only
   const { existsSync } = await import("node:fs");
