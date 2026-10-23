@@ -173,7 +173,7 @@ It does parse the PR's `tsconfig.json` and type files with TraceHound's bundled 
 detached base/head worktrees, and those files can reference files outside the checkout (for
 example through `extends` or `paths`); the compiler reads them, and a finding can quote them. So
 contracts, like the rest of the Action, are for same-repository PRs only: fork PRs are skipped,
-and the stage is not a sandbox.
+and the stage is not a sandbox (see [Security boundary](#security-boundary)).
 
 The stage has a **90-second execution budget**, including history lookup and any base fetch.
 On timeout, children receive SIGTERM first, then a 5-second grace before SIGKILL if still running.
@@ -218,6 +218,22 @@ data job collects feedback; the read-only review job applies it and records each
 in the footer. Run data before review (`review.needs: data`) for feedback to apply on the next
 push. [Learning setup, reset, conventions CLI, and scripted demo](../learn.md).
 This changes what is posted; it is not measured by the benchmark.
+
+## Security boundary
+
+- **Same-repository PRs only.** The example workflow's job condition skips fork PRs, and the
+  entry point (`packages/action/src/action.ts`) skips them again in code.
+- **Why that is the boundary:** a same-repository author already has write access, and a workflow
+  on their branch runs with the repository's secrets. The Action gives that author nothing they
+  don't already have. It is not built to review code from someone without that access.
+- **What the contracts stage reads:** the merge base and the PR head as detached worktrees, every
+  `tsconfig.json` in them and the configs those extend, and the source and type files the bundled
+  TypeScript resolves from them. `extends` and `paths` can point outside the checkout, and the
+  compiler then reads those files too. TypeScript plugins and config packages are read as JSON
+  and `.d.ts` only; no JavaScript from the PR runs. Tokens and the Nebius key are removed from the
+  stage's environment.
+- **Backlog (hardening):** restricting compiler reads to the checkout, and an environment
+  allowlist for the stage instead of removing known secrets.
 
 ## Behavior and limits
 
