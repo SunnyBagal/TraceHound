@@ -168,8 +168,12 @@ in strings are JSON-escaped to keep the hidden comment intact.
 `contracts` defaults to `'on'`. Alongside the reviewer, `tracehound contracts` deterministically
 compares the merge base with the PR head: typed exports and new TypeScript errors in dependent
 files, plus stale route, queue, Redis, environment-variable, and event keys. It makes no model
-call, installs no dependencies in the PR checkout, and executes no script from the PR's code.
-The checker uses TraceHound's bundled TypeScript and reads detached base/head worktrees.
+call. It doesn't install dependencies or run the PR's scripts, and it loads no TypeScript plugins.
+It does parse the PR's `tsconfig.json` and type files with TraceHound's bundled TypeScript, in
+detached base/head worktrees, and those files can reference files outside the checkout (for
+example through `extends` or `paths`); the compiler reads them, and a finding can quote them. So
+contracts, like the rest of the Action, are for same-repository PRs only: fork PRs are skipped,
+and the stage is not a sandbox.
 
 The stage has a **90-second execution budget**, including history lookup and any base fetch.
 On timeout, children receive SIGTERM first, then a 5-second grace before SIGKILL if still running.
