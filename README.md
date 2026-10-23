@@ -77,6 +77,8 @@ Every lever we tried is in the [levers table](docs/bench/results.md#6-precision-
 
 [[RESULTS-TABLE]]
 
+[[CALCOM-V2]] (decision 069: v2 on Cal.com, the second look)
+
 [[REVIEWBENCH]]
 
 [[SEEDED-TEST]]
