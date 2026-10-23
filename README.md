@@ -109,8 +109,6 @@ limits: [docs/bench/results.md](docs/bench/results.md).
 
 ## Details
 
-# TraceHound
-
 TraceHound maps TypeScript codebases into evidence-backed component graphs: every edge on the
 canvas points back to a file, symbol and line range in the analyzed code, with the extractor that
 found it and how confidently the value was resolved (`proven` · `resolved-default` · `dynamic`).
