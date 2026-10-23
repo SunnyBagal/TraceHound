@@ -54,15 +54,16 @@ flowchart LR
   P --> V["verify-ctx-v1<br/>keep or drop each finding,<br/>reading the code around it"]
   V --> L["Maintainer feedback (learn)<br/>drops findings like ones maintainers<br/>rejected; off by default"]
   L --> R["One COMMENT review<br/>line comments + fix suggestions"]
-  K["Cross-file contracts<br/>deterministic, no model<br/>(landing in int-01)"] -.-> R
+  K["Cross-file contracts<br/>deterministic, no model"] -.-> R
 ```
 
 - **Two generators** run in parallel on Nemotron: one sees only the diff, the other also sees
   the changed files and the places that reference the changed names.
 - **Pool, then verifier:** the verifier sees each pooled finding with the code around it and keeps
   or drops it. This three-stage pipeline is `pool-verify-v1` (decision 059).
-- **Cross-file contracts** (landing in int-01, draft PR #53): a deterministic check that a renamed
-  export, route, queue, Redis, env or event key still matches the files the PR did not edit.
+- **Cross-file contracts** (on by default; [docs/contracts.md](docs/contracts.md)): a
+  deterministic check that a renamed export, route, queue, Redis, env or event key still matches
+  the files the PR did not edit.
 - **Learning from maintainer feedback:** `learn: 'on'` suppresses findings similar to comments
   maintainers rejected, and records each suppression in the review footer. It is off by default
   and the benchmark does not measure it ([docs/learn.md](docs/learn.md)).
@@ -99,7 +100,6 @@ limits: [docs/bench/results.md](docs/bench/results.md).
 
 ## What's next
 
-- Merge cross-file contracts into the Action (int-01).
 - Decide on Nemotron 3.5 Super from decision 067's dev runs.
 - Measure what maintainer-feedback learning changes in posted reviews.
 
