@@ -83,3 +83,25 @@ Recorded at build commit `6a7e121`, before any v3 model call (the probe below is
 - Reduce: as P009 7; duplicates are same file, overlapping lines, word-set Jaccard ≥ 0.5; the cap keeps
   input order (lens A, lens B, missed), so it cuts missed findings first.
 - Dev runner: `scripts/bench/run-v3-dev.ts`, one pull request at a time, reviewer cache reads off.
+
+### Reasoning budget, per model (probe 2026-10-23T21:09–21:13Z, before the dev runs)
+`scripts/bench/v3-reasoning-probe.ts`: one lens A request on dev pull request discourse/4 (one 3,685-character
+chunk) per model and variant, temperature 1.0, top_p 0.95, max_tokens 16,000; 6 requests, 6 HTTP 200, $0.0624.
+
+| model | variant | finish | reasoning tokens | output tokens |
+|---|---|---|---|---|
+| 3 Super | reasoning on, no budget | stop | 2,077 | 2,308 |
+| 3 Super | `chat_template_kwargs.reasoning_budget: 256` | length | 16,000 | 16,000 |
+| 3 Super | `reasoning_effort: "low"` | stop | 142 | 711 |
+| 3.5 Super VL | reasoning on, no budget | length | 16,000 | 16,000 |
+| 3.5 Super VL | `chat_template_kwargs.reasoning_budget: 256` | stop | 12,887 | 13,184 |
+| 3.5 Super VL | `reasoning_effort: "low"` | stop | 12,227 | 12,602 |
+
+Finding: Token Factory honours **no reasoning token budget** for either model. `reasoning_budget` is
+ignored by both. `reasoning_effort: "low"` shortened 3 Super's reasoning (one sample, 142 tokens), but it
+is an effort level that cannot be set to about 3,000 tokens; 3.5 ignored it. So **both arms use P009's
+fallback**: reasoning on, max_tokens 16,000, one retry with reasoning off on `finish_reason=length`
+(`REASONING_PLANS` stays empty, every model gets `length-retry`). One sample per cell, temperature 1.0.
+
+Dev runs: `TRACEHOUND_BUDGET_TOTAL_USD=60 TRACEHOUND_BUDGET_RUN_USD=6 node scripts/bench/run-v3-dev.ts run --arm S|V`,
+then `… score --arm S|V`, then `node scripts/bench/v3-results.ts`. Stop rule before arm V as in the brief.
