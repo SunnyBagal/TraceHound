@@ -53,7 +53,11 @@ gets one review:
   shown as GitHub's native suggestion block with its **Commit suggestion** button.
 - **Cross-file contracts**: a section listing files the pull request did *not* edit that depend
   on an export, route, queue, Redis key, environment variable or event it changed. This part is
-  deterministic: no model, no network, no script from the pull request is run.
+  deterministic: no model, no network. It doesn't install dependencies, run the pull request's
+  scripts or load TypeScript plugins. It does parse the pull request's `tsconfig.json` and type
+  files with TraceHound's bundled TypeScript, and those can reference files outside the checkout.
+  So contracts, like the rest of the Action, are for same-repository pull requests only: fork pull
+  requests are skipped, and the stage is not a sandbox.
 - **A hidden machine-readable footer** (pipeline, model, pool and kept counts, fix counts) that the
   dashboard reads.
 - **Optional learning** (`learn: 'on'`, off by default): findings similar to comments maintainers
