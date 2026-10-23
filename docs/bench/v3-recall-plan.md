@@ -67,3 +67,19 @@ A new pipeline `recall-v3` in the ReviewBench adapter and the analyzer. It's add
 ## Builder's details (070, fixed before the first dev call)
 Filled in below as step 3 lands and before the first dev call: the lens prompt sha256 values, the
 reasoning-budget finding per model, and the measured knobs (chunk size in characters, concurrency).
+
+Recorded at build commit `6a7e121`, before any v3 model call (the probe below is the first):
+- Lens A prompt sha256 `0a1a29c96c2d7c6520bf47d2d4effc5fb2d359087204a4b794d9202c70f69351`.
+- Lens B prompt sha256 `804e955260a19d7b75d34921a9bb065369183eca34074314db3c10b0f88d12dd`.
+- Missed pass: `review-missed-v1` unchanged, sha256 `a5a2115f559b82de82c51ee2629e30b05c37ebe0e528e5a02b3de753b42053bc`,
+  with its own settings (temperature 0, reasoning on, review-ctx-v1's 60,000-character chunks and context block).
+- Chunks: at most 32,000 diff characters (about 8k tokens at 4 characters a token), at most 8 per pull request.
+- Lens calls: temperature 1.0, top_p 0.95, max_tokens 16,000, 4 at a time per pull request; an invalid
+  reply is retried once; a reply cut at max_tokens is retried once with reasoning off.
+- Per pull request: $0.12, enforced by reserving each call's worst case (estimated input + max_tokens)
+  before it is sent; a refused call is a failed call, never a failed pull request. Wall-clock guard
+  20 min (lens calls start only with 5 min left, the missed pass only with 3 min left), under the
+  adapter's 25 min and ReviewBench's 30 min.
+- Reduce: as P009 7; duplicates are same file, overlapping lines, word-set Jaccard ≥ 0.5; the cap keeps
+  input order (lens A, lens B, missed), so it cuts missed findings first.
+- Dev runner: `scripts/bench/run-v3-dev.ts`, one pull request at a time, reviewer cache reads off.
