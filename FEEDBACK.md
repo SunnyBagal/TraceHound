@@ -758,3 +758,15 @@ was re-run.
 - Latency: a lens call usually took 50–90 s; a pull request took a median of 132 s (S) and 134 s (V).
 - What would have helped: a documented, honoured reasoning token budget (or `max_reasoning_tokens`) for the
   Nemotron 3 / 3.5 Super models, and documentation of which `reasoning_effort` values each model honours.
+
+## 2026-10-24 — job 071 (Nemotron 3 Ultra on dev; Nebius for judges only)
+
+- **Nebius, called:** Token Factory chat completions, `nvidia/nemotron-3-super-120b-a12b` (bench-judge-v1) and
+  `Qwen/Qwen3-235B-A22B-Instruct-2507` (bench-judge-x1), us-central1, for dev run 10's judging. Spend $0.1011 (runner),
+  no HTTP or transport failures recorded. Run 11's judging ran later, unattended, and is not counted here.
+- **Not Nebius (labelled separately): the NVIDIA API** (`integrate.api.nvidia.com`, `nvidia/nemotron-3-ultra-550b-a55b`,
+  free tier). Probe: HTTP 200, 1.3 s. Smoke + run 10: 324 requests, 0 HTTP 429 at our 36/min throttle, 0 4xx, 4 requests
+  hit our 300 s timeout. `usage` carried no `completion_tokens_details.reasoning_tokens`; replies carried
+  `reasoning_content`. No reply ran to `max_tokens`.
+- **What would have helped (opinion):** Nemotron 3 Ultra on Token Factory at a price this credit could pay for, so the
+  comparison could run on the hackathon's own runtime.
