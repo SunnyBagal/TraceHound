@@ -742,3 +742,19 @@ was re-run.
 - **What would have helped:** the same as on 21 Oct: a per-call `finish_reason` of `length`, or a
   separate cap for reasoning tokens. Opinion: the invalid-JSON chunks again look like truncation at
   `max_tokens`.
+
+## 2026-10-24 — job 070 (recall-v3 dev runs)
+
+- Called: Token Factory chat completions. `nvidia/nemotron-3-super-120b-a12b` (us-central1) and
+  `nvidia/Nemotron-3.5-Super-VL` (us-north1), plus `Qwen/Qwen3-235B-A22B-Instruct-2507` as a judge.
+- Counts (ledger, this job): 562 requests, 562 HTTP 200, 0 failures, est. $5.71. 3 Super: 197 reviewer + 78 judge requests.
+  3.5 Super VL: 209 reviewer requests. Qwen: 78 judge requests. Probe: 6 requests.
+- Reasoning budget (one sample per cell, temperature 1.0, max_tokens 16,000): `chat_template_kwargs.reasoning_budget: 256`
+  is ignored by both models (3 Super reasoned to 16,000 tokens, finish `length`; 3.5 reasoned 12,887 tokens).
+  `reasoning_effort: "low"`: 3 Super reasoned 142 tokens (vs 2,077 without it); 3.5 reasoned 12,227 tokens.
+  `usage.completion_tokens_details.reasoning_tokens` was reported for both models.
+- Truncation: 27 (3 Super) and 38 (3.5) of 124 lens calls each ran to max_tokens 16,000 with reasoning on.
+  Invalid JSON (our parse, not an API error) after one retry: 21 and 29 lens calls.
+- Latency: a lens call usually took 50–90 s; a pull request took a median of 132 s (S) and 134 s (V).
+- What would have helped: a documented, honoured reasoning token budget (or `max_reasoning_tokens`) for the
+  Nemotron 3 / 3.5 Super models, and documentation of which `reasoning_effort` values each model honours.
