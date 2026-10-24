@@ -3464,3 +3464,14 @@ ignored; `reasoning_effort: "low"` cut 3 Super's reasoning in one sample but is 
 per-pull-request cap (15 such refusals in arm S); the run continued to arm V.
 **Rejected:** tuning the lenses or the cap after seeing arm S (P009 fixes two configurations, one run each);
 using `reasoning_effort: "low"` as the "budget" (it is not settable to about 3,000 tokens and was one sample).
+
+## 071 — Nemotron 3 Ultra on dev via the free NVIDIA API: report only (2026-10-24)
+
+**Choice:** an opt-in second provider in `src/llm/client.ts`: only with `TRACEHOUND_NVIDIA_API=1` and the exact id
+`nvidia/nemotron-3-ultra-550b-a55b` do requests go to `integrate.api.nvidia.com` with `NVIDIA_API_KEY` (36 requests per
+rolling minute, 429 waited out and counted, 300 s timeout, ledgered at $0); every Token Factory path is unchanged (tests).
+Dev runs 10–11 of pool-verify-v1 at `review-freeze-2` with only the model swapped. **Result on run 10 alone (fallback;
+run 11 ran unattended after this session's budget ended):** pool-verify-v1 v1 F 42.3 (3 Super mean 42.3, 3.5 mean 50.4),
+pool-raw v1 F 42.1 (38.2, 53.9); the only interval excluding 0 is pool-raw v1, Ultra − 3.5 = −11.8 [−19.6, −4.0].
+0 failed chunks, 0 truncations, 0 429s. **Nothing is adopted;** the Action stays on 3.5. `docs/bench/dev-ultra.md`.
+**Rejected:** raising the frozen `max_tokens` or the 300 s timeout after the smoke; Ultra on Token Factory (unaffordable).

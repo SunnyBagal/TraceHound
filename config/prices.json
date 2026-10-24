@@ -1,11 +1,12 @@
 {
-  "_readme": "USD per 1M tokens for Nebius Token Factory models. Nano and Super prices are taken from third-party trackers listing Nebius rates (OpenRouter, Bifrost, DeepInfra, Sep 2026), not yet verified against the Nebius console. Entries with \"placeholder\": true are NOT real prices; until filled, the budget uses placeholderFallback, a deliberately high estimate, so guardrails err toward refusing. Qwen/Qwen3-235B-A22B-Instruct-2507 comes from a third-party listing (models.dev via mastra.ai, 2026-10-16), not verified in the Nebius console. nvidia/Nemotron-3.5-Super-VL: the Nebius blog of 16 Oct 2026, \"three new open-weight models from US companies\", and the Token Factory model page (same rates as nvidia/nemotron-3-super-120b-a12b).",
+  "_readme": "USD per 1M tokens for Nebius Token Factory models. Nano and Super prices are taken from third-party trackers listing Nebius rates (OpenRouter, Bifrost, DeepInfra, Sep 2026), not yet verified against the Nebius console. Entries with \"placeholder\": true are NOT real prices; until filled, the budget uses placeholderFallback, a deliberately high estimate, so guardrails err toward refusing. Qwen/Qwen3-235B-A22B-Instruct-2507 comes from a third-party listing (models.dev via mastra.ai, 2026-10-16), not verified in the Nebius console. nvidia/Nemotron-3.5-Super-VL: the Nebius blog of 16 Oct 2026, \"three new open-weight models from US companies\", and the Token Factory model page (same rates as nvidia/nemotron-3-super-120b-a12b). nvidia/nemotron-3-ultra-550b-a55b (lowercase) is the free NVIDIA API (build.nvidia.com, decision 071), not Token Factory: 0 / 0, so its calls are ledgered at $0 with their real token counts; the Token Factory placeholder nvidia/Nemotron-3-Ultra-550b-a55b is a different entry.",
   "placeholderFallback": { "inputPer1M": 5.0, "outputPer1M": 15.0 },
   "models": {
     "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": { "inputPer1M": 0.06, "outputPer1M": 0.24, "placeholder": false },
     "nvidia/nemotron-3-super-120b-a12b": { "inputPer1M": 0.30, "outputPer1M": 0.90, "placeholder": false },
     "nvidia/Nemotron-3.5-Super-VL": { "inputPer1M": 0.30, "outputPer1M": 0.90, "placeholder": false },
     "nvidia/Nemotron-3-Ultra-550b-a55b": { "inputPer1M": null, "outputPer1M": null, "placeholder": true },
+    "nvidia/nemotron-3-ultra-550b-a55b": { "inputPer1M": 0, "outputPer1M": 0, "placeholder": false },
     "nvidia/Nemotron-3_5-Lightning": { "inputPer1M": null, "outputPer1M": null, "placeholder": true },
     "Qwen/Qwen3-235B-A22B-Instruct-2507": { "inputPer1M": 0.20, "outputPer1M": 0.60, "placeholder": false }
   }
