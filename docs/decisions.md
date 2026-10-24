@@ -3449,3 +3449,18 @@ spread 7 F points, which is more than the gap between 3.5 and 3 Super here.
   - `scripts/bench/intervals.ts` makes `freezeCheck069` fail from now on. That is acceptable, since
     no further Cal.com run is allowed.
   - `results.md`, the README and the viewer are unchanged.
+
+## 070 — recall-v3 for ReviewBench: built, dev-selected, neither arm qualifies (2026-10-24)
+
+**Choice:** build `recall-v3` (P009) as an additive pipeline: `tracehound review-recall`, `src/review/recall/`, and
+`recall-v3` in the ReviewBench adapter with its own conversion (ranges, null line → first changed line, cap 60).
+The other pipelines' functions are pinned byte-identical. It was run once on dev per arm (S = 3 Super, V = 3.5 Super VL) and P009's selection was applied:
+S v1 P 14.0 / R 50.0 / F 21.8 (floor 20.0) and V P 20.9 / R 63.5 / F 31.4 (floor 38.0). **Neither qualifies; v3 stops, and
+the P008 winner gets the final.** Token Factory honours no reasoning token budget for either model (`reasoning_budget`
+ignored; `reasoning_effort: "low"` cut 3 Super's reasoning in one sample but is not a token budget), so both arms used the
+16k + length-retry fallback. Measured final cost would have been S $36.29 / V $54.70 (mean × 657). Details:
+`docs/bench/v3-recall.md`; plan `docs/bench/v3-recall-plan.md`.
+**Disclosed reading:** the stop rule's "budget refusal" was taken to mean the client's global/run cap, not recall-v3's own
+per-pull-request cap (15 such refusals in arm S); the run continued to arm V.
+**Rejected:** tuning the lenses or the cap after seeing arm S (P009 fixes two configurations, one run each);
+using `reasoning_effort: "low"` as the "budget" (it is not settable to about 3,000 tokens and was one sample).
