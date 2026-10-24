@@ -33,6 +33,77 @@ export function baseUrlFor(model: string, configured: string): string {
   return TOKEN_FACTORY_HOST.test(host) ? MODEL_BASE_URLS[model]! : configured;
 }
 
+/**
+ * Decision 071: the free NVIDIA API (build.nvidia.com), a second provider for one model only. A
+ * request goes there only when the client was built with `nvidiaApi` (nvidiaApiFromEnv: set only by
+ * TRACEHOUND_NVIDIA_API=1) and its model is exactly NVIDIA_API_MODEL; every other request takes the
+ * Token Factory path unchanged. That provider has its own key, a 300 s timeout (reasoning is slow), a
+ * process-wide limit of 36 requests per rolling minute (its limit is 40), and waits out HTTP 429.
+ */
+export const NVIDIA_API_MODEL = "nvidia/nemotron-3-ultra-550b-a55b";
+export const NVIDIA_API_BASE_URL = "https://integrate.api.nvidia.com/v1";
+export const NVIDIA_API_TIMEOUT_MS = 300_000;
+export const NVIDIA_API_PER_MINUTE = 36;
+/** On HTTP 429: Retry-After if present, else 20 s doubling; at most 5 waits, then the 429 is returned. */
+export const NVIDIA_API_MAX_429_WAITS = 5;
+export const NVIDIA_API_FIRST_429_WAIT_MS = 20_000;
+
+const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** At most `limit` acquisitions in any rolling `windowMs`; acquire() waits for a free slot. */
+export class RateWindow {
+  readonly limit: number;
+  readonly windowMs: number;
+  readonly #now: () => number;
+  readonly #sleep: (ms: number) => Promise<void>;
+  #stamps: number[] = [];
+
+  constructor(limit: number, windowMs: number, clock: { now?: () => number; sleep?: (ms: number) => Promise<void> } = {}) {
+    this.limit = limit;
+    this.windowMs = windowMs;
+    this.#now = clock.now ?? Date.now;
+    this.#sleep = clock.sleep ?? realSleep;
+  }
+
+  async acquire(): Promise<void> {
+    for (;;) {
+      const now = this.#now();
+      this.#stamps = this.#stamps.filter((t) => t > now - this.windowMs);
+      if (this.#stamps.length < this.limit) {
+        this.#stamps.push(now);
+        return;
+      }
+      await this.#sleep(this.#stamps[0]! + this.windowMs - now);
+    }
+  }
+}
+
+/** The one window every NVIDIA API request in this process shares. */
+export const NVIDIA_API_WINDOW = new RateWindow(NVIDIA_API_PER_MINUTE, 60_000);
+
+export interface NvidiaApiOptions {
+  apiKey: string;
+  window?: RateWindow;
+  sleep?: (ms: number) => Promise<void>;
+  timeoutMs?: number;
+}
+
+/** The NVIDIA API options, only when TRACEHOUND_NVIDIA_API=1; throws if that is set without NVIDIA_API_KEY. */
+export function nvidiaApiFromEnv(env: NodeJS.ProcessEnv = process.env): NvidiaApiOptions | undefined {
+  if (env.TRACEHOUND_NVIDIA_API !== "1") return undefined;
+  const apiKey = env.NVIDIA_API_KEY;
+  if (!apiKey) throw new Error("TRACEHOUND_NVIDIA_API=1 needs NVIDIA_API_KEY (put it in .env)");
+  return { apiKey };
+}
+
+/** Retry-After as milliseconds: delta-seconds or an HTTP date; undefined when absent or unreadable. */
+export function retryAfterMs(value: string | null, now = Date.now()): number | undefined {
+  if (value === null || value.trim() === "") return undefined;
+  if (/^\d+(\.\d+)?$/.test(value.trim())) return Math.round(Number(value) * 1000);
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? undefined : Math.max(0, at - now);
+}
+
 /** OpenAI-style tool call as returned in `message.tool_calls`. */
 export interface ToolCall {
   id: string;
@@ -98,6 +169,8 @@ export interface TokenFactoryOptions {
   timeoutMs?: number;
   fetch?: typeof fetch;
   now?: () => Date;
+  /** Decision 071: route NVIDIA_API_MODEL to the NVIDIA API. Absent = no request ever goes there. */
+  nvidiaApi?: NvidiaApiOptions;
 }
 
 export class LlmHttpError extends Error {
@@ -110,7 +183,9 @@ export class CacheMissError extends Error {
 }
 
 export class TokenFactoryClient {
-  readonly #opts: Required<Omit<TokenFactoryOptions, "cache">> & { cache?: ResponseCache };
+  readonly #opts: Required<Omit<TokenFactoryOptions, "cache" | "nvidiaApi">> & { cache?: ResponseCache; nvidiaApi?: NvidiaApiOptions };
+  #nvidiaRequests = 0;
+  #nvidia429s = 0;
 
   constructor(opts: TokenFactoryOptions) {
     // `??` rather than spread defaults: an explicit `undefined` (e.g. unset NEBIUS_BASE_URL) must not win
@@ -123,6 +198,11 @@ export class TokenFactoryClient {
       fetch: opts.fetch ?? globalThis.fetch,
       now: opts.now ?? (() => new Date()),
     };
+  }
+
+  /** NVIDIA API requests sent (each 429 retry included) and HTTP 429 replies; both 0 without nvidiaApi. */
+  get nvidiaApiStats(): { requests: number; http429: number } {
+    return { requests: this.#nvidiaRequests, http429: this.#nvidia429s };
   }
 
   /** `model` picks the region (baseUrlFor); without it, the configured base URL. */
@@ -180,12 +260,15 @@ export class TokenFactoryClient {
     try {
       let res: Response;
       try {
-        res = await this.#opts.fetch(this.#url("/chat/completions", request.model), {
-          method: "POST",
-          headers: this.#headers(),
-          body: JSON.stringify(request),
-          signal: AbortSignal.timeout(this.#opts.timeoutMs),
-        });
+        const nvidia = this.#opts.nvidiaApi && request.model === NVIDIA_API_MODEL ? this.#opts.nvidiaApi : undefined;
+        res = nvidia
+          ? await this.#nvidiaFetch(request, nvidia)
+          : await this.#opts.fetch(this.#url("/chat/completions", request.model), {
+              method: "POST",
+              headers: this.#headers(),
+              body: JSON.stringify(request),
+              signal: AbortSignal.timeout(this.#opts.timeoutMs),
+            });
       } catch (error) {
         record({}); // network error / timeout: the model may have run, charge the upper bound
         throw error;
@@ -206,6 +289,34 @@ export class TokenFactoryClient {
       };
     } finally {
       reservation.settle(recorded ?? estimate);
+    }
+  }
+
+  /**
+   * Decision 071: one request to the NVIDIA API, through the process-wide window. A 429 is waited out
+   * and the same request sent again (at most NVIDIA_API_MAX_429_WAITS waits); it is counted, never
+   * ledgered. After the last wait a 429 is returned like any 4xx (ledgered at 0 tokens).
+   */
+  async #nvidiaFetch(request: ChatRequest, nv: NvidiaApiOptions): Promise<Response> {
+    const window = nv.window ?? NVIDIA_API_WINDOW;
+    const sleep = nv.sleep ?? realSleep;
+    let backoff = NVIDIA_API_FIRST_429_WAIT_MS;
+    for (let waits = 0; ; waits++) {
+      await window.acquire();
+      this.#nvidiaRequests++;
+      const res = await this.#opts.fetch(`${NVIDIA_API_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${nv.apiKey}` },
+        body: JSON.stringify(request),
+        signal: AbortSignal.timeout(nv.timeoutMs ?? NVIDIA_API_TIMEOUT_MS),
+      });
+      if (res.status !== 429) return res;
+      this.#nvidia429s++;
+      if (waits >= NVIDIA_API_MAX_429_WAITS) return res;
+      await res.body?.cancel().catch(() => {});
+      const after = retryAfterMs(res.headers.get("retry-after"));
+      await sleep(after ?? backoff);
+      if (after === undefined) backoff *= 2;
     }
   }
 
