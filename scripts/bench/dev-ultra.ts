@@ -155,8 +155,10 @@ export function ledgerWindow(model: string, dir: string) {
   const es = new SpendLedger(join(ROOT, ".tracehound/spend.jsonl"))
     .entries()
     .filter((e) => e.model === model && e.purpose !== "bench-judge" && j.startedAt !== undefined && e.timestamp >= j.startedAt && (!j.finishedAt || e.timestamp <= j.finishedAt));
-  const atMax = es.filter((e) => e.outputTokens >= (e.purpose.startsWith("verify") ? 16_000 : 32_000)).length;
-  return { calls: es.length, failedCalls: es.filter((e) => e.ok === false).length, atMax, inputTokens: es.reduce((s, e) => s + e.inputTokens, 0), outputTokens: es.reduce((s, e) => s + e.outputTokens, 0) };
+  // a call without reported usage (timeout, network error) is ledgered at its upper bound: not counted as at max_tokens, nor in the token totals
+  const reported = es.filter((e) => e.usageReported !== false);
+  const atMax = reported.filter((e) => e.outputTokens >= (e.purpose.startsWith("verify") ? 16_000 : 32_000)).length;
+  return { calls: es.length, failedCalls: es.filter((e) => e.ok === false).length, noUsage: es.length - reported.length, atMax, inputTokens: reported.reduce((s, e) => s + e.inputTokens, 0), outputTokens: reported.reduce((s, e) => s + e.outputTokens, 0) };
 }
 
 const wallSeconds = (dir: string) => ((readRunJson(dir) as { pulls?: { wallMs: number }[] }).pulls ?? []).map((p) => p.wallMs / 1000);
@@ -237,7 +239,7 @@ export function report(bench: string, log: (l: string) => void) {
     const f = failures(u.dir);
     const j = readRunJson(u.dir) as { nvidiaApi?: { requests: number; http429: number }; startedAt?: string; finishedAt?: string | null; costUSD: number };
     const l = ledgerWindow(MODEL_071, u.dir);
-    log(`Ultra run ${u.n}${u.restarted ? "r" : ""}: NVIDIA API requests ${j.nvidiaApi?.requests ?? "n/a"} · HTTP 429 ${j.nvidiaApi?.http429 ?? "n/a"} · ledgered Ultra calls ${l.calls} (failed ${l.failedCalls}) · Ultra tokens in ${l.inputTokens} out ${l.outputTokens} · started ${j.startedAt} · finished ${j.finishedAt} · Nebius spend (judges) $${j.costUSD.toFixed(4)}`);
+    log(`Ultra run ${u.n}${u.restarted ? "r" : ""}: NVIDIA API requests ${j.nvidiaApi?.requests ?? "n/a"} · HTTP 429 ${j.nvidiaApi?.http429 ?? "n/a"} · ledgered Ultra calls ${l.calls} (failed ${l.failedCalls}, without usage: timeout or network ${l.noUsage}) · Ultra tokens in ${l.inputTokens} out ${l.outputTokens} · started ${j.startedAt} · finished ${j.finishedAt} · Nebius spend (judges) $${j.costUSD.toFixed(4)}`);
     for (const [s, k] of f.strings) log(`  failed-chunk string ×${k}: ${s.slice(0, 200)}`);
   }
 
