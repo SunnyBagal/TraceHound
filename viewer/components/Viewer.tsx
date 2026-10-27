@@ -127,7 +127,7 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
                     chrome's colour shows around it; nodes, edges and the canvas buttons are
                     clipped by its corners. At 640px+ the rail's own width is the left gutter. */}
                 <div className={`min-w-0 flex-1 pb-1.5 pr-1.5 ${impact || changes ? "pl-1.5" : "pl-1.5 sm:pl-0"}`}>
-                  <div className="relative size-full overflow-hidden rounded-xl border border-line bg-bg" data-testid="canvas-panel">
+                  <div className="canvas-glow relative size-full overflow-hidden rounded-xl border border-line bg-bg" data-testid="canvas-panel">
                     <GraphCanvas
                       snapshot={snapshot}
                       selection={selection}

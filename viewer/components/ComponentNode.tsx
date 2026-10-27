@@ -28,7 +28,7 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
       data-change={data.change ? "touched" : data.change === null ? "untouched" : undefined}
       data-pr={data.pr ? "touched" : data.pr === null ? "untouched" : undefined}
       className={[
-        "group relative flex flex-col justify-between rounded-xl border bg-card p-[22px] transition-[opacity,box-shadow,border-color,background-color] duration-200",
+        "th-node group relative flex flex-col justify-between rounded-xl border bg-card p-[22px] transition-[opacity,box-shadow,border-color,background-color,filter,translate] duration-200",
         data.impact?.role === "changed"
           ? "border-2 border-solid border-impact-changed"
           : data.impact?.role === "affected"

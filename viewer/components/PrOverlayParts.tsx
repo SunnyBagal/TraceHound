@@ -42,8 +42,8 @@ function PrEdgeView({ id, source, target, data }: EdgeProps<PrEdge>) {
   const ty = t.internals.positionAbsolute.y - 12; // clear of the card's top chips
   const reach = Math.max(50, Math.abs(ty - sy) / 2);
   const path = `M ${sx},${sy} C ${sx},${sy + reach} ${tx},${ty - reach} ${tx},${ty}`;
-  // the label sits near the component end, where the edge is unambiguous
-  const k = 0.88, u = 1 - k;
+  // the label sits halfway, between the marker and the card the edge ends on
+  const k = 0.5, u = 1 - k;
   const lx = u ** 3 * sx + 3 * u ** 2 * k * sx + 3 * u * k ** 2 * tx + k ** 3 * tx;
   const ly = u ** 3 * sy + 3 * u ** 2 * k * (sy + reach) + 3 * u * k ** 2 * (ty - reach) + k ** 3 * ty;
   return (

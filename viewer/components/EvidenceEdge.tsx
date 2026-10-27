@@ -85,6 +85,7 @@ function EvidenceEdgeView({ id, source, target, data, selected }: EdgeProps<Evid
         id={id}
         path={path}
         interactionWidth={18}
+        className={active || hover ? "th-edge-active" : undefined}
         style={{
           stroke,
           strokeWidth: hover ? 2.8 : active || diff ? 2.2 : 1.6,

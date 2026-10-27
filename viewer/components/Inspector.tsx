@@ -87,7 +87,7 @@ function Tabs({ tabs, active, onChange, counts }: { tabs: { id: Tab; label: stri
           aria-controls="inspector-tabpanel"
           onClick={() => onChange(t.id)}
           className={[
-            "-mb-px shrink-0 whitespace-nowrap border-b-2 px-2 py-2.5 text-[14px] font-medium transition-colors",
+            "inspector-tab -mb-px shrink-0 whitespace-nowrap border-b-2 px-2 py-2.5 text-[14px] font-medium transition-colors",
             active === t.id ? "border-accent text-text" : "border-transparent text-muted hover:text-text",
           ].join(" ")}
         >
@@ -565,7 +565,7 @@ export function Inspector({ snapshot, nav, bind = noHighlight, changes, findings
       inert={!open}
       data-testid="inspector"
       className={[
-        "fixed inset-0 z-30 flex flex-col bg-panel transition-transform duration-300 ease-out",
+        "inspector-panel fixed inset-0 z-30 flex flex-col bg-panel transition-transform duration-300 ease-out",
         // lib/inspector.ts: clamp(480px, 50vw, 760px) wide, 10px inside the canvas (whose box sits
         // 6px in from main's right and bottom edges, so right/bottom are 16px here)
         "md:absolute md:bottom-4 md:left-auto md:right-4 md:top-2.5 md:z-20 md:w-[clamp(480px,50vw,760px)] md:overflow-hidden md:rounded-xl md:border md:border-panel-line md:shadow-[0_16px_48px_-16px_var(--scrim)]",
