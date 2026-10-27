@@ -763,8 +763,8 @@ was re-run.
 
 - **Nebius, called:** Token Factory chat completions, `nvidia/nemotron-3-super-120b-a12b` (bench-judge-v1) and
   `Qwen/Qwen3-235B-A22B-Instruct-2507` (bench-judge-x1), us-central1, for dev run 10's judging. Spend $0.1011 (runner),
-  no HTTP or transport failures recorded. Run 11's judging (same models and endpoint, unattended): $0.1011 + $0.0923 =
-  $0.1934 for job 071; no judge failures (0 JUDGE_FAILED in either run).
+  no HTTP or transport failures recorded. Run 11's judging (same models and endpoint, unattended): $0.0923, 0
+  JUDGE_FAILED. Job 071 Nebius total: $0.1934.
 - **Not Nebius (labelled separately): the NVIDIA API** (`integrate.api.nvidia.com`, `nvidia/nemotron-3-ultra-550b-a55b`,
   free tier). Probe: HTTP 200, 1.3 s. Smoke + run 10: 324 requests, 0 HTTP 429 at our 36/min throttle, 0 4xx, 4 requests
   hit our 300 s timeout. `usage` carried no `completion_tokens_details.reasoning_tokens`; replies carried
