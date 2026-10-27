@@ -3422,3 +3422,45 @@ JUDGE_FAILED, for $0.7228.
   066 had none. The sums are in `v2-calcom.md` and can be checked by hand.
 **Limits:** n = 23, one run, the second look, and the selection was on dev. 3 Super's three runs
 spread 7 F points, which is more than the gap between 3.5 and 3 Super here.
+
+**069b (2026-10-23): intervals for the v2 gaps (no model call, $0).** Brief:
+`docs/prompts/069b-v2-intervals.md`; plan `docs/bench/v2-intervals-plan.md` (`5e16e2b`, pushed
+16:07:42Z, before the first bootstrap at 16:09:13Z); result `docs/bench/v2-intervals.md`; script
+`scripts/bench/intervals.ts`.
+- **Choice:** the primary interval is a PR-level paired bootstrap (per-PR counts from the bench
+  folder's score files, 10,000 resamples, seed 69). "Ahead of" or "behind" is used only when its 95%
+  interval excludes 0, "statistically tied" otherwise, and ranks only as point estimates.
+- **Result:** on Cal.com (10 PRs), under both judges, v2 is statistically tied with Augment, Cursor,
+  Greptile, Copilot and 3 Super's run 1, and ahead of CodeRabbit (v1 +20.4 [+11.8, +34.3]). On all
+  50, under both judges, it is behind Augment (v1 −14.0 [−22.6, −4.7]), statistically tied with
+  Cursor and Greptile (x1 +0.3 [−9.5, +10.7]), and ahead of Copilot and CodeRabbit. Against 3 Super's
+  row (i), it is ahead under v1 (+11.0 [+1.8, +20.1]) and tied under x1. 0 JUDGE_FAILED dropped.
+- **Secondary (the audit's §3.2 (b)): not reproduced, skipped as pre-registered.** The v1
+  comment-level bounds matched to 0.0. Six inflated bounds were 0.1–0.2 off, and x1 Greptile's
+  lower bound was 0.4 off, against a 0.1 bar.
+- **Rejected:**
+  - Loosening the reproduction bar after seeing the check: it was fixed in the plan.
+  - Stratifying the all-50 resample by set: the plan fixed an unstratified resample first.
+- **Limits:**
+  - A 10-cluster bootstrap probably under-covers, and the intervals cover PR sampling only, not
+    run-to-run or judge spread.
+  - 24 gaps, with no multiplicity correction.
+  - The all-50 dev PRs are v2's selection set.
+  - `scripts/bench/intervals.ts` makes `freezeCheck069` fail from now on. That is acceptable, since
+    no further Cal.com run is allowed.
+  - `results.md`, the README and the viewer are unchanged.
+
+## 070 — recall-v3 for ReviewBench: built, dev-selected, neither arm qualifies (2026-10-24)
+
+**Choice:** build `recall-v3` (P009) as an additive pipeline: `tracehound review-recall`, `src/review/recall/`, and
+`recall-v3` in the ReviewBench adapter with its own conversion (ranges, null line → first changed line, cap 60).
+The other pipelines' functions are pinned byte-identical. It was run once on dev per arm (S = 3 Super, V = 3.5 Super VL) and P009's selection was applied:
+S v1 P 14.0 / R 50.0 / F 21.8 (floor 20.0) and V P 20.9 / R 63.5 / F 31.4 (floor 38.0). **Neither qualifies; v3 stops, and
+the P008 winner gets the final.** Token Factory honours no reasoning token budget for either model (`reasoning_budget`
+ignored; `reasoning_effort: "low"` cut 3 Super's reasoning in one sample but is not a token budget), so both arms used the
+16k + length-retry fallback. Measured final cost would have been S $36.29 / V $54.70 (mean × 657). Details:
+`docs/bench/v3-recall.md`; plan `docs/bench/v3-recall-plan.md`.
+**Disclosed reading:** the stop rule's "budget refusal" was taken to mean the client's global/run cap, not recall-v3's own
+per-pull-request cap (15 such refusals in arm S); the run continued to arm V.
+**Rejected:** tuning the lenses or the cap after seeing arm S (P009 fixes two configurations, one run each);
+using `reasoning_effort: "low"` as the "budget" (it is not settable to about 3,000 tokens and was one sample).
