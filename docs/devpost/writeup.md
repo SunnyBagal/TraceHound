@@ -64,7 +64,7 @@ gets one review:
   footer. It is deterministic and not measured by the benchmark.
 
 The dashboard, https://tracehound-tau.vercel.app, has three parts: `/reviews` (the demo repo's
-reviews as bug cards with fix diffs), `/benchmark` (the results tables; a test fails the build if
+reviews as bug cards with fix diffs), `/benchmark` (the results tables; a test fails CI if
 they differ from `docs/bench/results.md`), and the graph (the repo map the project started as).
 
 **Trying it without a key.** Judges can browse the recorded reviews, the dashboard and the seeded
@@ -165,11 +165,11 @@ contains the finding's line and changes something. Otherwise the comment is post
 
 **Stack:** TypeScript on Node 24 (native type stripping), pnpm workspaces, ts-morph, Zod, a
 composite GitHub Action, Next.js static export with React Flow and ELK on Vercel, Vitest
-(1,305 tests on 23 Oct), and Docker as the repair sandbox. Every decision, with the alternative we
+(1,421 tests on 27 Oct), and Docker as the repair sandbox. Every decision, with the alternative we
 rejected, is in `docs/decisions.md`.
 
 **AI coding assistants:** the code and docs were written with AI coding assistants: Claude Code,
-Codex, Cursor, Devin, Grok and Gemini.
+Codex, Devin, Grok and Gemini.
 
 ## Challenges we ran into
 
@@ -213,7 +213,7 @@ Codex, Cursor, Devin, Grok and Gemini.
 - Cross-file contracts that look for breaks in files the PR didn't touch, with no model and a
   90-second budget. On the 40 dev PRs they made 0 findings (decision 065), so they are not yet
   measured on real breaks.
-- 26 dated feedback entries to Nebius, with exact error strings and counts.
+- 29 dated feedback entries to Nebius, with exact error strings and counts.
 
 ## What we learned
 
@@ -245,7 +245,7 @@ Codex, Cursor, Devin, Grok and Gemini.
 - The verifier: on our 40-PR dev set, verified scores above the unverified pool with an interval
   excluding 0 in 2 of 9 runs; on 3.5 neither run shows a difference (−1.6 and −5.4, intervals
   include 0); on ReviewBench the unverified pool scores higher in both models. An open question,
-  not a finding.
+  not a finding (replay: `docs/bench/levers-v2.md`).
 - A cheaper 2-of-3 vote across runs: no gain established.
 - Where the misses are: both 3.5 dev runs miss 35 of 74 Medium+ golden comments; none of the 7
   Critical ones is missed by both; the most missed repo is sentry (14 of 21 Medium+).
