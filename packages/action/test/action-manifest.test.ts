@@ -37,7 +37,7 @@ it("pins pnpm to the version declared by TraceHound's root package", async () =>
   const manifest = await readFile(manifestUrl, "utf8");
   const rootPackage = JSON.parse(await readFile(packageUrl, "utf8")) as { packageManager: string };
   const rootVersion = /^pnpm@(.+)$/.exec(rootPackage.packageManager)?.[1];
-  const actionVersion = /^\s+version:\s*['"]?(\d+\.\d+\.\d+)['"]?\s*$/m.exec(manifest)?.[1];
+  const actionVersion = /^\s+run: npm install -g pnpm@(\d+\.\d+\.\d+)\s*$/m.exec(manifest)?.[1];
   expect(rootVersion).toBeDefined();
   expect(actionVersion).toBe(rootVersion);
 });
