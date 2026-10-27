@@ -24,13 +24,16 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
       data-impact={data.impact?.role ?? (data.impact === null ? "none" : undefined)}
       data-panel-hover={data.panelHover || undefined}
       data-change={data.change ? "touched" : data.change === null ? "untouched" : undefined}
+      data-pr={data.pr ? "touched" : data.pr === null ? "untouched" : undefined}
       className={[
         "group relative flex flex-col justify-between rounded-xl border bg-card p-[22px] transition-[opacity,box-shadow,border-color,background-color] duration-200",
         data.impact?.role === "changed"
           ? "border-2 border-solid border-impact-changed"
           : data.impact?.role === "affected"
             ? "border-2 border-dashed border-impact-affected"
-            : data.change?.warnings && !selected
+            : data.pr && !selected
+              ? "border-accent/60 shadow-[0_0_28px_-10px_var(--accent-glow)] hover:bg-card-hover"
+              : data.change?.warnings && !selected
               ? "border-warn/70 hover:bg-card-hover"
               : selected
               ? "border-accent shadow-[0_0_0_1px_var(--accent),0_0_28px_-6px_var(--accent-glow)]"
@@ -44,6 +47,7 @@ function ComponentNodeView({ data, selected }: NodeProps<ComponentNodeType>) {
       <Handle type="target" position={Position.Left} />
       {data.impact && <ImpactChip role={data.impact} />}
       {data.change && <ChangeChip diff={data.change} />}
+      {data.pr && <PrChip pr={data.pr} />}
       <div className="flex h-[22px] shrink-0 min-w-0 items-center gap-[11px]">
         <ComponentIcon kind={component.kind} tech={data.tech} size="node" tint={tint} />
         <div className="min-w-0 truncate text-[15px] font-semibold text-[var(--kind)]" title={component.name}>
@@ -93,6 +97,16 @@ function ChangeChip({ diff }: { diff: ComponentDiff }) {
           {b.text}
         </span>
       ))}
+    </span>
+  );
+}
+
+/** PR lane: which PR touched this component and how many of its files; same place and shape as the change chip. */
+function PrChip({ pr }: { pr: NonNullable<ComponentNodeType["data"]["pr"]> }) {
+  return (
+    <span data-testid="pr-badge" className="absolute -top-2.5 left-3 flex max-w-[calc(100%-24px)] items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-md border border-accent/60 bg-bg px-1.5 py-px font-mono text-sm font-semibold leading-tight text-accent" title={pr.files.join("\n")}>
+      #{pr.number}
+      <span className="text-muted">{pr.files.length ? `${pr.files.length} file${pr.files.length === 1 ? "" : "s"} changed` : "finding only"}</span>
     </span>
   );
 }

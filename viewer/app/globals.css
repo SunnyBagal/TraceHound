@@ -306,3 +306,18 @@ html:has(.landing) body {
 @keyframes lp-reveal { from { opacity: 0; transform: translateY(56px) scale(0.98); } }
 @keyframes lp-hero-drift { to { opacity: 0.15; transform: translateY(-90px) scale(0.97); } }
 @keyframes lp-sky { to { transform: scale(1.12); } }
+
+/* PR lane (/graph): the strip of pull requests and the selected PR's summary over the canvas */
+.lane-scroll { scrollbar-width: thin; scroll-snap-type: x proximity; }
+.lane-scroll > li { scroll-snap-align: start; }
+.pr-chip { transition: border-color 160ms ease-out, background-color 160ms ease-out, box-shadow 200ms ease-out, color 160ms; }
+.pr-summary {
+  position: absolute; top: 12px; left: 12px; z-index: 10;
+  width: min(360px, calc(100% - 24px)); max-height: calc(100% - 96px); overflow-y: auto;
+  border: 1px solid var(--panel-border); border-radius: 12px; padding: 14px 16px;
+  background: color-mix(in srgb, var(--panel-bg) 92%, transparent); backdrop-filter: blur(10px);
+  box-shadow: 0 16px 48px -16px var(--scrim);
+  animation: pr-summary-in 220ms ease-out both;
+}
+@keyframes pr-summary-in { from { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .pr-summary { animation: none; } .pr-chip { transition: none; } }

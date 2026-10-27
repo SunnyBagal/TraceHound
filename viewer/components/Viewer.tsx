@@ -7,7 +7,8 @@ import { useHighlight, type Highlight } from "@/lib/highlight";
 import { impactParam, type ImpactReport } from "@/lib/impact";
 import { inspectorOcclusion } from "@/lib/inspector";
 import { current, usePanelNavigation } from "@/lib/navigation";
-import type { RepoInfo } from "@/lib/repos";
+import { prLaneRepo, type RepoInfo } from "@/lib/repos";
+import { prOverlay } from "@/lib/pulls";
 import type { Snapshot } from "@/lib/types";
 import { ChangeList } from "./ChangeList";
 import { ChangeSummaryBar } from "./ChangeSummaryBar";
@@ -16,6 +17,7 @@ import { GraphCanvas, type Selection } from "./GraphCanvas";
 import { ImpactPanel } from "./ImpactPanel";
 import { Inspector } from "./Inspector";
 import { Rail } from "./Rail";
+import { PrLane, PrSummary, usePrLane } from "./PrLane";
 import { TopBar } from "./TopBar";
 import { WarningsControl } from "./WarningsControl";
 
@@ -100,6 +102,12 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
 
   const listView = Boolean(changes) && phone;
 
+  // PR lane: only on the plain graph (the change and impact views have their own highlight)
+  const laneRepo = changes || impact ? undefined : prLaneRepo(repoId);
+  const lane = usePrLane(laneRepo);
+  const overlayData = lane.overlay?.status === "ready" ? lane.overlay.data : null;
+  const pr = useMemo(() => (overlayData ? prOverlay(snapshot, overlayData.number, overlayData.files, overlayData.findings) : undefined), [overlayData, snapshot]);
+
   return (
     <ReactFlowProvider>
       <div className="flex h-dvh overflow-hidden bg-page">
@@ -107,6 +115,7 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar snapshot={snapshot} repos={repos} repoId={repoId} changeSets={changeSets} changes={changes} />
           {changes && <ChangeSummaryBar model={changes} />}
+          {laneRepo && lane.list && <PrLane repo={laneRepo} list={lane.list} selected={lane.selected} onSelect={lane.select} />}
           <main className="relative flex min-h-0 flex-1">
             {listView && changes ? (
               <ChangeList model={changes} onOpen={(id) => nav.open({ type: "node", id })} />
@@ -129,7 +138,9 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
                       changes={changes}
                       occludeRight={occludeRight}
                       highlight={highlight.active ?? warningHighlight}
+                      pr={pr}
                     />
+                    {laneRepo && lane.overlay && <PrSummary repo={laneRepo} overlay={lane.overlay} model={pr ?? null} />}
                     {!changes && (
                       <WarningsControl
                         snapshot={snapshot}

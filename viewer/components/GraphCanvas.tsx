@@ -16,6 +16,7 @@ import type { ChangeModel } from "@/lib/changes";
 import { buildGraph, neighbours, NODE_HEIGHT, NODE_WIDTH, type ComponentNode as ComponentNodeType, type EvidenceEdge as EvidenceEdgeType } from "@/lib/graph";
 import { impactEdges, impactRoles, type ImpactReport } from "@/lib/impact";
 import type { Highlight } from "@/lib/highlight";
+import { overlayTargets, type PrOverlay } from "@/lib/pulls";
 import { elkLayout, growNode, type Positions } from "@/lib/layout";
 import { clearPositions, loadPositions, savePositions } from "@/lib/positions";
 import type { Snapshot } from "@/lib/types";
@@ -46,6 +47,8 @@ export interface GraphCanvasProps {
   occludeRight?: number;
   /** transient hover/focus highlight from an inspector row (styled apart from the selection) */
   highlight?: Highlight | null;
+  /** PR lane selection: components with a changed file are lit, the rest dim (an overlay, not evidence) */
+  pr?: PrOverlay;
 }
 
 const fitOptions = (minZoom: number) => ({ padding: 0.18, duration: 300, minZoom, maxZoom: MAX_ZOOM });
@@ -62,7 +65,8 @@ function useMinZoom(): number {
 }
 const MARGIN = 32; // px kept clear around a selection brought into view
 
-export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focusNonce, impact, changes, occludeRight = 0, highlight = null }: GraphCanvasProps) {
+export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focusNonce, impact, changes, occludeRight = 0, highlight = null, pr }: GraphCanvasProps) {
+  const prTargets = useMemo(() => (pr ? new Set(overlayTargets(pr)) : null), [pr]);
   const roles = useMemo(() => (impact ? impactRoles(impact) : null), [impact]);
   const chainEdges = useMemo(() => (impact ? impactEdges(impact) : null), [impact]);
   const base = useMemo(() => buildGraph(snapshot, changes?.extraEdges), [snapshot, changes]);
@@ -225,7 +229,8 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
             // a panel-hovered node is never dimmed; then hover/selection focus; then impact mode
             // dims everything outside the impact
             // change view: components the change didn't touch stay visible, dimmed
-            dimmed: panelHover ? false : focusSet ? !focusSet.has(n.id) : roles ? !roles.has(n.id) : changes ? !changes.diffs.has(n.id) : false,
+            dimmed: panelHover ? false : focusSet ? !focusSet.has(n.id) : roles ? !roles.has(n.id) : changes ? !changes.diffs.has(n.id) : prTargets ? !prTargets.has(n.id) : false,
+            pr: pr && prTargets!.has(n.id) ? { number: pr.number, files: pr.touched.get(n.id) ?? [], findings: pr.findings.get(n.id) ?? [] } : pr ? null : undefined,
             highlighted: focusIds.includes(n.id),
             panelHover,
             impact: roles ? (roles.get(n.id) ?? null) : undefined,
@@ -234,7 +239,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
           },
         };
       }),
-    [nodes, selection, focusSet, focusKey, roles, highlight, changes, expanded, toggle, onSelect],
+    [nodes, selection, focusSet, focusKey, roles, highlight, changes, expanded, toggle, onSelect, pr, prTargets],
   );
   const displayEdges = useMemo(
     () =>
@@ -250,7 +255,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
           data: {
             ...e.data!,
             active: activeEdgeIds.has(e.id) || (!focusSet && Boolean(chainEdges?.has(e.id))),
-            dimmed: panelHover ? false : focusSet ? !activeEdgeIds.has(e.id) : chainEdges ? !chainEdges.has(e.id) : changes ? !changed : false,
+            dimmed: panelHover ? false : focusSet ? !activeEdgeIds.has(e.id) : chainEdges ? !chainEdges.has(e.id) : changes ? !changed : prTargets ? !(prTargets.has(e.source) && prTargets.has(e.target)) : false,
             panelHover,
             onImpactChain: chainEdges?.has(e.id),
             impactMode: Boolean(chainEdges),
@@ -259,7 +264,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
           },
         };
       }),
-    [base.edges, selection, activeEdgeIds, focusSet, chainEdges, highlight, changes],
+    [base.edges, selection, activeEdgeIds, focusSet, chainEdges, highlight, changes, prTargets],
   );
 
   const persist = useCallback(() => {
