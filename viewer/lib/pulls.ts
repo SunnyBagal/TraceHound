@@ -137,9 +137,16 @@ const clip = (text: string) => (text.length > 140 ? `${text.slice(0, 137).trimEn
  * ("can cause…", "breaks…"), else its first sentence. Always a verbatim sentence of the comment.
  */
 export function findingTitle(body: string): string {
+  return clip(findingParts(body).title);
+}
+
+/** The effect sentence unclipped, and whether the comment says anything beyond it. */
+export function findingParts(body: string): { title: string; more: boolean } {
   const prose = body.split(/\r?\n/).filter((l) => l.trim() && !/^\s*(`{3}|#|>)/.test(l)).join(" ");
   const sentences = plain(prose).split(/(?<=[.!?])\s+(?=[A-Z`"'(])/).filter(Boolean);
-  return clip(sentences.find((s) => EFFECT.test(s)) ?? sentences[0] ?? plain(body));
+  const title = sentences.find((s) => EFFECT.test(s)) ?? sentences[0] ?? plain(body);
+  // formatting (bold, code) only survives in the full comment, so that is shown too
+  return { title, more: sentences.length > 1 || /```|\*\*|`/.test(body) };
 }
 
 export const prParam = (search: string): number | null => {

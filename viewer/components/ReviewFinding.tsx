@@ -1,5 +1,5 @@
 import { ArrowUpRight, Code2, FileCode2 } from "lucide-react";
-import { findingTitle } from "@/lib/pulls";
+import { findingParts } from "@/lib/pulls";
 import { MODEL_DISCLOSURE, pullHref, type Finding } from "@/lib/reviews";
 import { CodeBlock } from "./CodeSnippet";
 
@@ -25,9 +25,10 @@ export function ReviewFinding({ finding, repo, number, reviewId }: { finding: Fi
   const comment = pullHref(repo, number, finding.commentId ? `#discussion_r${finding.commentId}` : `#pullrequestreview-${reviewId}`);
   const files = pullHref(repo, number, finding.commentId ? `/files#r${finding.commentId}` : "/files");
   const hasFix = finding.suggestion !== undefined;
+  const { title, more } = findingParts(finding.body);
   return <article id={`finding-${finding.id}`} aria-label={`Finding in ${finding.path}`} className="review-card rounded-2xl border border-panel-line bg-panel p-5 sm:p-7" data-testid="review-finding">
     {/* effect first (R15): the sentence that says what breaks, verbatim from the comment */}
-    <h3 className="mb-4 max-w-[70ch] text-[17px] font-semibold leading-snug tracking-[-0.01em] text-text" data-testid="finding-title">{findingTitle(finding.body)}</h3>
+    <h3 className="mb-4 max-w-[70ch] text-[17px] font-semibold leading-snug tracking-[-0.01em] text-text" data-testid="finding-title">{title}</h3>
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         <a href={comment} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-start gap-2 text-sm font-medium text-text hover:text-accent"><FileCode2 className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden /><span className="break-all font-mono">{finding.path}{finding.line !== null ? `:${finding.line}` : ""}</span><ArrowUpRight className="mt-0.5 size-4 shrink-0 text-faint" aria-hidden /></a>
@@ -35,7 +36,8 @@ export function ReviewFinding({ finding, repo, number, reviewId }: { finding: Fi
       </div>
       <span className="shrink-0 rounded-md border border-line-strong px-2.5 py-1 text-sm text-muted">{finding.source ? <>Source: <span className="font-mono text-text">{finding.source}</span></> : "Source not recorded"}</span>
     </header>
-    <div className="my-6"><CommentText body={finding.body} /></div>
+    {/* a one-sentence comment is its title; otherwise the whole comment follows */}
+    {more ? <div className="my-6"><CommentText body={finding.body} /></div> : <div className="h-6" />}
     <FixDiff finding={finding} />
     <footer className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-panel-line pt-5">
       <p className="max-w-[60ch] text-sm leading-relaxed text-muted">{hasFix ? "Review and commit the suggestion in GitHub’s Files tab." : "Read the full discussion on GitHub."}</p>
