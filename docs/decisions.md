@@ -3386,3 +3386,81 @@ change; tests use synthetic stage output.
 - Keep all-or-nothing reviews: with 3.5 this would post nothing on about 1 in 6 PRs, unlike the
   configuration measured in 067.
 - Fall back to 3 Super on failure: that combination is unmeasured.
+
+## 069 · The v2 blind Cal.com run (second look at the test set)
+**Context:** freeze-2 (`review-freeze-2` → `0aeef06`) changed one thing that affects the bench since
+the first Cal.com look (062): every pool-verify-v1 stage runs on `nvidia/Nemotron-3.5-Super-VL` (067,
+068). P007 and architecture-v2 allow exactly one blind Cal.com run of v2, stated as the second look.
+Brief: `docs/prompts/069-v2-calcom.md`.
+**Choice:**
+- **Runner:** `--set cal_dot_com --run 4 --model nvidia/Nemotron-3.5-Super-VL` with
+  `TRACEHOUND_TEST_RUN=069` is the only new invocation. Any other model, run or gate is refused before
+  any call, and runs 1–3 still need 061; a test pins their code path to the tag's text. The model goes
+  to every stage, and the judges are unchanged. Records are in `test/run-4-<slug>/`, and the restart
+  directory is `run-4r-<slug>/`. The cap is $3, the run judges the three TraceHound rows only, and
+  `freezeCheck069` compares against `review-freeze-2`.
+- **Pre-registered** in `docs/bench/v2-calcom-plan.md` (`b2ec214`, pushed 13:38:03Z on 23 Oct)
+  before the first Cal.com 3.5 call (13:38:51Z). A one-call routing check on a dev pull request first
+  confirmed us-north1.
+**Result (`docs/bench/v2-calcom.md`, n = 23, one run):** complete, with 0 reruns, 0 restarts and 0
+JUDGE_FAILED, for $0.7228.
+- pool-verify-v1 (3.5) under v1: P 63.2% / R 52.2% / F 57.1%. Under x1: F 58.5%.
+- 3 Super's Cal.com runs 1–3 had F 51.3 / 52.8 / 58.3% under v1.
+- It is 3rd of six on F under both judges against run 1's tools (a point estimate).
+- Secondaries under v1: review-diff-v1 F 58.5%, pool-raw F 57.8%.
+- Predictions: (a) F ≥ 52.8% right, (b) P ≥ 55.6% right, (c) ≤ 3 of 10 with a failed chunk right
+  (1 of 10: both chunks of one pull request returned invalid JSON twice, so it was scored with no
+  findings).
+- No pull request had more than 10 kept findings.
+- All 50 (066's method, dev run 7r + Cal.com run 4): v1 F 52.2%, x1 55.4%, 3rd of 6 under both judges.
+  Under x1 it is 0.3 points above Greptile. Dev run 8 as the dev draw gives 51.7% / 56.5%.
+**Rejected:**
+- A second v2 Cal.com run, or any change based on this one: the plan allows one look.
+- Updating `results.md`, the README or the viewer in this job: that is a separate job, with its own
+  viewer test.
+- Committing an all-50 script under `scripts/bench`: it would have broken run 4's freeze check, and
+  066 had none. The sums are in `v2-calcom.md` and can be checked by hand.
+**Limits:** n = 23, one run, the second look, and the selection was on dev. 3 Super's three runs
+spread 7 F points, which is more than the gap between 3.5 and 3 Super here.
+
+**069b (2026-10-23): intervals for the v2 gaps (no model call, $0).** Brief:
+`docs/prompts/069b-v2-intervals.md`; plan `docs/bench/v2-intervals-plan.md` (`5e16e2b`, pushed
+16:07:42Z, before the first bootstrap at 16:09:13Z); result `docs/bench/v2-intervals.md`; script
+`scripts/bench/intervals.ts`.
+- **Choice:** the primary interval is a PR-level paired bootstrap (per-PR counts from the bench
+  folder's score files, 10,000 resamples, seed 69). "Ahead of" or "behind" is used only when its 95%
+  interval excludes 0, "statistically tied" otherwise, and ranks only as point estimates.
+- **Result:** on Cal.com (10 PRs), under both judges, v2 is statistically tied with Augment, Cursor,
+  Greptile, Copilot and 3 Super's run 1, and ahead of CodeRabbit (v1 +20.4 [+11.8, +34.3]). On all
+  50, under both judges, it is behind Augment (v1 −14.0 [−22.6, −4.7]), statistically tied with
+  Cursor and Greptile (x1 +0.3 [−9.5, +10.7]), and ahead of Copilot and CodeRabbit. Against 3 Super's
+  row (i), it is ahead under v1 (+11.0 [+1.8, +20.1]) and tied under x1. 0 JUDGE_FAILED dropped.
+- **Secondary (the audit's §3.2 (b)): not reproduced, skipped as pre-registered.** The v1
+  comment-level bounds matched to 0.0. Six inflated bounds were 0.1–0.2 off, and x1 Greptile's
+  lower bound was 0.4 off, against a 0.1 bar.
+- **Rejected:**
+  - Loosening the reproduction bar after seeing the check: it was fixed in the plan.
+  - Stratifying the all-50 resample by set: the plan fixed an unstratified resample first.
+- **Limits:**
+  - A 10-cluster bootstrap probably under-covers, and the intervals cover PR sampling only, not
+    run-to-run or judge spread.
+  - 24 gaps, with no multiplicity correction.
+  - The all-50 dev PRs are v2's selection set.
+  - `scripts/bench/intervals.ts` makes `freezeCheck069` fail from now on. That is acceptable, since
+    no further Cal.com run is allowed.
+  - `results.md`, the README and the viewer are unchanged.
+
+## 070 — recall-v3 for ReviewBench: built, dev-selected, neither arm qualifies (2026-10-24)
+
+**Choice:** build `recall-v3` (P009) as an additive pipeline: `tracehound review-recall`, `src/review/recall/`, and
+`recall-v3` in the ReviewBench adapter with its own conversion (ranges, null line → first changed line, cap 60).
+The other pipelines' functions are pinned byte-identical. It was run once on dev per arm (S = 3 Super, V = 3.5 Super VL) and P009's selection was applied:
+S v1 P 14.0 / R 50.0 / F 21.8 (floor 20.0) and V P 20.9 / R 63.5 / F 31.4 (floor 38.0). **Neither qualifies; v3 stops, and
+the P008 winner gets the final.** Token Factory honours no reasoning token budget for either model (`reasoning_budget`
+ignored; `reasoning_effort: "low"` cut 3 Super's reasoning in one sample but is not a token budget), so both arms used the
+16k + length-retry fallback. Measured final cost would have been S $36.29 / V $54.70 (mean × 657). Details:
+`docs/bench/v3-recall.md`; plan `docs/bench/v3-recall-plan.md`.
+**Disclosed reading:** the stop rule's "budget refusal" was taken to mean the client's global/run cap, not recall-v3's own
+per-pull-request cap (15 such refusals in arm S); the run continued to arm V.
+**Rejected:** tuning the lenses or the cap after seeing arm S (P009 fixes two configurations, one run each);
+using `reasoning_effort: "low"` as the "budget" (it is not settable to about 3,000 tokens and was one sample).

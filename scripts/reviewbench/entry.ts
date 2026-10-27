@@ -2,6 +2,7 @@
 // container per pull request: read /work/pr/pr.json and the diff, run one of four pipelines on
 // /work/repo at RB_HEAD, write RB_OUT. Settings (RB_CONFIG_*):
 //   RB_CONFIG_PIPELINE  pool-verify-v1 (default; the Action's pipeline) | pool-raw | pool-raw-x2 | pool-raw-missed
+//                       | recall-v3 (decision 070: ReviewBench only; its own conversion, ranges kept, up to 60)
 //   RB_CONFIG_MODEL     model id for every stage (default: Super, as benchmarked)
 //   RB_MODEL_BASE_URL   the registered model API URL; becomes NEBIUS_BASE_URL for the stages (the
 //                       client sends 3.5 Super VL to us-north1 whatever Token Factory region it names)
@@ -23,10 +24,13 @@ import { checkRepoHead, poolFindings, runPipeline, type Execute } from "../../pa
 import { agrees } from "../bench/agree-rule.ts";
 import { baseUrlFor, DEFAULT_BASE_URL } from "../../packages/analyzer/src/llm/client.ts";
 import { SpendLedger } from "../../packages/analyzer/src/llm/ledger.ts";
-import { MAX_FINDINGS, toFindings, toInput, unionFindings } from "./adapter.ts";
+import { MAX_FINDINGS, toFindings, toInput, toRecallFindings, unionFindings, type RecallFindingIn } from "./adapter.ts";
+import { MAX_RECALL_FINDINGS } from "../../packages/analyzer/src/review/recall/reduce.ts";
 import { outputProblem, type RbOutput, type RbPrJson } from "./format.ts";
 
-export const PIPELINES = ["pool-verify-v1", "pool-raw", "pool-raw-x2", "pool-raw-missed"] as const;
+export const PIPELINES = ["pool-verify-v1", "pool-raw", "pool-raw-x2", "pool-raw-missed", "recall-v3"] as const;
+/** The pipelines before decision 070, named in the configuration error as they were; recall-v3 is added after them. */
+const LISTED_PIPELINES = PIPELINES.filter(p => p !== "recall-v3");
 export type PipelineName = (typeof PIPELINES)[number];
 /** pool-verify-v1's benchmarked model for every stage (scripts/bench/run-test-set.ts REVIEW_MODEL). */
 export const DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b";
@@ -73,7 +77,7 @@ export function readSettings(env: NodeJS.ProcessEnv): Settings {
   if (!value("NEBIUS_API_KEY")) throw new ConfigError("NEBIUS_API_KEY is not set; declare it as a secret in the portal");
   const pipeline = value("RB_CONFIG_PIPELINE") || "pool-verify-v1";
   if (!(PIPELINES as readonly string[]).includes(pipeline)) {
-    throw new ConfigError(`RB_CONFIG_PIPELINE must be one of ${PIPELINES.join(", ")}, got "${pipeline}"`);
+    throw new ConfigError(`RB_CONFIG_PIPELINE must be one of ${LISTED_PIPELINES.join(", ")}, got "${pipeline}" (recall-v3 is also accepted)`);
   }
   if (pipeline === "pool-raw-x2" && value("TRACEHOUND_RB_IMAGE") !== "1") {
     throw new ConfigError("pool-raw-x2 clears the response cache between its passes, so it runs only in the image (TRACEHOUND_RB_IMAGE=1)");
@@ -259,7 +263,53 @@ export async function poolRawMissed(input: ReviewerInput, c: RunContext): Promis
   }
 }
 
+/**
+ * recall-v3 (decision 070): one `tracehound review-recall` run, which keeps its own wall-clock guard
+ * (20 min, under WALL_LIMIT_MS) and per-pull-request budget, and always writes its findings so far.
+ * Its findings keep their ranges (start_line, end_line) for toRecallFindings. Lens calls that failed
+ * are reported like failed chunks; if every lens call failed and nothing was found, the pull request
+ * is reported failed (it is written with no findings either way).
+ */
+export async function recallV3(input: ReviewerInput, c: RunContext): Promise<RecallFindingIn[]> {
+  const exec = c.makeExec(c.signal);
+  await checkRepoHead(c.repo, c.head, exec);
+  const directory = await mkdtemp(path.join(tmpdir(), "tracehound-rb-recall-"));
+  try {
+    const inputPath = path.join(directory, "input.json");
+    const out = path.join(directory, "review-recall.json");
+    await writeFile(inputPath, JSON.stringify(input), { mode: 0o600 });
+    await exec(process.execPath, [BIN, "review-recall", "--pr", inputPath, "--repo", c.repo, "--head", c.head, "--out", out, "--model", c.model],
+      { cwd: ROOT, env: c.env, maxBuffer: 4 * 1024 * 1024 });
+    return readRecall(JSON.parse(await readFile(out, "utf8")), c);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+/** review-recall's output → findings with ranges; reports failed lens calls. Malformed items are left to toRecallFindings' drops. */
+export function readRecall(value: unknown, c: Pick<RunContext, "log" | "reportChunks">): RecallFindingIn[] {
+  const output = value as { comments?: unknown; review?: { calls?: unknown; missed?: { status?: unknown }; errors?: unknown } } | null;
+  if (!Array.isArray(output?.comments) || !Array.isArray(output?.review?.calls)) throw new Error("review-recall: invalid output");
+  const calls = output.review.calls as { status?: unknown; failure?: unknown }[];
+  const failed = calls.filter(call => call?.status !== "OK");
+  c.reportChunks?.(failed.length, calls.length);
+  const comments = (output.comments as Partial<RecallFindingIn>[]).filter(f => f && typeof f === "object").map(f => ({
+    path: typeof f.path === "string" ? f.path : "",
+    line: typeof f.line === "number" ? f.line : null,
+    start_line: typeof f.start_line === "number" ? f.start_line : null,
+    end_line: typeof f.end_line === "number" ? f.end_line : null,
+    body: typeof f.body === "string" ? f.body : "",
+  }));
+  c.log(`recall findings ${comments.length}, lens calls ${calls.length - failed.length}/${calls.length} ok, missed ${String(output.review.missed?.status)}`);
+  if (calls.length > 0 && failed.length === calls.length && comments.length === 0) {
+    const first = failed.find(call => typeof call.failure === "string")?.failure;
+    throw new Error(`recall-v3: every lens call failed${typeof first === "string" ? ` (first: ${first.slice(0, 200)})` : ""}`);
+  }
+  return comments;
+}
+
 export function runSelected(pipeline: PipelineName, input: ReviewerInput, c: RunContext): Promise<Finding[]> {
+  if (pipeline === "recall-v3") return recallV3(input, c) as Promise<Finding[]>;
   if (pipeline === "pool-verify-v1") return poolVerify(input, c);
   if (pipeline === "pool-raw") return poolRaw(input, c);
   if (pipeline === "pool-raw-missed") return poolRawMissed(input, c);
@@ -332,18 +382,20 @@ export async function main(env: NodeJS.ProcessEnv = process.env, deps: MainDeps 
   // the client then routes each model to its region (baseUrlFor), so the line shows that URL.
   if (env.RB_MODEL_BASE_URL?.trim()) env.NEBIUS_BASE_URL = env.RB_MODEL_BASE_URL.trim();
   print(`pipeline=${s.pipeline} model=${s.model} base_url=${baseUrlFor(s.model, env.NEBIUS_BASE_URL || DEFAULT_BASE_URL)} `
-    + `limit_min=${limitMs / 60_000} max_findings=${MAX_FINDINGS} attempt=${env.RB_ATTEMPT ?? "1"}`);
+    + `limit_min=${limitMs / 60_000} max_findings=${s.pipeline === "recall-v3" ? MAX_RECALL_FINDINGS : MAX_FINDINGS} attempt=${env.RB_ATTEMPT ?? "1"}`);
 
   const before = spent();
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let findings: Finding[] = [];
+  let diff = "";
   let status = "ok";
   let failedChunks = 0;
   let reviewerChunks = 0;
   try {
     const pr = JSON.parse(readFileSync(s.prJsonPath, "utf8")) as RbPrJson;
-    const input = toInput(pr ?? {}, readFileSync(s.diffPath, "utf8"), s.prNumber, s.nwo);
+    diff = readFileSync(s.diffPath, "utf8");
+    const input = toInput(pr ?? {}, diff, s.prNumber, s.nwo);
     if (!input.diff.trim()) {
       status = "empty diff";
     } else {
@@ -366,7 +418,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env, deps: MainDeps 
     controller.abort(); // stops any stage still running after a failure or the limit
   }
 
-  const converted = toFindings(findings, s.agent);
+  const converted = s.pipeline === "recall-v3" ? toRecallFindings(findings as RecallFindingIn[], s.agent, diff) : toFindings(findings, s.agent);
   const expect = { head: s.head, prNumber: s.prNumber, agent: s.agent };
   let output: RbOutput = {
     pr: { repo: s.nwo ? `https://github.com/${s.nwo}` : "", pr_number: s.prNumber, base: s.base, head: s.head },

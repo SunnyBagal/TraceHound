@@ -308,3 +308,52 @@ export function planDev067Item(run: Dev067Run, states: (ItemState | null)[], res
   if (allowanceUSD <= 0) return { ok: false, why: `not done: the cap is reached (spent $${spent.toFixed(4)} of $${CAP_067_USD})` };
   return { ok: true, allowanceUSD };
 }
+
+// ---- Cal.com run 4, v2 (decision 069) ----
+// The one blind Cal.com run of v2, the second look at the test set: pool-verify-v1 at review-freeze-2
+// with every stage on Nemotron 3.5 Super VL. Only `--set cal_dot_com --run 4 --model <MODEL_069>` with
+// TRACEHOUND_TEST_RUN=069 reaches it; runs 1–3 still need 061 and checkRun, unchanged above. One item,
+// its own $3 cap; a crashed run may be restarted once (061a) into run-4r-<slug>/, which stands for run 4.
+
+export const TEST_RUN_ID_069 = "069";
+export const MODEL_069 = "nvidia/Nemotron-3.5-Super-VL";
+export const isCal069Run = (set: string | undefined, run: string | undefined) => set === TEST_SET && run === "4";
+
+/** Throws unless the model is MODEL_069 and TRACEHOUND_TEST_RUN=069 is set. */
+export function checkCal069(model: string | undefined, env: NodeJS.ProcessEnv): void {
+  if (model !== MODEL_069) throw new Error(`refusing --set ${TEST_SET} --run 4: it needs --model ${MODEL_069} (decision 069)`);
+  if (env[TEST_RUN_ENV] !== TEST_RUN_ID_069) throw new Error(`refusing --set ${TEST_SET} --run 4: it needs ${TEST_RUN_ENV}=${TEST_RUN_ID_069} in the environment (decision 069)`);
+}
+
+/** 069's Nebius cap, judging included. */
+export const CAP_069_USD = 3;
+export const ITEMS_069 = Object.freeze([Object.freeze({ set: "cal_dot_com" as const, run: 4 as const, group: "cal-069", plannedUSD: 1.5 })]);
+
+/** test/run-4-<slug>/, or test/run-4r-<slug>/ for its one restart. */
+export const cal069RunDir = (bench: string, restart = false) => join(bench, "test", `run-4${restart ? "r" : ""}-${modelSlug(MODEL_069)}`);
+
+/** readStatesOf for run 4. */
+export function readStates069(bench: string): (ItemState | null)[] {
+  const dir = cal069RunDir(bench);
+  if (!existsSync(dir)) return [null];
+  const first = readRunJson(dir);
+  const firstScoreFiles = scoreFileCount(dir);
+  const rdir = cal069RunDir(bench, true);
+  if (!existsSync(rdir)) return [{ status: first.status, costUSD: first.costUSD, firstScoreFiles }];
+  const r = readRunJson(rdir);
+  return [{ status: r.status, costUSD: (r.voidCostUSD ?? first.costUSD) + r.costUSD, restarted: true, firstStatus: first.status, firstScoreFiles }];
+}
+
+/** planDev067Item's rules for the one item: capped at CAP_069_USD, the void run's spend carried on a restart. */
+export function planCal069Item(states: (ItemState | null)[], restart = false): { ok: true; allowanceUSD: number } | { ok: false; why: string } {
+  if (states.length !== ITEMS_069.length) throw new Error(`planCal069Item: ${states.length} states for ${ITEMS_069.length} items`);
+  let spent = 0;
+  if (restart) {
+    const why = restartRefusal(states[0] ?? null, "run-4");
+    if (why) return { ok: false, why };
+    spent = states[0]!.costUSD;
+  } else if (states[0]) return { ok: false, why: `${TEST_SET} run 4 already has a run directory` };
+  const allowanceUSD = CAP_069_USD - spent;
+  if (allowanceUSD <= 0) return { ok: false, why: `not done: the cap is reached (spent $${spent.toFixed(4)} of $${CAP_069_USD})` };
+  return { ok: true, allowanceUSD };
+}

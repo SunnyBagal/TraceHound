@@ -9,10 +9,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
-import { ALLOWED_MODIFIED_067, buildClients, EXTRA_FROZEN_PATHS, FROZEN_PATHS, JUDGES, REVIEW_MODEL, runTestSet, writeNew, type Deps } from "../../../scripts/bench/run-test-set.ts";
+import { ALLOWED_MODIFIED_067, buildClients, EXTRA_FROZEN_PATHS, freezeCheck069, FROZEN_PATHS, FROZEN_PATHS_069, JUDGES, REVIEW_MODEL, runTestSet, writeNew, type Deps } from "../../../scripts/bench/run-test-set.ts";
 import { minMedMax, rowSpread, spreadReport } from "../../../scripts/bench/spread.ts";
 import {
+  cal069RunDir,
   CAP_067_USD,
+  CAP_069_USD,
+  checkCal069,
   checkRun,
   DEV_REPOS,
   EXTRA_CAP_USD,
@@ -23,11 +26,13 @@ import {
   ITEMS_067,
   modelRunDir,
   modelSlug,
+  planCal069Item,
   planDev067Item,
   planExtraItem,
   planItem,
   readItemStates,
   readStates067,
+  readStates069,
   readStatesOf,
   requireTestRun,
   restartRefusal,
@@ -533,7 +538,7 @@ describe("dev runs 4–6 (decision 064)", () => {
     expect(await runTestSet(["--set", "cal_dot_com", "--run", "4"], deps)).toBe(1);
     expect(await runTestSet(["--set", "dev", "--run", "10"], deps)).toBe(1); // 7–9 are 067's
     expect(await runTestSet(["--set", "dev", "--run", "5"], deps)).toBe(1); // order: run 4 first
-    expect(out.join("\n")).toMatch(/refusing --run 4: 1, 2 or 3/);
+    expect(out.join("\n")).toMatch(/refusing --set cal_dot_com --run 4: it needs --model nvidia\/Nemotron-3.5-Super-VL \(decision 069\)/); // 069's run, not 064's
     expect(out.join("\n")).toMatch(/refusing --run 10: 1, 2 or 3/);
     expect(out.join("\n")).toMatch(/dev run 4 has not run; the order is dev run 4, dev run 5, dev run 6/);
     expect(readdirSync(bench)).toEqual([]);
@@ -624,6 +629,32 @@ describe("Cal.com's path is the tag's (decision 064)", () => {
       ["        used = await pipeline(reviewer, job.input, repoSrc, model);", "        used = await pipeline(reviewer, job.input, repoSrc);"],
     ]);
 
+  /** Undo each 069 edit (current text → 067's), each exactly once; every one is a no-op unless the run is Cal.com run 4. */
+  const undo069 = (text: string) =>
+    undo(text, [
+      ["// Decision 069 adds Cal.com run 4 (v2, the second look): every stage on Nemotron 3.5 Super VL, gate\n// TRACEHOUND_TEST_RUN=069, records in test/run-4-<model slug>/, its own $3 cap, the three TraceHound\n// rows only, and a freeze check against review-freeze-2. Runs 1–3 are unchanged.\n", ""],
+      ["//   TRACEHOUND_TEST_RUN=069 node scripts/bench/run-test-set.ts --set cal_dot_com --run 4 --model nvidia/Nemotron-3.5-Super-VL [--restart] [--bench <dir>]\n", ""],
+      ["  cal069RunDir,\n  checkCal069,\n", ""],
+      ["  isCal069Run,\n", ""],
+      ["  ITEMS_069,\n", ""],
+      ["  planCal069Item,\n", ""],
+      ["  readStates069,\n", ""],
+      ["  TEST_RUN_ID_069,\n", ""],
+      [text.match(/\n\/\*\*\n \* Decision 069's freeze check[\s\S]*?\n}\n/)![0], ""],
+      ["  let cal069: boolean;\n", ""],
+      ["    cal069 = isCal069Run(values.set, values.run);\n    if (cal069) checkCal069(values.model, deps.env);\n", ""],
+      [" && !cal069) throw new Error(\"refusing --model: it applies to --set dev --run 7|8|9 only (decision 067) and to --set cal_dot_com --run 4 (decision 069)\");", ") throw new Error(\"refusing --model: it applies to --set dev --run 7|8|9 only (decision 067)\");"],
+      ["({ set, run } = cal069 ? { set: \"cal_dot_com\", run: 4 } : extra", "({ set, run } = extra"],
+      ["  const items = cal069 ? ITEMS_069 : dev067", "  const items = dev067"],
+      ["  const states = cal069 ? readStates069(bench) : dev067", "  const states = dev067"],
+      ["voidRunReport(cal069 ? cal069RunDir(bench) : dev067", "voidRunReport(dev067"],
+      ["  const plan = cal069 ? planCal069Item(states, restart) : dev067", "  const plan = dev067"],
+      [": cal069 ? freezeCheck069() : dev067 ? freezeCheck067()", ": dev067 ? freezeCheck067()"],
+      ["  const dir = cal069 ? cal069RunDir(bench, restart) : dev067", "  const dir = dev067"],
+      ['  const decision = cal069 ? "069" : dev067', '  const decision = dev067'],
+      ["freezeTag: cal069 ? FREEZE_TAG_069 : FREEZE_TAG, ...(cal069 && { frozenPaths: FROZEN_PATHS_069, testRunGate: TEST_RUN_ID_069 }), ", "freezeTag: FREEZE_TAG, "],
+    ]);
+
   // sha256 of `git show review-freeze-1:scripts/bench/<file>` (CI checks out without tags)
   const TAG_TEST_SET = "0d9a75b58410f839628f49c80ad914d4877c980e94ee4687c4f7c8b318693fa8";
   const TAG_RUNNER = "863dc39c4893a27cade371845b0871dcb2b60ffaeea8246c7acba7ffdd2b382e";
@@ -660,7 +691,7 @@ describe("Cal.com's path is the tag's (decision 064)", () => {
       ["  printSummary(`${label} (decision ${decision})`, state,", "  printSummary(label, state,"],
       ["  log(`## ${label}`);", "  log(`## ${label} (decision 061)`);"],
     ];
-    expect(sha(undo(undo067(src("run-test-set.ts")), edits))).toBe(TAG_RUNNER);
+    expect(sha(undo(undo067(undo069(src("run-test-set.ts"))), edits))).toBe(TAG_RUNNER);
   });
 
   it("a Cal.com run 1 on invented data: 061's decision, allowance, rows and heading", async () => {
@@ -776,5 +807,190 @@ describe("dev runs 7–9 with --model (decision 067)", () => {
     const deps: Deps = { bench, stateDir: path.join(bench, ".state"), pricesFile: PRICES, env: { NEBIUS_API_KEY: "k", TRACEHOUND_BUDGET_RUN_USD: "15" }, log: () => {}, err: () => {}, fetch, freezeCheck: () => ({ ok: true, head: "x" }) };
     expect(await runTestSet(["--set", "dev", "--run", "4"], deps)).toBe(0);
     expect([...models].sort()).toEqual(PIPELINE_MODELS(REVIEW_MODEL));
+  });
+});
+
+// ---- decision 069: Cal.com run 4, v2 ----
+
+/** An invented Cal.com bench: one pull request, a tiny git repo, the five tools' reviews, Cal.com runs 1–3 done. */
+function inventedCalBench(): string {
+  const bench = tmp("tracehound-069-cal-");
+  const src = path.join(bench, "src-repo");
+  mkdirSync(src);
+  const git = (...args: string[]) => execFileSync("git", ["-C", src, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { encoding: "utf8", env: cleanGitEnv() });
+  const lines = Array.from({ length: 10 }, (_, i) => `export const v${i + 1} = ${i + 1}; // SECRET-CODE`);
+  git("init", "-q", "-b", "main");
+  put(path.join(src, "src/a.ts"), lines.join("\n") + "\n");
+  git("add", "-A");
+  git("commit", "-q", "-m", "base");
+  const base = git("rev-parse", "HEAD").trim();
+  lines[1] = "export const v2 = 20; // SECRET-CODE";
+  lines[7] = "export const v8 = 80; // SECRET-CODE";
+  put(path.join(src, "src/a.ts"), lines.join("\n") + "\n");
+  git("commit", "-q", "-am", "head");
+  const head = git("rev-parse", "HEAD").trim();
+  execFileSync("git", ["clone", "-q", "--bare", src, path.join(bench, "test/repos/cal_dot_com")], { env: cleanGitEnv() });
+  put(path.join(bench, "test/repos/cal_dot_com.heads.json"), { 0: { head } });
+  put(path.join(bench, "test/prs/cal_dot_com/0.json"), { number: 1, title: "SECRET-TITLE-cal_dot_com", body: "SECRET-DESCRIPTION", diff: git("diff", base, head) });
+  put(path.join(bench, "golden/code_review_benchmarks/cal_dot_com.json"), [{ pr_title: "SECRET-TITLE-cal_dot_com", comments: [{ comment: "SECRET-GOLDEN", severity: "High" }] }]);
+  for (const tool of TOOL_ROWS) put(path.join(bench, "reviews", tool, "cal_dot_com", "0.json"), { pr_title: "SECRET-TITLE-cal_dot_com", pr_number: 1, comments: [{ path: "src/a.ts", line: 2, body: "SECRET-BODY-diff" }] });
+  priorCalRuns(bench);
+  return bench;
+}
+
+describe("Cal.com run 4, v2 (decision 069)", () => {
+  const M = "nvidia/Nemotron-3.5-Super-VL";
+  const SLUG = "nvidia-nemotron-3-5-super-vl";
+  const env069 = { NEBIUS_API_KEY: "k", TRACEHOUND_TEST_RUN: "069", TRACEHOUND_BUDGET_RUN_USD: "3" };
+  const depsFor = (bench: string, out: string[], env: NodeJS.ProcessEnv, fetch?: typeof globalThis.fetch): Deps => ({ bench, stateDir: path.join(bench, ".state"), pricesFile: PRICES, env, log: (l) => out.push(l), err: (l) => out.push(l), ...(fetch && { fetch }), freezeCheck: () => ({ ok: true, head: "x" }) });
+  const listAll = (d: string) => readdirSync(d, { recursive: true }).map(String).sort();
+
+  it("gates: only --run 4 with this model and TRACEHOUND_TEST_RUN=069; runs 1–3 still need 061", () => {
+    expect(() => checkCal069(M, { TRACEHOUND_TEST_RUN: "069" })).not.toThrow();
+    expect(() => checkCal069(undefined, { TRACEHOUND_TEST_RUN: "069" })).toThrow(/needs --model nvidia\/Nemotron-3.5-Super-VL/);
+    expect(() => checkCal069(REVIEW_MODEL, { TRACEHOUND_TEST_RUN: "069" })).toThrow(/needs --model/);
+    expect(() => checkCal069("nvidia/nemotron-3.5-super-vl", { TRACEHOUND_TEST_RUN: "069" })).toThrow(/needs --model/);
+    for (const gate of [undefined, "", "061", "067", "69"]) expect(() => checkCal069(M, { TRACEHOUND_TEST_RUN: gate })).toThrow(/TRACEHOUND_TEST_RUN=069/);
+    for (const run of ["1", "2", "3"]) {
+      expect(() => checkRun("cal_dot_com", run, { TRACEHOUND_TEST_RUN: "069" })).toThrow(/TRACEHOUND_TEST_RUN=061/);
+      expect(checkRun("cal_dot_com", run, { TRACEHOUND_TEST_RUN: "061" })).toEqual({ set: "cal_dot_com", run: Number(run) });
+    }
+    for (const run of ["4", "5", "10"]) expect(() => checkRun("cal_dot_com", run, { TRACEHOUND_TEST_RUN: "061" })).toThrow(/refusing --run/);
+  });
+
+  it("refusals send no request and write nothing", async () => {
+    const bench = inventedCalBench();
+    const before = listAll(bench);
+    const { fetch, models } = fakeFetch(() => false);
+    const out: string[] = [];
+    const cases: [string[], NodeJS.ProcessEnv][] = [
+      [["--set", "cal_dot_com", "--run", "4", "--model", M], { ...env069, TRACEHOUND_TEST_RUN: "061" }],
+      [["--set", "cal_dot_com", "--run", "4", "--model", M], { NEBIUS_API_KEY: "k" }],
+      [["--set", "cal_dot_com", "--run", "4"], env069],
+      [["--set", "cal_dot_com", "--run", "4", "--model", REVIEW_MODEL], env069],
+      [["--set", "cal_dot_com", "--run", "4", "--model", "Qwen/Qwen3-235B-A22B-Instruct-2507"], env069],
+      [["--set", "cal_dot_com", "--run", "5", "--model", M], env069],
+      [["--set", "cal_dot_com", "--run", "1", "--model", M], env069],
+      [["--set", "cal_dot_com", "--run", "1"], env069],
+      [["--set", "cal_dot_com", "--run", "2"], env069],
+      [["--set", "dev", "--run", "4", "--model", M], env069],
+    ];
+    for (const [args, env] of cases) expect(await runTestSet(args, depsFor(bench, out, env, fetch)), args.join(" ")).toBe(1);
+    expect(models.size).toBe(0);
+    expect(listAll(bench)).toEqual(before);
+    const text = out.join("\n");
+    expect(text).toMatch(/refusing --set cal_dot_com --run 4: it needs TRACEHOUND_TEST_RUN=069/);
+    expect(text).toMatch(/refusing --set cal_dot_com --run 4: it needs --model nvidia\/Nemotron-3.5-Super-VL/);
+    expect(text).toMatch(/refusing --model: it applies to --set dev --run 7\|8\|9 only \(decision 067\) and to --set cal_dot_com --run 4 \(decision 069\)/);
+    expect(text).toMatch(/the test set needs TRACEHOUND_TEST_RUN=061/);
+  });
+
+  it("the freeze check failing refuses the run", async () => {
+    const bench = inventedCalBench();
+    const out: string[] = [];
+    const deps = { ...depsFor(bench, out, env069), freezeCheck: () => ({ ok: false, why: "no tag review-freeze-2", head: "x" }) };
+    expect(await runTestSet(["--set", "cal_dot_com", "--run", "4", "--model", M], deps)).toBe(1);
+    expect(out.join("\n")).toMatch(/refusing cal_dot_com run 4: no tag review-freeze-2/);
+    expect(existsSync(cal069RunDir(bench))).toBe(false);
+  });
+
+  it("directory, cap and the one restart (061a)", () => {
+    expect(cal069RunDir("/b")).toBe(path.join("/b", "test", `run-4-${SLUG}`));
+    expect(cal069RunDir("/b", true)).toBe(path.join("/b", "test", `run-4r-${SLUG}`));
+    expect(CAP_069_USD).toBe(3);
+    expect(planCal069Item([null])).toEqual({ ok: true, allowanceUSD: 3 });
+    expect(planCal069Item([{ status: "complete", costUSD: 1 }])).toEqual({ ok: false, why: "cal_dot_com run 4 already has a run directory" });
+    expect(planCal069Item([{ status: "running", costUSD: 1.25, firstScoreFiles: 0 }], true)).toEqual({ ok: true, allowanceUSD: 1.75 });
+    expect(planCal069Item([{ status: "running", costUSD: 1, firstScoreFiles: 2 }], true)).toMatchObject({ ok: false, why: expect.stringMatching(/a result exists/) });
+    expect(planCal069Item([{ status: "complete", costUSD: 1 }], true)).toMatchObject({ ok: false, why: expect.stringMatching(/only a crashed run/) });
+    expect(planCal069Item([{ status: "running", costUSD: 3, firstScoreFiles: 0 }], true)).toMatchObject({ ok: false, why: expect.stringMatching(/the cap is reached/) });
+    // Cal.com runs 1–3 do not count toward 069's cap, and run 4 is not one of 061's items
+    expect(ITEMS.some((i) => i.set === "cal_dot_com" && (i.run as number) === 4)).toBe(false);
+    const bench = tmp("tracehound-069-states-");
+    put(path.join(cal069RunDir(bench), "run.json"), { status: "running", costUSD: 0.5 });
+    put(path.join(cal069RunDir(bench, true), "run.json"), { status: "complete", costUSD: 1, voidCostUSD: 0.6 });
+    expect(readStates069(bench)).toEqual([{ status: "complete", costUSD: 1.6, restarted: true, firstStatus: "running", firstScoreFiles: 0 }]);
+  });
+
+  it("runs every stage on the model into test/run-4-<slug>/, judges unchanged, three rows, counts only", async () => {
+    const bench = inventedCalBench();
+    const runs123 = [1, 2, 3].map((n) => readFileSync(path.join(runDir(bench, "cal_dot_com", n as 1), "run.json"), "utf8"));
+    const { fetch, models } = fakeFetch(() => false);
+    const out: string[] = [];
+    expect(await runTestSet(["--set", "cal_dot_com", "--run", "4", "--model", M], depsFor(bench, out, env069, fetch))).toBe(0);
+    expect([...models].sort()).toEqual(PIPELINE_MODELS(M));
+    const dir = cal069RunDir(bench);
+    expect(existsSync(runDir(bench, "cal_dot_com", 4))).toBe(false);
+    const run = JSON.parse(readFileSync(path.join(dir, "run.json"), "utf8"));
+    expect(run).toMatchObject({ decision: "069", set: "cal_dot_com", run: 4, status: "complete", allowanceUSD: 3, config: { reviewModel: M, reasoning: "on", reviewerCacheReads: false, judges: JUDGES }, trace: { head: "x", freezeTag: "review-freeze-2", frozenPaths: [...FROZEN_PATHS_069], testRunGate: "069" } });
+    // the three TraceHound rows only: the tools were judged in run 1
+    for (const j of ["judge-v1", "judge-x1"]) expect(readdirSync(path.join(dir, "scores", j)).filter((f) => f.endsWith(".summary.json")).sort()).toEqual(["pool-raw-cal_dot_com.summary.json", "pool-verify-v1-cal_dot_com.summary.json", "review-diff-v1-cal_dot_com.summary.json"]);
+    const text = out.join("\n");
+    expect(text).toContain("## cal_dot_com run 4 (decision 069)");
+    expect(text.split("\n").filter((l) => /^\| (greptile|coderabbit|augment|cursor|copilot)/.test(l))).toEqual([]);
+    for (const sec of SECRETS) expect(text).not.toContain(sec);
+    // runs 1–3 untouched; never twice
+    expect([1, 2, 3].map((n) => readFileSync(path.join(runDir(bench, "cal_dot_com", n as 1), "run.json"), "utf8"))).toEqual(runs123);
+    expect(await runTestSet(["--set", "cal_dot_com", "--run", "4", "--model", M], depsFor(bench, out, env069, fetch))).toBe(1);
+  });
+
+  it("a crashed run 4 is restarted once into run-4r-<slug>/, which stands for run 4", async () => {
+    const bench = inventedCalBench();
+    put(path.join(cal069RunDir(bench), "run.json"), { status: "running", costUSD: 0.2, startedAt: "2026-10-23T10:00:00.000Z", pulls: [], error: null });
+    const { fetch } = fakeFetch(() => false);
+    const out: string[] = [];
+    expect(await runTestSet(["--set", "cal_dot_com", "--run", "4", "--model", M], depsFor(bench, out, env069, fetch))).toBe(1); // no plain rerun
+    expect(await runTestSet(["--set", "cal_dot_com", "--run", "4", "--model", M, "--restart"], depsFor(bench, out, env069, fetch))).toBe(0);
+    const r = JSON.parse(readFileSync(path.join(cal069RunDir(bench, true), "run.json"), "utf8"));
+    expect(r).toMatchObject({ decision: "069", restart: true, status: "complete", voidCostUSD: 0.2, allowanceUSD: expect.closeTo(2.8, 9) });
+    expect(readStates069(bench)[0]).toMatchObject({ status: "complete", restarted: true });
+    expect(await runTestSet(["--set", "cal_dot_com", "--run", "4", "--model", M, "--restart"], depsFor(bench, out, env069, fetch))).toBe(1);
+    expect(out.join("\n")).toMatch(/already exists: a run is restarted once/);
+  });
+
+  describe("freezeCheck069 on a scratch repository", () => {
+    function scratch() {
+      const root = tmp("tracehound-069-freeze-");
+      const git = (...args: string[]) => execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", ...args], { encoding: "utf8", env: cleanGitEnv() });
+      git("init", "-q", "-b", "main");
+      for (const f of ["packages/analyzer/src/a.ts", "config/prices.json", "scripts/bench/run-test-set.ts", "scripts/bench/test-set.ts", "scripts/bench/spread.ts", "docs/x.md"]) put(path.join(root, f), "x\n");
+      git("add", "-A");
+      git("commit", "-q", "-m", "freeze");
+      git("tag", "review-freeze-2");
+      return { root, git };
+    }
+
+    it("passes at the tag, and after commits to the runner, its gates or other paths", () => {
+      const { root, git } = scratch();
+      expect(freezeCheck069(root)).toMatchObject({ ok: true });
+      for (const f of ["scripts/bench/run-test-set.ts", "scripts/bench/test-set.ts", "docs/x.md", "docs/new.md"]) put(path.join(root, f), "changed\n");
+      git("add", "-A");
+      git("commit", "-q", "-m", "runner");
+      expect(freezeCheck069(root)).toMatchObject({ ok: true });
+    });
+
+    it("refuses a committed change under a frozen path", () => {
+      for (const f of ["packages/analyzer/src/a.ts", "config/prices.json", "scripts/bench/spread.ts", "scripts/bench/new.ts"]) {
+        const { root, git } = scratch();
+        put(path.join(root, f), "changed\n");
+        git("add", "-A");
+        git("commit", "-q", "-m", "drift");
+        expect(freezeCheck069(root), f).toMatchObject({ ok: false, why: expect.stringMatching(/^git diff review-freeze-2 HEAD -- .* is not empty$/) });
+      }
+    });
+
+    it("refuses uncommitted or untracked changes under a frozen path", () => {
+      for (const f of ["packages/analyzer/src/a.ts", "config/prices.json", "scripts/bench/spread.ts", "scripts/bench/untracked.ts"]) {
+        const { root } = scratch();
+        put(path.join(root, f), "changed\n");
+        expect(freezeCheck069(root), f).toMatchObject({ ok: false, why: expect.stringMatching(/^uncommitted changes under/) });
+      }
+    });
+
+    it("refuses without the tag", () => {
+      const root = tmp("tracehound-069-notag-");
+      execFileSync("git", ["-C", root, "init", "-q"], { env: cleanGitEnv() });
+      expect(freezeCheck069(root)).toMatchObject({ ok: false, why: "no tag review-freeze-2" });
+    });
   });
 });
