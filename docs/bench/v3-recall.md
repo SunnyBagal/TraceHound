@@ -7,8 +7,8 @@ Dev only: the 40 dev pull requests. Cal.com, `test/` and ReviewBench data were n
 `node scripts/bench/v3-results.ts`, which reads only the records and the judges' summaries/matches and prints counts.
 
 **Verdict: neither arm qualifies, so v3 stops here (P009 "Dev selection"), and the P008 winner gets the final.**
-Arm S: v1 precision 14.0 against a floor of 20.0. Arm V: 20.9 against 38.0. Both arms raise recall over their
-model's pool-raw dev mean (S 50.0 vs 52.7, so S does not; V 63.5 vs 61.5), but they pay with precision far below the floor.
+Arm S: v1 precision 14.0 against a floor of 20.0. Arm V: 20.9 against 38.0. Arm V raises recall over 3.5's
+pool-raw dev mean (63.5 vs 61.5); arm S does not (50.0 vs 52.7). Both pay with precision far below the floor.
 There is no ReviewBench image, smoke run or portal run for v3.
 
 Runs: arm S 2026-10-23T21:13:42Z–22:50:33Z, arm V 22:51:17Z–2026-10-24T00:18:47Z, one run each, reviewer cache
@@ -16,7 +16,7 @@ reads off, one pull request at a time. Records are in `~/Projects/tracehound-ben
 
 Stop rule before arm V: arm S had 1 pull request with 0 findings (not more than 10). It had no HTTP 4xx/5xx and no global
 budget refusal (ledger: 0 calls with `ok: false` in the whole job). The runner's status file listed 15 "request errors"
-for arm S, but every one of them is recall-v3's own pre-registered per-pull-request cap ($0.12, P009 8): the
+for arm S, counted per failure string (9 lens calls plus the missed passes of 6 pull requests), but every one of them is recall-v3's own pre-registered per-pull-request cap ($0.12, P009 8): the
 string `per-pull-request budget $0.12 reached`, on 6 pull requests. They were flagged because the runner's filter matched the
 `TRACEHOUND_BUDGET_RUN_USD` name inside that message. The builder read the rule's "budget refusal" as the client's
 global/run cap, not the pipeline's own cap, and continued to arm V. **This is the builder's reading, disclosed here.**
@@ -87,21 +87,21 @@ counts lens replies cut at 16,000 tokens. Most retries after a cut still failed 
 | lens A only | 160 | 20 | 117 | 54 | 14.6 | 27.0 | 19.0 |
 
 - pull requests 40; findings 313 (lens A 160, lens B 119, missed 34); per PR median 6, max 60; PRs with 0 findings 1; capped at 60 1
-- lens calls 124: OK 94, FAILED 30, SKIPPED 0; truncated replies 27 (calls with one 27); retries 38
+- lens calls 124 (counts per lens call): OK 94, FAILED 30, SKIPPED 0; truncated replies 27 (calls with one 27); retries 38
   - lens failure ×21: the reply is not valid JSON
   - lens failure ×1: request failed: PrBudgetError: per-pull-request budget $0.12 reached (refusing review-recall: estimated $0.0190 would bring this run to $0.1326, over TRACEHOUND
   - lens failure ×1: request failed: PrBudgetError: per-pull-request budget $0.12 reached (refusing review-recall: estimated $0.0189 would bring this run to $0.1331, over TRACEHOUND
   - lens failure ×3: request failed: PrBudgetError: per-pull-request budget $0.12 reached (refusing review-recall: estimated $0.0189 would bring this run to $0.1330, over TRACEHOUND
   - lens failure ×2: request failed: PrBudgetError: per-pull-request budget $0.12 reached (refusing review-recall: estimated $0.0186 would bring this run to $0.1328, over TRACEHOUND
   - lens failure ×2: request failed: PrBudgetError: per-pull-request budget $0.12 reached (refusing review-recall: estimated $0.0188 would bring this run to $0.1330, over TRACEHOUND
-- missed pass: OK 35, FAILED 5, SKIPPED 0; chunks failed 12
+- missed pass (one per pull request; counts per pull request): OK 35, FAILED 5, SKIPPED 0; chunks failed 12 (per chunk); the 6 failure strings below include 1 pull request whose pass was OK with failed chunks
   - missed failure ×1: request failed: per-pull-request budget $0.12 reached (refusing review: estimated $0.0399 would bring this run to $0.1480, over TRACEHOUND_BUDGET_RUN_USD=0.12)
   - missed failure ×1: request failed: per-pull-request budget $0.12 reached (refusing review: estimated $0.0397 would bring this run to $0.1289, over TRACEHOUND_BUDGET_RUN_USD=0.12)
   - missed failure ×1: the reply is not valid JSON; retry request failed: per-pull-request budget $0.12 reached (refusing review: estimated $0.0368 would bring this run to $0.1258, ov
   - missed failure ×1: request failed: per-pull-request budget $0.12 reached (refusing review: estimated $0.0396 would bring this run to $0.1232, over TRACEHOUND_BUDGET_RUN_USD=0.12)
   - missed failure ×1: request failed: per-pull-request budget $0.12 reached (refusing review: estimated $0.0384 would bring this run to $0.1252, over TRACEHOUND_BUDGET_RUN_USD=0.12)
   - missed failure ×1: request failed: per-pull-request budget $0.12 reached (refusing review: estimated $0.0347 would bring this run to $0.1213, over TRACEHOUND_BUDGET_RUN_USD=0.12)
-- skipped files 10 ({"deleted":3,"chunk-cap":1,"no-hunks":3,"lockfile":2,"generated":1}); chunks 62; per-PR budget refusals 21 on 6 PRs; guard hit 0; errors 0
+- skipped files 10 ({"deleted":3,"chunk-cap":1,"no-hunks":3,"lockfile":2,"generated":1}); chunks 62; per-PR budget refusals (per refused request) 21 on 6 PRs; guard hit 0; errors 0
 - cost per PR median $0.0499, mean $0.0552, max $0.1081, total $2.2095; seconds per PR median 132, max 361
 - ReviewBench final estimate: mean $36.29 (median $32.78) for 657 PRs
 
@@ -126,7 +126,7 @@ counts lens replies cut at 16,000 tokens. Most retries after a cut still failed 
 | lens A only | 124 | 31 | 67 | 43 | 31.6 | 41.9 | 36.0 |
 
 - pull requests 40; findings 271 (lens A 124, lens B 130, missed 17); per PR median 6, max 18; PRs with 0 findings 1; capped at 60 0
-- lens calls 124: OK 79, FAILED 45, SKIPPED 0; truncated replies 38 (calls with one 38); retries 43
+- lens calls 124 (counts per lens call): OK 79, FAILED 45, SKIPPED 0; truncated replies 38 (calls with one 38); retries 43
   - lens failure ×29: the reply is not valid JSON
   - lens failure ×2: request failed: PrBudgetError: per-pull-request budget $0.12 reached (refusing review-recall: estimated $0.0190 would bring this run to $0.1316, over TRACEHOUND
   - lens failure ×1: request failed: PrBudgetError: per-pull-request budget $0.12 reached (refusing review-recall: estimated $0.0190 would bring this run to $0.1310, over TRACEHOUND
@@ -138,7 +138,7 @@ counts lens replies cut at 16,000 tokens. Most retries after a cut still failed 
   - lens failure ×1: request failed: PrBudgetError: per-pull-request budget $0.12 reached (refusing review-recall: estimated $0.0177 would bring this run to $0.1210, over TRACEHOUND
   - lens failure ×1: request failed: PrBudgetError: per-pull-request budget $0.12 reached (refusing review-recall: estimated $0.0174 would bring this run to $0.1313, over TRACEHOUND
   - lens failure ×1: request failed: PrBudgetError: per-pull-request budget $0.12 reached (refusing review-recall: estimated $0.0185 would bring this run to $0.1279, over TRACEHOUND
-- missed pass: OK 18, FAILED 22, SKIPPED 0; chunks failed 30
+- missed pass (one per pull request; counts per pull request): OK 18, FAILED 22, SKIPPED 0; chunks failed 30 (per chunk); the 23 failure strings below include 1 pull request whose pass was OK with failed chunks
   - missed failure ×12: the reply is not valid JSON; after one retry: the reply is not valid JSON
   - missed failure ×1: request failed: per-pull-request budget $0.12 reached (refusing review: estimated $0.0399 would bring this run to $0.1441, over TRACEHOUND_BUDGET_RUN_USD=0.12)
   - missed failure ×1: request failed: per-pull-request budget $0.12 reached (refusing review: estimated $0.0398 would bring this run to $0.1217, over TRACEHOUND_BUDGET_RUN_USD=0.12)
@@ -151,7 +151,7 @@ counts lens replies cut at 16,000 tokens. Most retries after a cut still failed 
   - missed failure ×1: request failed: per-pull-request budget $0.12 reached (refusing review: estimated $0.0397 would bring this run to $0.1247, over TRACEHOUND_BUDGET_RUN_USD=0.12)
   - missed failure ×1: the reply is not valid JSON; retry request failed: per-pull-request budget $0.12 reached (refusing review: estimated $0.0370 would bring this run to $0.1371, ov
   - missed failure ×1: the reply is not valid JSON; retry request failed: per-pull-request budget $0.12 reached (refusing review: estimated $0.0359 would bring this run to $0.1251, ov
-- skipped files 10 ({"deleted":3,"chunk-cap":1,"no-hunks":3,"lockfile":2,"generated":1}); chunks 62; per-PR budget refusals 34 on 11 PRs; guard hit 0; errors 0
+- skipped files 10 ({"deleted":3,"chunk-cap":1,"no-hunks":3,"lockfile":2,"generated":1}); chunks 62; per-PR budget refusals (per refused request) 34 on 11 PRs; guard hit 0; errors 0
 - cost per PR median $0.0931, mean $0.0833, max $0.1178, total $3.3303; seconds per PR median 134, max 206
 - ReviewBench final estimate: mean $54.70 (median $61.15) for 657 PRs
 
@@ -166,7 +166,7 @@ counts lens replies cut at 16,000 tokens. Most retries after a cut still failed 
 - Judges: bench-judge-v1 is the scorer of record, and x1 is shown alongside it. Neither judge put either arm's F at its model's pool-raw mean.
 - The ablation rows are recomputed from the judge's per-comment matches with the scorer's own `scorePull` on
   the comments left. There is no new judge call, so a removed comment's duplicate can become the TP. The "all" rows equal the judges' summaries (checked by the script).
-- Per-PR cap refusals: S 21 on 6 PRs, V 34 on 11 PRs. They are mostly lens calls on multi-chunk pull requests and the
+- Per-PR cap refusals (per refused request): S 21 on 6 PRs, V 34 on 11 PRs. They are mostly lens calls on multi-chunk pull requests and the
   missed pass, whose worst-case reservation (32,000 max_tokens) is about $0.04.
 - Invalid JSON: S 21 and V 29 lens calls failed after their retry; the 3.5 missed pass failed on 12 PRs with invalid JSON
   after one retry (the same failure dev-3.5 reported).
@@ -174,3 +174,11 @@ counts lens replies cut at 16,000 tokens. Most retries after a cut still failed 
   against P 20.9 / R 63.5 / F 31.4). Even V's lens A alone (P 25.7) is under V's floor.
 - Measured ReviewBench final cost (cost per PR × 657): S $36.29 (mean) / $32.78 (median); V $54.70 / $61.15.
   This replaces R16's unmeasured ~$33. Not run, because neither arm qualifies.
+
+## Known defects (found by Bugbot on PR #62, not fixed: v3 never runs again)
+
+1. The wall-clock guard drops lens findings already completed, so a guarded review is empty
+   (`packages/analyzer/src/review/recall/run.ts` ~l. 299). The guard was hit 0 times in both arms, so
+   this had no dev impact.
+2. Lens findings are collected in completion order, so the dedup survivors and the 60-finding cap
+   depend on timing (~l. 257–260). Small dev impact: the cap was hit on 1 arm-S pull request.
