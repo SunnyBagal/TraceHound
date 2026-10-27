@@ -22,15 +22,13 @@ import {
 import { LEGACY_REDIRECT_SCRIPT } from "@/lib/legacy";
 import { reviewsHref } from "@/lib/reviews";
 import { AnimatedFigure } from "./AnimatedFigure";
-import { DiffToDeclarations } from "./DiffToDeclarations";
+import { DIFF_BEATS, DiffToDeclarations } from "./DiffToDeclarations";
 import { inter, jetbrains, serif } from "./fonts";
 import { Hero } from "./Hero";
 import { FeatureTabs } from "./FeatureTabs";
 import { FEATURES } from "./features";
-import { Pipeline } from "./Pipeline";
-import { PipelineWide } from "./PipelineWide";
-import { RepoToGraph } from "./RepoToGraph";
-import { RepoToGraphWide } from "./RepoToGraphWide";
+import { Pipeline, PIPELINE_BEATS, PipelineWide } from "./Pipeline";
+import { GRAPH_BEATS, RepoToGraph, RepoToGraphWide } from "./RepoToGraph";
 import { RoadmapFlow } from "./RoadmapFlow";
 import { Strike } from "./StrikeLine";
 import { TrustSection } from "./TrustSection";
@@ -204,7 +202,7 @@ export function Landing() {
                 layout="beside"
                 title="Diff → declarations"
                 steps={[
-                  { title: "The pull request", text: <>{mono(COMMIT.files)} files, {mono(fmt(COMMIT_LINES))} lines.</>, t: 0 },
+                  { title: "The pull request", text: <>{mono(COMMIT.files)} files, {mono(fmt(COMMIT_LINES))} lines.</>, t: DIFF_BEATS[0] },
                   {
                     title: "Drop the files with no declaration",
                     text: (
@@ -212,7 +210,7 @@ export function Landing() {
                         {mono(IGNORED_FILES)} under {mono("bench/")}, which Recall&apos;s config ignores; {mono(COMMIT_FILES.length - KEPT_FILES - IGNORED_FILES)} that are not TypeScript.
                       </>
                     ),
-                    t: 1700,
+                    t: DIFF_BEATS[1],
                   },
                   {
                     title: `Open the ${KEPT_FILES} files left`,
@@ -221,7 +219,7 @@ export function Landing() {
                         {mono(COMMIT_DECLARATIONS)} declarations: {mono(COMMIT.declarationsAdded)} added, {mono(COMMIT.declarationsModified)} modified.
                       </>
                     ),
-                    t: 3200,
+                    t: DIFF_BEATS[2],
                   },
                   {
                     title: "Frame them by component",
@@ -230,7 +228,7 @@ export function Landing() {
                         Recall API and Shared Recall, with the new {mono(ADDED_EDGE.kind)} edge at {mono(`${ADDED_EDGE.file.slice(GRAPH_PATH_PREFIX.length)}:${ADDED_EDGE.line}`)}.
                       </>
                     ),
-                    t: 4700,
+                    t: DIFF_BEATS[3],
                   },
                 ]}
                 note={
@@ -257,25 +255,25 @@ export function Landing() {
                 title="Repo → graph"
                 wide={<RepoToGraphWide />}
                 steps={[
-                  { title: "Files", text: <>Recall&apos;s {mono(GRAPH_TREE.length)} backend files at {mono(RECALL.short)}.</>, t: 0 },
-                  { title: "Facts", text: "The extractors find imports, queue calls and env reads, each at a file and line.", t: 1020 },
+                  { title: "Files", text: <>Recall&apos;s {mono(GRAPH_TREE.length)} backend files at {mono(RECALL.short)}.</>, t: GRAPH_BEATS[0] },
+                  { title: "Facts", text: "The extractors find imports, queue calls and env reads, each at a file and line.", t: GRAPH_BEATS[1] },
                   {
                     title: "Components",
                     text: (
                       <>
-                        The files group into {mono(GRAPH_COMPONENTS.length - 1)} components; the queue they share becomes a fifth.
+                        Each file flies into its component: {mono(GRAPH_COMPONENTS.length - 1)} hold files, and the queue they share is a fifth.
                       </>
                     ),
-                    t: 2465,
+                    t: GRAPH_BEATS[2],
                   },
                   {
                     title: "Edges",
                     text: (
                       <>
-                        {mono(GRAPH_EDGES.length)} edges, each labelled with its evidence. Then a dot follows the queue: API, queue, worker.
+                        {mono(GRAPH_EDGES.length)} edges draw, each labelled with the file and line that proves it.
                       </>
                     ),
-                    t: 4505,
+                    t: GRAPH_BEATS[3],
                   },
                 ]}
                 note={
@@ -295,10 +293,10 @@ export function Landing() {
                 title="Find → reproduce → repair → verify"
                 wide={<PipelineWide />}
                 steps={[
-                  { title: "Find", text: "A rule over the graph emits a hypothesis: one narrow question. No model.", t: 0 },
-                  { title: "Reproduce", text: "Nemotron writes one test. A fresh sandbox runs it twice; it must fail on an assertion in the same cases.", t: 1360 },
-                  { title: "Repair", text: "Nemotron edits the repo in a Docker sandbox with the network off.", t: 3230 },
-                  { title: "Verify", text: "The harness, not the agent, runs the reproduction test, the existing tests and the typecheck.", t: 4505 },
+                  { title: "Find", text: "A rule over the graph emits a hypothesis: one narrow question. No model.", t: PIPELINE_BEATS[0] },
+                  { title: "Reproduce", text: "Nemotron writes one test. A fresh sandbox runs it twice; it must fail on an assertion in the same cases.", t: PIPELINE_BEATS[1] },
+                  { title: "Repair", text: "Nemotron edits the repo in a Docker sandbox with the network off.", t: PIPELINE_BEATS[2] },
+                  { title: "Verify", text: "The harness, not the agent, runs the reproduction test, the existing tests and the typecheck.", t: PIPELINE_BEATS[3] },
                 ]}
                 note="The finder's claims have not been through the reproduce stage yet; the reproduce stage and the repair agent have run on seeded claims and tasks."
               >

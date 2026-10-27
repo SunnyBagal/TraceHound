@@ -295,6 +295,13 @@ html:has(.landing) body {
 .lp-anim [data-anim="step"] { animation-name: lp-step; transform-box: border-box; }
 .lp-anim [data-anim="growy"] { animation-name: lp-growy; transform-origin: top center; transform-box: border-box; }
 .lp-anim span[data-anim="grow"] { transform-origin: left center; transform-box: border-box; }
+.lp-anim [data-anim="fly"] { animation-name: lp-fly; animation-timing-function: cubic-bezier(0.55, 0, 0.25, 1); transform-box: view-box; transform-origin: 0 0; }
+.lp-anim [data-anim="pop"] { animation-name: lp-pop; animation-timing-function: var(--ease-spring); }
+.lp-anim [data-anim="travel-x"] { animation-name: lp-travel-x; animation-timing-function: linear; transform-box: view-box; }
+.lp-anim [data-anim="travel-y"] { animation-name: lp-travel-y; animation-timing-function: linear; transform-box: view-box; }
+.lp-anim span[data-anim] { display: inline-block; }
+.lp-anim .dd span[data-anim] { display: block; }
+.lp-anim .dd .dd-seg[data-anim], .lp-anim .dd .dd-fill[data-anim], .lp-anim .dd .dd-lit[data-anim] { display: block; }
 .lp-gone { opacity: 0; }
 .lp-dimmed { opacity: 0.22; }
 .lp-path { stroke-dasharray: 1; stroke-dashoffset: 0; }
@@ -325,6 +332,71 @@ html:has(.landing) body {
   90% { opacity: 1; transform: translateX(390px); }
   to { opacity: 0; transform: translateX(390px); }
 }
+/* a file's dot: from its row (--fx, --fy away) into its component, then gone as the node appears */
+@keyframes lp-fly {
+  from { opacity: 0; transform: translate(var(--fx), var(--fy)); }
+  10% { opacity: 1; transform: translate(var(--fx), var(--fy)); }
+  85% { opacity: 1; }
+  to { opacity: 0; transform: none; }
+}
+@keyframes lp-pop { from { opacity: 0; transform: scale(0.82); } }
+/* the claim's token: still at each station, moving between them (--run = first station − last) */
+@keyframes lp-travel-x {
+  from { opacity: 1; transform: translateX(var(--run)); }
+  10% { transform: translateX(var(--run)); }
+  30% { transform: translateX(calc(var(--run) * 2 / 3)); }
+  40% { transform: translateX(calc(var(--run) * 2 / 3)); }
+  62% { transform: translateX(calc(var(--run) / 3)); }
+  72% { transform: translateX(calc(var(--run) / 3)); }
+  92% { opacity: 1; transform: none; }
+  to { opacity: 0; transform: none; }
+}
+@keyframes lp-travel-y {
+  from { opacity: 1; transform: translateY(var(--run)); }
+  10% { transform: translateY(var(--run)); }
+  30% { transform: translateY(calc(var(--run) * 2 / 3)); }
+  40% { transform: translateY(calc(var(--run) * 2 / 3)); }
+  62% { transform: translateY(calc(var(--run) / 3)); }
+  72% { transform: translateY(calc(var(--run) / 3)); }
+  92% { opacity: 1; transform: none; }
+  to { opacity: 0; transform: none; }
+}
+.pl-token { fill: #fff; filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.85)); }
+.pl-glow { filter: drop-shadow(0 0 10px rgba(74, 222, 128, 0.55)); }
+/* Diff → declarations: the counter, the files bar, and the component cards */
+.dd { display: flex; flex-direction: column; gap: 18px; padding: 10px 6px 6px; text-align: left; }
+.dd-head { display: flex; flex-direction: column; gap: 6px; }
+.dd-count { display: grid; font-family: var(--font-code); font-size: clamp(26px, 4.4vw, 38px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.dd-count > * { grid-area: 1 / 1; }
+.dd-from { color: var(--text); }
+.dd-to { color: var(--accent); }
+.dd-sub { font-family: var(--font-code); font-size: 12.5px; color: var(--faint); }
+.dd-bar { display: flex; gap: 2px; height: 30px; }
+.dd-seg { position: relative; min-width: 4px; border-radius: 3px; overflow: hidden; }
+.dd-fill { position: absolute; inset: 0; background: #5b6075; border-radius: 3px; }
+.dd-drop .dd-fill { background: repeating-linear-gradient(135deg, #5b6075 0 4px, #474b5c 4px 8px); }
+.dd-lit { position: absolute; inset: 0; background: var(--accent); box-shadow: 0 0 18px var(--accent-glow); }
+.dd-legend { display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45; color: var(--muted); }
+.dd-key { display: flex; align-items: baseline; gap: 8px; }
+.dd-key code { font-family: var(--font-code); font-size: 12px; color: var(--text); }
+.dd-swatch { flex-shrink: 0; width: 10px; height: 10px; border-radius: 2px; background: repeating-linear-gradient(135deg, #5b6075 0 3px, #474b5c 3px 6px); translate: 0 1px; }
+.dd-swatch-keep { background: var(--accent); }
+.dd-cards { display: grid; gap: 12px; margin-top: 4px; }
+@media (min-width: 560px) { .dd-cards { grid-template-columns: 1.15fr 1fr; align-items: start; } }
+.dd-card { display: flex; flex-direction: column; gap: 6px; padding: 14px 14px 12px; border-radius: 12px; border: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent); background: color-mix(in srgb, var(--accent) 4%, var(--card)); }
+.dd-card-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px; margin-bottom: 2px; }
+.dd-card-name { font-size: 15px; font-weight: 600; color: var(--text); }
+.dd-card-counts { font-family: var(--font-code); font-size: 11px; color: var(--muted); }
+.dd-file { display: flex; flex-direction: column; gap: 4px; }
+.dd-file-name { font-family: var(--font-code); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.dd-decl { display: flex; align-items: center; gap: 7px; width: fit-content; max-width: 100%; margin-left: 14px; padding: 3px 9px; border-radius: 7px; background: rgba(255, 255, 255, 0.04); font-family: var(--font-code); font-size: 12.5px; color: var(--text); overflow-wrap: anywhere; }
+.dd-decl b { color: var(--diff-modified); }
+.dd-decl[data-status="added"] b { color: var(--diff-added); }
+.dd-edge { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; padding: 9px 10px; border-radius: 9px; border: 1px dashed color-mix(in srgb, var(--highlight) 60%, transparent); font-family: var(--font-code); font-size: 12px; color: var(--text); }
+.dd-edge-arrow { position: relative; display: flex; align-items: center; gap: 8px; padding-left: 14px; }
+.dd-edge-line { position: absolute; left: 4px; top: -2px; bottom: -2px; width: 1.5px; background: var(--highlight); }
+.dd-edge-tag { color: var(--highlight); }
+.dd-edge-to::before { content: "↳ "; color: var(--highlight); }
 /* a caption step lights up when its beat starts */
 @keyframes lp-step { from { opacity: 0.35; } }
 @keyframes lp-light { from { stroke: var(--line-strong); fill: var(--card); } }
