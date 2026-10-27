@@ -6,7 +6,8 @@
 // (docs/bench/dev-ultra-plan.md) resamples the 40 pull requests with replacement, 10,000 times, seed
 // 71 (mulberry32, as dev-3-5.ts); each resample recomputes every run's F on the drawn pull requests
 // and takes mean F (Ultra) − mean F (baseline); the interval is the 2.5th and 97.5th percentiles.
-// stdout gets counts only, never titles or comment text.
+// stdout gets counts only, never titles or comment text. A baseline that differs from the plan's by
+// more than 0.1 prints its check line and nothing after it, and the exit code is 1.
 //   node scripts/bench/dev-ultra.ts [--bench <dir>]
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -25,7 +26,7 @@ export type RowName = (typeof ROWS)[number];
 type Judge = "judge-v1" | "judge-x1";
 const JUDGES: Judge[] = ["judge-v1", "judge-x1"];
 type Pr = { tp: number; fp: number; fn: number };
-interface RunScores {
+export interface RunScores {
   label: string;
   pulls: Record<Judge, Map<string, Pr>>;
   totals: Record<Judge, Counts>;
@@ -123,7 +124,8 @@ export function bootstrap(base: RunScores[], cand: RunScores[], j: Judge, keys: 
 // ---- operations: failed chunks, truncations, 429s, wall time, tokens ----
 
 type Chunk = { failure?: string };
-type Verdict = { failure?: string };
+type Usage = { calls: number; inputTokens: number; outputTokens: number };
+type Verdict = { failure?: string; usage?: Usage };
 type AttemptFile = { diff: { review: { chunks: Chunk[] } }; ctx: { review: { chunks: Chunk[] } }; diffVerdicts: { comments: Verdict[] }; ctxOnlyVerdicts: { comments: Verdict[] } };
 
 /** Failed reviewer chunks and VERIFY_FAILED in the attempt each pull request used. */
@@ -149,34 +151,93 @@ export function failures(dir: string) {
   return { prs, chunks, verifyFailed, strings };
 }
 
-/** Ledger entries of a model inside a run's time window (judge calls excluded: bench-judge-v1 is 3 Super), and those at their max_tokens (32,000 reviewer, 16,000 verifier). */
-export function ledgerWindow(model: string, dir: string) {
+export const DEFAULT_LEDGER = join(ROOT, ".tracehound/spend.jsonl");
+export const REVIEWER_MAX_TOKENS = 32_000;
+export const VERIFIER_MAX_TOKENS = 16_000;
+
+/** The verifier's per-finding usage in every attempt of a run (a rerun's first attempt was ledgered too). */
+export function verdictUsages(dir: string): Usage[] {
+  const out: Usage[] = [];
+  for (const repo of DEV_REPOS) {
+    const ad = join(dir, "attempts", repo);
+    if (!existsSync(ad)) continue;
+    for (const f of readdirSync(ad).filter((x) => /\.attempt-\d\.json$/.test(x))) {
+      const a = readJson<AttemptFile>(join(ad, f));
+      for (const c of [...a.diffVerdicts.comments, ...a.ctxOnlyVerdicts.comments]) if (c.usage) out.push(c.usage);
+    }
+  }
+  return out;
+}
+
+type Tokens = { inputTokens: number; outputTokens: number };
+const tk = (e: Tokens) => `${e.inputTokens}/${e.outputTokens}`;
+
+/**
+ * Which of `entries` (calls with reported usage) are verifier calls. verify-ctx ledgers its calls with
+ * the reviewer's purpose ("review", VERIFY_CTX_PURPOSE) and the ledger keeps no max_tokens, so a call
+ * is told apart by its token counts: it is the verifier's when a finding's verdict made exactly one
+ * call with those counts, or made two whose totals are this call plus another call in `entries`.
+ */
+export function verifierCalls(entries: Tokens[], verdicts: Usage[]): boolean[] {
+  const counts = new Map<string, number>();
+  for (const e of entries) counts.set(tk(e), (counts.get(tk(e)) ?? 0) + 1);
+  const one = new Set(verdicts.filter((v) => v.calls === 1).map(tk));
+  const two = verdicts.filter((v) => v.calls === 2);
+  return entries.map((e) => {
+    if (one.has(tk(e))) return true;
+    return two.some((v) => {
+      const rest = tk({ inputTokens: v.inputTokens - e.inputTokens, outputTokens: v.outputTokens - e.outputTokens });
+      return (counts.get(rest) ?? 0) >= (rest === tk(e) ? 2 : 1);
+    });
+  });
+}
+
+/**
+ * Ledger entries of a model inside a run's time window (judge calls excluded: bench-judge-v1 is 3
+ * Super), and those at their max_tokens: reviewer calls at 32,000 (atMax) and verifier calls at
+ * 16,000 (verifierAtMax), told apart by verifierCalls.
+ */
+export function ledgerWindow(model: string, dir: string, ledgerFile = DEFAULT_LEDGER) {
   const j = readRunJson(dir) as { startedAt?: string; finishedAt?: string | null };
-  const es = new SpendLedger(join(ROOT, ".tracehound/spend.jsonl"))
+  const es = new SpendLedger(ledgerFile)
     .entries()
     .filter((e) => e.model === model && e.purpose !== "bench-judge" && j.startedAt !== undefined && e.timestamp >= j.startedAt && (!j.finishedAt || e.timestamp <= j.finishedAt));
   // a call without reported usage (timeout, network error) is ledgered at its upper bound: not counted as at max_tokens, nor in the token totals
   const reported = es.filter((e) => e.usageReported !== false);
-  const atMax = reported.filter((e) => e.outputTokens >= (e.purpose.startsWith("verify") ? 16_000 : 32_000)).length;
-  return { calls: es.length, failedCalls: es.filter((e) => e.ok === false).length, noUsage: es.length - reported.length, atMax, inputTokens: reported.reduce((s, e) => s + e.inputTokens, 0), outputTokens: reported.reduce((s, e) => s + e.outputTokens, 0) };
+  const isVerifier = verifierCalls(reported, verdictUsages(dir));
+  const atMax = reported.filter((e, i) => !isVerifier[i] && e.outputTokens >= REVIEWER_MAX_TOKENS).length;
+  const verifierAtMax = reported.filter((e, i) => isVerifier[i] && e.outputTokens >= VERIFIER_MAX_TOKENS).length;
+  return { calls: es.length, failedCalls: es.filter((e) => e.ok === false).length, noUsage: es.length - reported.length, atMax, verifierAtMax, inputTokens: reported.reduce((s, e) => s + e.inputTokens, 0), outputTokens: reported.reduce((s, e) => s + e.outputTokens, 0) };
 }
 
 const wallSeconds = (dir: string) => ((readRunJson(dir) as { pulls?: { wallMs: number }[] }).pulls ?? []).map((p) => p.wallMs / 1000);
 
-export function report(bench: string, log: (l: string) => void) {
+/** One line per baseline (row × 3 Super / 3.5 Super): the recomputed v1 mean F against the stated one. */
+export function baselineCheck(gs: Record<RowName, Record<"3 Super" | "3.5 Super", RunScores[]>>, stated = STATED_BASELINES) {
+  const lines: string[] = [];
+  let ok = true;
+  for (const row of ROWS) {
+    for (const name of ["3 Super", "3.5 Super"] as const) {
+      const got = 100 * mean(gs[row][name].map((r) => metrics(r.totals["judge-v1"]).f ?? 0));
+      const within = Math.abs(got - stated[row][name]) <= 0.1 + 1e-9;
+      ok &&= within;
+      lines.push(`baseline check ${row} ${name} v1 mean F: recomputed ${got.toFixed(2)} · stated ${stated[row][name]} · ${within ? "ok" : "DIFFERS BY MORE THAN 0.1: STOP"}`);
+    }
+  }
+  return { ok, lines };
+}
+
+/** Prints the report; returns baselinesOk false, after the check lines and nothing else, when a baseline differs. */
+export function report(bench: string, log: (l: string) => void, opts: { ledgerFile?: string; stated?: typeof STATED_BASELINES } = {}): { baselinesOk: boolean } {
   const ultra = ultraDirs(bench);
   log(`Ultra runs: ${ultra.map((u) => `${u.n}${u.restarted ? "r" : ""} ${u.status}`).join(" · ")}`);
   const gs = Object.fromEntries(ROWS.map((row) => [row, groups(bench, row)])) as Record<RowName, ReturnType<typeof groups>>;
 
   // baseline check against the plan's stated numbers
   log("");
-  for (const row of ROWS) {
-    for (const name of ["3 Super", "3.5 Super"] as const) {
-      const got = 100 * mean(gs[row][name].map((r) => metrics(r.totals["judge-v1"]).f ?? 0));
-      const stated = STATED_BASELINES[row][name];
-      log(`baseline check ${row} ${name} v1 mean F: recomputed ${got.toFixed(2)} · stated ${stated} · ${Math.abs(got - stated) <= 0.1 + 1e-9 ? "ok" : "DIFFERS BY MORE THAN 0.1: STOP"}`);
-    }
-  }
+  const check = baselineCheck(gs, opts.stated);
+  for (const l of check.lines) log(l);
+  if (!check.ok) return { baselinesOk: false };
 
   for (const row of ROWS) {
     log("");
@@ -221,8 +282,8 @@ export function report(bench: string, log: (l: string) => void) {
 
   // operations
   log("");
-  log("| model | run | PRs with a failed chunk | failed chunks | VERIFY_FAILED | calls (ledger) | at max_tokens | wall s median | wall s max |");
-  log("|---|---|---|---|---|---|---|---|---|");
+  log("| model | run | PRs with a failed chunk | failed chunks | VERIFY_FAILED | calls (ledger) | at max_tokens | verifier at max_tokens | wall s median | wall s max |");
+  log("|---|---|---|---|---|---|---|---|---|---|");
   const opsRows: { name: string; model: string; n: string; dir: string }[] = [
     ...super3Dirs(bench).map(({ n, dir, restarted }) => ({ name: "3 Super", model: "nvidia/nemotron-3-super-120b-a12b", n: `${n}${restarted ? "r" : ""}`, dir })),
     ...super35Dirs(bench).map(({ n, dir, restarted }) => ({ name: "3.5 Super", model: SUPER_35, n: `${n}${restarted ? "r" : ""}`, dir })),
@@ -230,15 +291,15 @@ export function report(bench: string, log: (l: string) => void) {
   ];
   for (const o of opsRows) {
     const f = failures(o.dir);
-    const l = ledgerWindow(o.model, o.dir);
+    const l = ledgerWindow(o.model, o.dir, opts.ledgerFile);
     const w = wallSeconds(o.dir);
-    log(`| ${o.name} | ${o.n} | ${f.prs} | ${f.chunks} | ${f.verifyFailed} | ${l.calls} | ${l.atMax} | ${median(w).toFixed(0)} | ${Math.max(0, ...w).toFixed(0)} |`);
+    log(`| ${o.name} | ${o.n} | ${f.prs} | ${f.chunks} | ${f.verifyFailed} | ${l.calls} | ${l.atMax} | ${l.verifierAtMax} | ${median(w).toFixed(0)} | ${Math.max(0, ...w).toFixed(0)} |`);
   }
   log("");
   for (const u of ultra.filter((x) => x.status !== "absent")) {
     const f = failures(u.dir);
     const j = readRunJson(u.dir) as { nvidiaApi?: { requests: number; http429: number }; startedAt?: string; finishedAt?: string | null; costUSD: number };
-    const l = ledgerWindow(MODEL_071, u.dir);
+    const l = ledgerWindow(MODEL_071, u.dir, opts.ledgerFile);
     log(`Ultra run ${u.n}${u.restarted ? "r" : ""}: NVIDIA API requests ${j.nvidiaApi?.requests ?? "n/a"} · HTTP 429 ${j.nvidiaApi?.http429 ?? "n/a"} · ledgered Ultra calls ${l.calls} (failed ${l.failedCalls}, without usage: timeout or network ${l.noUsage}) · Ultra tokens in ${l.inputTokens} out ${l.outputTokens} · started ${j.startedAt} · finished ${j.finishedAt} · Nebius spend (judges) $${j.costUSD.toFixed(4)}`);
     for (const [s, k] of f.strings) log(`  failed-chunk string ×${k}: ${s.slice(0, 200)}`);
   }
@@ -256,9 +317,10 @@ export function report(bench: string, log: (l: string) => void) {
     if (!us.length) continue;
     log(`| ${name} | ${us.length} | ${median(us.map((u) => u.inputTokens)).toFixed(0)} | ${median(us.map((u) => u.outputTokens)).toFixed(0)} | ${mean(us.map((u) => u.outputTokens)).toFixed(0)} |`);
   }
+  return { baselinesOk: true };
 }
 
 if (import.meta.main) {
   const { values } = parseArgs({ options: { bench: { type: "string" } }, strict: true });
-  report(values.bench ?? join(homedir(), "Projects/tracehound-bench"), (l) => console.log(l));
+  if (!report(values.bench ?? join(homedir(), "Projects/tracehound-bench"), (l) => console.log(l)).baselinesOk) process.exitCode = 1;
 }
