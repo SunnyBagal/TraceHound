@@ -241,3 +241,29 @@ export const DEMO = {
     { id: "recall-backend:worker", name: "Recall Backend Worker", files: ["recall-backend/worker.ts"] },
   ],
 } as const;
+
+/**
+ * The imports between the 15 files of GRAPH_TREE (each file's `imports` in the Recall snapshot
+ * with a `target` in the tree, type-only ones left out), with the line each import is on. Paths
+ * drop GRAPH_PATH_PREFIX. The repo → graph figure draws them on its file layer.
+ */
+export const FILE_IMPORTS: readonly (readonly [from: string, to: string, line: number])[] = [
+  ["config/db.ts", "db/schema.ts", 2],
+  ["index.ts", "middleware/middleware.ts", 8],
+  ["index.ts", "services/searchService.ts", 9],
+  ["index.ts", "config/db.ts", 11],
+  ["index.ts", "db/schema.ts", 12],
+  ["index.ts", "services/linkDetector.ts", 13],
+  ["index.ts", "services/metadataFetcher.ts", 14],
+  ["index.ts", "config/queue.ts", 15],
+  ["index.ts", "services/embeddings.ts", 16],
+  ["services/searchService.ts", "config/db.ts", 4],
+  ["services/searchService.ts", "db/schema.ts", 5],
+  ["worker.ts", "config/db.ts", 6],
+  ["worker.ts", "db/schema.ts", 7],
+  ["worker.ts", "config/queue.ts", 8],
+  ["worker.ts", "services/linkDetector.ts", 9],
+  ["worker.ts", "services/textExtractor.ts", 10],
+  ["worker.ts", "services/aiProcessor.ts", 11],
+  ["worker.ts", "services/embeddings.ts", 12],
+];

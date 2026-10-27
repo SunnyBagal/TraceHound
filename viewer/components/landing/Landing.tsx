@@ -9,7 +9,9 @@ import {
   fmt,
   GITHUB_URL,
   GRAPH_COMPONENTS,
+  FILE_IMPORTS,
   GRAPH_EDGES,
+  GRAPH_FILES,
   GRAPH_HREF,
   GRAPH_PATH_PREFIX,
   GRAPH_TREE,
@@ -255,26 +257,10 @@ export function Landing() {
                 title="Repo → graph"
                 wide={<RepoToGraphWide />}
                 steps={[
-                  { title: "Files", text: <>Recall&apos;s {mono(GRAPH_TREE.length)} backend files at {mono(RECALL.short)}.</>, t: GRAPH_BEATS[0] },
-                  { title: "Facts", text: "The extractors find imports, queue calls and env reads, each at a file and line.", t: GRAPH_BEATS[1] },
-                  {
-                    title: "Components",
-                    text: (
-                      <>
-                        Each file flies into its component: {mono(GRAPH_COMPONENTS.length - 1)} hold files, and the queue they share is a fifth.
-                      </>
-                    ),
-                    t: GRAPH_BEATS[2],
-                  },
-                  {
-                    title: "Edges",
-                    text: (
-                      <>
-                        {mono(GRAPH_EDGES.length)} edges draw, each labelled with the file and line that proves it.
-                      </>
-                    ),
-                    t: GRAPH_BEATS[3],
-                  },
+                  { title: "Files", text: <>Recall&apos;s {mono(GRAPH_TREE.length)} backend files at {mono(RECALL.short)}, and the {mono(FILE_IMPORTS.length)} imports between them.</>, t: GRAPH_BEATS[0] },
+                  { title: "Facts", text: <>A plate of facts rises: {mono(GRAPH_FILES.length)} queue calls and env reads, each on a thread down to its file and line.</>, t: GRAPH_BEATS[1] },
+                  { title: "Components", text: <>The graph plate rises with {mono(GRAPH_COMPONENTS.length)} components; every file takes its component&apos;s colour.</>, t: GRAPH_BEATS[2] },
+                  { title: "Edges", text: <>{mono(GRAPH_EDGES.length)} edges draw, and each drops a pin to the file and line that proves it.</>, t: GRAPH_BEATS[3] },
                 ]}
                 note={
                   <>

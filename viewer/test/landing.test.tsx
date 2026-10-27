@@ -13,6 +13,7 @@ import {
   DECLARATIONS,
   DEMO,
   EDGE_LABELS,
+  FILE_IMPORTS,
   FINDER_RULE,
   GRAPH_COMPONENTS,
   GRAPH_EDGES,
@@ -333,6 +334,15 @@ describe("every name and number in the animations and sections comes from the re
     const snapshot = json(RECALL_SNAPSHOT);
     const expected = GRAPH_COMPONENTS.flatMap((c) => (snapshot.components.find((x: { id: string }) => x.id === c.id).files as string[]).map((path) => ({ path, component: c.id })));
     expect([...GRAPH_TREE].sort((a, b) => a.path.localeCompare(b.path))).toEqual(expected.sort((a, b) => a.path.localeCompare(b.path)));
+  });
+
+  it("repo → graph's file layer: the snapshot's imports between the tree's files, with their lines", () => {
+    const snapshot = json(RECALL_SNAPSHOT);
+    const tree = new Set(GRAPH_TREE.map((f) => f.path));
+    const expected = (snapshot.files as { path: string; imports: { target?: string; typeOnly: boolean; evidenceId: string }[] }[])
+      .filter((f) => tree.has(f.path))
+      .flatMap((f) => f.imports.filter((i) => i.target && tree.has(i.target) && !i.typeOnly).map((i) => [f.path.slice(GRAPH_PATH_PREFIX.length), i.target!.slice(GRAPH_PATH_PREFIX.length), Number(/#L(\d+)/.exec(i.evidenceId)![1])]));
+    expect([...FILE_IMPORTS].map((x) => [...x])).toEqual(expected);
   });
 
   it("the pipeline's rule and question are the finder's, word for word", () => {

@@ -1288,3 +1288,22 @@ html:has(.landing) body {
 }
 @media (prefers-reduced-motion: reduce) { .fig-step, .fig-step::after, .fig-step-title, .fig-step-text, .sec-chip { transition: none; } }
 @media (max-width: 520px) { .dd-shell { padding: 16px 14px; } .fig-stage { padding: 10px; } .fig-step { padding: 16px 18px; } .vsection { padding-inline: 16px; } }
+
+/* ---------- Repo → graph: the exploded stack (vite.dev's plates, our tones) ---------- */
+.rg-mono { font-family: var(--font-code); }
+.rg-top { fill: #101018; }
+.rg-glass { fill: rgba(16, 16, 24, 0.62); }
+.rg-edge { fill: none; stroke: color-mix(in srgb, var(--c) 70%, #fff); stroke-width: 1.1; stroke-linejoin: round; }
+.rg-edge-lit { stroke: var(--c); stroke-width: 1.4; filter: drop-shadow(0 0 4px var(--c)); }
+.rg-plate-name { fill: color-mix(in srgb, var(--faint) 85%, transparent); letter-spacing: 0.12em; }
+.rg-import { fill: none; stroke: rgba(170, 190, 220, 0.38); stroke-width: 1; }
+.rg-file { fill: #1b1d27; stroke: #c9d3e6; stroke-width: 1.2; }
+.rg-file-lit { stroke: none; filter: drop-shadow(0 0 4px currentColor); }
+.rg-file-name { fill: #c9d3e6; }
+.rg-thread { fill: none; stroke: #ffc46b; stroke-width: 1.2; opacity: 0.85; }
+.rg-fact-dot { fill: #ffc46b; filter: drop-shadow(0 0 5px #f5a524); }
+.rg-pill { fill: rgba(12, 12, 17, 0.94); stroke: var(--panel-line); stroke-width: 1; }
+.rg-tile-top { fill: #121219; stroke: none; }
+.rg-edge-line { fill: none; stroke-width: 2.2; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.25)); }
+.rg-pin { fill: none; stroke: #f5a524; stroke-width: 1.1; stroke-dasharray: 3 4; opacity: 0.85; }
+.rg-pin-end { fill: #f5a524; filter: drop-shadow(0 0 6px #f5a524); }
