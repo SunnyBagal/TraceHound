@@ -284,7 +284,8 @@ leaderboard submission, and imply no leaderboard rank.
 - No final run and no leaderboard entry: the final (219 pull requests × 3 rounds) would cost about
   $107 with VAT (measured from #331: $3.45 per 25-PR round) against a $43.52 balance (P008
   amendment 8).
-- Six configurations on the same 25 pull requests: the best of them carries selection bias.
+- Six configurations on the same 25 pull requests: the top score among them carries selection
+  bias.
 - 3.5 beat 3 Super on our dev set but lost on ReviewBench in both pipelines (pool-verify-v1 12.2 vs
   13.9; pool-raw 13.5 vs 16.0).
 - ReviewBench's grounded metric rewards volume (findings), which the product's verifier cuts.
