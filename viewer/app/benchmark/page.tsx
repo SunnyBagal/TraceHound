@@ -14,7 +14,7 @@ function Verdict({ text }: { text: string }) {
 
 export default function BenchmarkPage() {
   return <ReviewShell active="Benchmark">
-    <header className="mb-10 max-w-3xl">
+    <header className="mb-10 max-w-3xl pt-12">
       <p className="vkicker mb-4">TraceHound / Benchmark</p>
       <h1 className="vh2">Tied with {word(tiedTools.length)} of {word(tools.length)} commercial reviewers on the blind test, ahead of {word(aheadTools.length)}. Every loss is on this page.</h1>
       <p className="mt-5 text-base leading-relaxed text-muted">Aggregate results for TraceHound v2 (pool-verify-v1 on Nemotron 3.5 Super), copied from the committed benchmark report. Medium+ findings; low-severity findings are ignored, and duplicates count as neither true nor false positives.</p>
