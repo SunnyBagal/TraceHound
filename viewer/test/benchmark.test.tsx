@@ -48,3 +48,10 @@ it("v2's headline reads its tables by title: no undefined, NaN or 'th of 6', and
   expect(screen.getByTestId("tile-rank").textContent).toMatch(/^rank \d of 6/);
   expect(screen.getByTestId("bench-caption").textContent).not.toMatch(/no gap to another tool is outside/i);
 });
+it("the cost tile is the cost table's 3.5 Super median, and figure 1 draws bars from 0%", () => {
+  render(<BenchmarkPage />);
+  const cost = BENCHMARK_TABLES.find((t) => t.title.startsWith("Dev cost per pull request"))!;
+  const median = cost.rows.find((r) => r[0].startsWith("3.5 Super"))![(cost.headers as readonly string[]).indexOf("cost median")]!;
+  expect(screen.getByTestId("tile-cost").textContent).toContain(median);
+  expect(screen.getByTestId("bench-dots").textContent).toContain("0%");
+});
