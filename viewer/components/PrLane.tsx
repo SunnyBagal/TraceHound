@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUpRight, CircleDot, GitMerge, GitPullRequest, GitPullRequestClosed, LoaderCircle, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { prParam, pullsClient, type LaneList, type LanePull, type PullOverlayData, type PrOverlay, type ReviewStatus } from "@/lib/pulls";
 import { pullHref } from "@/lib/reviews";
 
@@ -50,9 +50,13 @@ export const STATUS_LABEL: Record<ReviewStatus, string> = { reviewed: "reviewed"
 
 function PullChip({ pull, active, onSelect }: { pull: LanePull; active: boolean; onSelect: () => void }) {
   const Icon = STATE_ICON[pull.state];
+  const ref = useRef<HTMLButtonElement>(null);
+  // a deep-linked or chosen PR is scrolled into the strip's view
+  useEffect(() => { if (active) ref.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); }, [active]);
   return (
     <li className="shrink-0">
       <button
+        ref={ref}
         type="button"
         onClick={onSelect}
         aria-pressed={active}
