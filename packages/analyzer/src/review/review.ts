@@ -6,7 +6,7 @@
 // plus a `review` record of chunks, failures, drops and usage, so no pull request is silently empty.
 import { createHash } from "node:crypto";
 import type { ChatClient } from "../agent/decider.ts";
-import { BudgetExceededError, type ChatMessage, type ChatRequest } from "../llm/client.ts";
+import { BudgetExceededError, type ChatMessage, type ChatRequest, type ChatResult } from "../llm/client.ts";
 import type { ReasoningMode } from "../naming/llm.ts";
 import { chunkDiff, CHUNK_LIMIT_CHARS, newSideLines, parseDiff, renderChunk, type DiffFile } from "./diff.ts";
 import { REVIEW_SYSTEM_PROMPT, REVIEW_VERSION, reviewUserMessage } from "./prompt.ts";
@@ -46,6 +46,25 @@ export interface ChunkRecord {
   findings: number; // findings in the accepted reply
   kept: number;
   dropped: Record<DropReason, number>;
+  /** one entry per reply received, in order; absent when no reply was received */
+  attemptsDetail?: AttemptDetail[];
+}
+
+/** What the provider said about one reply; the reply text itself is not kept. */
+export interface AttemptDetail {
+  finishReason?: string;
+  reasoningTokens?: number;
+  outputTokens?: number;
+  contentEmpty: boolean;
+}
+
+export function attemptDetail(r: ChatResult): AttemptDetail {
+  return {
+    ...(r.finishReason !== undefined && { finishReason: r.finishReason }),
+    ...(r.reasoningTokens !== undefined && { reasoningTokens: r.reasoningTokens }),
+    ...(r.outputTokens !== undefined && { outputTokens: r.outputTokens }),
+    contentEmpty: !r.content?.trim(),
+  };
 }
 
 export interface ReviewOutput {
@@ -77,8 +96,33 @@ interface RawFinding {
   body: unknown;
 }
 
+/** For the "lenient" parser: the last candidate in a reply that `accept` takes. Candidates are every
+ * fenced block, then every balanced {…} (in closing order) that mentions `key`. */
+export function extractJson(content: string, key: string, accept: (text: string) => boolean): string | null {
+  const candidates = [...content.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/g)].map((m) => m[1]!);
+  const open: number[] = [];
+  let inString = false;
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+    if (inString) {
+      if (ch === "\\") i++;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"' && open.length) inString = true;
+    else if (ch === "{") open.push(i);
+    else if (ch === "}" && open.length) {
+      const text = content.slice(open.pop()!, i + 1);
+      if (text.includes(`"${key}"`)) candidates.push(text);
+    }
+  }
+  return candidates.findLast(accept) ?? null;
+}
+
 /** Shape check of a reply: `{"findings": [...]}`, optionally in a ```json fence. Items are checked one by one later. */
-export function parseReviewReply(content: string): { ok: true; findings: RawFinding[] } | { ok: false; why: string } {
+export function parseReviewReply(content: string, mode: "strict" | "lenient" = "strict"): { ok: true; findings: RawFinding[] } | { ok: false; why: string } {
+  if (mode === "lenient") {
+    const picked = extractJson(content, "findings", (text) => parseReviewReply(text).ok);
+    if (picked !== null) return parseReviewReply(picked);
+  }
   let text = content.trim();
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(text);
   if (fenced) text = fenced[1]!;
@@ -123,6 +167,10 @@ export interface ReviewOptions {
   reasoning?: "on" | "off";
   maxTokens?: number;
   chunkLimit?: number;
+  /** retry after finish_reason "length": "append" (default, today) or "fresh" */
+  retryOnLength?: "append" | "fresh";
+  /** reply parsing: "strict" (default, today) or "lenient" (extractJson) */
+  parser?: "strict" | "lenient";
 }
 
 export async function reviewPull(client: ChatClient, input: PullInput, opts: ReviewOptions): Promise<ReviewOutput> {
@@ -163,7 +211,9 @@ export async function reviewPull(client: ChatClient, input: PullInput, opts: Rev
     const attempt = async (request: ChatRequest) => {
       rec.attempts++;
       try {
-        return { reply: await call(request) };
+        const reply = await call(request);
+        (rec.attemptsDetail ??= []).push(attemptDetail(reply));
+        return { reply };
       } catch (err) {
         if (err instanceof BudgetExceededError) throw err; // the run stops; never a silent empty chunk
         return { error: `request failed: ${(err as Error).message}` };
@@ -175,7 +225,7 @@ export async function reviewPull(client: ChatClient, input: PullInput, opts: Rev
       rec.failure = a1.error;
       continue;
     }
-    let parsed = parseReviewReply(a1.reply.content);
+    let parsed = parseReviewReply(a1.reply.content, opts.parser);
     if (!parsed.ok) {
       const firstWhy = parsed.why;
       const messages: ChatMessage[] = [
@@ -183,13 +233,15 @@ export async function reviewPull(client: ChatClient, input: PullInput, opts: Rev
         { role: "assistant", content: a1.reply.content },
         { role: "user", content: `Your reply was invalid: ${parsed.why}. Reply again with only the JSON object in the shape given.` },
       ];
-      const a2 = await attempt({ ...first, messages });
+      // "fresh": a reply cut off at max_tokens is retried as the original request with reasoning off
+      const fresh = opts.retryOnLength === "fresh" && a1.reply.finishReason === "length";
+      const a2 = await attempt(fresh ? { ...first, ...REASONING_OFF } : { ...first, messages });
       if ("error" in a2) {
         rec.status = "CHUNK_FAILED";
         rec.failure = `${firstWhy}; retry ${a2.error}`;
         continue;
       }
-      parsed = parseReviewReply(a2.reply.content);
+      parsed = parseReviewReply(a2.reply.content, opts.parser);
       if (!parsed.ok) {
         rec.status = "CHUNK_FAILED";
         rec.failure = `${firstWhy}; after one retry: ${parsed.why}`;

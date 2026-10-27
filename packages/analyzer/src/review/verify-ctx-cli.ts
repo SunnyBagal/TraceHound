@@ -25,7 +25,7 @@ import { keptReview, VERIFY_CTX_MODEL, verifyReviewWithContext, type CtxVerified
 const WORKSPACE_ROOT = path.resolve(import.meta.dirname, "../../../..");
 const STATE_DIR = path.join(WORKSPACE_ROOT, ".tracehound");
 const USAGE =
-  "usage: tracehound verify-ctx (--review <file> --pr <file> --head <sha> | --reviews <dir> --prs <dir> --heads <file>) --repo <git dir> --out <file|dir> [--kept <file|dir>] [--model <id>] [--reasoning on|off] [--concurrency <n>] [--summary <file>] [--context-only]";
+  "usage: tracehound verify-ctx (--review <file> --pr <file> --head <sha> | --reviews <dir> --prs <dir> --heads <file>) --repo <git dir> --out <file|dir> [--kept <file|dir>] [--model <id>] [--reasoning on|off] [--concurrency <n>] [--summary <file>] [--context-only] [--parser strict|lenient]";
 
 const byName = (a: string, b: string) => a.localeCompare(b, "en", { numeric: true });
 
@@ -80,6 +80,7 @@ export async function main(argv: string[]): Promise<number> {
       reasoning: { type: "string", default: "on" },
       concurrency: { type: "string", default: "4" },
       summary: { type: "string" },
+      parser: { type: "string", default: "strict" },
       "context-only": { type: "boolean", default: false },
     },
   });
@@ -131,6 +132,10 @@ export async function main(argv: string[]): Promise<number> {
     return 0;
   }
 
+  if (!["strict", "lenient"].includes(values.parser!)) {
+    console.error(USAGE);
+    return 1;
+  }
   const apiKey = process.env.NEBIUS_API_KEY;
   if (!apiKey) {
     console.error("NEBIUS_API_KEY is not set (put it in .env)");
@@ -147,7 +152,12 @@ export async function main(argv: string[]): Promise<number> {
     cache: new ResponseCache(path.join(STATE_DIR, "cache")),
     timeoutMs: 600_000,
   });
-  const opts = { model: values.model!, reasoning: values.reasoning as "on" | "off", concurrency: Math.max(1, Number(values.concurrency)) };
+  const opts = {
+    model: values.model!,
+    reasoning: values.reasoning as "on" | "off",
+    concurrency: Math.max(1, Number(values.concurrency)),
+    ...(values.parser === "lenient" && { parser: "lenient" as const }),
+  };
 
   const results: CtxVerifiedReview[] = [];
   for (const j of jobs) {

@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { agrees } from "../../../scripts/bench/agree-rule.ts";
+import { agrees, norm } from "../../../scripts/bench/agree-rule.ts";
 import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
 import type { Finding, ReviewerInput } from "./action.ts";
 
@@ -20,11 +20,18 @@ export interface PipelineCounts {
   reviewerChunks?: number;
 }
 export type FindingSource = "diff" | "ctx" | "both";
+
+/** Stage counts for the "nothing posted" log lines; "-" where a stage did not finish. */
+export interface StageCounts { chunksOk?: number; chunksFailed?: number; pool?: number; kept?: number; posted?: number }
+export const formatStageCounts = (c: StageCounts) =>
+  `chunks ok ${c.chunksOk ?? "-"}, failed ${c.chunksFailed ?? "-"}; pool ${c.pool ?? "-"}; kept ${c.kept ?? "-"}; posted ${c.posted ?? 0}`;
 export interface PipelineOutput {
   comments: Finding[];
   sources: FindingSource[];
   review: { model: string; chunkFailed: number };
   pipeline: PipelineCounts;
+  /** reviewer chunk counts for logs; never posted */
+  stages?: { chunksOk: number; chunksFailed: number };
 }
 
 export class MissingHeadError extends Error {
@@ -68,15 +75,26 @@ function findings(value: unknown): Finding[] {
   });
 }
 
-export function poolFindings(diff: Finding[], ctx: Finding[]): Finding[] {
-  return [...diff, ...ctx.filter(finding => !diff.some(candidate => agrees(candidate, finding)))];
+export interface PipelineOptions {
+  /** pool step only: "separate" (default, today) or "merge", where the same normalised path with both lines null agrees */
+  poolNullLines?: "separate" | "merge";
+}
+
+const poolAgrees = (nullLines: PipelineOptions["poolNullLines"]) => nullLines === "merge"
+  ? (a: Finding, b: Finding) => agrees(a, b) || (a.line === null && b.line === null && norm(a.path) === norm(b.path))
+  : agrees;
+
+export function poolFindings(diff: Finding[], ctx: Finding[], nullLines: PipelineOptions["poolNullLines"] = "separate"): Finding[] {
+  const same = poolAgrees(nullLines);
+  return [...diff, ...ctx.filter(finding => !diff.some(candidate => same(candidate, finding)))];
 }
 
 /** Sidecar metadata: never changes the bytes sent to the frozen verifier. */
-export function poolSources(diff: Finding[], ctx: Finding[]): FindingSource[] {
+export function poolSources(diff: Finding[], ctx: Finding[], nullLines: PipelineOptions["poolNullLines"] = "separate"): FindingSource[] {
+  const same = poolAgrees(nullLines);
   return [
-    ...diff.map((finding): FindingSource => ctx.some(candidate => agrees(finding, candidate)) ? "both" : "diff"),
-    ...ctx.filter(finding => !diff.some(candidate => agrees(candidate, finding))).map((): FindingSource => "ctx"),
+    ...diff.map((finding): FindingSource => ctx.some(candidate => same(finding, candidate)) ? "both" : "diff"),
+    ...ctx.filter(finding => !diff.some(candidate => same(candidate, finding))).map((): FindingSource => "ctx"),
   ];
 }
 
@@ -91,9 +109,10 @@ async function stage<T>(name: string, run: () => Promise<T>): Promise<T> {
 /** CLI orchestration only; the analyzer owns candidate generation and verification decisions. */
 export async function runPipeline(
   input: ReviewerInput, selectedModel: string, repo: string, head: string,
-  log: (message: string) => void, exec: Execute = execute,
+  log: (message: string) => void, exec: Execute = execute, options: PipelineOptions = {},
 ): Promise<PipelineOutput | null> {
   let directory: string | undefined;
+  const counts: StageCounts = {};
   try {
     directory = await mkdtemp(path.join(tmpdir(), "tracehound-pool-"));
     const inputPath = path.join(directory, "input.json");
@@ -131,9 +150,12 @@ export async function runPipeline(
     const ctx = ctxResult!.value;
     const chunkFailed = diff.chunkFailed + ctx.chunkFailed;
     const reviewerChunks = diff.chunks + ctx.chunks;
+    counts.chunksOk = reviewerChunks - chunkFailed;
+    counts.chunksFailed = chunkFailed;
     if (chunkFailed > 0 && chunkFailed === reviewerChunks) throw new StageError("reviewers");
-    const pool = poolFindings(diff.comments, ctx.comments);
-    const sources = poolSources(diff.comments, ctx.comments);
+    const pool = poolFindings(diff.comments, ctx.comments, options.poolNullLines);
+    const sources = poolSources(diff.comments, ctx.comments, options.poolNullLines);
+    counts.pool = pool.length;
     await stage("pool", () => writeFile(poolPath, JSON.stringify({
       pr_title: input.title, pr_number: input.number, comments: pool,
     }), { mode: 0o600 }));
@@ -174,11 +196,12 @@ export async function runPipeline(
       // Use the CLI's kept file directly, including its VERIFY_FAILED decisions.
       return { comments, sources: keptSources, review: { model: [...new Set([diff.model, ctx.model, verifyModel])].join(", "), chunkFailed },
         pipeline: { pool: pool.length, kept: comments.length,
-          ...(chunkFailed > 0 && { chunkFailed: { diff: diff.chunkFailed, ctx: ctx.chunkFailed }, reviewerChunks }) } };
+          ...(chunkFailed > 0 && { chunkFailed: { diff: diff.chunkFailed, ctx: ctx.chunkFailed }, reviewerChunks }) },
+        stages: { chunksOk: reviewerChunks - chunkFailed, chunksFailed: chunkFailed } };
     });
   } catch (error) {
     const name = error instanceof StageError ? error.stage : "pool-verify-v1";
-    log(`TraceHound: ${name} failed or returned invalid output; nothing posted.`);
+    log(`TraceHound: ${name} failed or returned invalid output; nothing posted (${formatStageCounts(counts)}).`);
     return null;
   } finally {
     if (directory) await rm(directory, { recursive: true, force: true });

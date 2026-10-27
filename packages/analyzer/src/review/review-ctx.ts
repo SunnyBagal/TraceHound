@@ -10,6 +10,7 @@ import { buildChunkContext, CONTEXT_BUDGET_CHARS, type ContextRecord, type GitSo
 import { chunkDiff, CHUNK_LIMIT_CHARS, parseDiff, renderChunk } from "./diff.ts";
 import { REVIEW_CTX_SYSTEM_PROMPT, REVIEW_CTX_VERSION, reviewCtxUserMessage } from "./prompt-ctx.ts";
 import {
+  attemptDetail,
   DiffIndex,
   DROP_REASONS,
   parseReviewReply,
@@ -81,7 +82,9 @@ export async function reviewPullWithContext(
     const attempt = async (request: ChatRequest) => {
       rec.attempts++;
       try {
-        return { reply: await call(request) };
+        const reply = await call(request);
+        (rec.attemptsDetail ??= []).push(attemptDetail(reply));
+        return { reply };
       } catch (err) {
         if (err instanceof BudgetExceededError) throw err; // the run stops; never a silent empty chunk
         return { error: `request failed: ${(err as Error).message}` };
@@ -93,7 +96,7 @@ export async function reviewPullWithContext(
       rec.failure = a1.error;
       continue;
     }
-    let parsed = parseReviewReply(a1.reply.content);
+    let parsed = parseReviewReply(a1.reply.content, opts.parser);
     if (!parsed.ok) {
       const firstWhy = parsed.why;
       const messages: ChatMessage[] = [
@@ -101,13 +104,15 @@ export async function reviewPullWithContext(
         { role: "assistant", content: a1.reply.content },
         { role: "user", content: `Your reply was invalid: ${parsed.why}. Reply again with only the JSON object in the shape given.` },
       ];
-      const a2 = await attempt({ ...first, messages });
+      // "fresh": a reply cut off at max_tokens is retried as the original request with reasoning off
+      const fresh = opts.retryOnLength === "fresh" && a1.reply.finishReason === "length";
+      const a2 = await attempt(fresh ? { ...first, ...REASONING_OFF } : { ...first, messages });
       if ("error" in a2) {
         rec.status = "CHUNK_FAILED";
         rec.failure = `${firstWhy}; retry ${a2.error}`;
         continue;
       }
-      parsed = parseReviewReply(a2.reply.content);
+      parsed = parseReviewReply(a2.reply.content, opts.parser);
       if (!parsed.ok) {
         rec.status = "CHUNK_FAILED";
         rec.failure = `${firstWhy}; after one retry: ${parsed.why}`;

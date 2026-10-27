@@ -168,6 +168,8 @@ export interface TokenFactoryOptions {
   readCache?: boolean; // false = --no-cache: always call, still refresh the cache
   /** --cache-only: serve cache hits, throw CacheMissError on a miss; never reserve budget or fetch. */
   offline?: boolean;
+  /** false: a reply with finish_reason "length" is neither written to nor served from the cache (default true, today); keys unchanged */
+  cacheTruncated?: boolean;
   timeoutMs?: number;
   fetch?: typeof fetch;
   now?: () => Date;
@@ -196,6 +198,7 @@ export class TokenFactoryClient {
       baseUrl: opts.baseUrl ?? DEFAULT_BASE_URL,
       readCache: opts.readCache ?? true,
       offline: opts.offline ?? false,
+      cacheTruncated: opts.cacheTruncated ?? true,
       timeoutMs: opts.timeoutMs ?? 60_000,
       fetch: opts.fetch ?? globalThis.fetch,
       now: opts.now ?? (() => new Date()),
@@ -249,7 +252,7 @@ export class TokenFactoryClient {
 
     if (cache && this.#opts.readCache) {
       const hit = cache.get<CompletionBody>(key);
-      if (hit) {
+      if (hit && (this.#opts.cacheTruncated || hit.choices?.[0]?.finish_reason !== "length")) {
         return {
           content: hit.choices?.[0]?.message?.content ?? "",
           cached: true,
@@ -294,7 +297,8 @@ export class TokenFactoryClient {
       record(body, res.status);
       if (!res.ok) throw new LlmHttpError(`HTTP ${res.status}: ${errorText(body)}`);
       const content = body.choices?.[0]?.message?.content ?? "";
-      if (content || body.choices?.[0]?.message?.tool_calls?.length) cache?.put(key, body);
+      if ((content || body.choices?.[0]?.message?.tool_calls?.length)
+        && (this.#opts.cacheTruncated || body.choices?.[0]?.finish_reason !== "length")) cache?.put(key, body);
       return {
         content,
         cached: false,

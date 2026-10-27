@@ -5,6 +5,8 @@ prompts `docs/prompts/agent-v6.md` and `docs/prompts/agent-v6-amendment-1.md`, d
 `docs/build-log.md`). Nothing below changes until the evaluation is over. A change to any item
 means a new freeze with a new tag.
 
+**`review-freeze-2.1`** (decision 072, `86fd5d7`) is `review-freeze-2` (`0aeef06`) with only the Action's pnpm install step changed; the review pipeline and every result are `review-freeze-2`'s.
+
 **Which models the evaluation runs is decided by `docs/eval/protocol.md` (Nano and Super, always reported together); this file decides the code, prompts and settings, including each model's cost limit. Where a row below calls Super "not the evaluation's model", the protocol decides (owner's ruling, 2026-10-04, reproduce stage; no new tag).**
 
 **`eval-freeze` (agent-v5, 2026-10-03, PR #8) is superseded.** Its tag stays where it is, for
