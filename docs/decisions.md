@@ -3480,3 +3480,22 @@ reviewer or verifier calls at max_tokens in either. **Nothing is adopted;** the 
 cache namespace hold only on the NVIDIA route; verifier truncations are counted by matching attempt records' verdict
 usage, since verify-ctx ledgers as `review`.
 **Rejected:** raising the frozen `max_tokens` or the 300 s timeout after the smoke; Ultra on Token Factory (unaffordable).
+
+## 072 — review-freeze-2.1: the Action's install step only (2026-10-27)
+
+**Why:** in the seeded test, every TraceHound run on the Linea repo failed in the composite action's
+`pnpm/action-setup@v4` step with `Error: Multiple versions of pnpm specified`, before any model call. The action
+pins `version: 11.20.0`, `pnpm/action-setup` also reads the reviewed repo's root `package.json`, and that repo
+pins `"packageManager": "pnpm@9.0.0"`. So any repo that pins a different pnpm could not run TraceHound at all.
+**Choice:** `review-freeze-2.1` = `review-freeze-2` (`0aeef06`) plus one commit, `86fd5d7` on
+`release/review-freeze-2.1`, that changes only the install step of `.github/actions/tracehound-review/action.yml`:
+`actions/setup-node@v4` (node 24) first, then `npm install -g pnpm@11.20.0` run in the action's own checkout, so
+nothing reads the workspace's `package.json`. The `--frozen-lockfile --ignore-scripts --filter @tracehound/analyzer...`
+install and every later step are byte-identical. `git diff 0aeef06 86fd5d7 --stat` lists exactly
+`.github/actions/tracehound-review/action.yml | 9 +++++----`. The review code, prompts, config and bench scripts
+are identical to `review-freeze-2`, so every published result still describes `review-freeze-2`'s pipeline.
+Proof: `.github/workflows/action-install-matrix.yml` runs the install steps under six reviewed-repo root
+`package.json` cases (`pnpm@9.0.0`, `pnpm@10.0.0`, `pnpm@11.20.0`, `yarn@4.5.0`, `npm@10.8.0`, none). It fails
+for pnpm@9 on the old `action.yml` and passes all six after the fix (#68). The Action pin moves to the 2.1 commit.
+**Rejected:** keeping `pnpm/action-setup` with `package_json_file`, because its default path is resolved in the
+workspace and I could not show that it would point at the action's own `package.json`.
