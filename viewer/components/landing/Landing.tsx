@@ -122,7 +122,7 @@ export function Landing() {
             title="TraceHound"
             testId="nav-logo"
             markClassName="size-7"
-            className="lp-nav-logo shrink-0 text-[18px] font-semibold tracking-[-0.01em] text-ink! focus-visible:outline-ink!"
+            className="lp-nav-logo shrink-0 text-[18px] font-semibold tracking-[-0.01em]"
           >
             TraceHound
           </LogoLink>
