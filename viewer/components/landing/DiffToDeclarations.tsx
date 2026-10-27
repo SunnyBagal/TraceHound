@@ -1,3 +1,4 @@
+import { HUE } from "./RepoToGraph";
 import { ADDED_EDGE, CHANGE_COMPONENTS, COMMIT, COMMIT_DECLARATIONS, COMMIT_FILES, COMMIT_LINES, DECLARATIONS, fmt, IGNORED_BY_CONFIG } from "@/lib/landing";
 
 /**
@@ -34,7 +35,7 @@ export function DiffToDeclarations() {
   let dropped = 0;
   let row = 0;
   return (
-    <span className="dd" data-testid="diff-to-declarations" aria-hidden>
+    <span className="dd dd-shell" data-testid="diff-to-declarations" aria-hidden>
       {/* the counter: lines, then declarations */}
       <span className="dd-head">
         <span className="dd-count">
@@ -63,7 +64,7 @@ export function DiffToDeclarations() {
             );
           }
           return (
-            <span key={f.path} className="dd-seg dd-keep" style={grow} data-testid="kept-file" title={short(f.path)}>
+            <span key={f.path} className="dd-seg dd-keep" style={{ ...grow, "--c": HUE[DECLARATIONS.find((d) => d.file === f.path)!.component] } as React.CSSProperties} data-testid="kept-file" title={short(f.path)}>
               <span className="dd-fill" data-anim="grow" style={at(120 + i * 60, 420)} />
               <span className="dd-lit" data-anim="fade" style={at(B2 + 300, 500)} />
             </span>
@@ -72,7 +73,8 @@ export function DiffToDeclarations() {
       </span>
       <span className="dd-legend">
         <span className="dd-key" data-anim="in" style={at(B2 + 200, 400)}>
-          <i className="dd-swatch dd-swatch-keep" />
+          <i className="dd-swatch dd-swatch-keep" style={{ "--c": HUE[CHANGE_COMPONENTS[0].id] } as React.CSSProperties} />
+          <i className="dd-swatch dd-swatch-keep" style={{ "--c": HUE[CHANGE_COMPONENTS[1].id] } as React.CSSProperties} />
           {kept.length} files with a declaration · {keptLines} lines
         </span>
         <span className="dd-key" data-anim="in" style={at(B2 + 400, 400)}>
@@ -84,7 +86,7 @@ export function DiffToDeclarations() {
       {/* beats 3–4: the components and their declarations, then the new edge */}
       <span className="dd-cards">
         {CARDS.map((c, k) => (
-          <span key={c.id} className="dd-card" data-anim="in" style={at(B3 + k * 180, 500)} data-testid="change-component">
+          <span key={c.id} className="dd-card" data-anim="in" style={{ ...at(B3 + k * 180, 500), "--c": HUE[c.id] } as React.CSSProperties} data-testid="change-component">
             <span className="dd-card-head">
               <span className="dd-card-name" data-testid="change-component-name">
                 {c.name}

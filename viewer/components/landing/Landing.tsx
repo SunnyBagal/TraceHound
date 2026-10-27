@@ -74,7 +74,6 @@ const NAV = [
 
 const focusInk = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
 const focusAccent = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
-const h2 = "vh2";
 /** every section below the hero: a hairline-ruled band on the night page (Vite's grid), rising in as it scrolls into view */
 const glass = "lp-col lp-reveal vsection";
 
@@ -140,7 +139,7 @@ export function Landing() {
 
       <Hero />
 
-      {/* the caption under the picture, then the snow fades into the night the rest of the page sits in */}
+      {/* the caption under the picture; the night the rest of the page sits in starts right below it */}
       <div className="lp-fig">
         <div className="lp-fig-row">
           <span className="inline-flex items-center gap-2.5">
@@ -150,7 +149,6 @@ export function Landing() {
           <em>Every edge points at code.</em>
         </div>
       </div>
-      <div aria-hidden className="lp-dusk" />
 
       <section aria-label="Runs on" className="vgrid-row">
         <div className="lp-col vgrid-strip">
@@ -184,14 +182,15 @@ export function Landing() {
       <main className="flex flex-col">
         <section aria-labelledby="agents-write">
           <div className={glass}>
-            <h2 id="agents-write" className="text-[clamp(2.4rem,1rem+5.4vw,5.75rem)] font-semibold leading-[1] tracking-[-0.035em] text-text">
+            <p className="sec-kicker" data-tone="amber">Change sets</p>
+            <h2 id="agents-write" className="sec-h2">
               Understand what agents write.
             </h2>
-            <p className="mt-2 text-[clamp(2.4rem,1rem+5.4vw,5.75rem)] font-semibold leading-[1] tracking-[-0.035em] text-text" data-testid="strike-line">
+            <p className="sec-strike" data-testid="strike-line">
               Don&apos;t read <Strike>{fmt(COMMIT_LINES)}</Strike> lines. Read {COMMIT_DECLARATIONS}.
             </p>
-            <p className="mt-8">
-              <a href={CHANGES_HREF} className={`mono inline rounded-sm text-[14px] leading-relaxed text-muted underline decoration-line-strong underline-offset-4 hover:text-text hover:decoration-accent sm:text-[15px] ${focusAccent}`} data-testid="commit-caption">
+            <p className="mt-7">
+              <a href={CHANGES_HREF} className={`sec-chip ${focusAccent}`} data-testid="commit-caption">
                 Recall commit {COMMIT.short} · {COMMIT.files} files · {fmt(COMMIT.linesAdded)} added, {fmt(COMMIT.linesRemoved)} removed → {COMMIT.declarationsAdded} declarations added,{" "}
                 {COMMIT.declarationsModified} modified, {COMMIT.edgesAdded} new edge
               </a>
@@ -199,7 +198,7 @@ export function Landing() {
             <div className="mt-14">
               <AnimatedFigure
                 name="diff"
-                layout="beside"
+                art="amber"
                 title="Diff → declarations"
                 steps={[
                   { title: "The pull request", text: <>{mono(COMMIT.files)} files, {mono(fmt(COMMIT_LINES))} lines.</>, t: DIFF_BEATS[0] },
@@ -246,7 +245,8 @@ export function Landing() {
 
         <section id="how-it-works" aria-labelledby="how-it-works-title" className="lp-anchor">
           <div className={glass}>
-            <h2 id="how-it-works-title" className={h2}>
+            <p className="sec-kicker" data-tone="glacier">The graph</p>
+            <h2 id="how-it-works-title" className="sec-h2">
               How it works
             </h2>
             <div className="mt-12 flex flex-col gap-16">
@@ -308,7 +308,8 @@ export function Landing() {
 
         <section id="agents" aria-labelledby="agents-title" className="lp-anchor">
           <div className={glass}>
-            <h2 id="agents-title" className={h2}>
+            <p className="sec-kicker" data-tone="green">On NVIDIA Nemotron</p>
+            <h2 id="agents-title" className="sec-h2">
               Agents
             </h2>
             <ul className="mt-10 divide-y divide-panel-line border-y border-panel-line" data-testid="agent-rows">
@@ -394,7 +395,8 @@ export function Landing() {
 
         <section id="roadmap" aria-labelledby="roadmap-title" className="lp-anchor">
           <div className={glass}>
-            <h2 id="roadmap-title" className={h2}>
+            <p className="sec-kicker" data-tone="violet">Next</p>
+            <h2 id="roadmap-title" className="sec-h2">
               Roadmap
             </h2>
             <div className="mt-12">
