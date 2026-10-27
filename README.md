@@ -74,7 +74,7 @@ flowchart LR
 Stages we tried and dropped, each a loss on the dev set:
 [064, vote across runs](docs/decisions.md#064--vote-across-runs-dev-only-a-loss) and
 [065, evidence verifier + gate](docs/decisions.md#065--evidence-verifier--deterministic-gate-dev-only-a-loss).
-Every lever we tried is in the [levers table](docs/bench/results.md#6-precision-levers-tried-on-dev).
+Every lever we tried is in the [levers table](docs/bench/results.md#7-precision-levers-tried-on-dev).
 
 ## Results
 
@@ -245,7 +245,7 @@ tasks with the graph as without it, and never called a graph tool. See
 This section is the first look, v1 (pool-verify-v1 on Nemotron 3 Super, `review-freeze-1`,
 decisions 062 and 066). The product config's numbers are under [Results](#results).
 
-On 10 blind pull requests (Cal.com run 1, n = 23), TraceHound is statistically tied with Greptile and Cursor. Its run-1 F was 58.3% against CodeRabbit's 36.7%, but that is not a significant lead. No gap to another tool is outside its 95% interval. The CodeRabbit gap is the clearest: TraceHound is ahead in 96% of resamples, but its interval still includes 0 ([audit-cc01 §3.2](docs/bench/audit-cc01.md#32-bootstrap-95-ci-over-prs-for-the-calcom-f-difference)). Across all 50 pull requests it is 4th of 6 under both judges ([all-50 table](docs/bench/results.md#5-all-50-prs)). Every loss is published, including every precision lever we tried on dev ([levers table](docs/bench/results.md#6-precision-levers-tried-on-dev)); the run-to-run spread at temperature 0 is larger than every effect we tried to measure. Tool numbers come from their recorded reviews in the public benchmark dataset, scored with our judge; we did not run the tools. F under bench-judge-v1; details, losses and limits in [docs/bench/results.md](docs/bench/results.md).
+On 10 blind pull requests (Cal.com run 1, n = 23), TraceHound is statistically tied with Greptile and Cursor. Its run-1 F was 58.3% against CodeRabbit's 36.7%, but that is not a significant lead. No gap to another tool is outside its 95% interval. The CodeRabbit gap is the clearest: TraceHound is ahead in 96% of resamples, but its interval still includes 0 ([audit-cc01 §3.2](docs/bench/audit-cc01.md#32-bootstrap-95-ci-over-prs-for-the-calcom-f-difference)). Across all 50 pull requests it is 4th of 6 under both judges ([v1 all-50 table](https://github.com/SunnyBagal/TraceHound/blob/e91a268/docs/bench/results.md#5-all-50-prs)). Every loss is published, including every precision lever we tried on dev ([levers table](docs/bench/results.md#7-precision-levers-tried-on-dev)); the run-to-run spread at temperature 0 is larger than every effect we tried to measure. Tool numbers come from their recorded reviews in the public benchmark dataset, scored with our judge; we did not run the tools. F under bench-judge-v1; details, losses and limits in [docs/bench/results.md](docs/bench/results.md).
 
 | reviewer | F, blind (Cal.com run 1, n = 23) | F, dev (run 1, n = 74) |
 |---|---|---|
