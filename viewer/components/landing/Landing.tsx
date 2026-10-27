@@ -33,6 +33,7 @@ import { Pipeline } from "./Pipeline";
 import { GRAPH_BEATS, RepoToGraph, RepoToGraphWide } from "./RepoToGraph";
 import { RoadmapFlow } from "./RoadmapFlow";
 import { RunsOn } from "./RunsOn";
+import { HowlingWolf } from "./HowlingWolf";
 import { AgentsPanel } from "./AgentsPanel";
 import { Strike } from "./StrikeLine";
 import { TrustSection } from "./TrustSection";
@@ -363,16 +364,22 @@ export function Landing() {
         </section>
       </main>
 
-      <section aria-labelledby="cta-title" className="vband vcta">
-        <div className="lp-col py-24 text-center sm:py-32">
-          <h2 id="cta-title" className="vh2 mx-auto max-w-[16ch]">See your pull requests on the map.</h2>
-          <p className="mx-auto mt-5 max-w-[48ch] text-[17px] leading-relaxed text-muted">Open the graph, pick a pull request, and read its findings where they land.</p>
-          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-            <a href={GRAPH_HREF} className={`vbtn vbtn-primary ${focusAccent}`}>
-              <GithubMark className="size-4" /> Connect GitHub
-            </a>
-            <a href={reviewsHref()} className={`vbtn ${focusAccent}`}>Read the reviews</a>
-            <a href={`${base}/benchmark`} className={`vbtn ${focusAccent}`}>Benchmark</a>
+      <section aria-labelledby="cta-title" className="cta">
+        <div className="lp-col cta-grid">
+          <div className="cta-copy">
+            <p className="sec-kicker" data-tone="amber">Every edge points at code</p>
+            <h2 id="cta-title" className="sec-h2 max-w-[14ch]">See your pull requests on the map.</h2>
+            <p className="mt-5 max-w-[42ch] text-[17px] leading-relaxed text-muted">Open the graph, pick a pull request, and read its findings where they land.</p>
+            <div className="mt-9 flex flex-wrap items-center gap-3">
+              <a href={GRAPH_HREF} className={`vbtn vbtn-primary ${focusAccent}`}>
+                <GithubMark className="size-4" /> Connect GitHub
+              </a>
+              <a href={reviewsHref()} className={`vbtn ${focusAccent}`}>Read the reviews</a>
+              <a href={`${base}/benchmark`} className={`vbtn ${focusAccent}`}>Benchmark</a>
+            </div>
+          </div>
+          <div className="cta-wolf">
+            <HowlingWolf className="cta-canvas" />
           </div>
         </div>
       </section>

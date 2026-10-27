@@ -1469,3 +1469,11 @@ html:has(.landing) body {
 .rm-item:not([data-planned]) .rm-chip { border-color: #ffc46b; color: #ffc46b; }
 .rm-title { font-size: 16.5px; font-weight: 600; line-height: 1.35; color: var(--text); }
 .rm-text { font-size: 14.5px; line-height: 1.55; color: var(--muted); }
+
+/* ---------- the closing band: the call to action and the hound howling (greptile's halftone, our night) ---------- */
+.cta { position: relative; overflow: hidden; border-top: 1px solid var(--hairline); background: radial-gradient(60% 70% at 78% 85%, rgba(245, 165, 36, 0.13), transparent 70%), var(--page-bg); }
+.cta-grid { display: grid; grid-template-columns: 1fr; align-items: end; gap: 12px; }
+@media (min-width: 960px) { .cta-grid { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); } }
+.cta-copy { padding-top: clamp(64px, 9vw, 120px); padding-bottom: clamp(24px, 6vw, 110px); }
+.cta-wolf { position: relative; margin-right: calc(-1 * var(--landing-gutter)); padding-top: clamp(24px, 4vw, 60px); }
+.cta-canvas { display: block; width: 100%; aspect-ratio: 560 / 440; filter: drop-shadow(0 0 6px rgba(245, 165, 36, 0.45)) drop-shadow(0 0 22px rgba(245, 165, 36, 0.18)); }
