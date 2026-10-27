@@ -40,7 +40,7 @@ pool-verify-v1 on Nemotron 3.5 Super (`nvidia/Nemotron-3.5-Super-VL`) at `review
 ## Install block for shot 8
 
 The review job from `docs/action/example-workflow.yml`, without the graph-history job, pinned to
-`0aeef06` (tag `review-freeze-2`), with the product model set explicitly, as in the README.
+`review-freeze-2.1` (`86fd5d7`), with the product model set explicitly, as in the README.
 
 ```yaml
 name: TraceHound review
@@ -61,7 +61,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@0aeef06fa8742cc8a36581c3894e554b8748c965 # review-freeze-2
+      - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@86fd5d796c901cb20177cda28c4925e8c72d0901 # review-freeze-2.1
         with:
           nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
           model: 'nvidia/Nemotron-3.5-Super-VL'

@@ -71,7 +71,8 @@ they differ from `docs/bench/results.md`), and the graph (the repo map the proje
 PRs ([[TBD-SEEDED]]) without a Nebius key. They can't trigger a new review on the demo repo: that
 needs write access, because the Action runs only on same-repository pull requests (forks get no
 repository secrets) and every review spends our Token Factory key. The demo repo runs the Action
-pinned to `0aeef06` with the 3.5 model set explicitly; on demo PR #2 that config posted no findings
+pinned to `review-freeze-2.1` (`86fd5d7`), the measured pipeline with an install fix,
+with the 3.5 model set explicitly; on demo PR #2 that config posted no findings
 (24 Oct). The older reviews on the demo repo came from earlier generators on Nemotron Nano, not the
 current config.
 
@@ -173,6 +174,9 @@ Codex, Devin, Grok and Gemini.
 
 ## Challenges we ran into
 
+- **Our own Action failed before review.** The seeded test caught an install bug: on a repo
+  pinning another pnpm version via `packageManager`, the setup step failed before any model call.
+  We fixed it as `review-freeze-2.1`, a one-file change with the review code unchanged (decision 072).
 - **The graph didn't help.** The project started as a component graph to guide a repair agent. In
   a pre-registered held-out evaluation (8 seeded bugs, 160 runs), graph on and off resolved about
   the same (Nano 11 vs 13 of 40, Super 28 vs 26 of 40), and the agent never called a graph tool in
