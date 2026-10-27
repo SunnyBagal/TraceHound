@@ -23,7 +23,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       # Update this main-commit pin by hand after action changes.
-      - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@0aeef06fa8742cc8a36581c3894e554b8748c965 # review-freeze-2
+      - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@86fd5d796c901cb20177cda28c4925e8c72d0901 # review-freeze-2.1
         with:
           nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
           model: 'nvidia/Nemotron-3.5-Super-VL'

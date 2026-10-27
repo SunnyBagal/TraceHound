@@ -39,13 +39,14 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: pnpm/action-setup@v4
-      with:
-        version: 11.20.0
-        run_install: false
     - uses: actions/setup-node@v4
       with:
         node-version: '24'
+    # Not pnpm/action-setup: it reads the reviewed repo's package.json "packageManager" and fails on a mismatch.
+    - name: Install pnpm
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: npm install -g pnpm@11.20.0
     - name: Install TraceHound reviewer dependencies
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
