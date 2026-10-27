@@ -334,3 +334,26 @@ describe("stage counts in nothing-posted log lines", () => {
     expect(f.posts).toEqual([]);
   });
 });
+
+describe("poolNullLines option", () => {
+  const fileLevel = { ...finding, line: null };
+  it.each([
+    ["same path, both lines null", [fileLevel], [{ ...fileLevel, path: "./src/widget.ts", body: "other words" }], 1, ["both"]],
+    ["different paths, both lines null", [fileLevel], [{ ...fileLevel, path: "src/other.ts" }], 2, ["diff", "ctx"]],
+    ["one line null", [finding], [fileLevel], 2, ["diff", "ctx"]],
+  ] as const)('"merge": %s', (_name, diff, ctx, size, sources) => {
+    expect(poolFindings([...diff], [...ctx], "merge")).toHaveLength(size);
+    expect(poolSources([...diff], [...ctx], "merge")).toEqual(sources);
+    expect(poolFindings([...diff], [...ctx])).toHaveLength(diff.length + ctx.length);
+  });
+
+  it.each([[undefined, 2, ["diff", "ctx"]], ["merge", 1, ["both"]]] as const)("runPipeline with poolNullLines %s", async (mode, pool, sources) => {
+    const f = fake();
+    f.overrides.review = { pr_title: input.title, pr_number: input.number, comments: [fileLevel],
+      review: { model: "fake-model", chunkFailed: 0, chunks: [{ status: "OK" }] } };
+    const result = await runPipeline(input, "fake-model", "/fake/repo", "abc123", f.log, f.exec, mode ? { poolNullLines: mode } : {});
+    expect(result?.pipeline.pool).toBe(pool);
+    expect(result?.sources).toEqual(sources);
+    await f.cleaned();
+  });
+});
