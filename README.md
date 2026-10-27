@@ -42,10 +42,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      # 0aeef06… is the commit tagged review-freeze-2, the frozen release that was measured.
+      # 86fd5d7 is the commit tagged review-freeze-2.1: the measured review pipeline of
+      # review-freeze-2 (0aeef06) with only the install step changed (decision 072).
       # The model runs every review stage (both reviewers and the verifier) on Nemotron 3.5
       # Super VL; fixes run on Nemotron 3 Super.
-      - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@0aeef06fa8742cc8a36581c3894e554b8748c965 # review-freeze-2
+      - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@86fd5d796c901cb20177cda28c4925e8c72d0901 # review-freeze-2.1
         with:
           nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
           model: 'nvidia/Nemotron-3.5-Super-VL'
@@ -89,7 +90,8 @@ Every lever we tried is in the [levers table](docs/bench/results.md#7-precision-
 
 Every result below is the product: **pool-verify-v1 on Nemotron 3.5 Super
 (`nvidia/Nemotron-3.5-Super-VL`) at tag `review-freeze-2` (`0aeef06`)**, via Nebius Token Factory,
-called TraceHound v2 here. Benchmark: `ai-code-review-evaluations/golden_comments` (5 repos × 10
+called TraceHound v2 here. The review pipeline at `review-freeze-2`; the Action at
+`review-freeze-2.1` fixes installation only. Benchmark: `ai-code-review-evaluations/golden_comments` (5 repos × 10
 PRs). F is scored by bench-judge-v1 (the scorer of record) with bench-judge-x1 as a second judge.
 The tools' rows are their recorded reviews in the public dataset, scored with our judges; we did not
 run the tools.
@@ -190,7 +192,7 @@ the only interval that excludes 0. Under judge x1: pool-verify-v1 54.9, pool-raw
 ## Live demo
 
 [`SunnyBagal/tracehound-demo`](https://github.com/SunnyBagal/tracehound-demo) runs the Action pinned
-to `@0aeef06` with the 3.5 model set explicitly. On demo PR #2, the current config posted no
+to `review-freeze-2.1` (`86fd5d7`) with the 3.5 model set explicitly. On demo PR #2, the current config posted no
 findings (24 Oct). The older reviews posted there came from earlier generators on Nemotron Nano and
 are not the current config. Seeded PRs on the current config: [[TBD-SEEDED]].
 
