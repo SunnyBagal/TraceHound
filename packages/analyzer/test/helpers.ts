@@ -40,13 +40,14 @@ export const TEST_PRICES = PriceTable.parse({
 });
 
 /** TokenFactoryClient wired to a fake fetch and a throwaway ledger/cache directory. */
-export function fakeClient(fetchImpl: typeof fetch, opts: { caps?: BudgetCaps; readCache?: boolean; offline?: boolean; dir?: string; spentBefore?: number; baseUrl?: string } = {}) {
+export function fakeClient(fetchImpl: typeof fetch, opts: { caps?: BudgetCaps; readCache?: boolean; offline?: boolean; dir?: string; spentBefore?: number; baseUrl?: string; cacheTruncated?: boolean } = {}) {
   const dir = opts.dir ?? mkdtempSync(path.join(tmpdir(), "tracehound-test-"));
   const ledger = new SpendLedger(path.join(dir, "spend.jsonl"));
   const budget = new Budget(opts.caps ?? { totalUSD: 45, runUSD: 1 }, opts.spentBefore ?? ledger.totalUSD());
   const client = new TokenFactoryClient({
     apiKey: "test-key", prices: TEST_PRICES, budget, ledger, cache: new ResponseCache(path.join(dir, "cache")),
     readCache: opts.readCache ?? true, offline: opts.offline, fetch: fetchImpl, baseUrl: opts.baseUrl,
+    ...(opts.cacheTruncated !== undefined && { cacheTruncated: opts.cacheTruncated }),
   });
   return { client, ledger, budget, dir };
 }

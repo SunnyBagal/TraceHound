@@ -1,5 +1,5 @@
 import { newSideLines, parseDiff } from "../../analyzer/src/review/diff.ts";
-import type { FindingSource, PipelineCounts, PipelineOutput } from "./pipeline.ts";
+import { formatStageCounts, type FindingSource, type PipelineCounts, type PipelineOutput } from "./pipeline.ts";
 import type { Fix, FixOutput } from "./fix.ts";
 import { filterFeedback, readFeedback, type SuppressedFinding } from "./learn.ts";
 import { contractsSection, placeContracts, settleContracts, type ContractDelivery, type ContractsResult, type ContractsSummary } from "./contracts.ts";
@@ -49,6 +49,8 @@ export interface Options {
   learn?: "on" | "off";
   contracts?: "on" | "off";
   serverUrl?: string;
+  /** order before the max-comments cap: "pool" (default, today) or "agreement-first" (both, then diff, then ctx; stable) */
+  capOrder?: "pool" | "agreement-first";
 }
 
 export interface Dependencies {
@@ -218,6 +220,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     throw new Error("Invalid reviewer");
   }
   if (options.fixes !== undefined && options.fixes !== "on" && options.fixes !== "off") throw new Error("Invalid fixes input");
+  if (options.capOrder !== undefined && options.capOrder !== "pool" && options.capOrder !== "agreement-first") throw new Error("Invalid capOrder option");
   if (event.repository.full_name.toLowerCase() === "calcom/cal.com") {
     deps.log("TraceHound: benchmark test-set repository refused; nothing posted.");
     return;
@@ -246,6 +249,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
   }
   let output: ReturnType<typeof readOutput>;
   let pipeline: PipelineCounts | undefined;
+  let stages: PipelineOutput["stages"];
   let sources: FindingSource[] = [];
   const contractsTask = contractsMode === "on"
     ? settleContracts(deps.runContracts && (() => deps.runContracts!(options.repoDir ?? "",
@@ -256,6 +260,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
       const result = await deps.runPipeline(buildInput(event, diff), options.model, options.repoDir ?? "", event.pull_request.head.sha);
       if (!result) { await contractsTask; return; }
       pipeline = result.pipeline;
+      stages = result.stages;
       sources = result.sources;
       output = readOutput(result);
     } else {
@@ -289,8 +294,15 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     sources = filtered.indexes.map(index => sources[index]!);
     suppressed = filtered.suppressed;
   }
+  if (options.capOrder === "agreement-first") {
+    const rank: Record<FindingSource, number> = { both: 0, diff: 1, ctx: 2 };
+    const order = output.comments.map((_, i) => i).sort((a, b) => rank[sources[a]!] - rank[sources[b]!] || a - b);
+    output.comments = order.map(i => output.comments[i]!);
+    sources = order.map(i => sources[i]!);
+  }
   if (!output.comments.length && !suppressed?.length && !contractsResult.findings.length) {
-    deps.log("TraceHound: reviewer returned no findings; nothing posted.");
+    deps.log(`TraceHound: reviewer returned no findings; nothing posted${pipeline && stages
+      ? ` (${formatStageCounts({ ...stages, pool: pipeline.pool, kept: pipeline.kept, posted: 0 })})` : ""}.`);
     return;
   }
   const model = output.model || options.model || "reviewer default";

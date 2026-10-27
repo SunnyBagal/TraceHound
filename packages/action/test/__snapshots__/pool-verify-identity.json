@@ -1,0 +1,993 @@
+{
+ "log": [
+  [
+   "TraceHound: posted review with 3 findings."
+  ]
+ ],
+ "posts": [
+  {
+   "commit_id": "<head>",
+   "event": "COMMENT",
+   "body": "TraceHound · pool-verify-v1 · fake-model · 5 findings (pool 6, kept 5)\n\n6 of 10 reviewer chunks failed (invalid model reply); this review is partial.\n\n2 findings omitted by max-comments.\n\nThese comments are model-generated and unverified.\n\n<!-- tracehound:v1 {\"version\":1,\"pipeline\":\"pool-verify-v1\",\"headSha\":\"<head>\",\"pool\":6,\"kept\":5,\"chunkFailed\":{\"diff\":3,\"ctx\":3},\"posted\":3,\"fixes\":{\"attempted\":3,\"valid\":0,\"rejected\":3},\"findings\":[{\"path\":\"src/a.ts\",\"line\":2,\"source\":\"diff\",\"hasSuggestion\":false},{\"path\":\"src/e.ts\",\"line\":20,\"source\":\"diff\",\"hasSuggestion\":false},{\"path\":\"src/e.ts\",\"line\":30,\"source\":\"diff\",\"hasSuggestion\":false}]} -->",
+   "comments": [
+    {
+     "path": "src/a.ts",
+     "line": 2,
+     "body": "A2 diff finding",
+     "side": "RIGHT"
+    },
+    {
+     "path": "src/e.ts",
+     "line": 20,
+     "body": "E20 verifier reply invalid",
+     "side": "RIGHT"
+    },
+    {
+     "path": "src/e.ts",
+     "line": 30,
+     "body": "E30 kept",
+     "side": "RIGHT"
+    }
+   ]
+  }
+ ],
+ "outputs": {
+  "review": {
+   "pr_title": "Synthetic PR",
+   "pr_number": 7,
+   "comments": [
+    {
+     "path": "src/a.ts",
+     "line": 2,
+     "body": "A2 diff finding"
+    },
+    {
+     "path": "src/e.ts",
+     "line": 10,
+     "body": "E10 verifier drops this"
+    },
+    {
+     "path": "src/e.ts",
+     "line": 20,
+     "body": "E20 verifier reply invalid"
+    },
+    {
+     "path": "src/e.ts",
+     "line": 30,
+     "body": "E30 kept"
+    },
+    {
+     "path": "src/e.ts",
+     "line": 40,
+     "body": "E40 both reviewers"
+    }
+   ],
+   "review": {
+    "version": "review-diff-v1",
+    "model": "fake-model",
+    "reasoning": "on",
+    "promptSha256": "f77c203105111e02222d8f1c985a4629d9ac8cdd07b465fdb526cf1dddea4849",
+    "diffChars": 156670,
+    "files": 5,
+    "chunks": [
+     {
+      "index": 0,
+      "files": [
+       "src/a.ts"
+      ],
+      "diffChars": 31334,
+      "overLimit": false,
+      "status": "OK",
+      "attempts": 1,
+      "findings": 2,
+      "kept": 1,
+      "dropped": {
+       "malformed": 1,
+       "path-not-in-diff": 0,
+       "file-deleted": 0,
+       "line-not-in-new-version": 0
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ]
+     },
+     {
+      "index": 1,
+      "files": [
+       "src/b.ts"
+      ],
+      "diffChars": 31334,
+      "overLimit": false,
+      "status": "CHUNK_FAILED",
+      "attempts": 2,
+      "findings": 0,
+      "kept": 0,
+      "dropped": {
+       "malformed": 0,
+       "path-not-in-diff": 0,
+       "file-deleted": 0,
+       "line-not-in-new-version": 0
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       },
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ],
+      "failure": "the reply is not valid JSON; after one retry: the reply is not valid JSON"
+     },
+     {
+      "index": 2,
+      "files": [
+       "src/c.ts"
+      ],
+      "diffChars": 31334,
+      "overLimit": false,
+      "status": "CHUNK_FAILED",
+      "attempts": 2,
+      "findings": 0,
+      "kept": 0,
+      "dropped": {
+       "malformed": 0,
+       "path-not-in-diff": 0,
+       "file-deleted": 0,
+       "line-not-in-new-version": 0
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "length",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       },
+       {
+        "finishReason": "length",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ],
+      "failure": "the reply is not valid JSON; after one retry: the reply is not valid JSON"
+     },
+     {
+      "index": 3,
+      "files": [
+       "src/d.ts"
+      ],
+      "diffChars": 31334,
+      "overLimit": false,
+      "status": "CHUNK_FAILED",
+      "attempts": 2,
+      "findings": 0,
+      "kept": 0,
+      "dropped": {
+       "malformed": 0,
+       "path-not-in-diff": 0,
+       "file-deleted": 0,
+       "line-not-in-new-version": 0
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": true
+       },
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": true
+       }
+      ],
+      "failure": "the reply is not valid JSON; after one retry: the reply is not valid JSON"
+     },
+     {
+      "index": 4,
+      "files": [
+       "src/e.ts"
+      ],
+      "diffChars": 31334,
+      "overLimit": false,
+      "status": "OK",
+      "attempts": 1,
+      "findings": 4,
+      "kept": 4,
+      "dropped": {
+       "malformed": 0,
+       "path-not-in-diff": 0,
+       "file-deleted": 0,
+       "line-not-in-new-version": 0
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ]
+     }
+    ],
+    "chunkFailed": 3,
+    "findings": 6,
+    "dropped": {
+     "malformed": 1,
+     "path-not-in-diff": 0,
+     "file-deleted": 0,
+     "line-not-in-new-version": 0
+    },
+    "usage": {
+     "calls": 8,
+     "cached": 0,
+     "inputTokens": 800,
+     "outputTokens": 400,
+     "costUSD": 0,
+     "latencyMs": 0
+    },
+    "wallMs": 0
+   }
+  },
+  "review-ctx": {
+   "pr_title": "Synthetic PR",
+   "pr_number": 7,
+   "comments": [
+    {
+     "path": "src/e.ts",
+     "line": 41,
+     "body": "E41 both reviewers (ctx)"
+    },
+    {
+     "path": "src/e.ts",
+     "line": 100,
+     "body": "E100 ctx only"
+    }
+   ],
+   "review": {
+    "version": "review-ctx-v1",
+    "model": "fake-model",
+    "reasoning": "on",
+    "promptSha256": "0c4dcdcf4d764919b87c581278943e1c6d7b0714aa72b0f3cf60aa0f728089e0",
+    "diffChars": 156670,
+    "files": 5,
+    "chunks": [
+     {
+      "index": 0,
+      "files": [
+       "src/a.ts"
+      ],
+      "diffChars": 31334,
+      "overLimit": false,
+      "status": "OK",
+      "attempts": 1,
+      "findings": 1,
+      "kept": 0,
+      "dropped": {
+       "malformed": 1,
+       "path-not-in-diff": 0,
+       "file-deleted": 0,
+       "line-not-in-new-version": 0
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ]
+     },
+     {
+      "index": 1,
+      "files": [
+       "src/b.ts"
+      ],
+      "diffChars": 31334,
+      "overLimit": false,
+      "status": "CHUNK_FAILED",
+      "attempts": 2,
+      "findings": 0,
+      "kept": 0,
+      "dropped": {
+       "malformed": 0,
+       "path-not-in-diff": 0,
+       "file-deleted": 0,
+       "line-not-in-new-version": 0
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       },
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ],
+      "failure": "the reply is not valid JSON; after one retry: the reply is not valid JSON"
+     },
+     {
+      "index": 2,
+      "files": [
+       "src/c.ts"
+      ],
+      "diffChars": 31334,
+      "overLimit": false,
+      "status": "CHUNK_FAILED",
+      "attempts": 2,
+      "findings": 0,
+      "kept": 0,
+      "dropped": {
+       "malformed": 0,
+       "path-not-in-diff": 0,
+       "file-deleted": 0,
+       "line-not-in-new-version": 0
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "length",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       },
+       {
+        "finishReason": "length",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ],
+      "failure": "the reply is not valid JSON; after one retry: the reply is not valid JSON"
+     },
+     {
+      "index": 3,
+      "files": [
+       "src/d.ts"
+      ],
+      "diffChars": 31334,
+      "overLimit": false,
+      "status": "CHUNK_FAILED",
+      "attempts": 2,
+      "findings": 0,
+      "kept": 0,
+      "dropped": {
+       "malformed": 0,
+       "path-not-in-diff": 0,
+       "file-deleted": 0,
+       "line-not-in-new-version": 0
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": true
+       },
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": true
+       }
+      ],
+      "failure": "the reply is not valid JSON; after one retry: the reply is not valid JSON"
+     },
+     {
+      "index": 4,
+      "files": [
+       "src/e.ts"
+      ],
+      "diffChars": 31334,
+      "overLimit": false,
+      "status": "OK",
+      "attempts": 1,
+      "findings": 2,
+      "kept": 2,
+      "dropped": {
+       "malformed": 0,
+       "path-not-in-diff": 0,
+       "file-deleted": 0,
+       "line-not-in-new-version": 0
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ]
+     }
+    ],
+    "chunkFailed": 3,
+    "findings": 3,
+    "dropped": {
+     "malformed": 1,
+     "path-not-in-diff": 0,
+     "file-deleted": 0,
+     "line-not-in-new-version": 0
+    },
+    "usage": {
+     "calls": 8,
+     "cached": 0,
+     "inputTokens": 800,
+     "outputTokens": 400,
+     "costUSD": 0,
+     "latencyMs": 0
+    },
+    "wallMs": 0,
+    "head": "<head>",
+    "context": [
+     {
+      "chunk": 0,
+      "chars": 39751,
+      "files": [
+       {
+        "path": "src/a.ts",
+        "status": "windows",
+        "fileChars": 30023,
+        "shownChars": 39707
+       }
+      ],
+      "names": [],
+      "references": {
+       "matches": 0,
+       "selected": 0,
+       "shown": 0,
+       "droppedForBudget": 0,
+       "perName": {}
+      },
+      "cut": {
+       "references": 0,
+       "filesToWindows": 0,
+       "filesDropped": 0
+      }
+     },
+     {
+      "chunk": 1,
+      "chars": 39751,
+      "files": [
+       {
+        "path": "src/b.ts",
+        "status": "windows",
+        "fileChars": 30023,
+        "shownChars": 39707
+       }
+      ],
+      "names": [],
+      "references": {
+       "matches": 0,
+       "selected": 0,
+       "shown": 0,
+       "droppedForBudget": 0,
+       "perName": {}
+      },
+      "cut": {
+       "references": 0,
+       "filesToWindows": 0,
+       "filesDropped": 0
+      }
+     },
+     {
+      "chunk": 2,
+      "chars": 39751,
+      "files": [
+       {
+        "path": "src/c.ts",
+        "status": "windows",
+        "fileChars": 30023,
+        "shownChars": 39707
+       }
+      ],
+      "names": [],
+      "references": {
+       "matches": 0,
+       "selected": 0,
+       "shown": 0,
+       "droppedForBudget": 0,
+       "perName": {}
+      },
+      "cut": {
+       "references": 0,
+       "filesToWindows": 0,
+       "filesDropped": 0
+      }
+     },
+     {
+      "chunk": 3,
+      "chars": 39751,
+      "files": [
+       {
+        "path": "src/d.ts",
+        "status": "windows",
+        "fileChars": 30023,
+        "shownChars": 39707
+       }
+      ],
+      "names": [],
+      "references": {
+       "matches": 0,
+       "selected": 0,
+       "shown": 0,
+       "droppedForBudget": 0,
+       "perName": {}
+      },
+      "cut": {
+       "references": 0,
+       "filesToWindows": 0,
+       "filesDropped": 0
+      }
+     },
+     {
+      "chunk": 4,
+      "chars": 39751,
+      "files": [
+       {
+        "path": "src/e.ts",
+        "status": "windows",
+        "fileChars": 30023,
+        "shownChars": 39707
+       }
+      ],
+      "names": [],
+      "references": {
+       "matches": 0,
+       "selected": 0,
+       "shown": 0,
+       "droppedForBudget": 0,
+       "perName": {}
+      },
+      "cut": {
+       "references": 0,
+       "filesToWindows": 0,
+       "filesDropped": 0
+      }
+     }
+    ]
+   }
+  },
+  "verify-ctx": {
+   "pr_title": "Synthetic PR",
+   "pr_number": 7,
+   "comments": [
+    {
+     "path": "src/a.ts",
+     "line": 2,
+     "body": "A2 diff finding",
+     "verdict": "keep",
+     "reason": "stub keep",
+     "status": "VERIFIED",
+     "attempts": 1,
+     "context": {
+      "chars": 14835,
+      "window": {
+       "status": "shown",
+       "fileLines": 1201,
+       "anchor": 2,
+       "from": 1,
+       "to": 82,
+       "radius": 80,
+       "chars": 2763
+      },
+      "diff": {
+       "status": "shown",
+       "hunks": 1,
+       "selected": 1,
+       "shown": 1,
+       "omittedOverLimit": 0,
+       "truncated": true,
+       "chars": 12028
+      },
+      "names": {
+       "enclosing": null,
+       "defined": null,
+       "called": [],
+       "all": []
+      },
+      "references": {
+       "matches": 0,
+       "selected": 0,
+       "shown": 0,
+       "perName": {},
+       "chars": 0
+      },
+      "cut": {
+       "references": 0,
+       "windowShrunk": false,
+       "windowLinesRemoved": 0,
+       "hunksDropped": 0,
+       "overBudget": false
+      }
+     },
+     "usage": {
+      "calls": 1,
+      "cached": 0,
+      "inputTokens": 100,
+      "outputTokens": 50,
+      "costUSD": 0,
+      "latencyMs": 0
+     }
+    },
+    {
+     "path": "src/e.ts",
+     "line": 10,
+     "body": "E10 verifier drops this",
+     "verdict": "drop",
+     "reason": "stub drop",
+     "status": "VERIFIED",
+     "attempts": 1,
+     "context": {
+      "chars": 15099,
+      "window": {
+       "status": "shown",
+       "fileLines": 1201,
+       "anchor": 10,
+       "from": 1,
+       "to": 90,
+       "radius": 80,
+       "chars": 3027
+      },
+      "diff": {
+       "status": "shown",
+       "hunks": 1,
+       "selected": 1,
+       "shown": 1,
+       "omittedOverLimit": 0,
+       "truncated": true,
+       "chars": 12028
+      },
+      "names": {
+       "enclosing": null,
+       "defined": null,
+       "called": [],
+       "all": []
+      },
+      "references": {
+       "matches": 0,
+       "selected": 0,
+       "shown": 0,
+       "perName": {},
+       "chars": 0
+      },
+      "cut": {
+       "references": 0,
+       "windowShrunk": false,
+       "windowLinesRemoved": 0,
+       "hunksDropped": 0,
+       "overBudget": false
+      }
+     },
+     "usage": {
+      "calls": 1,
+      "cached": 0,
+      "inputTokens": 100,
+      "outputTokens": 50,
+      "costUSD": 0,
+      "latencyMs": 0
+     }
+    },
+    {
+     "path": "src/e.ts",
+     "line": 20,
+     "body": "E20 verifier reply invalid",
+     "verdict": null,
+     "reason": null,
+     "status": "VERIFY_FAILED",
+     "attempts": 2,
+     "context": {
+      "chars": 15430,
+      "window": {
+       "status": "shown",
+       "fileLines": 1201,
+       "anchor": 20,
+       "from": 1,
+       "to": 100,
+       "radius": 80,
+       "chars": 3358
+      },
+      "diff": {
+       "status": "shown",
+       "hunks": 1,
+       "selected": 1,
+       "shown": 1,
+       "omittedOverLimit": 0,
+       "truncated": true,
+       "chars": 12028
+      },
+      "names": {
+       "enclosing": null,
+       "defined": null,
+       "called": [],
+       "all": []
+      },
+      "references": {
+       "matches": 0,
+       "selected": 0,
+       "shown": 0,
+       "perName": {},
+       "chars": 0
+      },
+      "cut": {
+       "references": 0,
+       "windowShrunk": false,
+       "windowLinesRemoved": 0,
+       "hunksDropped": 0,
+       "overBudget": false
+      }
+     },
+     "usage": {
+      "calls": 2,
+      "cached": 0,
+      "inputTokens": 200,
+      "outputTokens": 100,
+      "costUSD": 0,
+      "latencyMs": 0
+     },
+     "failure": "the reply is not valid JSON; after one retry: the reply is not valid JSON"
+    },
+    {
+     "path": "src/e.ts",
+     "line": 30,
+     "body": "E30 kept",
+     "verdict": "keep",
+     "reason": "stub keep",
+     "status": "VERIFIED",
+     "attempts": 1,
+     "context": {
+      "chars": 15760,
+      "window": {
+       "status": "shown",
+       "fileLines": 1201,
+       "anchor": 30,
+       "from": 1,
+       "to": 110,
+       "radius": 80,
+       "chars": 3688
+      },
+      "diff": {
+       "status": "shown",
+       "hunks": 1,
+       "selected": 1,
+       "shown": 1,
+       "omittedOverLimit": 0,
+       "truncated": true,
+       "chars": 12028
+      },
+      "names": {
+       "enclosing": null,
+       "defined": null,
+       "called": [],
+       "all": []
+      },
+      "references": {
+       "matches": 0,
+       "selected": 0,
+       "shown": 0,
+       "perName": {},
+       "chars": 0
+      },
+      "cut": {
+       "references": 0,
+       "windowShrunk": false,
+       "windowLinesRemoved": 0,
+       "hunksDropped": 0,
+       "overBudget": false
+      }
+     },
+     "usage": {
+      "calls": 1,
+      "cached": 0,
+      "inputTokens": 100,
+      "outputTokens": 50,
+      "costUSD": 0,
+      "latencyMs": 0
+     }
+    },
+    {
+     "path": "src/e.ts",
+     "line": 40,
+     "body": "E40 both reviewers",
+     "verdict": "keep",
+     "reason": "stub keep",
+     "status": "VERIFIED",
+     "attempts": 1,
+     "context": {
+      "chars": 16090,
+      "window": {
+       "status": "shown",
+       "fileLines": 1201,
+       "anchor": 40,
+       "from": 1,
+       "to": 120,
+       "radius": 80,
+       "chars": 4018
+      },
+      "diff": {
+       "status": "shown",
+       "hunks": 1,
+       "selected": 1,
+       "shown": 1,
+       "omittedOverLimit": 0,
+       "truncated": true,
+       "chars": 12028
+      },
+      "names": {
+       "enclosing": null,
+       "defined": null,
+       "called": [],
+       "all": []
+      },
+      "references": {
+       "matches": 0,
+       "selected": 0,
+       "shown": 0,
+       "perName": {},
+       "chars": 0
+      },
+      "cut": {
+       "references": 0,
+       "windowShrunk": false,
+       "windowLinesRemoved": 0,
+       "hunksDropped": 0,
+       "overBudget": false
+      }
+     },
+     "usage": {
+      "calls": 1,
+      "cached": 0,
+      "inputTokens": 100,
+      "outputTokens": 50,
+      "costUSD": 0,
+      "latencyMs": 0
+     }
+    },
+    {
+     "path": "src/e.ts",
+     "line": 100,
+     "body": "E100 ctx only",
+     "verdict": "keep",
+     "reason": "stub keep",
+     "status": "VERIFIED",
+     "attempts": 1,
+     "context": {
+      "chars": 17446,
+      "window": {
+       "status": "shown",
+       "fileLines": 1201,
+       "anchor": 100,
+       "from": 20,
+       "to": 180,
+       "radius": 80,
+       "chars": 5374
+      },
+      "diff": {
+       "status": "shown",
+       "hunks": 1,
+       "selected": 1,
+       "shown": 1,
+       "omittedOverLimit": 0,
+       "truncated": true,
+       "chars": 12028
+      },
+      "names": {
+       "enclosing": null,
+       "defined": null,
+       "called": [],
+       "all": []
+      },
+      "references": {
+       "matches": 0,
+       "selected": 0,
+       "shown": 0,
+       "perName": {},
+       "chars": 0
+      },
+      "cut": {
+       "references": 0,
+       "windowShrunk": false,
+       "windowLinesRemoved": 0,
+       "hunksDropped": 0,
+       "overBudget": false
+      }
+     },
+     "usage": {
+      "calls": 1,
+      "cached": 0,
+      "inputTokens": 100,
+      "outputTokens": 50,
+      "costUSD": 0,
+      "latencyMs": 0
+     }
+    }
+   ],
+   "verify": {
+    "version": "verify-ctx-v1",
+    "model": "fake-model",
+    "reasoning": "on",
+    "promptSha256": "75703fc6b34910f5bdebf29703023d6ec8e8cbbbfbc35574bfbf60830a383e70",
+    "head": "<head>",
+    "findings": 6,
+    "kept": 5,
+    "dropped": 1,
+    "verifyFailed": 1,
+    "retried": 1,
+    "usage": {
+     "calls": 7,
+     "cached": 0,
+     "inputTokens": 700,
+     "outputTokens": 350,
+     "costUSD": 0
+    },
+    "wallMs": 0
+   }
+  },
+  "kept": {
+   "pr_title": "Synthetic PR",
+   "pr_number": 7,
+   "comments": [
+    {
+     "path": "src/a.ts",
+     "line": 2,
+     "body": "A2 diff finding"
+    },
+    {
+     "path": "src/e.ts",
+     "line": 20,
+     "body": "E20 verifier reply invalid"
+    },
+    {
+     "path": "src/e.ts",
+     "line": 30,
+     "body": "E30 kept"
+    },
+    {
+     "path": "src/e.ts",
+     "line": 40,
+     "body": "E40 both reviewers"
+    },
+    {
+     "path": "src/e.ts",
+     "line": 100,
+     "body": "E100 ctx only"
+    }
+   ],
+   "verify": {
+    "version": "verify-ctx-v1",
+    "model": "fake-model",
+    "reasoning": "on",
+    "promptSha256": "75703fc6b34910f5bdebf29703023d6ec8e8cbbbfbc35574bfbf60830a383e70",
+    "head": "<head>",
+    "findings": 6,
+    "kept": 5,
+    "dropped": 1,
+    "verifyFailed": 1,
+    "retried": 1,
+    "usage": {
+     "calls": 7,
+     "cached": 0,
+     "inputTokens": 700,
+     "outputTokens": 350,
+     "costUSD": 0
+    },
+    "wallMs": 0
+   }
+  }
+ }
+}
