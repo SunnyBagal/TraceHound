@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { fakeClient } from "./helpers.ts";
 import type { ChatClient } from "../src/agent/decider.ts";
+import { ResponseCache } from "../src/llm/cache.ts";
 import type { ChatRequest, ChatResult } from "../src/llm/client.ts";
 import type { GitSource } from "../src/review/context.ts";
 import { reviewPullWithContext } from "../src/review/review-ctx.ts";
@@ -181,5 +182,26 @@ describe("cacheTruncated client option", () => {
     const [on, off] = [await run("stop"), await run("stop", false)];
     expect(off.calls).toBe(1);
     expect(off.cached).toEqual(on.cached);
+  });
+
+  // A length body cached by an earlier default run, seeded straight into the cache (no ledger entry).
+  const seeded = async (cacheTruncated?: boolean) => {
+    const f = counting("stop");
+    const { client, ledger, dir } = fakeClient(f.impl, cacheTruncated === undefined ? {} : { cacheTruncated });
+    new ResponseCache(path.join(dir, "cache")).put(ResponseCache.key(req.model, req), body("length"));
+    const result = await client.chat(req, { purpose: "review" });
+    return { calls: f.calls(), result, ledger: ledger.entries().map(({ timestamp: _t, ...e }) => e) };
+  };
+
+  it("default true: a pre-seeded length body is served from the cache (today)", async () => {
+    const r = await seeded();
+    expect(r).toMatchObject({ calls: 0, result: { cached: true, content: '{"findings":[', finishReason: "length" } });
+    expect(r.ledger).toEqual([]);
+  });
+
+  it("false: a pre-seeded length body is a miss, the request goes out, and its ledger entry is the uncached one", async () => {
+    const [fresh, off] = [await run("stop"), await seeded(false)];
+    expect(off).toMatchObject({ calls: 1, result: { cached: false, finishReason: "stop" } });
+    expect(off.ledger).toEqual([fresh.ledger[0]]);
   });
 });

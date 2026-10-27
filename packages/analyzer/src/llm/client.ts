@@ -168,7 +168,7 @@ export interface TokenFactoryOptions {
   readCache?: boolean; // false = --no-cache: always call, still refresh the cache
   /** --cache-only: serve cache hits, throw CacheMissError on a miss; never reserve budget or fetch. */
   offline?: boolean;
-  /** false: a reply with finish_reason "length" is not written to the cache (default true, today); keys unchanged */
+  /** false: a reply with finish_reason "length" is neither written to nor served from the cache (default true, today); keys unchanged */
   cacheTruncated?: boolean;
   timeoutMs?: number;
   fetch?: typeof fetch;
@@ -252,7 +252,7 @@ export class TokenFactoryClient {
 
     if (cache && this.#opts.readCache) {
       const hit = cache.get<CompletionBody>(key);
-      if (hit) {
+      if (hit && (this.#opts.cacheTruncated || hit.choices?.[0]?.finish_reason !== "length")) {
         return {
           content: hit.choices?.[0]?.message?.content ?? "",
           cached: true,
