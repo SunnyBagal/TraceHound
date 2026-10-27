@@ -8,46 +8,55 @@ export interface RoadmapItem {
   text: string;
 }
 
-const STEP = 450;
+const STEP = 520;
 const at = (t: number, d: number) => ({ "--t": `${t}ms`, "--d": `${d}ms` }) as React.CSSProperties;
 
+/** a paw print pointing up (rotated by CSS along the trail) */
+function Paw({ className, style, anim }: { className?: string; style?: React.CSSProperties; anim?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} style={style} data-anim={anim} aria-hidden>
+      <path d="M12 21.2c-2.9 0-6.1-1.6-6.1-4.3 0-2.4 2.6-5.6 6.1-5.6s6.1 3.2 6.1 5.6c0 2.7-3.2 4.3-6.1 4.3Z" />
+      <ellipse cx="5.2" cy="10.6" rx="2" ry="2.6" transform="rotate(-18 5.2 10.6)" />
+      <ellipse cx="9.1" cy="5.9" rx="2.1" ry="2.8" transform="rotate(-6 9.1 5.9)" />
+      <ellipse cx="14.9" cy="5.9" rx="2.1" ry="2.8" transform="rotate(6 14.9 5.9)" />
+      <ellipse cx="18.8" cy="10.6" rx="2" ry="2.6" transform="rotate(18 18.8 10.6)" />
+    </svg>
+  );
+}
+
 /**
- * The roadmap as a flow: from where things stand now through each planned item, the line drawing
- * from one to the next. It plays once, the first time it scrolls into view after the page loads;
- * it is not a button and a click never replays it. Reduced motion: the whole flow, static.
+ * The roadmap as the hound's trail: from where things stand now, a line of paw prints walks to
+ * each planned item in turn (left to right on wide screens, down on phones). It plays once, the
+ * first time it scrolls into view after the page loads; it is not a button and a click never
+ * replays it. Reduced motion: the whole trail, static.
  */
 export function RoadmapFlow({ now, items }: { now: RoadmapItem; items: readonly RoadmapItem[] }) {
   const ref = useRef<HTMLOListElement>(null);
   const [state] = usePlayOnView(ref, 0.25);
   const all = [{ ...now, planned: false }, ...items.map((i) => ({ ...i, planned: true }))];
   return (
-    <ol ref={ref} className="lp-anim grid gap-0 lg:grid-cols-5 lg:gap-4" data-state={state} data-testid="roadmap-flow">
+    <ol ref={ref} className="rm lp-anim" data-state={state} data-testid="roadmap-flow">
       {all.map((item, k) => {
         const t = k * STEP;
         const last = k === all.length - 1;
         return (
-          <li key={item.title} className="relative pb-8 pl-12 lg:pb-0 lg:pl-0 lg:pt-12" data-testid={item.planned ? "roadmap-item" : "roadmap-now"}>
-            {/* the line to the next item: down on phones, right on wide screens */}
-            {!last && (
-              <>
-                <span aria-hidden className="absolute left-[15px] top-8 h-[calc(100%-32px)] w-0.5 origin-top bg-line-strong lg:hidden" data-anim="growy" style={at(t + 200, 400)} />
-                <span aria-hidden className="absolute left-8 top-[15px] hidden h-0.5 w-[calc(100%-16px)] origin-left bg-line-strong lg:block" data-anim="grow" style={at(t + 200, 400)} />
-              </>
-            )}
-            <span
-              aria-hidden
-              className={`absolute left-0 top-0 grid size-8 place-items-center rounded-full border-2 ${item.planned ? "border-line-strong bg-panel" : "border-accent bg-accent-soft"}`}
-              data-anim="in"
-              style={at(t, 350)}
-            >
-              <span className={`size-2.5 rounded-full ${item.planned ? "bg-faint" : "bg-accent"}`} />
-            </span>
-            <div className="flex flex-col gap-2 lg:pr-2" data-anim="in" style={at(t + 100, 400)}>
-              <span className={`mono w-fit rounded-full border px-2.5 py-0.5 text-[12px] ${item.planned ? "border-line-strong text-muted" : "border-accent text-accent"}`}>
-                {item.planned ? "Planned" : "Now"}
+          <li key={item.title} className="rm-item" data-planned={item.planned || undefined} data-testid={item.planned ? "roadmap-item" : "roadmap-now"}>
+            <div className="rm-trail" aria-hidden>
+              <span className="rm-mark" data-anim="pop" style={at(t, 420)}>
+                <Paw className="rm-mark-paw" />
               </span>
-              <span className="text-[17px] font-semibold leading-snug text-text">{item.title}</span>
-              <span className="text-[15px] leading-relaxed text-muted">{item.text}</span>
+              {!last && (
+                <span className="rm-steps">
+                  {[0, 1, 2, 3].map((j) => (
+                    <Paw key={j} anim="fade" className="rm-paw" style={{ ...at(t + 220 + j * 85, 260), "--j": j } as React.CSSProperties} />
+                  ))}
+                </span>
+              )}
+            </div>
+            <div className="rm-card" data-anim="in" style={at(t + 120, 420)}>
+              <span className="rm-chip">{item.planned ? "Planned" : "Now"}</span>
+              <span className="rm-title">{item.title}</span>
+              <span className="rm-text">{item.text}</span>
             </div>
           </li>
         );
