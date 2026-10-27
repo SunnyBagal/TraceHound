@@ -872,3 +872,48 @@ html:has(.landing) body {
 .page-shell main > * { animation: page-in 360ms var(--ease-out) both; }
 @keyframes page-in { from { opacity: 0; transform: translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { .skeleton, .page-shell main > * { animation: none; } }
+
+/* ---------- benchmark page (5e) ---------- */
+.bench-tiles { display: grid; gap: 1px; grid-template-columns: 1fr; border: 1px solid var(--hairline); border-radius: 16px; overflow: hidden; background: var(--hairline); }
+@media (min-width: 760px) { .bench-tiles { grid-template-columns: repeat(3, 1fr); } }
+.bench-tile { display: flex; flex-direction: column; gap: 6px; padding: 24px; background: var(--panel-bg); }
+.bench-tile:first-child { background: var(--glow-amber), var(--panel-bg); }
+.bench-n { font-size: clamp(2rem, 1.4rem + 2vw, 2.75rem); font-weight: 500; letter-spacing: -0.035em; line-height: 1.05; color: var(--text); }
+.bench-l { font-size: 14px; line-height: 1.5; color: var(--muted); }
+.bench-tag { align-self: flex-start; margin-top: 6px; font-family: var(--font-code); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); border: 1px dashed var(--line-strong); border-radius: 6px; padding: 2px 6px; }
+.bench-dots { --name-w: 120px; position: relative; display: grid; gap: 10px; padding-bottom: 28px; }
+@media (max-width: 480px) { .bench-dots { --name-w: 84px; } }
+.bench-row { position: relative; z-index: 1; display: grid; grid-template-columns: var(--name-w) 1fr; align-items: center; gap: 14px; }
+.bench-overlay { position: absolute; left: calc(var(--name-w) + 14px); right: 0; top: 0; bottom: 0; pointer-events: none; }
+.bench-name { font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bench-row[data-ours] .bench-name { color: var(--text); font-weight: 600; }
+.bench-track { position: relative; height: 28px; border-radius: 999px; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.035), transparent); }
+.bench-track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px dashed var(--line-strong); }
+.bench-dot {
+  position: absolute; top: 50%; width: 12px; height: 12px; translate: -50% -50%; border-radius: 999px;
+  background: var(--muted); box-shadow: 0 0 0 3px var(--panel-bg);
+  animation: dot-in 600ms var(--ease-out) calc(var(--i) * 70ms) both;
+}
+.bench-row[data-ours] .bench-dot { width: 16px; height: 16px; background: var(--accent); box-shadow: 0 0 0 3px var(--panel-bg), 0 0 20px var(--accent-glow); }
+.bench-val { position: absolute; left: 50%; bottom: 150%; translate: -50% 0; font-family: var(--font-code); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.bench-row[data-ours] .bench-val { color: var(--accent); }
+@keyframes dot-in { from { opacity: 0; scale: 0.3; } }
+/* the band starts where the tracks start (after the name column) */
+.bench-band {
+  position: absolute; top: -6px; bottom: 22px; margin-inline: -10px; padding-inline: 10px; box-sizing: content-box;
+  border-radius: 10px; border: 1px dashed color-mix(in srgb, var(--glacier) 45%, transparent);
+  background: color-mix(in srgb, var(--glacier) 7%, transparent); pointer-events: none;
+}
+.bench-band span { position: absolute; right: 10px; top: 6px; font-family: var(--font-code); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--glacier); }
+.bench-axis { position: absolute; left: 0; right: 0; bottom: 0; height: 16px; }
+.bench-axis span { position: absolute; translate: -50% 0; font-family: var(--font-code); font-size: 10.5px; color: var(--faint); }
+.bench-spread { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.bench-spread li { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.bench-chip { font-family: var(--font-code); font-size: 11px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 6px; padding: 1px 6px; }
+.bench-chip-dev { color: var(--glacier); border-color: color-mix(in srgb, var(--glacier) 40%, transparent); }
+.bench-ours { background: linear-gradient(90deg, var(--accent-soft), transparent 70%); box-shadow: inset 2px 0 0 var(--accent); }
+.verdict { display: inline; border-radius: 6px; padding: 1px 6px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.verdict[data-tone="adopted"] { background: color-mix(in srgb, var(--diff-added) 14%, transparent); color: var(--diff-added); }
+.verdict[data-tone="loss"] { background: color-mix(in srgb, var(--diff-removed) 12%, transparent); color: #ffb4ae; }
+.verdict[data-tone="flat"] { background: rgba(255, 255, 255, 0.05); color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .bench-dot { animation: none; } }
