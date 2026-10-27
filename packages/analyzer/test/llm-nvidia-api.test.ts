@@ -2,11 +2,12 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
-import { Budget } from "../src/llm/budget.ts";
+import { describe, expect, it, vi } from "vitest";
+import { Budget, BudgetExceededError } from "../src/llm/budget.ts";
 import { ResponseCache } from "../src/llm/cache.ts";
 import {
   NVIDIA_API_BASE_URL,
+  NVIDIA_API_CACHE_NAMESPACE,
   NVIDIA_API_MODEL,
   nvidiaApiFromEnv,
   RateWindow,
@@ -16,7 +17,7 @@ import {
   type NvidiaApiOptions,
 } from "../src/llm/client.ts";
 import { SpendLedger } from "../src/llm/ledger.ts";
-import { loadPriceTable, priceFor } from "../src/llm/prices.ts";
+import { costUSD, estimateInputTokens, loadPriceTable, priceFor } from "../src/llm/prices.ts";
 
 const REPO_PRICES = path.resolve(import.meta.dirname, "../../../config/prices.json");
 const CENTRAL = "https://api.tokenfactory.us-central1.nebius.com/v1";
@@ -170,6 +171,83 @@ describe("price and ledger", () => {
     expect(r).toMatchObject({ costUSD: 0, inputTokens: 1200, outputTokens: 3400, finishReason: "stop", reasoningChars: 8 });
     expect(ledger.entries()).toEqual([expect.objectContaining({ model: NVIDIA_API_MODEL, inputTokens: 1200, outputTokens: 3400, estCostUSD: 0, ok: true, usageReported: true, priceEstimated: false })]);
     expect(JSON.stringify(ledger.entries())).not.toMatch(/https?:|nvidia\.com/);
+  });
+});
+
+describe("the $0 price and the cache namespace hold only on the NVIDIA route (review of #63)", () => {
+  function sharedClient(fetchImpl: typeof fetch, cacheDir: string, budget: Budget, nvidiaApi?: NvidiaApiOptions) {
+    const dir = mkdtempSync(path.join(tmpdir(), "tracehound-test-"));
+    return new TokenFactoryClient({
+      apiKey: NEBIUS_KEY,
+      prices: loadPriceTable(REPO_PRICES),
+      budget,
+      ledger: new SpendLedger(path.join(dir, "spend.jsonl")),
+      cache: new ResponseCache(cacheDir),
+      readCache: true,
+      fetch: fetchImpl,
+      ...(nvidiaApi && { nvidiaApi }),
+    });
+  }
+
+  it("reserves the placeholderFallback estimate for the lowercase Ultra id without the flag, and $0 with it", async () => {
+    const table = loadPriceTable(REPO_PRICES);
+    const fallback = costUSD({ ...table.placeholderFallback, estimated: true }, estimateInputTokens(request(NVIDIA_API_MODEL).messages), 32_000);
+    expect(fallback).toBeGreaterThan(0);
+    const cacheDir = mkdtempSync(path.join(tmpdir(), "tracehound-test-"));
+    const off = new Budget({ totalUSD: 45, runUSD: 1 }, 0);
+    const offReserve = vi.spyOn(off, "reserve");
+    const offFetch = recordingFetch();
+    const r = await sharedClient(offFetch.impl, cacheDir, off).chat(request(NVIDIA_API_MODEL), { purpose: "p" });
+    expect(offReserve.mock.calls.map((c) => c[0])).toEqual([fallback]);
+    expect(r.costUSD).toBeGreaterThan(0);
+    expect(offFetch.sent[0]!.url).toBe(`${CENTRAL}/chat/completions`);
+    const on = new Budget({ totalUSD: 45, runUSD: 1 }, 0);
+    const onReserve = vi.spyOn(on, "reserve");
+    await sharedClient(recordingFetch().impl, mkdtempSync(path.join(tmpdir(), "tracehound-test-")), on, nvidia()).chat(request(NVIDIA_API_MODEL), { purpose: "p" });
+    expect(onReserve.mock.calls.map((c) => c[0])).toEqual([0]);
+  });
+
+  it("refuses an unflagged lowercase Ultra request that the run cap cannot cover, before sending it", async () => {
+    const f = recordingFetch();
+    const c = sharedClient(f.impl, mkdtempSync(path.join(tmpdir(), "tracehound-test-")), new Budget({ totalUSD: 45, runUSD: 0.1 }, 0));
+    await expect(c.chat(request(NVIDIA_API_MODEL), { purpose: "p" })).rejects.toBeInstanceOf(BudgetExceededError);
+    expect(f.sent).toHaveLength(0);
+  });
+
+  it("never shares a cache entry between flagged and unflagged requests; unflagged keys are unchanged", async () => {
+    const cacheDir = mkdtempSync(path.join(tmpdir(), "tracehound-test-"));
+    const budget = () => new Budget({ totalUSD: 45, runUSD: 1 }, 0);
+    const req = request(NVIDIA_API_MODEL);
+    const cache = new ResponseCache(cacheDir);
+    const offKey = ResponseCache.key(NVIDIA_API_MODEL, req);
+    const onKey = ResponseCache.key(`${NVIDIA_API_CACHE_NAMESPACE}${NVIDIA_API_MODEL}`, req);
+    expect(onKey).not.toBe(offKey);
+
+    const off1 = recordingFetch();
+    expect((await sharedClient(off1.impl, cacheDir, budget()).chat(req, { purpose: "p" })).cached).toBe(false);
+    expect(cache.get(offKey)).toBeDefined();
+    expect(cache.get(onKey)).toBeUndefined();
+
+    const on1 = recordingFetch();
+    expect((await sharedClient(on1.impl, cacheDir, budget(), nvidia()).chat(req, { purpose: "p" })).cached).toBe(false);
+    expect(on1.sent).toHaveLength(1);
+    expect(on1.sent[0]!.url).toBe(`${NVIDIA_API_BASE_URL}/chat/completions`);
+    expect(cache.get(onKey)).toBeDefined();
+
+    // each route now hits only its own entry
+    const on2 = recordingFetch();
+    expect((await sharedClient(on2.impl, cacheDir, budget(), nvidia()).chat(req, { purpose: "p" })).cached).toBe(true);
+    const off2 = recordingFetch();
+    expect((await sharedClient(off2.impl, cacheDir, budget()).chat(req, { purpose: "p" })).cached).toBe(true);
+    expect([...on2.sent, ...off2.sent]).toHaveLength(0);
+  });
+
+  it("keeps Token Factory cache keys for every other model as they were, flag or not", async () => {
+    for (const model of [SUPER_3, SUPER_35, ULTRA_TF]) {
+      const cacheDir = mkdtempSync(path.join(tmpdir(), "tracehound-test-"));
+      await sharedClient(recordingFetch().impl, cacheDir, new Budget({ totalUSD: 45, runUSD: 1 }, 0), nvidia()).chat(request(model), { purpose: "p" });
+      expect(new ResponseCache(cacheDir).get(ResponseCache.key(model, request(model)))).toBeDefined();
+    }
   });
 });
 

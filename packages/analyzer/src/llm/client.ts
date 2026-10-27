@@ -2,7 +2,7 @@
 import { BudgetExceededError, type Budget } from "./budget.ts";
 import { ResponseCache } from "./cache.ts";
 import type { SpendLedger } from "./ledger.ts";
-import { costUSD, estimateInputTokens, priceFor, type PriceTable } from "./prices.ts";
+import { costUSD, estimateInputTokens, priceFor, type ModelPrice, type PriceTable } from "./prices.ts";
 
 export const DEFAULT_BASE_URL = "https://api.tokenfactory.us-central1.nebius.com/v1";
 
@@ -47,6 +47,8 @@ export const NVIDIA_API_PER_MINUTE = 36;
 /** On HTTP 429: Retry-After if present, else 20 s doubling; at most 5 waits, then the 429 is returned. */
 export const NVIDIA_API_MAX_429_WAITS = 5;
 export const NVIDIA_API_FIRST_429_WAIT_MS = 20_000;
+/** Prefix to the model in the cache key of NVIDIA API requests, so they never share an entry with Token Factory. */
+export const NVIDIA_API_CACHE_NAMESPACE = "nvidia-api:";
 
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -224,9 +226,25 @@ export class TokenFactoryClient {
     return (body.data ?? []).map((m) => m.id);
   }
 
+  /** The NVIDIA API options when this request goes there (flag set, exact Ultra id), else undefined. */
+  #nvidiaRoute(request: ChatRequest): NvidiaApiOptions | undefined {
+    return this.#opts.nvidiaApi && request.model === NVIDIA_API_MODEL ? this.#opts.nvidiaApi : undefined;
+  }
+
+  /**
+   * The table's price, except that the NVIDIA API id's $0 entry holds only on the NVIDIA route: sent
+   * to Token Factory (flag unset) it is priced at placeholderFallback like any unknown id.
+   */
+  #priceFor(request: ChatRequest): ModelPrice {
+    if (request.model === NVIDIA_API_MODEL && !this.#nvidiaRoute(request)) return { ...this.#opts.prices.placeholderFallback, estimated: true };
+    return priceFor(this.#opts.prices, request.model);
+  }
+
   async chat(request: ChatRequest, meta: { purpose: string; componentId?: string }): Promise<ChatResult> {
-    const { budget, ledger, cache, prices } = this.#opts;
-    const key = ResponseCache.key(request.model, request);
+    const { budget, ledger, cache } = this.#opts;
+    const nvidia = this.#nvidiaRoute(request);
+    // NVIDIA API replies live in their own cache namespace; every Token Factory key is unchanged.
+    const key = ResponseCache.key(nvidia ? `${NVIDIA_API_CACHE_NAMESPACE}${request.model}` : request.model, request);
     const started = performance.now();
 
     if (cache && this.#opts.readCache) {
@@ -250,7 +268,7 @@ export class TokenFactoryClient {
 
     // Worst case: estimated prompt tokens + every allowed completion token, at the (possibly
     // conservative placeholder) price. Throws before any request if a cap would be crossed.
-    const price = priceFor(prices, request.model);
+    const price = this.#priceFor(request);
     const estIn = estimateInputTokens(request.messages, request.tools);
     const estimate = costUSD(price, estIn, request.max_tokens);
     const reservation = budget.reserve(estimate, `${meta.purpose}${meta.componentId ? ` (${meta.componentId})` : ""} on ${request.model}`);
@@ -260,7 +278,6 @@ export class TokenFactoryClient {
     try {
       let res: Response;
       try {
-        const nvidia = this.#opts.nvidiaApi && request.model === NVIDIA_API_MODEL ? this.#opts.nvidiaApi : undefined;
         res = nvidia
           ? await this.#nvidiaFetch(request, nvidia)
           : await this.#opts.fetch(this.#url("/chat/completions", request.model), {
@@ -326,7 +343,7 @@ export class TokenFactoryClient {
    * upper bound, so the ledger can over-count but never under-count.
    */
   #record(request: ChatRequest, meta: { purpose: string; componentId?: string }, body: CompletionBody, estIn: number, status?: number): number {
-    const price = priceFor(this.#opts.prices, request.model);
+    const price = this.#priceFor(request);
     const usageReported = body.usage?.prompt_tokens !== undefined && body.usage?.completion_tokens !== undefined;
     const rejected = status !== undefined && status >= 400 && status < 500;
     const inputTokens = body.usage?.prompt_tokens ?? (rejected ? 0 : estIn);
