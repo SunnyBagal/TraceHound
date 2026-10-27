@@ -25,7 +25,7 @@ function PrNodeView({ data }: NodeProps<PrNode>) {
         <div className="font-mono text-sm font-semibold text-accent">PR #{data.number}</div>
         <div className="truncate text-xs text-muted">{data.files} file{data.files === 1 ? "" : "s"} · {data.findings} finding{data.findings === 1 ? "" : "s"}</div>
       </div>
-      <Handle type="source" position={Position.Right} />
+      <Handle type="source" position={Position.Bottom} />
     </div>
   );
 }
@@ -35,16 +35,17 @@ function PrEdgeView({ id, source, target, data }: EdgeProps<PrEdge>) {
   const s = useInternalNode(source);
   const t = useInternalNode(target);
   if (!s || !t) return null;
-  const sx = s.internals.positionAbsolute.x + (s.measured?.width ?? PR_NODE_WIDTH);
-  const sy = s.internals.positionAbsolute.y + (s.measured?.height ?? PR_NODE_HEIGHT) / 2;
-  const tx = t.internals.positionAbsolute.x;
-  const ty = t.internals.positionAbsolute.y + Math.min(t.measured?.height ?? NODE_HEIGHT, NODE_HEIGHT) / 2;
-  const reach = Math.max(60, Math.abs(tx - sx) / 2.4);
-  const path = `M ${sx},${sy} C ${sx + reach},${sy} ${tx - reach},${ty} ${tx},${ty}`;
+  // from the marker's bottom to the card's top edge (the PR marker sits above the graph)
+  const sx = s.internals.positionAbsolute.x + (s.measured?.width ?? PR_NODE_WIDTH) / 2;
+  const sy = s.internals.positionAbsolute.y + (s.measured?.height ?? PR_NODE_HEIGHT);
+  const tx = t.internals.positionAbsolute.x + Math.min(t.measured?.width ?? NODE_WIDTH, NODE_WIDTH) / 2;
+  const ty = t.internals.positionAbsolute.y - 12; // clear of the card's top chips
+  const reach = Math.max(50, Math.abs(ty - sy) / 2);
+  const path = `M ${sx},${sy} C ${sx},${sy + reach} ${tx},${ty - reach} ${tx},${ty}`;
   // the label sits near the component end, where the edge is unambiguous
-  const k = 0.78, u = 1 - k;
-  const lx = u ** 3 * sx + 3 * u ** 2 * k * (sx + reach) + 3 * u * k ** 2 * (tx - reach) + k ** 3 * tx;
-  const ly = u ** 3 * sy + 3 * u ** 2 * k * sy + 3 * u * k ** 2 * ty + k ** 3 * ty;
+  const k = 0.88, u = 1 - k;
+  const lx = u ** 3 * sx + 3 * u ** 2 * k * sx + 3 * u * k ** 2 * tx + k ** 3 * tx;
+  const ly = u ** 3 * sy + 3 * u ** 2 * k * (sy + reach) + 3 * u * k ** 2 * (ty - reach) + k ** 3 * ty;
   return (
     <>
       <BaseEdge id={id} path={path} className="pr-edge" style={{ stroke: "var(--accent)", strokeWidth: 1.5, strokeDasharray: "6 6", opacity: data?.dimmed ? 0.25 : 0.85 }} />

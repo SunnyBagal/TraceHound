@@ -252,18 +252,30 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
   // changed file or a finding location (never anything else). Not in `nodes`, so never saved.
   const prNode = useMemo((): PrNode | null => {
     if (!pr || !prTargets?.size || !nodes.length) return null;
+    // a marker above the graph, centred over the components it points at
     const targets = nodes.filter((n) => prTargets.has(n.id));
-    const minX = Math.min(...nodes.map((n) => n.position.x));
-    const mid = targets.reduce((sum, n) => sum + n.position.y + NODE_HEIGHT / 2, 0) / targets.length;
+    const top = Math.min(...nodes.map((n) => n.position.y));
+    const mid = targets.reduce((sum, n) => sum + n.position.x + NODE_WIDTH / 2, 0) / targets.length;
     const files = [...pr.touched.values()].reduce((sum, f) => sum + f.length, 0) + pr.outsideFiles.length;
     const findings = [...pr.findings.values()].reduce((sum, f) => sum + f.length, 0) + pr.outsideFindings.length;
-    return { id: `pr:${pr.number}`, type: "pr", position: { x: minX - PR_NODE_WIDTH - 220, y: mid - PR_NODE_HEIGHT / 2 }, draggable: false, selectable: false, data: { number: pr.number, title: prTitle, files, findings }, width: PR_NODE_WIDTH, height: PR_NODE_HEIGHT,
-      handles: [{ type: "source", position: Position.Right, x: PR_NODE_WIDTH - 4, y: PR_NODE_HEIGHT / 2 - 4, width: 8, height: 8 }] };
+    return { id: `pr:${pr.number}`, type: "pr", position: { x: mid - PR_NODE_WIDTH / 2, y: top - PR_NODE_HEIGHT - 170 }, draggable: false, selectable: false, data: { number: pr.number, title: prTitle, files, findings }, width: PR_NODE_WIDTH, height: PR_NODE_HEIGHT,
+      handles: [{ type: "source", position: Position.Bottom, x: PR_NODE_WIDTH / 2 - 4, y: PR_NODE_HEIGHT - 4, width: 8, height: 8 }] };
   }, [pr, prTargets, nodes, prTitle]);
   const prEdges = useMemo((): PrEdge[] => (prNode && pr ? [...prTargets!].map((id) => ({
     id: `pr:${pr.number}->${id}`, type: "pr", source: prNode.id, target: id, selectable: false, focusable: false,
     data: { label: pr.touched.has(id) ? `changed in #${pr.number}` : `finding in #${pr.number}`, findings: pr.findings.get(id)?.length ?? 0, dimmed: Boolean(focusSet && !focusSet.has(id)) },
   })) : []), [prNode, pr, prTargets, focusSet]);
+
+  // selecting a PR brings it and what it touched into view (once per PR, not per drag)
+  const prFitted = useRef<string | null>(null);
+  useEffect(() => {
+    const key = prNode ? `${prNode.id}:${[...prTargets!].join(",")}` : null;
+    if (!key || prFitted.current === key) { if (!key) prFitted.current = null; return; }
+    prFitted.current = key;
+    const ids = [prNode!.id, ...prTargets!].map((id) => ({ id }));
+    requestAnimationFrame(() => void fitView({ ...fitRef.current, nodes: ids, maxZoom: 1, duration: 450, ...(occludeRight ? { padding: { top: 0.15, bottom: 0.25, left: 0.1, right: `${occludeRight + MARGIN}px` } } : { padding: { top: 0.12, bottom: 0.3, left: 0.12, right: 0.12 } }) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- per PR selection
+  }, [prNode?.id, prTargets, nodesInitialized]);
   const displayEdges = useMemo(
     () =>
       base.edges.map((e): EvidenceEdgeType => {
