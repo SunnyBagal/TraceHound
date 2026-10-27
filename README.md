@@ -165,9 +165,11 @@ limits: [docs/bench/results.md](docs/bench/results.md).
 - No ReviewBench final run (money; see above).
 
 Nemotron 3 Ultra (report only, free NVIDIA API, not Token Factory, not the product): the 550B
-Nemotron 3 Ultra did not review better than 3.5 Super on our pipeline. On dev run 10 (judge v1) its
-pool-raw F was 42.1 against 3.5's 53.9 (−11.8 [−19.6, −4.0]); no other difference was outside its
-interval. Run 11: [[TBD-ULTRA]].
+Nemotron 3 Ultra did not review better than 3.5 Super on our pipeline. Over dev runs 10 and 11
+(judge v1), its pool-verify-v1 mean F was 47.1, against 3.5's 50.4 and 3 Super's 42.3, with no
+interval-backed difference. Its pool-raw mean F was 43.6 against 3.5's 53.9 (−10.2 [−17.7, −3.2]),
+the only interval that excludes 0. Under judge x1: pool-verify-v1 54.9, pool-raw 51.4
+([docs/bench/dev-ultra.md](docs/bench/dev-ultra.md)).
 
 ## Cost per pull request
 
@@ -200,9 +202,17 @@ are not the current config. Seeded PRs on the current config: [[TBD-SEEDED]].
 
 - Recover chunks lost to invalid JSON (JSON repair or schema-constrained output; a retry with
   reasoning off mostly failed in 070).
-- A per-PR comment cap, against product noise: [[TBD-LEVERS]].
-- The verifier doesn't pay on 3.5: pool-raw ≥ pool-verify on dev and on ReviewBench.
-  [[TBD-LEVERS]].
+- A per-PR comment cap, against product noise: replayed on saved dev runs ($0,
+  [docs/bench/levers-v2.md](docs/bench/levers-v2.md)), no cap on the shipped, verified pipeline
+  improves F with an interval excluding 0; small gains appear only on the unverified pool at
+  k = 4–5. A hypothesis, not adopted.
+- The verifier: on dev, verified scores above raw with an interval excluding 0 in 2 of 9 runs
+  (3 Super 2r, Ultra 11); on 3.5 neither run shows a difference (−1.6 and −5.4, intervals include
+  0); on ReviewBench raw scores higher in both models. An open question, not a finding
+  ([levers v2](docs/bench/levers-v2.md)).
+- A cheaper 2-of-3 vote across runs: no gain established (levers v2).
+- Where the misses are: both 3.5 dev runs miss 35 of 74 Medium+ golden comments; none of the 7
+  Critical ones is missed by both; the most missed repo is sentry (14 of 21 Medium+).
 - Cheaper experiments: run-to-run spread exceeds most effects, so replay on saved records before
   paying for runs.
 - Measure what maintainer-feedback learning changes in posted reviews.
