@@ -732,86 +732,6 @@ html:has(.landing) body {
 .vgrid-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px 28px; padding-block: 22px; }
 .vgrid-logos { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 28px; font-size: 15px; font-weight: 500; color: var(--muted); }
 .vgrid-logos li { display: inline-flex; align-items: center; gap: 8px; }
-.vgrid {
-  display: grid;
-  grid-template-columns: 1fr;
-  border: 1px solid var(--hairline);
-  border-bottom: 0;
-}
-@media (min-width: 900px) { .vgrid { grid-template-columns: 1fr 1fr; } }
-.vcell { display: flex; flex-direction: column; border-bottom: 1px solid var(--hairline); padding: 28px 0 0; overflow: hidden; }
-@media (min-width: 900px) { .vcell:nth-child(odd) { border-right: 1px solid var(--hairline); } }
-.vcell > .vh3, .vcell > .vcell-text { padding-inline: 28px; }
-.vcell-text { margin-top: 8px; max-width: 46ch; font-size: 15px; line-height: 1.6; color: var(--muted); }
-/* the luminous panel each feature sits on: soft streaks of amber or glacier, CSS only */
-.vpanel {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 260px;
-  margin-top: 28px;
-  padding: 28px 20px;
-  overflow: hidden;
-  isolation: isolate;
-}
-.vpanel::before {
-  content: "";
-  position: absolute;
-  inset: -40%;
-  z-index: -1;
-  background:
-    repeating-linear-gradient(118deg, transparent 0 18px, rgba(255, 255, 255, 0.045) 18px 19px),
-    conic-gradient(from 210deg at 70% 60%, transparent, var(--c1) 18%, transparent 34%, var(--c2) 52%, transparent 70%);
-  filter: blur(26px) saturate(1.2);
-  opacity: 0.85;
-  animation: panel-drift 18s linear infinite;
-}
-.vpanel-amber { --c1: rgba(245, 165, 36, 0.55); --c2: rgba(255, 207, 122, 0.3); }
-.vpanel-ice { --c1: rgba(143, 211, 255, 0.5); --c2: rgba(91, 140, 255, 0.35); }
-@keyframes panel-drift { to { transform: rotate(360deg); } }
-.vterm, .vcomment {
-  width: min(440px, 100%);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(10, 10, 14, 0.88);
-  box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.8);
-  padding: 16px 18px;
-}
-.vterm { font-family: var(--font-code); font-size: 12.5px; line-height: 1.75; color: var(--text); }
-.vmini { position: relative; display: grid; grid-template-columns: repeat(3, auto); gap: 22px; align-items: center; }
-.vmini-node {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  height: 52px;
-  padding: 0 18px;
-  border-radius: 12px;
-  border: 1px solid var(--line-strong);
-  background: rgba(16, 16, 22, 0.92);
-  font-size: 14px;
-  color: var(--muted);
-  opacity: 0.55;
-}
-.vmini-lit { opacity: 1; color: var(--text); border-color: var(--accent); box-shadow: var(--shadow-glow); }
-.vmini-lit b {
-  position: absolute; top: -10px; right: -10px; display: grid; place-items: center; width: 22px; height: 22px;
-  border-radius: 999px; background: var(--accent); color: var(--ink); font-size: 12px; font-family: var(--font-code);
-  box-shadow: 0 0 0 3px #0e0e13, 0 0 16px var(--accent-glow);
-}
-.vmini-callout {
-  grid-column: 3; justify-self: start; margin-top: -8px;
-  font-family: var(--font-code); font-size: 11.5px; color: var(--accent);
-  border: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent); border-radius: 8px; padding: 4px 8px; background: rgba(10, 10, 14, 0.9);
-}
-.vstat {
-  display: flex; flex-direction: column; align-items: flex-start;
-  width: min(360px, 100%); padding: 22px 24px; border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(10, 10, 14, 0.88);
-  box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.8);
-  transition: border-color var(--dur-fast);
-}
-.vstat:hover { border-color: var(--accent); }
-.vstat-n { font-size: 54px; font-weight: 500; letter-spacing: -0.04em; line-height: 1; color: var(--text); }
 .vsection { border-inline: 1px solid var(--hairline); border-top: 1px solid var(--hairline); padding: 72px clamp(20px, 4vw, 56px); }
 .vcta { background: var(--glow-amber), var(--page-bg); }
 .vbtn {
@@ -823,7 +743,6 @@ html:has(.landing) body {
 .vbtn-primary { background: var(--text); color: var(--page-bg); border-color: var(--text); }
 .vbtn-primary:hover { background: #fff; border-color: #fff; }
 @media (prefers-reduced-motion: reduce) {
-  .vpanel::before { animation: none; }
   .vbtn:hover, .hero-connect:hover { transform: none; }
 }
 /* the nav at night: below the hero it becomes dark glass with light type */
@@ -837,8 +756,6 @@ html:has(.landing) body {
 .lp-nav[data-night] .lp-nav-link { color: var(--muted); }
 .lp-nav[data-night] .lp-nav-link:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
 .lp-nav[data-night] .lp-nav-cta { background: var(--text); color: var(--page-bg); }
-.vterm p { white-space: pre-wrap; overflow-wrap: anywhere; }
-@media (max-width: 480px) { .vterm { font-size: 11.5px; padding: 14px; } .vcell > .vh3, .vcell > .vcell-text { padding-inline: 20px; } }
 
 /* ---------- the graph (5b): cards, edges, canvas and inspector in the ui v2 system ---------- */
 /* the canvas panel carries a faint amber dawn along its top edge */
@@ -927,3 +844,136 @@ html:has(.landing) body {
 .bench-row[data-kind="history"] .bench-dot { background: transparent; box-shadow: inset 0 0 0 2px var(--muted), 0 0 0 3px var(--panel-bg); }
 .bench-row[data-kind="history"] .bench-name { font-style: italic; }
 .bench-row[data-band="outside"] .bench-dot { background: var(--faint); opacity: 0.7; }
+
+/* ---------- landing: the feature tabs (viteplus-style; TraceHound's own art) ---------- */
+/* each tab's hue: --tone for text accents; --a0..--a3 dark to light for its gradient */
+.fx-frame { border-inline: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); }
+[data-tone="amber"] { --tone: #f5a524; --a0: #1a0a02; --a1: #7c3304; --a2: #f0890f; --a3: #ffd99a; }
+[data-tone="violet"] { --tone: #b4a2ff; --a0: #0f0533; --a1: #3214a8; --a2: #7657ff; --a3: #d9ceff; }
+[data-tone="glacier"] { --tone: #8fd3ff; --a0: #021624; --a1: #0a587e; --a2: #2fb0e8; --a3: #d2f3ff; }
+[data-tone="green"] { --tone: #5ee68f; --a0: #031c0c; --a1: #0e6a35; --a2: #36c066; --a3: #d3ffe1; }
+.fx-tabs {
+  position: sticky; top: 90px; z-index: 30;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  border-block: 1px solid var(--hairline);
+  background: rgba(14, 14, 19, 0.88); backdrop-filter: blur(14px) saturate(1.2);
+}
+.fx-tab {
+  position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; height: 52px;
+  font-family: var(--font-code); font-size: 13.5px; color: var(--faint);
+  transition: color var(--dur-base);
+}
+.fx-tab + .fx-tab { border-left: 1px solid var(--hairline); }
+.fx-tab:hover { color: var(--muted); }
+.fx-tab::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--text);
+  transform: scaleX(0); transition: transform var(--dur-slow) var(--ease-out);
+}
+.fx-tab[aria-current="true"] { color: var(--text); }
+.fx-tab[aria-current="true"]::after { transform: scaleX(1); }
+.fx-tab[aria-current="true"] .fx-tab-icon { color: var(--tone); }
+.fx-tab:focus-visible { outline: 2px solid var(--tone); outline-offset: -4px; }
+.fx-panel { display: grid; grid-template-columns: 1fr; scroll-margin-top: 142px; }
+.fx-panel + .fx-panel { border-top: 1px solid var(--hairline); }
+@media (min-width: 960px) { .fx-panel { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.fx-copy { display: flex; flex-direction: column; padding: clamp(40px, 5.5vw, 72px) clamp(20px, 4vw, 56px); }
+.fx-kicker { font-family: var(--font-code); font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.fx-title { margin-top: 22px; font-size: clamp(1.75rem, 1.2rem + 1.6vw, 2.5rem); font-weight: 500; line-height: 1.1; letter-spacing: -0.028em; color: var(--text); text-wrap: balance; }
+.fx-text { margin-top: 18px; max-width: 44ch; font-size: 16.5px; line-height: 1.6; color: var(--muted); }
+.fx-bullets { margin-top: 26px; display: grid; gap: 14px; font-size: 15.5px; line-height: 1.5; color: var(--text); }
+.fx-bullets li { display: flex; gap: 12px; align-items: baseline; }
+.fx-check { display: inline-flex; align-items: center; flex-shrink: 0; font-family: var(--font-code); font-size: 12px; color: var(--muted); translate: 0 1px; }
+.fx-code { font-family: var(--font-code); font-size: 0.9em; color: var(--tone); background: color-mix(in srgb, var(--tone) 11%, transparent); border-radius: 5px; padding: 1px 6px; }
+.fx-powered {
+  align-self: flex-start; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: auto;
+  padding: 10px 14px; border-radius: 8px; background: rgba(255, 255, 255, 0.035); font-size: 15px; color: var(--text);
+}
+.fx-copy > .fx-bullets { margin-bottom: 44px; }
+.fx-powered-by { font-family: var(--font-code); font-size: 12.5px; letter-spacing: 0.06em; color: var(--faint); }
+/* the art: a dark-to-light sweep of the tab's hue, soft blooms, long diagonal light, and grain */
+.fx-art {
+  position: relative; isolation: isolate; overflow: hidden;
+  display: grid; place-items: center; min-height: 420px;
+  padding: clamp(36px, 5vw, 64px) clamp(14px, 3vw, 44px);
+  background: var(--a0);
+}
+.fx-art::before {
+  content: ""; position: absolute; inset: -12%; z-index: -3;
+  background:
+    radial-gradient(42% 36% at 82% 14%, color-mix(in srgb, var(--a3) 85%, transparent), transparent 70%),
+    radial-gradient(60% 50% at 8% 92%, color-mix(in srgb, var(--a2) 80%, transparent), transparent 70%),
+    linear-gradient(152deg, var(--a0) 4%, var(--a1) 30%, var(--a2) 52%, var(--a1) 70%, var(--a0) 96%);
+  filter: saturate(1.15);
+  animation: fx-drift 24s ease-in-out infinite alternate;
+}
+/* long fibrous light: stripe layers with incommensurate periods (no visible repeat), turned to the
+   diagonal, plus three sharp beams; the grain on top makes them read as light through haze */
+.fx-beams {
+  position: absolute; inset: -70%; z-index: -2; pointer-events: none;
+  rotate: -31deg;
+  background:
+    linear-gradient(90deg, transparent 47.6%, rgba(255, 255, 255, 0.75) 48%, transparent 48.5%),
+    linear-gradient(90deg, transparent 51%, color-mix(in srgb, var(--a3) 65%, transparent) 51.9%, transparent 53.2%),
+    linear-gradient(90deg, transparent 55.5%, color-mix(in srgb, var(--a3) 40%, transparent) 57%, transparent 59.5%),
+    repeating-linear-gradient(90deg, transparent 0 11px, rgba(255, 255, 255, 0.09) 12px, transparent 13px 23px),
+    repeating-linear-gradient(90deg, transparent 0 29px, rgba(255, 255, 255, 0.13) 30px 31px, transparent 33px 61px),
+    repeating-linear-gradient(90deg, transparent 0 67px, color-mix(in srgb, var(--a3) 30%, transparent) 70px 74px, transparent 78px 139px),
+    repeating-linear-gradient(90deg, transparent 0 173px, rgba(255, 255, 255, 0.22) 176px 181px, transparent 186px 311px),
+    repeating-linear-gradient(90deg, transparent 0 401px, color-mix(in srgb, var(--a3) 35%, transparent) 410px 430px, transparent 440px 727px);
+  filter: blur(0.8px);
+  mix-blend-mode: overlay; opacity: 0.95;
+  mask-image: radial-gradient(70% 60% at 55% 45%, #000 30%, transparent 75%);
+  animation: fx-beam 22s ease-in-out infinite alternate;
+}
+.fx-art::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1.3 0 0 0 -0.15 1.3 0 0 0 -0.15 1.3 0 0 0 -0.15 0 0 0 0 0.6'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay; opacity: 0.85;
+}
+@keyframes fx-drift { to { transform: translate3d(-5%, 4%, 0) scale(1.04); } }
+@keyframes fx-beam { to { translate: -4% 3%; } }
+/* the terminal card and the scenario pills under it */
+.term-wrap { position: relative; width: min(620px, 100%); display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.term {
+  width: 100%; min-height: calc(var(--rows) * 1.75em + 46px);
+  padding: 22px 24px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(13, 13, 18, 0.95); box-shadow: 0 30px 80px -28px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  font-family: var(--font-code); font-size: 12.75px; line-height: 1.75; color: var(--text);
+}
+.term p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.term-cmd { margin-bottom: 0.7em; }
+.term-prompt { color: var(--muted); }
+.term[data-mode="armed"] .term-ghost, .term[data-mode="play"] .term-ghost { opacity: 0; }
+.term-caret { display: inline-block; width: 0.58em; height: 1.2em; margin-left: 1px; vertical-align: -0.24em; background: var(--text); animation: caret 1s steps(1) infinite; }
+@keyframes caret { 50% { opacity: 0; } }
+.term-line { transition: opacity 220ms var(--ease-out), translate 220ms var(--ease-out); }
+.term[data-mode="armed"] .term-line:not([data-on]), .term[data-mode="play"] .term-line:not([data-on]) { opacity: 0; translate: 0 4px; }
+.t-text { color: var(--text); }
+.t-dim { color: var(--faint); }
+.t-ok { color: var(--diff-added); }
+.t-hi { color: var(--tone); }
+.t-path { color: color-mix(in srgb, var(--tone) 55%, var(--text)); }
+.t-bad { color: #ff9a8f; }
+.term-pills {
+  display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 2px; max-width: 100%;
+  padding: 4px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(13, 13, 18, 0.92);
+}
+.term-pills button {
+  padding: 6px 12px; border-radius: 7px; font-family: var(--font-code); font-size: 12.5px; color: var(--muted);
+  transition: background-color var(--dur-fast), color var(--dur-fast);
+}
+.term-pills button:hover { color: var(--text); }
+.term-pills button[aria-pressed="true"] { background: #fff; color: #0b0a10; }
+.term-pills button:focus-visible { outline: 2px solid var(--tone); outline-offset: 2px; }
+@media (max-width: 520px) {
+  .fx-tabs { top: 88px; }
+  .fx-tab { gap: 6px; font-size: 12.5px; }
+  .fx-tab-icon { display: none; }
+  .fx-art { min-height: 0; }
+  .term { padding: 16px; font-size: 11.5px; }
+  .term-pills button { padding: 5px 9px; font-size: 11.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fx-art::before, .fx-beams, .term-caret { animation: none; }
+  .fx-tab::after, .term-line { transition: none; }
+}

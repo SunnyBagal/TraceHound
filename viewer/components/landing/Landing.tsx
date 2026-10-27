@@ -15,20 +15,18 @@ import {
   GRAPH_TREE,
   HELDOUT,
   IGNORED_BY_CONFIG,
-  RECALL_COMPONENTS,
   LICENSE_URL,
   MODELS,
   RECALL,
 } from "@/lib/landing";
 import { LEGACY_REDIRECT_SCRIPT } from "@/lib/legacy";
-import { MODEL_DISCLOSURE, reviewsHref } from "@/lib/reviews";
+import { reviewsHref } from "@/lib/reviews";
 import { AnimatedFigure } from "./AnimatedFigure";
 import { DiffToDeclarations } from "./DiffToDeclarations";
 import { inter, jetbrains, serif } from "./fonts";
 import { Hero } from "./Hero";
-import demoReviews from "@/public/reviews/SunnyBagal__tracehound-demo.json";
-import { BENCHMARK_TABLES } from "@/lib/benchmark";
-import { findingTitle } from "@/lib/pulls";
+import { FeatureTabs } from "./FeatureTabs";
+import { FEATURES } from "./features";
 import { Pipeline } from "./Pipeline";
 import { PipelineWide } from "./PipelineWide";
 import { RepoToGraph } from "./RepoToGraph";
@@ -98,13 +96,6 @@ function GithubMark({ className = "size-4" }: { className?: string }) {
 const mono = (text: React.ReactNode) => <span className="mono text-text">{text}</span>;
 const modelNamed = GRAPH_COMPONENTS.filter((c) => c.model).map((c) => c.name);
 
-/** Landing features (Vite-style grid). Every number is the repo's: lib/landing.ts, lib/benchmark.ts (read only), the demo's saved review. */
-const BLIND = BENCHMARK_TABLES[0]!;
-const BLIND_ROW = BLIND.rows.find((r) => r[0]!.startsWith("TraceHound"))!;
-const BLIND_PRS = /^(\d+) pull requests/.exec(BLIND.note)?.[1];
-const DEMO_FINDING = demoReviews.pulls.flatMap((p) => p.comments.map((c) => ({ number: p.pull.number, path: c.path, line: c.line, title: findingTitle(c.body) })))[0];
-const FIRST_EDGE = GRAPH_EDGES.find((e) => e.kind === "produces") ?? GRAPH_EDGES[0]!;
-const componentName = (id: string) => GRAPH_COMPONENTS.find((c) => c.id === id)?.name ?? id;
 
 const RUNS_ON = ["NVIDIA Nemotron", "Nebius Token Factory", "ts-morph", "React Flow", "ELK", "Docker sandbox"] as const;
 
@@ -177,7 +168,7 @@ export function Landing() {
       </section>
 
       <section aria-labelledby="features-title" className="vband">
-        <div className="lp-col py-24 text-center sm:py-32">
+        <div className="lp-col pb-16 pt-24 text-center sm:pb-20 sm:pt-32">
           <p className="vkicker">The graph is the review surface</p>
           <h2 id="features-title" className="vh2 mx-auto mt-4 max-w-[18ch]">
             Read the architecture, not the diff.
@@ -186,60 +177,7 @@ export function Landing() {
             TraceHound draws your repo as components and the evidence between them, then reviews each pull request against that map, and pins what it finds to the part of the system it touches.
           </p>
         </div>
-        <div className="lp-col vgrid">
-          <article className="vcell">
-            <h3 className="vh3">Every edge has evidence</h3>
-            <p className="vcell-text">No model draws the graph. Each edge cites a file, a symbol and a line range, with the extractor that found it.</p>
-            <div className="vpanel vpanel-amber">
-              <div className="vterm" data-testid="feature-terminal">
-                <p><span className="text-faint">$</span> pnpm tracehound analyze --repo ./Recall</p>
-                <p className="text-faint">SunnyBagal/Recall@{RECALL.short} · analyzer {RECALL.analyzerVersion}</p>
-                <p><span className="text-diff-added">✓</span> {RECALL_COMPONENTS} components · {GRAPH_EDGES.length} edges, each with evidence</p>
-                <p className="mt-2 truncate">
-                  <span className="text-accent">{componentName(FIRST_EDGE.from)}</span> <span className="text-faint">-{FIRST_EDGE.kind}-&gt;</span> <span className="text-glacier">{componentName(FIRST_EDGE.to)}</span>
-                </p>
-                <p className="text-faint">  ↳ {FIRST_EDGE.file}:{FIRST_EDGE.line}</p>
-              </div>
-            </div>
-          </article>
-          <article className="vcell">
-            <h3 className="vh3">Reviews where you merge</h3>
-            <p className="vcell-text">A GitHub Action posts the review on the pull request: effect first, with the file and line, and a fix you can commit.</p>
-            <div className="vpanel vpanel-ice">
-              {DEMO_FINDING && (
-                <div className="vcomment" data-testid="feature-comment">
-                  <p className="flex items-center gap-2 text-[12px] text-muted"><span className="grid size-5 place-items-center rounded-full bg-accent text-[10px] font-bold text-ink">T</span>TraceHound · tracehound-demo #{DEMO_FINDING.number}</p>
-                  <p className="mt-2.5 text-[14px] font-medium leading-snug text-text">{DEMO_FINDING.title}</p>
-                  <p className="mono mt-2 truncate text-[12px] text-muted">{DEMO_FINDING.path}{DEMO_FINDING.line ? `:${DEMO_FINDING.line}` : ""}</p>
-                  <p className="mt-1.5 text-[11.5px] text-faint">{MODEL_DISCLOSURE}</p>
-                </div>
-              )}
-            </div>
-          </article>
-          <article className="vcell">
-            <h3 className="vh3">Findings pinned to the graph</h3>
-            <p className="vcell-text">Pick a pull request: the components it changed light up, the rest dim, and each finding hangs from the component it lives in.</p>
-            <div className="vpanel vpanel-amber" aria-hidden>
-              <div className="vmini">
-                <span className="vmini-node">API</span>
-                <span className="vmini-node">Queue</span>
-                <span className="vmini-node vmini-lit">Shared<b>1</b></span>
-                <span className="vmini-callout">changed in #2</span>
-              </div>
-            </div>
-          </article>
-          <article className="vcell">
-            <h3 className="vh3">Numbers you can check</h3>
-            <p className="vcell-text">On the benchmark&apos;s {BLIND_PRS ?? "10"} blind pull requests the reviewer&apos;s F score is a point estimate inside a wide interval, and every loss is on the page.</p>
-            <div className="vpanel vpanel-ice">
-              <a href={`${base}/benchmark`} className="vstat" data-testid="feature-benchmark">
-                <span className="vstat-n">{BLIND_ROW[7]}</span>
-                <span className="text-[13px] text-muted">F, blind test run 1 · point estimate</span>
-                <span className="mt-3 text-[13px] text-accent">See the benchmark →</span>
-              </a>
-            </div>
-          </article>
-        </div>
+        <FeatureTabs features={FEATURES} />
       </section>
 
       <main className="flex flex-col">
