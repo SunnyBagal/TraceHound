@@ -1,6 +1,9 @@
 // Post-freeze options (docs/post-freeze-fixes.md); every option is off by default. Invented diffs
 // only, a scripted ChatClient, no network.
+import { existsSync, readdirSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { fakeClient } from "./helpers.ts";
 import type { ChatClient } from "../src/agent/decider.ts";
 import type { ChatRequest, ChatResult } from "../src/llm/client.ts";
 import type { GitSource } from "../src/review/context.ts";
@@ -137,5 +140,46 @@ describe("verify-ctx-v1 parser option", () => {
   });
   it("lenient: the verdict is read on the first attempt", async () => {
     expect((await verify([prose], "lenient")).comments[0]).toMatchObject({ status: "VERIFIED", verdict: "drop", attempts: 1 });
+  });
+});
+
+describe("cacheTruncated client option", () => {
+  const body = (finish_reason: string) => ({
+    choices: [{ finish_reason, message: { content: '{"findings":[' } }],
+    usage: { prompt_tokens: 100, completion_tokens: 32_000 },
+  });
+  const counting = (finish: string) => {
+    let calls = 0;
+    const impl = (async () => { calls++; return new Response(JSON.stringify(body(finish)), { status: 200 }); }) as typeof fetch;
+    return { impl, calls: () => calls };
+  };
+  const req: ChatRequest = { model: "priced/model", messages: [{ role: "user", content: "invented" }], max_tokens: 32_000, temperature: 0 };
+  const run = async (finish: string, cacheTruncated?: boolean) => {
+    const f = counting(finish);
+    const { client, ledger, dir } = fakeClient(f.impl, cacheTruncated === undefined ? {} : { cacheTruncated });
+    const first = await client.chat(req, { purpose: "review" });
+    const second = await client.chat(req, { purpose: "review" });
+    const cacheDir = path.join(dir, "cache");
+    const cached = existsSync(cacheDir) ? readdirSync(cacheDir, { recursive: true }).filter(n => String(n).endsWith(".json")) : [];
+    return { calls: f.calls(), first, second, cached, ledger: ledger.entries().map(({ timestamp: _t, ...e }) => e) };
+  };
+
+  it("default true: a length reply is cached and the second call is a hit (today)", async () => {
+    const r = await run("length");
+    expect(r).toMatchObject({ calls: 1, second: { cached: true } });
+    expect(r.ledger).toHaveLength(1);
+  });
+
+  it("false: a length reply is not cached, so the second call goes out again; same ledger entry per call", async () => {
+    const [on, off] = [await run("length"), await run("length", false)];
+    expect(off).toMatchObject({ calls: 2, first: { cached: false, finishReason: "length" }, second: { cached: false } });
+    expect(off.cached).toEqual([]);
+    expect(off.ledger).toEqual([on.ledger[0], on.ledger[0]]);
+  });
+
+  it("false: a stop reply is still cached, under the same key as the default", async () => {
+    const [on, off] = [await run("stop"), await run("stop", false)];
+    expect(off.calls).toBe(1);
+    expect(off.cached).toEqual(on.cached);
   });
 });
