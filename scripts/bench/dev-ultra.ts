@@ -175,21 +175,33 @@ const tk = (e: Tokens) => `${e.inputTokens}/${e.outputTokens}`;
 /**
  * Which of `entries` (calls with reported usage) are verifier calls. verify-ctx ledgers its calls with
  * the reviewer's purpose ("review", VERIFY_CTX_PURPOSE) and the ledger keeps no max_tokens, so a call
- * is told apart by its token counts: it is the verifier's when a finding's verdict made exactly one
- * call with those counts, or made two whose totals are this call plus another call in `entries`.
+ * is told apart by its token counts. Each verdict claims as many unclaimed entries as it made calls:
+ * a one-call verdict the entry with its counts, a two-call verdict a pair whose counts sum to its
+ * totals (one-call verdicts first). So at most as many entries are marked as the verdicts made calls;
+ * when a reviewer call has the same counts as a verifier call, one of the two is marked, not both.
  */
 export function verifierCalls(entries: Tokens[], verdicts: Usage[]): boolean[] {
-  const counts = new Map<string, number>();
-  for (const e of entries) counts.set(tk(e), (counts.get(tk(e)) ?? 0) + 1);
-  const one = new Set(verdicts.filter((v) => v.calls === 1).map(tk));
-  const two = verdicts.filter((v) => v.calls === 2);
-  return entries.map((e) => {
-    if (one.has(tk(e))) return true;
-    return two.some((v) => {
+  const free = new Map<string, number[]>(); // token key → indices of unclaimed entries
+  entries.forEach((e, i) => free.set(tk(e), [...(free.get(tk(e)) ?? []), i]));
+  const marked = entries.map(() => false);
+  const claim = (key: string) => {
+    const i = free.get(key)?.shift();
+    if (i !== undefined) marked[i] = true;
+  };
+  for (const v of verdicts.filter((x) => x.calls === 1)) claim(tk(v));
+  for (const v of verdicts.filter((x) => x.calls === 2)) {
+    for (const [key, idx] of free) {
+      if (!idx.length) continue;
+      const e = entries[idx[0]!]!;
       const rest = tk({ inputTokens: v.inputTokens - e.inputTokens, outputTokens: v.outputTokens - e.outputTokens });
-      return (counts.get(rest) ?? 0) >= (rest === tk(e) ? 2 : 1);
-    });
-  });
+      if ((free.get(rest)?.length ?? 0) >= (rest === key ? 2 : 1)) {
+        claim(key);
+        claim(rest);
+        break;
+      }
+    }
+  }
+  return marked;
 }
 
 /**

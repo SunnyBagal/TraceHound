@@ -112,6 +112,23 @@ describe("verifier truncations (review of #63: verify-ctx ledgers as review)", (
     expect(verifierCalls([{ inputTokens: 1, outputTokens: 2 }, { inputTokens: 1, outputTokens: 2 }], [usage(2, 2, 4)])).toEqual([true, true]);
   });
 
+  it("verifierCalls claims entries with multiplicity: a verdict never marks more entries than it made calls", () => {
+    // a reviewer call with the same counts as a one-call verifier verdict: one of the two is marked, not both
+    const same = [{ inputTokens: 5000, outputTokens: 16_000 }, { inputTokens: 5000, outputTokens: 16_000 }];
+    expect(verifierCalls(same, [usage(1, 5000, 16_000)]).filter(Boolean)).toHaveLength(1);
+    expect(verifierCalls(same, [usage(1, 5000, 16_000), usage(1, 5000, 16_000)])).toEqual([true, true]);
+    // competing pairs for one two-call verdict: exactly two entries are marked
+    const pairs = [
+      { inputTokens: 1, outputTokens: 1 },
+      { inputTokens: 2, outputTokens: 2 },
+      { inputTokens: 3, outputTokens: 3 },
+      { inputTokens: 0, outputTokens: 0 },
+    ];
+    expect(verifierCalls(pairs, [usage(2, 3, 3)]).filter(Boolean)).toHaveLength(2);
+    // a one-call verdict's entry is not reused by a two-call verdict
+    expect(verifierCalls([{ inputTokens: 2, outputTokens: 2 }, { inputTokens: 2, outputTokens: 2 }], [usage(1, 2, 2), usage(2, 4, 4)])).toEqual([true, false]);
+  });
+
   it("ledgerWindow counts reviewer calls at 32,000 and verifier calls at 16,000 apart, though all are purpose review", () => {
     const { ultra, ledger } = fixtureBench();
     expect(ledgerWindow(MODEL_071, ultra, ledger)).toEqual({ calls: 5, failedCalls: 0, noUsage: 0, atMax: 1, verifierAtMax: 2, inputTokens: 94_000, outputTokens: 84_600 });
