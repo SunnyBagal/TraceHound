@@ -1,36 +1,36 @@
 "use client";
 
-import { ArrowUpRight } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { GITHUB_URL, GRAPH_HREF } from "@/lib/landing";
 import { AppWindow } from "./AppWindow";
 
 const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 /**
- * The hero (owner's design, after nuphos): two wolves facing each other in the snow. The black
- * wolf wears NVIDIA (TraceHound runs on Nemotron); the white pack wears the coding agents whose
- * pull requests it reviews. "Connect GitHub" sits between their noses; the app window follows
- * under it, over the snow. Scrolling zooms the picture around the noses; with reduced motion
- * nothing moves.
+ * The hero, laid out as nuphos.ai's is (owner's request for the hackathon; credited to nuphos):
+ * a Georgia headline with an italic second line, the description, the button and "View on
+ * GitHub", then the app window. The owner's picture is two wolves facing each other in the snow:
+ * the black wolf wears NVIDIA (TraceHound runs on Nemotron), the white pack the coding agents
+ * whose pull requests it reviews. The picture hangs from the button by the point between the two
+ * noses, so the button always sits between them. As on nuphos the two figures slide in from the
+ * sides out of a blur; scrolling then grows the picture around the noses. Reduced motion: still.
  *
- * Positions are fractions of the 2000×1124 picture, so marks stay on their wolves at every size.
+ * Positions are fractions of the 2000×1124 picture, measured on it.
  */
-export const FOCUS = { x: 0.465, y: 0.48 }; // between the two noses
+export const NOSES = { x: 0.4985, y: 0.476 }; // black nose (850, 538), white nose (1145, 532)
 
-type Mark = { id: string; label: string; x: number; y: number; size: number; rotate: number; tile: string; art: { mask?: string; img?: string; color?: string; scale?: number }; shape?: "round" | "square" };
+type Mark = { id: string; label: string; x: number; y: number; size: number; rotate: number; tile: string; side: "l" | "r"; art: { mask?: string; img?: string; color?: string; scale?: number }; shape?: "round" | "square" };
 /*
- * Each mark sits on its wolf's neck, just behind the head, as the owner asked (measured on the
- * 2000×1124 picture). The black wolf wears NVIDIA; the lead white wolf Claude, then ChatGPT,
- * Antigravity and OpenCode on the wolves behind it and Cursor on the one in front.
+ * The black wolf and the lead white wolf wear theirs on the neck, just behind the head; the
+ * wolves behind wear theirs over the face, as in the owner's mock-up.
  */
 export const MARKS: Mark[] = [
-  { id: "nvidia", label: "NVIDIA", x: 550 / 2000, y: 515 / 1124, size: 0.105, rotate: -12, tile: "#76b900", art: { mask: "nvidia.svg", color: "#ffffff", scale: 0.7 } },
-  { id: "claude", label: "Claude", x: 1445 / 2000, y: 545 / 1124, size: 0.1, rotate: 10, tile: "#d97757", art: { mask: "brands/claude.svg", color: "#ffffff", scale: 0.64 } },
-  { id: "chatgpt", label: "ChatGPT", x: 1722 / 2000, y: 458 / 1124, size: 0.05, rotate: 0, tile: "#0b0b0f", art: { mask: "brands/openai.svg", color: "#ffffff", scale: 0.66 }, shape: "round" },
-  { id: "antigravity", label: "Antigravity", x: 1818 / 2000, y: 452 / 1124, size: 0.04, rotate: -4, tile: "#ffffff", art: { img: "brands/antigravity-color.svg", scale: 0.72 } },
-  { id: "opencode", label: "OpenCode", x: 1938 / 2000, y: 538 / 1124, size: 0.042, rotate: 8, tile: "#f4f1ea", art: { mask: "brands/opencode.svg", color: "#0b0b0f", scale: 0.58 } },
-  { id: "cursor", label: "Cursor", x: 1932 / 2000, y: 790 / 1124, size: 0.058, rotate: -6, tile: "#0b0b0f", art: { mask: "brands/cursor.svg", color: "#ffffff", scale: 0.62 } },
+  { id: "nvidia", label: "NVIDIA", side: "l", x: 550 / 2000, y: 515 / 1124, size: 0.105, rotate: -12, tile: "#76b900", art: { mask: "nvidia.svg", color: "#ffffff", scale: 0.7 } },
+  { id: "claude", label: "Claude", side: "r", x: 1445 / 2000, y: 540 / 1124, size: 0.1, rotate: 10, tile: "#d97757", art: { mask: "brands/claude.svg", color: "#ffffff", scale: 0.64 } },
+  { id: "chatgpt", label: "ChatGPT", side: "r", x: 1638 / 2000, y: 425 / 1124, size: 0.066, rotate: 0, tile: "#0b0b0f", art: { mask: "brands/openai.svg", color: "#ffffff", scale: 0.66 }, shape: "round" },
+  { id: "antigravity", label: "Antigravity", side: "r", x: 1836 / 2000, y: 352 / 1124, size: 0.066, rotate: -4, tile: "#ffffff", art: { img: "brands/antigravity-color.svg", scale: 0.74 } },
+  { id: "opencode", label: "OpenCode", side: "r", x: 1918 / 2000, y: 452 / 1124, size: 0.05, rotate: 8, tile: "#f4f1ea", art: { mask: "brands/opencode.svg", color: "#0b0b0f", scale: 0.58 } },
+  { id: "cursor", label: "Cursor", side: "r", x: 1852 / 2000, y: 682 / 1124, size: 0.078, rotate: -6, tile: "#0b0b0f", art: { mask: "brands/cursor.svg", color: "#ffffff", scale: 0.62 } },
 ];
 
 function MarkTile({ mark, index }: { mark: Mark; index: number }) {
@@ -57,12 +57,30 @@ function MarkTile({ mark, index }: { mark: Mark; index: number }) {
   );
 }
 
-/**
- * As on nuphos: nothing is pinned. The page scrolls normally and the picture, which hangs from the
- * button between the noses, grows around that point (--z), so the button stays between them.
- */
-function useHeroZoom() {
-  const ref = useRef<HTMLElement>(null);
+/** One wolf's half of the picture: the whole picture, masked to its side of the noses. */
+function Half({ side }: { side: "l" | "r" }) {
+  return (
+    <div className={`hero-half hero-half-${side}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a static export: next/image would not optimise it */}
+      <img
+        src={`${base}/landing/wolves-2560.webp`}
+        srcSet={`${base}/landing/wolves-960.webp 960w, ${base}/landing/wolves-1600.webp 1600w, ${base}/landing/wolves-2560.webp 2560w, ${base}/landing/wolves-3840.webp 3840w`}
+        sizes="(max-width: 767px) 260vw, 100vw"
+        alt=""
+        width={3840}
+        height={2158}
+        fetchPriority="high"
+        className="hero-image"
+        data-testid={side === "l" ? "hero-image" : undefined}
+        draggable={false}
+      />
+      {MARKS.map((m, i) => (m.side === side ? <MarkTile key={m.id} mark={m} index={i} /> : null))}
+    </div>
+  );
+}
+
+/** Scroll grows the picture around the noses (--z); the page itself scrolls normally. */
+function useHeroZoom(ref: RefObject<HTMLElement | null>) {
   const [motion, setMotion] = useState(false);
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
@@ -78,36 +96,27 @@ function useHeroZoom() {
     let frame = 0;
     let target = 0;
     let shown = 0;
-    // ease toward the scroll position so wheel steps glide instead of jumping
     const tick = () => {
-      shown += (target - shown) * 0.2;
+      shown += (target - shown) * 0.18;
       if (Math.abs(target - shown) < 0.0005) shown = target;
-      el.style.setProperty("--z", (1 + shown * 0.6).toFixed(4));
+      el.style.setProperty("--z", (1 + shown * 0.32).toFixed(4));
       frame = shown === target ? 0 : requestAnimationFrame(tick);
     };
     const onScroll = () => {
       target = Math.min(1, Math.max(0, window.scrollY / window.innerHeight));
       if (!frame) frame = requestAnimationFrame(tick);
     };
-    // the marks lean a little toward the pointer
-    const onPointer = (e: PointerEvent) => {
-      el.style.setProperty("--mx", ((e.clientX / window.innerWidth) * 2 - 1).toFixed(3));
-      el.style.setProperty("--my", ((e.clientY / window.innerHeight) * 2 - 1).toFixed(3));
-    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("pointermove", onPointer, { passive: true });
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("pointermove", onPointer);
     };
-  }, [motion]);
-  return { ref, motion };
+  }, [motion, ref]);
 }
 
 /** The nav turns to night glass once the snow has scrolled away (with or without motion). */
-function useNightNav(hero: React.RefObject<HTMLElement | null>) {
+function useNightNav(hero: RefObject<HTMLElement | null>) {
   useEffect(() => {
     const nav = document.querySelector<HTMLElement>(".lp-nav");
     const el = hero.current;
@@ -120,13 +129,14 @@ function useNightNav(hero: React.RefObject<HTMLElement | null>) {
 }
 
 export function Hero() {
-  const { ref, motion } = useHeroZoom();
+  const ref = useRef<HTMLElement>(null);
+  useHeroZoom(ref);
   useNightNav(ref);
   return (
-    <section ref={ref} className="hero" data-motion={motion ? "on" : "off"} data-testid="hero" aria-labelledby="hero-title">
-      <div className="hero-copy">
+    <section ref={ref} className="hero" data-testid="hero" aria-labelledby="hero-title">
+      <div className="hero-copy hero-reveal-text">
         <h1 id="hero-title" className="hero-title">
-          Understand your code. <br />
+          Understand your code.{" "}
           <em>Fix what breaks.</em>
         </h1>
         <p className="hero-line" data-testid="hero-line">
@@ -138,20 +148,8 @@ export function Hero() {
         {/* the point between the two noses: the picture hangs from it */}
         <div className="hero-anchor">
           <div className="hero-stage" aria-hidden data-testid="hero-stage">
-            {/* eslint-disable-next-line @next/next/no-img-element -- a static export: next/image would not optimise it */}
-            <img
-              src={`${base}/landing/wolves-2560.webp`}
-              srcSet={`${base}/landing/wolves-960.webp 960w, ${base}/landing/wolves-1600.webp 1600w, ${base}/landing/wolves-2560.webp 2560w, ${base}/landing/wolves-3840.webp 3840w`}
-              sizes="(max-aspect-ratio: 4/5) 200vw, 100vw"
-              alt=""
-              width={3840}
-              height={2158}
-              fetchPriority="high"
-              className="hero-image"
-              data-testid="hero-image"
-              draggable={false}
-            />
-            {MARKS.map((m, i) => <MarkTile key={m.id} mark={m} index={i} />)}
+            <Half side="l" />
+            <Half side="r" />
           </div>
         </div>
         <a href={GRAPH_HREF} className="hero-connect" data-testid="connect-github">
@@ -159,13 +157,12 @@ export function Hero() {
           Connect GitHub
         </a>
         <a href={GITHUB_URL} className="hero-ghost" data-testid="view-github">
-          <GithubIcon className="size-4" />
+          <GithubIcon className="size-[18px]" />
           View on GitHub
-          <ArrowUpRight className="size-3.5 opacity-60" aria-hidden />
         </a>
       </div>
 
-      <div className="hero-window">
+      <div className="hero-window hero-reveal-video">
         <AppWindow />
       </div>
     </section>
