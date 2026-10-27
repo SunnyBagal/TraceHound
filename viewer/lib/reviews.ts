@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sessionCachedFetch } from "./ghcache.ts";
 
 export const DEFAULT_REVIEW_REPO = "SunnyBagal/tracehound-demo";
 export const MODEL_DISCLOSURE = "model-generated, not tested";
@@ -179,6 +180,6 @@ export function createReviewsClient(fetcher: typeof fetch) {
 }
 
 let pageClient: ReturnType<typeof createReviewsClient> | undefined;
-const client = () => pageClient ??= createReviewsClient((...args) => fetch(...args));
+const client = () => pageClient ??= createReviewsClient(sessionCachedFetch((...args) => fetch(...args)));
 export const loadReviewList = (repo: string) => client().list(repo);
 export const loadPullReview = (repo: string, number: number) => client().detail(repo, number);

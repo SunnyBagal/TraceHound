@@ -863,3 +863,12 @@ html:has(.landing) body {
   .th-node:hover, .pr-chip:hover { translate: none; }
   .react-flow__node.selected .th-node { animation: none; }
 }
+
+/* ---------- reviews pages (5d) ---------- */
+.skeleton { background: linear-gradient(90deg, var(--card) 0%, var(--card-hover) 40%, var(--card) 80%); background-size: 200% 100%; animation: skeleton 1.4s linear infinite; }
+@keyframes skeleton { to { background-position: -200% 0; } }
+.review-card { transition: border-color var(--dur-base); }
+.review-card:hover { border-color: var(--line-strong); }
+.page-shell main > * { animation: page-in 360ms var(--ease-out) both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .skeleton, .page-shell main > * { animation: none; } }

@@ -1,5 +1,8 @@
 import { createReviewsClient, reviewFindings, reviewRepo, ReviewsError, type Finding, type GitHubComment, type PullFile, type PullRequest, type ReviewFooter, type TraceReview } from "./reviews";
 import type { Snapshot } from "./types";
+import { sessionCachedFetch } from "./ghcache";
+
+export { sessionCachedFetch };
 
 /**
  * The PR lane on /graph: a repo's pull requests with TraceHound's review status, and for the
@@ -42,34 +45,12 @@ export function reviewStatus(review: TraceReview | undefined, unavailable?: bool
 const laneState = (p: PullRequest): LanePull["state"] => (p.merged_at ? "merged" : p.state);
 const byNewest = (a: LanePull, b: LanePull) => b.number - a.number;
 
-/** fetch that answers from sessionStorage when it can and stores every successful GET there. */
-export function sessionCachedFetch(fetcher: typeof fetch, storage: () => Storage | undefined = () => globalThis.sessionStorage): typeof fetch {
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input instanceof Request ? input.url : input);
-    const key = `tracehound:gh:${url}`;
-    try {
-      const hit = storage()?.getItem(key);
-      if (hit) return new Response(hit, { status: 200, headers: { "content-type": "application/json" } });
-    } catch { /* storage blocked: go to the network */ }
-    const response = await fetcher(input, init);
-    if (response.ok) {
-      const text = await response.clone().text();
-      try { storage()?.setItem(key, text); } catch { /* full or blocked: fine */ }
-    }
-    return response;
-  }) as typeof fetch;
-}
-
 export const staticReviewsPath = (repo: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/reviews/${reviewRepo(repo).replace("/", "__")}.json`;
 
 export function createPullsClient(fetcher: typeof fetch) {
   const live = createReviewsClient(sessionCachedFetch(fetcher));
   let staticFile: Promise<StaticReviews | undefined> | undefined;
-  const loadStatic = (repo: string) => staticFile ??= fetcher(staticReviewsPath(repo)).then(async (r) => {
-    if (!r.ok) return undefined;
-    const data = (await r.json()) as StaticReviews;
-    return data?.version === 1 && data.repo.toLowerCase() === repo.toLowerCase() && Array.isArray(data.pulls) ? data : undefined;
-  }).catch(() => undefined);
+  const loadStatic = (repo: string) => staticFile ??= savedReviews(repo, fetcher);
   const notice = (error: unknown) => (error instanceof ReviewsError && error.rateLimited ? RATE_LIMIT_NOTICE : error instanceof Error ? error.message : "GitHub couldn’t be reached.");
 
   return {
@@ -168,3 +149,18 @@ export const prParam = (search: string): number | null => {
 
 let pageClient: ReturnType<typeof createPullsClient> | undefined;
 export const pullsClient = () => pageClient ??= createPullsClient((...args) => fetch(...args));
+
+/**
+ * /reviews on a rate limit: the same saved copy, in the reviews pages' own shapes. Undefined when
+ * there is no copy for the repo (the page then shows the rate-limit state).
+ */
+export async function savedReviews(repo: string, fetcher: typeof fetch = (...args) => fetch(...args)): Promise<StaticReviews | undefined> {
+  try {
+    const r = await fetcher(staticReviewsPath(repo));
+    if (!r.ok) return undefined;
+    const data = (await r.json()) as StaticReviews;
+    return data?.version === 1 && data.repo.toLowerCase() === repo.toLowerCase() && Array.isArray(data.pulls) ? data : undefined;
+  } catch {
+    return undefined;
+  }
+}

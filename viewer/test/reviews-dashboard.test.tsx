@@ -56,3 +56,14 @@ it("distinguishes no review from a zero-finding review", async () => {
   render(<PullReviewDashboard />);
   await waitFor(() => expect(screen.getByText(/TraceHound posted no findings/)).toBeTruthy());
 });
+it("on a rate limit reads the saved copy and says so", async () => {
+  window.history.replaceState(null, "", "/reviews/pr?n=3");
+  vi.mocked(loadPullReview).mockRejectedValue(new ReviewsError("GitHub rate limit, try later", true));
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => url.endsWith("/reviews/SunnyBagal__tracehound-demo.json")
+    ? new Response(JSON.stringify({ version: 1, repo: "SunnyBagal/tracehound-demo", generatedAt: "2026-10-27T10:00:00Z", pulls: [{ pull, files: [], review, comments: [{ id: 42, pull_request_review_id: 10, user: { login: "github-actions[bot]" }, path: "src/auth.ts", body: "Expired sessions stay valid.", line: 8, original_line: 8, start_line: null, original_start_line: null, diff_hunk: "@@ -8,1 +8,1 @@\n+x", commit_id: "a".repeat(40) }] }] }), { status: 200 })
+    : new Response("", { status: 404 })));
+  render(<PullReviewDashboard />);
+  expect((await screen.findByText(/Showing the copy saved 2026-10-27/)).getAttribute("role")).toBe("status");
+  expect(within(screen.getByTestId("review-finding")).getByTestId("finding-title").textContent).toBe("Expired sessions stay valid.");
+  vi.unstubAllGlobals();
+});
