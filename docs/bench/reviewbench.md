@@ -265,3 +265,26 @@ From a ReviewBench clone (needs docker, git, jq):
 Adapter tests: `pnpm exec vitest run --config scripts/reviewbench/vitest.config.ts` and
 `pnpm exec tsc -p scripts/reviewbench`. They sit outside the workspace packages, so `pnpm test` does
 not run them; the image workflow does.
+
+## Test runs (portal, 23–24 Oct)
+
+Source: the ReviewBench portal's run pages #328–#333 (owner's record). Image `9b9a5127` (P008), 25
+pull requests, one round, scored by ReviewBench's own judge. These are test runs, not a
+leaderboard submission, and imply no leaderboard rank.
+
+| # | config | grounded F1 | G P | G R | augmented F1 | A P | findings |
+|---|---|---|---|---|---|---|---|
+| 331 | **pool-raw-x2 · 3 Super** (pre-registered winner) | **21.3** | 76.3 | 12.4 | 30.6 | 50.6 | 222 |
+| 333 | pool-raw-missed · 3 Super | 20.4 | 64.5 | 12.1 | 28.9 | 43.9 | 194 |
+| 328 | pool-raw · 3 Super | 16.0 | 70.6 | 9.0 | 23.0 | 52.5 | 124 |
+| 330 | pool-verify-v1 · 3 Super | 13.9 | 79.5 | 7.6 | 22.3 | 67.2 | 99 |
+| 329 | pool-raw · 3.5 | 13.5 | 56.3 | 7.7 | 19.0 | 44.0 | 86 |
+| 332 | pool-verify-v1 · 3.5 (= the product) | 12.2 | 69.2 | 6.7 | 17.6 | 57.2 | 60 |
+
+- No final run and no leaderboard entry: the final (219 pull requests × 3 rounds) would cost about
+  $107 with VAT (measured from #331: $3.45 per 25-PR round) against a $43.52 balance (P008
+  amendment 8).
+- Six configurations on the same 25 pull requests: the best of them carries selection bias.
+- 3.5 beat 3 Super on our dev set but lost on ReviewBench in both pipelines (pool-verify-v1 12.2 vs
+  13.9; pool-raw 13.5 vs 16.0).
+- ReviewBench's grounded metric rewards volume (findings), which the product's verifier cuts.
