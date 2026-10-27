@@ -32,6 +32,8 @@ import { FEATURES } from "./features";
 import { Pipeline } from "./Pipeline";
 import { GRAPH_BEATS, RepoToGraph, RepoToGraphWide } from "./RepoToGraph";
 import { RoadmapFlow } from "./RoadmapFlow";
+import { RunsOn } from "./RunsOn";
+import { AgentsPanel } from "./AgentsPanel";
 import { Strike } from "./StrikeLine";
 import { TrustSection } from "./TrustSection";
 
@@ -97,7 +99,6 @@ const mono = (text: React.ReactNode) => <span className="mono text-text">{text}<
 const modelNamed = GRAPH_COMPONENTS.filter((c) => c.model).map((c) => c.name);
 
 
-const RUNS_ON = ["NVIDIA Nemotron", "Nebius Token Factory", "ts-morph", "React Flow", "ELK", "Docker sandbox"] as const;
 
 export function Landing() {
   return (
@@ -152,19 +153,7 @@ export function Landing() {
         </div>
       </div>
 
-      <section aria-label="Runs on" className="vgrid-row">
-        <div className="lp-col vgrid-strip">
-          <span className="vkicker">Runs on</span>
-          <ul className="vgrid-logos">
-            {RUNS_ON.map((name) => (
-              <li key={name}>
-                {name === "NVIDIA Nemotron" && <NvidiaEye className="h-3.5 w-5" />}
-                {name}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
+      <RunsOn />
 
       <section aria-labelledby="features-title" className="vband">
         <div className="lp-col pb-16 pt-24 text-center sm:pb-20 sm:pt-32">
@@ -289,84 +278,75 @@ export function Landing() {
             <h2 id="agents-title" className="sec-h2">
               Agents
             </h2>
-            <ul className="mt-10 divide-y divide-panel-line border-y border-panel-line" data-testid="agent-rows">
-              {AGENTS.map((a) => (
-                <li key={a.name} className="grid gap-1 py-5 sm:grid-cols-[170px_1fr_260px] sm:gap-8">
-                  <span className="text-[17px] font-semibold text-text">{a.name}</span>
-                  <span className="text-[16px] leading-relaxed text-muted">{a.does}</span>
-                  <span className="mono flex items-center gap-2 text-[13px] leading-relaxed text-text sm:justify-end">
-                    {a.model.startsWith("Nemotron") && <NvidiaEye />}
-                    {a.model}
-                  </span>
-                </li>
-              ))}
-            </ul>
-
-            <div className="mt-16 flex flex-wrap items-center gap-x-5 gap-y-3">
-              <h3 className="text-xl font-semibold text-text">Models</h3>
-              {/* eslint-disable-next-line @next/next/no-img-element -- a vendored static logo */}
-              <img src={`${base}/icons/nvidia-color.svg`} alt="NVIDIA" width={351} height={259} className="h-9 w-auto" data-testid="nvidia-logo" />
+            <p className="sec-lede">Five agents, two of them deterministic. Pick one to see which model it calls.</p>
+            <div className="mt-10">
+              <AgentsPanel agents={AGENTS} />
             </div>
-            <ul className="mt-5 divide-y divide-panel-line border-y border-panel-line">
-              {MODELS.map((m) => (
-                <li key={m.id} className="grid gap-1 py-4 sm:grid-cols-[180px_1fr_auto] sm:items-center sm:gap-8">
-                  <span className="flex items-center gap-2 text-[16px] font-semibold text-text">
-                    <NvidiaEye className="h-4 w-6" />
-                    {m.name}
-                  </span>
-                  <span className="mono break-all text-[13px] leading-relaxed text-text">{m.id}</span>
-                  <span className="text-[15px] text-muted">{m.use}</span>
-                </li>
-              ))}
-            </ul>
 
-            <h3 className="mt-16 text-xl font-semibold text-text">Held-out evaluation</h3>
-            <p className="mt-4 max-w-prose text-[16px] leading-relaxed text-muted">
-              <span className="mono text-text">{HELDOUT.tasks}</span> seeded tasks, graph on and graph off, Nano and Super, <span className="mono text-text">{HELDOUT.repeats}</span> repeats
-              each: <span className="mono text-text">{HELDOUT.runs}</span> runs. The graph did not help the repair agent. It called a graph tool{" "}
-              <span className="mono text-text">{HELDOUT.graphToolCalls}</span> times in <span className="mono text-text">{HELDOUT.graphOnRuns}</span> graph-on runs.
-            </p>
-            <div className="mt-6 max-w-[640px] overflow-hidden rounded-xl border border-panel-line">
-              <table className="w-full border-collapse text-left text-[15px]" data-testid="heldout-table">
-                <caption className="sr-only">Held-out results, out of {HELDOUT.perArm} runs per model and arm</caption>
-                <thead className="bg-panel text-muted">
-                  <tr>
-                    <th scope="col" className="px-4 py-3 font-medium">
-                      Model
-                    </th>
-                    <th scope="col" className="px-4 py-3 font-medium">
-                      Graph on
-                    </th>
-                    <th scope="col" className="px-4 py-3 font-medium">
-                      Graph off
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-panel-line">
-                  {HELDOUT.rows.flatMap((r) => [
-                    { label: `${r.model}, resolved`, on: r.resolvedOn, off: r.resolvedOff },
-                    { label: `${r.model}, verified at stop`, on: r.verifiedOn, off: r.verifiedOff },
-                  ]).map((row) => (
-                    <tr key={row.label}>
-                      <th scope="row" className="px-4 py-3 font-medium text-text">
-                        {row.label}
-                      </th>
-                      <td className="mono px-4 py-3 text-text">
-                        {row.on} of {HELDOUT.perArm}
-                      </td>
-                      <td className="mono px-4 py-3 text-text">
-                        {row.off} of {HELDOUT.perArm}
-                      </td>
-                    </tr>
+            <div className="ag-grid mt-6">
+              <article className="ag-cell">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="ag-h3">Models</h3>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- a vendored static logo */}
+                  <img src={`${base}/icons/nvidia-color.svg`} alt="NVIDIA" width={351} height={259} className="h-9 w-auto" data-testid="nvidia-logo" />
+                </div>
+                <ul className="mt-5 grid gap-3">
+                  {MODELS.map((m, i) => (
+                    <li key={m.id} className="ag-model-card" data-tone={i ? "violet" : "green"}>
+                      <span className="flex items-center gap-2 text-[16px] font-semibold text-text">
+                        <NvidiaEye className="h-4 w-6" />
+                        {m.name}
+                      </span>
+                      <span className="mono mt-2 block break-all text-[12.5px] text-[color:var(--tone)]">{m.id}</span>
+                      <span className="mt-1.5 block text-[14px] text-muted">{m.use}</span>
+                    </li>
                   ))}
-                </tbody>
-              </table>
+                </ul>
+              </article>
+              <article className="ag-cell">
+                <h3 className="ag-h3">Held-out evaluation</h3>
+                <p className="mt-3 text-[15px] leading-relaxed text-muted">
+                  <span className="mono text-text">{HELDOUT.tasks}</span> seeded tasks, graph on and graph off, Nano and Super, <span className="mono text-text">{HELDOUT.repeats}</span> repeats each:{" "}
+                  <span className="mono text-text">{HELDOUT.runs}</span> runs.
+                </p>
+                <p className="ag-verdict">
+                  The graph did not help the repair agent. It called a graph tool <span className="mono">{HELDOUT.graphToolCalls}</span> times in <span className="mono">{HELDOUT.graphOnRuns}</span> graph-on runs.
+                </p>
+                <table className="ag-table" data-testid="heldout-table">
+                  <caption className="sr-only">Held-out results, out of {HELDOUT.perArm} runs per model and arm</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Model</th>
+                      <th scope="col">Graph on</th>
+                      <th scope="col">Graph off</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {HELDOUT.rows.flatMap((r) => [
+                      { label: `${r.model}, resolved`, on: r.resolvedOn, off: r.resolvedOff },
+                      { label: `${r.model}, verified at stop`, on: r.verifiedOn, off: r.verifiedOff },
+                    ]).map((row) => (
+                      <tr key={row.label}>
+                        <th scope="row">{row.label}</th>
+                        {[row.on, row.off].map((n, k) => (
+                          <td key={k} data-arm={k ? "off" : "on"}>
+                            <span className="ag-bar" style={{ "--w": `${(n / HELDOUT.perArm) * 100}%` } as React.CSSProperties} aria-hidden />
+                            <span className="mono">
+                              {n} of {HELDOUT.perArm}
+                            </span>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-4">
+                  <a href={`${GITHUB_URL}/blob/main/docs/eval/heldout-results.md`} className={`mono rounded-sm text-[13px] text-muted underline decoration-line-strong underline-offset-4 hover:text-text ${focusAccent}`}>
+                    docs/eval/heldout-results.md
+                  </a>
+                </p>
+              </article>
             </div>
-            <p className="mt-4 text-[15px] text-muted">
-              <a href={`${GITHUB_URL}/blob/main/docs/eval/heldout-results.md`} className={`mono rounded-sm text-[13px] underline decoration-line-strong underline-offset-4 hover:text-text ${focusAccent}`}>
-                docs/eval/heldout-results.md
-              </a>
-            </p>
           </div>
         </section>
 
