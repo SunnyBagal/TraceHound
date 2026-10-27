@@ -27,3 +27,41 @@ export async function elkLayout(nodeIds: string[], edges: { id: string; source: 
   const graph = await elk.layout(layoutGraph(nodeIds, edges, heights));
   return Object.fromEntries((graph.children ?? []).map((c) => [c.id, { x: c.x ?? 0, y: c.y ?? 0 }]));
 }
+
+/** Most clearance a card pushed by a growing card keeps above it (px). */
+export const PUSH_GAP = 32;
+
+/**
+ * A card changed height in place (expand/collapse): nothing is laid out again. Growing pushes
+ * down the cards below it in its column that it would now cover or crowd, each keeping the
+ * clearance it had (at most PUSH_GAP), and so on down the column; shrinking moves nothing.
+ * Returns only the positions that changed.
+ */
+export function growNode(
+  boxes: Record<string, { x: number; y: number; height: number }>,
+  id: string,
+  oldHeight: number,
+  width: number,
+): Positions {
+  const moved: Positions = {};
+  const queue: { id: string; oldBottom: number }[] = [{ id, oldBottom: boxes[id]!.y + oldHeight }];
+  const at = (k: string) => moved[k] ?? boxes[k]!;
+  while (queue.length) {
+    const { id: top, oldBottom } = queue.shift()!;
+    const t = at(top);
+    const bottom = t.y + boxes[top]!.height;
+    for (const [k, b] of Object.entries(boxes)) {
+      if (k === top || k === id) continue;
+      const p = at(k);
+      if (p.x + width <= t.x || t.x + width <= p.x) continue; // another column
+      if (p.y < t.y) continue; // above it
+      if (p.y >= bottom + PUSH_GAP) continue; // already clear
+      const keep = Math.min(Math.max(p.y - oldBottom, 0), PUSH_GAP);
+      const y = bottom + keep;
+      if (y <= p.y) continue;
+      moved[k] = { x: p.x, y };
+      queue.push({ id: k, oldBottom: p.y + b.height });
+    }
+  }
+  return moved;
+}

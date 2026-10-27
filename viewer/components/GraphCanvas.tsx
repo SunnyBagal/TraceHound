@@ -16,7 +16,7 @@ import type { ChangeModel } from "@/lib/changes";
 import { buildGraph, neighbours, NODE_HEIGHT, NODE_WIDTH, type ComponentNode as ComponentNodeType, type EvidenceEdge as EvidenceEdgeType } from "@/lib/graph";
 import { impactEdges, impactRoles, type ImpactReport } from "@/lib/impact";
 import type { Highlight } from "@/lib/highlight";
-import { elkLayout, type Positions } from "@/lib/layout";
+import { elkLayout, growNode, type Positions } from "@/lib/layout";
 import { clearPositions, loadPositions, savePositions } from "@/lib/positions";
 import type { Snapshot } from "@/lib/types";
 import { clampZoom, keepInView, MAX_ZOOM, MIN_ZOOM, minZoomFor } from "@/lib/zoom";
@@ -71,7 +71,9 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
   const heights = useMemo(() => Object.fromEntries(base.nodes.map((n) => [n.id, expanded.has(n.id) ? expandedHeight(n.data.contents ?? []) : NODE_HEIGHT])), [base, expanded]);
   const layoutIdentity = useRef("");
   const initialFitPending = useRef(false);
-  const anchor = useRef<{ id: string; x: number; y: number } | null>(null);
+  // the layout reads the heights it starts with; a toggle afterwards resizes one card in place (below)
+  const heightsRef = useRef(heights);
+  heightsRef.current = heights;
   // positions are per repo (lib/positions.ts); the commit is only used to pick up pre-040 saves
   const storageKey = snapshot.repo.name;
   const legacySha = snapshot.repo.commitSha;
@@ -89,17 +91,19 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
   const fitRef = useRef(fit); // the layout effect reads the current limits without re-running ELK on resize
   fitRef.current = fit;
 
-  // ELK layout, then any positions this viewer saved for this snapshot.
+  // ELK layout, then any positions this viewer saved for this snapshot. Runs per repo, graph or
+  // reset, never per expand/collapse: that would move every card and drop dragged positions.
   useEffect(() => {
     let cancelled = false;
+    const start = heightsRef.current;
     elkLayout(
       base.nodes.map((n) => n.id),
       base.edges,
-      heights,
+      start,
     )
       .catch((): Positions => {
         let y = 0;
-        return Object.fromEntries(base.nodes.map((n) => { const p = { x: 0, y }; y += heights[n.id]! + 80; return [n.id, p]; }));
+        return Object.fromEntries(base.nodes.map((n) => { const p = { x: 0, y }; y += start[n.id]! + 80; return [n.id, p]; }));
       })
       .then((layout) => {
         if (cancelled) return;
@@ -107,22 +111,38 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
         const initial = layoutIdentity.current !== identity;
         layoutIdentity.current = identity;
         initialFitPending.current = initial;
-        const saved = initial && !expanded.size ? loadPositions(storageKey, legacySha) : {};
+        const saved = initial ? loadPositions(storageKey, legacySha) : {};
+        // a new graph for the same repo (change view): keep the first card where it was
         const first = nodesRef.current[0];
-        const oldAnchor = anchor.current ?? (first ? { id: first.id, ...first.position } : null);
-        const origin = oldAnchor && layout[oldAnchor.id];
-        const offset = !initial && origin && oldAnchor ? { x: oldAnchor.x - origin.x, y: oldAnchor.y - origin.y } : { x: 0, y: 0 };
-        setNodes(base.nodes.map((n) => ({
-          ...n, height: heights[n.id],
-          handles: n.handles?.map((h) => ({ ...h, y: heights[n.id]! / 2 - 4 })),
-          position: saved[n.id] ?? { x: (layout[n.id]?.x ?? 0) + offset.x, y: (layout[n.id]?.y ?? 0) + offset.y },
-        })));
-        anchor.current = null;
+        const origin = first && layout[first.id];
+        const offset = !initial && origin ? { x: first.position.x - origin.x, y: first.position.y - origin.y } : { x: 0, y: 0 };
+        const positions: Positions = Object.fromEntries(base.nodes.map((n) => [n.id, saved[n.id] ?? { x: (layout[n.id]?.x ?? 0) + offset.x, y: (layout[n.id]?.y ?? 0) + offset.y }]));
+        // saved positions were dragged at some height; cards open from the URL may now crowd others
+        const now = heightsRef.current;
+        for (const n of base.nodes) {
+          const was = saved[n.id] ? NODE_HEIGHT : start[n.id]!;
+          if (now[n.id]! > was) Object.assign(positions, growNode(boxesOf(positions, now), n.id, was, NODE_WIDTH));
+        }
+        setNodes(base.nodes.map((n) => sized({ ...n, position: positions[n.id]! }, now[n.id]!)));
       });
     return () => {
       cancelled = true;
     };
-  }, [base, storageKey, legacySha, setNodes, fitView, layoutRun, heights, expanded]);
+  }, [base, storageKey, legacySha, setNodes, layoutRun]);
+
+  // Expand/collapse: only that card's height changes; cards it would now cover move down. No ELK,
+  // no fitView, and dragged positions stay.
+  useEffect(() => {
+    setNodes((current) => {
+      if (!current.some((n) => n.height !== heights[n.id])) return current;
+      const positions: Positions = Object.fromEntries(current.map((n) => [n.id, n.position]));
+      for (const n of current) {
+        const was = n.height ?? NODE_HEIGHT;
+        if (heights[n.id]! > was) Object.assign(positions, growNode(boxesOf(positions, heights), n.id, was, NODE_WIDTH));
+      }
+      return current.map((n) => sized(positions[n.id] === n.position ? n : { ...n, position: positions[n.id]! }, heights[n.id]!));
+    });
+  }, [heights, setNodes]);
 
   // Fit only once React Flow has registered and measured the first layout's cards.
   useEffect(() => {
@@ -200,7 +220,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
             ...n.data,
             expanded: expanded.has(n.id),
             height: n.height,
-            onToggle: () => { anchor.current = { id: n.id, ...n.position }; toggle(n.id); },
+            onToggle: () => toggle(n.id),
             onMore: () => onSelect({ type: "node", id: n.id }),
             // a panel-hovered node is never dimmed; then hover/selection focus; then impact mode
             // dims everything outside the impact
@@ -304,6 +324,16 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
       {nodes.length === 0 && <div className="absolute inset-0 grid place-items-center text-sm text-faint">Laying out {base.nodes.length} components…</div>}
     </div>
   );
+}
+
+function boxesOf(positions: Positions, heights: Record<string, number>) {
+  return Object.fromEntries(Object.entries(positions).map(([id, p]) => [id, { ...p, height: heights[id] ?? NODE_HEIGHT }]));
+}
+
+/** A card at its height, its handles at mid-height. */
+function sized(n: ComponentNodeType, height: number): ComponentNodeType {
+  if (n.height === height) return n;
+  return { ...n, height, handles: n.handles?.map((h) => ({ ...h, y: height / 2 - 4 })) };
 }
 
 const CONTROL_GROUP = "flex flex-col overflow-hidden rounded-lg border border-line bg-panel/90 shadow-lg backdrop-blur";
