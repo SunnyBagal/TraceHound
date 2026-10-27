@@ -62,10 +62,10 @@ describe('the landing page at "/"', () => {
     render(<Home />);
     expect(screen.getByTestId("landing")).toBeTruthy();
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Understand your code. Fix what breaks.");
-    expect(screen.getByTestId("hero-line").textContent).toBe("AI agents that review and test pull requests with full context of the codebase.");
-    for (const name of ["Understand what agents write.", "How it works", "Agents", "Roadmap"]) expect(screen.getByRole("heading", { level: 2, name })).toBeTruthy();
+    expect(screen.getByTestId("hero-line").textContent).toBe("An evidence-backed graph of your repo's architecture, and a pull-request reviewer on NVIDIA Nemotron through Nebius Token Factory.");
+    for (const name of ["Read the architecture, not the diff.", "Understand what agents write.", "How it works", "Agents", "Roadmap", "See your pull requests on the map."]) expect(screen.getByRole("heading", { level: 2, name })).toBeTruthy();
     const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual(["TraceHound", "Graph", "Reviews", "Benchmark", "How it works", "Agents", "Roadmap", "GitHub"]);
+    expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual(["TraceHound", "Graph", "Reviews", "Benchmark", "How it works", "Agents", "Roadmap", "GitHub", "Connect GitHub"]);
     expect(within(nav).getByRole("link", { name: "GitHub" }).getAttribute("href")).toBe("https://github.com/SunnyBagal/TraceHound");
     expect(within(nav).queryByText(/sign in|log in/i)).toBeNull();
     for (const id of ["how-it-works", "agents", "roadmap"]) expect(document.getElementById(id)).toBeTruthy();
@@ -74,10 +74,14 @@ describe('the landing page at "/"', () => {
     expect(within(footer).getAllByRole("link").map((a) => a.textContent)).toEqual(["GitHub", "MIT License"]);
   });
 
-  it('"Get started" opens demo reviews, with graph and agents navigation available', () => {
+  it('the hero: "Connect GitHub" opens the graph, "View on GitHub" the repo; reviews and agents navigation available', () => {
     render(<Home />);
-    expect(screen.getByRole("link", { name: "Get started" }).getAttribute("href")).toBe("/reviews?repo=SunnyBagal%2Ftracehound-demo");
-    expect(screen.getByRole("link", { name: "Explore graph" }).getAttribute("href")).toBe("/graph");
+    const hero = screen.getByTestId("hero");
+    expect(within(hero).getByRole("link", { name: "Connect GitHub" }).getAttribute("href")).toBe("/graph");
+    expect(within(hero).getByRole("link", { name: "View on GitHub" }).getAttribute("href")).toBe("https://github.com/SunnyBagal/TraceHound");
+    expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Reviews" }).getAttribute("href")).toBe("/reviews?repo=SunnyBagal%2Ftracehound-demo");
+    // the owner's layout: NVIDIA on the black wolf, the coding agents on the pack
+    expect(within(hero).getAllByTestId("hero-mark").map((m) => m.dataset.mark)).toEqual(["nvidia", "chatgpt", "claude", "antigravity", "opencode", "cursor"]);
     expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Agents" }).getAttribute("href")).toBe("#agents");
   });
 

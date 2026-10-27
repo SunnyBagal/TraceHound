@@ -50,3 +50,20 @@ cropped to that path (`56.5 31.2 249.5 166`; sha256 `3d0ff94ca476e49e5e94cf00a01
 badge size. The viewer uses it, in colour at the owner's request, for every model-written
 name (`viewer/components/ModelMark.tsx`), always beside the disclosure text or with it as the
 tooltip. It replaces the single-colour `nvidia.svg` above, which stays vendored but unused.
+
+## Landing hero brand marks (`brands/`)
+
+Vendored on 2026-10-27 for the landing page's hero only, with the owner's approval; trademarks
+belong to their owners and the marks only name the coding agents whose pull requests TraceHound
+reviews (and NVIDIA, whose Nemotron models it runs on). Unmodified files:
+
+| File | Mark | Source | Licence of the file |
+| --- | --- | --- | --- |
+| `brands/claude.svg` | Claude | https://cdn.jsdelivr.net/npm/simple-icons@15/icons/claude.svg | CC0-1.0 (Simple Icons) |
+| `brands/openai.svg` | ChatGPT / OpenAI | https://cdn.jsdelivr.net/npm/simple-icons@15/icons/openai.svg | CC0-1.0 (Simple Icons) |
+| `brands/cursor.svg` | Cursor | https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1/icons/cursor.svg | MIT (Lobe Icons) |
+| `brands/antigravity-color.svg` | Google Antigravity | https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1/icons/antigravity-color.svg | MIT (Lobe Icons) |
+| `brands/opencode.svg` | OpenCode | https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1/icons/opencode.svg | MIT (Lobe Icons) |
+
+The NVIDIA mark on the hero reuses `nvidia.svg` above. Single-colour files are drawn as CSS
+masks filled with the brand's colour on its tile.

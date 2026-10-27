@@ -1,4 +1,4 @@
-import { LogoButton, LogoLink } from "@/components/Logo";
+import { LogoLink } from "@/components/Logo";
 import {
   ADDED_EDGE,
   CHANGES_HREF,
@@ -15,15 +15,20 @@ import {
   GRAPH_TREE,
   HELDOUT,
   IGNORED_BY_CONFIG,
+  RECALL_COMPONENTS,
   LICENSE_URL,
   MODELS,
   RECALL,
 } from "@/lib/landing";
 import { LEGACY_REDIRECT_SCRIPT } from "@/lib/legacy";
-import { reviewsHref } from "@/lib/reviews";
+import { MODEL_DISCLOSURE, reviewsHref } from "@/lib/reviews";
 import { AnimatedFigure } from "./AnimatedFigure";
 import { DiffToDeclarations } from "./DiffToDeclarations";
-import { inter, jetbrains } from "./fonts";
+import { inter, jetbrains, serif } from "./fonts";
+import { Hero } from "./Hero";
+import demoReviews from "@/public/reviews/SunnyBagal__tracehound-demo.json";
+import { BENCHMARK_TABLES } from "@/lib/benchmark";
+import { findingTitle } from "@/lib/pulls";
 import { Pipeline } from "./Pipeline";
 import { PipelineWide } from "./PipelineWide";
 import { RepoToGraph } from "./RepoToGraph";
@@ -72,9 +77,9 @@ const NAV = [
 
 const focusInk = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
 const focusAccent = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
-const h2 = "text-[clamp(2rem,1.3rem+2.6vw,3.25rem)] font-bold leading-[1.05] tracking-[-0.02em] text-text";
-/** every section below the hero: a dark glass card over the sky, rising in as it scrolls into view */
-const glass = "lp-col lp-reveal rounded-[28px] border border-glass-line bg-glass p-5 backdrop-blur-xl sm:p-10 lg:p-14";
+const h2 = "vh2";
+/** every section below the hero: a hairline-ruled band on the night page (Vite's grid), rising in as it scrolls into view */
+const glass = "lp-col lp-reveal vsection";
 
 /** The NVIDIA eye in colour (public/icons/CREDITS.md). */
 function NvidiaEye({ className = "h-3.5 w-5" }: { className?: string }) {
@@ -82,91 +87,165 @@ function NvidiaEye({ className = "h-3.5 w-5" }: { className?: string }) {
   return <img src={`${base}/icons/nvidia-color-eye.svg`} alt="" aria-hidden className={`inline-block shrink-0 object-contain ${className}`} />;
 }
 
+function GithubMark({ className = "size-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z" />
+    </svg>
+  );
+}
+
 const mono = (text: React.ReactNode) => <span className="mono text-text">{text}</span>;
 const modelNamed = GRAPH_COMPONENTS.filter((c) => c.model).map((c) => c.name);
 
+/** Landing features (Vite-style grid). Every number is the repo's: lib/landing.ts, lib/benchmark.ts (read only), the demo's saved review. */
+const BLIND = BENCHMARK_TABLES[0]!;
+const BLIND_ROW = BLIND.rows.find((r) => r[0]!.startsWith("TraceHound"))!;
+const BLIND_PRS = /^(\d+) pull requests/.exec(BLIND.note)?.[1];
+const DEMO_FINDING = demoReviews.pulls.flatMap((p) => p.comments.map((c) => ({ number: p.pull.number, path: c.path, line: c.line, title: findingTitle(c.body) })))[0];
+const FIRST_EDGE = GRAPH_EDGES.find((e) => e.kind === "produces") ?? GRAPH_EDGES[0]!;
+const componentName = (id: string) => GRAPH_COMPONENTS.find((c) => c.id === id)?.name ?? id;
+
+const RUNS_ON = ["NVIDIA Nemotron", "Nebius Token Factory", "ts-morph", "React Flow", "ELK", "Docker sandbox"] as const;
+
 export function Landing() {
   return (
-    <div className={`landing relative isolate min-h-dvh text-text ${inter.variable} ${jetbrains.variable}`} data-testid="landing">
+    <div className={`landing relative isolate min-h-dvh text-text ${inter.variable} ${jetbrains.variable} ${serif.variable}`} data-testid="landing">
       {/* old viewer links (/?repo=, ?changes=, ?impact=) go on to /graph before anything paints */}
       <script dangerouslySetInnerHTML={{ __html: LEGACY_REDIRECT_SCRIPT }} />
 
-      {/* the sky, fixed behind the whole page: the hero shows it bare, every section below sits on glass over it */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-page">
-        <picture>
-          <source media="(max-width: 640px)" srcSet={`${base}/landing/hero-phone.webp`} type="image/webp" width={706} height={942} />
-          {/* eslint-disable-next-line @next/next/no-img-element -- a static export: next/image would not optimise it */}
-          <img
-            src={`${base}/landing/hero-1920.webp`}
-            alt=""
-            width={1920}
-            height={1084}
-            fetchPriority="high"
-            className="lp-sky h-full w-full object-cover"
-            data-testid="hero-image"
-          />
-        </picture>
-      </div>
-
-      <header className="flex min-h-[max(600px,min(100svh,980px))] flex-col">
-        <nav aria-label="Main" className="lp-col pt-4 sm:pt-6">
-          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-2xl bg-veil px-4 py-2.5 text-ink backdrop-blur-md sm:px-5">
-            <LogoLink
-              href={`${base}/`}
-              label="TraceHound home"
-              title="TraceHound"
-              testId="nav-logo"
-              markClassName="size-7"
-              className="text-[19px] font-bold tracking-[-0.01em] text-ink! focus-visible:outline-ink!"
-            >
-              TraceHound
-            </LogoLink>
-            <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px] font-medium sm:gap-x-5 sm:text-[15px]">
-              {NAV.map((l) => (
-                <li key={l.href}>
-                  <a href={l.href} className={`rounded-sm underline-offset-4 hover:underline ${focusInk}`}>
-                    {l.label}
-                  </a>
-                </li>
-              ))}
-              <li>
-                <a href={GITHUB_URL} className={`rounded-sm underline-offset-4 hover:underline ${focusInk}`}>
-                  GitHub
+      <nav aria-label="Main" className="lp-nav">
+        <div className="lp-nav-bar">
+          <LogoLink
+            href={`${base}/`}
+            label="TraceHound home"
+            title="TraceHound"
+            testId="nav-logo"
+            markClassName="size-7"
+            className="lp-nav-logo shrink-0 text-[18px] font-semibold tracking-[-0.01em] text-ink! focus-visible:outline-ink!"
+          >
+            TraceHound
+          </LogoLink>
+          <ul className="lp-nav-links">
+            {NAV.map((l) => (
+              <li key={l.href}>
+                <a href={l.href} className={`lp-nav-link ${focusInk}`}>
+                  {l.label}
                 </a>
               </li>
-            </ul>
-          </div>
-        </nav>
-
-        <div className="lp-col flex flex-1 items-center justify-center py-14">
-          <div className="lp-hero-drift flex w-full max-w-[900px] flex-col items-center rounded-[28px] bg-veil px-5 py-9 text-center text-ink backdrop-blur-md sm:px-12 sm:py-12" data-testid="hero-veil">
-            <LogoButton className="text-ink" markClassName="size-24" />
-            <h1 className="mt-6 text-[clamp(2.25rem,1.35rem+3.4vw,4.25rem)] font-bold leading-[1.02] tracking-[-0.025em] text-ink">
-              Understand your code. <br className="hidden sm:inline" />
-              Fix what breaks.
-            </h1>
-            <p className="mt-5 max-w-[34ch] text-[clamp(1.05rem,0.95rem+0.5vw,1.3rem)] font-medium leading-snug text-ink" data-testid="hero-line">
-              AI agents that review and test pull requests with full context of the codebase.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <a href={reviewsHref()} className={`inline-flex h-12 items-center rounded-full bg-ink px-7 text-[16px] font-semibold text-on-ink hover:bg-ink/85 ${focusInk}`} data-testid="get-started">
-                Get started
-              </a>
-              <a href={GRAPH_HREF} className={`inline-flex h-12 items-center rounded-full border-2 border-ink px-7 text-[16px] font-semibold text-ink hover:bg-white/40 ${focusInk}`}>
-                Explore graph
-              </a>
-            </div>
+            ))}
+          </ul>
+          <div className="flex shrink-0 items-center gap-2">
+            <a href={GITHUB_URL} className={`lp-nav-link lp-nav-gh inline-flex items-center gap-1.5 ${focusInk}`}>
+              <GithubMark className="size-4" />
+              <span className="max-sm:sr-only">GitHub</span>
+            </a>
+            <a href={GRAPH_HREF} className={`lp-nav-cta ${focusInk}`}>
+              <GithubMark className="size-3.5" />
+              Connect GitHub
+            </a>
           </div>
         </div>
-      </header>
+      </nav>
 
-      <main className="flex flex-col gap-10 pb-10 sm:gap-14 sm:pb-14">
+      <Hero />
+
+      {/* the caption under the picture, then the snow fades into the night the rest of the page sits in */}
+      <div className="lp-fig">
+        <div className="lp-col flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-ink/10 pt-4">
+          <span className="mono text-[11px] uppercase tracking-[0.18em] text-ink/70">Fig. 01: The hound and the pack</span>
+          <span className="font-display text-[17px] italic text-ink/80">Every edge points at code.</span>
+        </div>
+      </div>
+      <div aria-hidden className="lp-dusk" />
+
+      <section aria-label="Runs on" className="vgrid-row">
+        <div className="lp-col vgrid-strip">
+          <span className="vkicker">Runs on</span>
+          <ul className="vgrid-logos">
+            {RUNS_ON.map((name) => (
+              <li key={name}>
+                {name === "NVIDIA Nemotron" && <NvidiaEye className="h-3.5 w-5" />}
+                {name}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section aria-labelledby="features-title" className="vband">
+        <div className="lp-col py-24 text-center sm:py-32">
+          <p className="vkicker">The graph is the review surface</p>
+          <h2 id="features-title" className="vh2 mx-auto mt-4 max-w-[18ch]">
+            Read the architecture, not the diff.
+          </h2>
+          <p className="mx-auto mt-5 max-w-[56ch] text-[17px] leading-relaxed text-muted">
+            TraceHound draws your repo as components and the evidence between them, then reviews each pull request against that map, and pins what it finds to the part of the system it touches.
+          </p>
+        </div>
+        <div className="lp-col vgrid">
+          <article className="vcell">
+            <h3 className="vh3">Every edge has evidence</h3>
+            <p className="vcell-text">No model draws the graph. Each edge cites a file, a symbol and a line range, with the extractor that found it.</p>
+            <div className="vpanel vpanel-amber">
+              <div className="vterm" data-testid="feature-terminal">
+                <p><span className="text-faint">$</span> pnpm tracehound analyze --repo ./Recall</p>
+                <p className="text-faint">SunnyBagal/Recall@{RECALL.short} · analyzer {RECALL.analyzerVersion}</p>
+                <p><span className="text-diff-added">✓</span> {RECALL_COMPONENTS} components · {GRAPH_EDGES.length} edges, each with evidence</p>
+                <p className="mt-2 truncate">
+                  <span className="text-accent">{componentName(FIRST_EDGE.from)}</span> <span className="text-faint">-{FIRST_EDGE.kind}-&gt;</span> <span className="text-glacier">{componentName(FIRST_EDGE.to)}</span>
+                </p>
+                <p className="text-faint">  ↳ {FIRST_EDGE.file}:{FIRST_EDGE.line}</p>
+              </div>
+            </div>
+          </article>
+          <article className="vcell">
+            <h3 className="vh3">Reviews where you merge</h3>
+            <p className="vcell-text">A GitHub Action posts the review on the pull request: effect first, with the file and line, and a fix you can commit.</p>
+            <div className="vpanel vpanel-ice">
+              {DEMO_FINDING && (
+                <div className="vcomment" data-testid="feature-comment">
+                  <p className="flex items-center gap-2 text-[12px] text-muted"><span className="grid size-5 place-items-center rounded-full bg-accent text-[10px] font-bold text-ink">T</span>TraceHound · tracehound-demo #{DEMO_FINDING.number}</p>
+                  <p className="mt-2.5 text-[14px] font-medium leading-snug text-text">{DEMO_FINDING.title}</p>
+                  <p className="mono mt-2 truncate text-[12px] text-muted">{DEMO_FINDING.path}{DEMO_FINDING.line ? `:${DEMO_FINDING.line}` : ""}</p>
+                  <p className="mt-1.5 text-[11.5px] text-faint">{MODEL_DISCLOSURE}</p>
+                </div>
+              )}
+            </div>
+          </article>
+          <article className="vcell">
+            <h3 className="vh3">Findings pinned to the graph</h3>
+            <p className="vcell-text">Pick a pull request: the components it changed light up, the rest dim, and each finding hangs from the component it lives in.</p>
+            <div className="vpanel vpanel-amber" aria-hidden>
+              <div className="vmini">
+                <span className="vmini-node">API</span>
+                <span className="vmini-node">Queue</span>
+                <span className="vmini-node vmini-lit">Shared<b>1</b></span>
+                <span className="vmini-callout">changed in #2</span>
+              </div>
+            </div>
+          </article>
+          <article className="vcell">
+            <h3 className="vh3">Numbers you can check</h3>
+            <p className="vcell-text">On the benchmark&apos;s {BLIND_PRS ?? "10"} blind pull requests the reviewer&apos;s F score is a point estimate inside a wide interval, and every loss is on the page.</p>
+            <div className="vpanel vpanel-ice">
+              <a href={`${base}/benchmark`} className="vstat" data-testid="feature-benchmark">
+                <span className="vstat-n">{BLIND_ROW[7]}</span>
+                <span className="text-[13px] text-muted">F, blind test run 1 · point estimate</span>
+                <span className="mt-3 text-[13px] text-accent">See the benchmark →</span>
+              </a>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <main className="flex flex-col">
         <section aria-labelledby="agents-write">
           <div className={glass}>
-            <h2 id="agents-write" className="text-[clamp(2.6rem,1rem+6.6vw,7rem)] font-extrabold leading-[0.98] tracking-[-0.035em] text-text">
+            <h2 id="agents-write" className="text-[clamp(2.4rem,1rem+5.4vw,5.75rem)] font-semibold leading-[1] tracking-[-0.035em] text-text">
               Understand what agents write.
             </h2>
-            <p className="mt-2 text-[clamp(2.6rem,1rem+6.6vw,7rem)] font-extrabold leading-[0.98] tracking-[-0.035em] text-text" data-testid="strike-line">
+            <p className="mt-2 text-[clamp(2.4rem,1rem+5.4vw,5.75rem)] font-semibold leading-[1] tracking-[-0.035em] text-text" data-testid="strike-line">
               Don&apos;t read <Strike>{fmt(COMMIT_LINES)}</Strike> lines. Read {COMMIT_DECLARATIONS}.
             </p>
             <p className="mt-8">
@@ -383,14 +462,31 @@ export function Landing() {
         </section>
       </main>
 
-      <footer className="pb-8">
-        <div className="lp-col flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-glass-line bg-glass px-6 py-5 text-[15px] text-muted backdrop-blur-xl">
-          <a href={GITHUB_URL} className={`rounded-sm hover:text-text ${focusAccent}`}>
-            GitHub
-          </a>
-          <a href={LICENSE_URL} className={`rounded-sm hover:text-text ${focusAccent}`}>
-            MIT License
-          </a>
+      <section aria-labelledby="cta-title" className="vband vcta">
+        <div className="lp-col py-24 text-center sm:py-32">
+          <h2 id="cta-title" className="vh2 mx-auto max-w-[16ch]">See your pull requests on the map.</h2>
+          <p className="mx-auto mt-5 max-w-[48ch] text-[17px] leading-relaxed text-muted">Open the graph, pick a pull request, and read its findings where they land.</p>
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+            <a href={GRAPH_HREF} className={`vbtn vbtn-primary ${focusAccent}`}>
+              <GithubMark className="size-4" /> Connect GitHub
+            </a>
+            <a href={reviewsHref()} className={`vbtn ${focusAccent}`}>Read the reviews</a>
+            <a href={`${base}/benchmark`} className={`vbtn ${focusAccent}`}>Benchmark</a>
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-hairline">
+        <div className="lp-col flex flex-wrap items-center justify-between gap-4 py-8 text-[14px] text-muted">
+          <span className="inline-flex items-center gap-2 text-text">TraceHound <span className="text-faint">· graph + reviewer on NVIDIA Nemotron</span></span>
+          <span className="flex items-center gap-6">
+            <a href={GITHUB_URL} className={`rounded-sm hover:text-text ${focusAccent}`}>
+              GitHub
+            </a>
+            <a href={LICENSE_URL} className={`rounded-sm hover:text-text ${focusAccent}`}>
+              MIT License
+            </a>
+          </span>
         </div>
       </footer>
     </div>
