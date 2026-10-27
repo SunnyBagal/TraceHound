@@ -29,7 +29,7 @@ import { inter, jetbrains, serif } from "./fonts";
 import { Hero } from "./Hero";
 import { FeatureTabs } from "./FeatureTabs";
 import { FEATURES } from "./features";
-import { Pipeline, PIPELINE_BEATS, PipelineWide } from "./Pipeline";
+import { Pipeline } from "./Pipeline";
 import { GRAPH_BEATS, RepoToGraph, RepoToGraphWide } from "./RepoToGraph";
 import { RoadmapFlow } from "./RoadmapFlow";
 import { Strike } from "./StrikeLine";
@@ -274,20 +274,11 @@ export function Landing() {
               >
                 <RepoToGraph />
               </AnimatedFigure>
-              <AnimatedFigure
-                name="pipeline"
-                title="Find → reproduce → repair → verify"
-                wide={<PipelineWide />}
-                steps={[
-                  { title: "Find", text: "A rule over the graph emits a hypothesis: one narrow question. No model.", t: PIPELINE_BEATS[0] },
-                  { title: "Reproduce", text: "Nemotron writes one test. A fresh sandbox runs it twice; it must fail on an assertion in the same cases.", t: PIPELINE_BEATS[1] },
-                  { title: "Repair", text: "Nemotron edits the repo in a Docker sandbox with the network off.", t: PIPELINE_BEATS[2] },
-                  { title: "Verify", text: "The harness, not the agent, runs the reproduction test, the existing tests and the typecheck.", t: PIPELINE_BEATS[3] },
-                ]}
-                note="The finder's claims have not been through the reproduce stage yet; the reproduce stage and the repair agent have run on seeded claims and tasks."
-              >
+              <div className="fig-wrap">
+                <h3 className="fig-title">Find → reproduce → repair → verify</h3>
                 <Pipeline />
-              </AnimatedFigure>
+                <p className="fig-after">The finder&apos;s claims have not been through the reproduce stage yet; the reproduce stage and the repair agent have run on seeded claims and tasks.</p>
+              </div>
             </div>
           </div>
         </section>

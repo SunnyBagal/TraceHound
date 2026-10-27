@@ -223,7 +223,7 @@ describe("the strikethrough line and its caption", () => {
 });
 
 describe("the animations", () => {
-  const figures = ["diff", "graph", "pipeline"] as const;
+  const figures = ["diff", "graph"] as const;
 
   it("under reduced motion each shows its final frame, static, not a button, with its caption as the text alternative", () => {
     reducedMotion(true);
@@ -236,7 +236,7 @@ describe("the animations", () => {
       const img = within(figure).getByRole("img");
       expect(document.getElementById(img.getAttribute("aria-labelledby")!)!.tagName).toBe("FIGCAPTION");
     }
-    // the final frames: 8 declarations and both components; 5 nodes and 6 labelled edges; the test passing
+    // the final frames: 8 declarations and both components; 5 nodes and 6 labelled edges
     const diff = screen.getByTestId("anim-diff");
     expect(within(diff).getByTestId("diff-counter").textContent).toBe("8 declarations");
     expect(within(diff).getAllByTestId("dropped-file")).toHaveLength(11);
@@ -244,24 +244,31 @@ describe("the animations", () => {
     expect(within(diff).getAllByTestId("declaration-row")).toHaveLength(8);
     expect(within(diff).getAllByTestId("change-component-name").map((c) => c.textContent)).toEqual(["Recall API", "Shared Recall"]);
     expect(within(diff).getByTestId("new-edge").textContent).toBe("calls · index.ts:320");
-    // repo → graph and the pipeline: a wide drawing (lg and up) and a narrow one, both final
+    // repo → graph: a wide drawing (lg and up) and a narrow one, both final
     const variant = (name: string, v: "wide" | "narrow") => screen.getByTestId(`anim-${name}`).querySelector<HTMLElement>(`[data-variant="${v}"]`)!;
     const labels = ["index.ts:153", "worker.ts:111", "index.ts:15", "index.ts:11", "worker.ts:8", "worker.ts:6"];
     for (const v of ["wide", "narrow"] as const) {
       const graph = variant("graph", v);
       expect(within(graph).getAllByTestId("graph-node"), v).toHaveLength(5);
       expect(within(graph).getAllByTestId("edge-label").map((l) => l.textContent), v).toEqual(labels);
-      const pipeline = variant("pipeline", v);
-      expect(within(pipeline).getAllByTestId("pipeline-stage").map((s) => s.querySelector("text")!.textContent), v).toEqual(["find", "reproduce", "repair", "verify"]);
     }
     const wide = variant("graph", "wide");
     expect(within(wide).getAllByTestId("tree-row")).toHaveLength(15);
     expect(within(wide).getAllByTestId("fact-chip").map((c) => c.textContent)).toEqual(["env L4", "new Queue L10", "queue.add L153", "new Worker L111"]);
-    expect(within(variant("pipeline", "wide")).getAllByTestId("verify-check").map((c) => c.textContent)).toEqual(["✓reproduction test", "✓existing tests", "✓typecheck"]);
-    expect(within(variant("pipeline", "wide")).getByTestId("test-passes").textContent).toBe("RESOLVED");
-    expect(within(variant("pipeline", "narrow")).getByTestId("test-passes").textContent).toContain("test passes");
     // every caption is a numbered list of four steps
     for (const name of figures) expect(within(screen.getByTestId(`anim-${name}`)).getAllByRole("listitem"), name).toHaveLength(4);
+  });
+
+  it("find → reproduce → repair → verify is a static grid (no animation): four stages, the finder's rule, the verify checks", () => {
+    reducedMotion(false);
+    render(<Home />);
+    const pipeline = screen.getByTestId("pipeline");
+    expect(within(pipeline).queryByRole("button")).toBeNull();
+    expect(within(pipeline).getAllByTestId("pipeline-stage").map((s) => s.dataset.stage)).toEqual(["find", "reproduce", "repair", "verify"]);
+    expect(pipeline.textContent).toContain(FINDER_RULE.id);
+    expect(pipeline.textContent).toContain(FINDER_RULE.question);
+    expect(within(pipeline).getAllByTestId("verify-check").map((c) => c.textContent)).toEqual(["✓reproduction test", "✓existing tests", "✓typecheck"]);
+    expect(within(pipeline).getByTestId("test-passes").textContent).toBe("RESOLVED");
   });
 
   it("with motion each is a replay button (paused until in view; jsdom has no IntersectionObserver, so it plays)", () => {
