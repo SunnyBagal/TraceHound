@@ -58,3 +58,32 @@ describe.each(reviewers)("%s attemptsDetail", (_name, run) => {
     expect(out.review.chunks[0]!.attemptsDetail).toBeUndefined();
   });
 });
+
+const finding = JSON.stringify({ findings: [{ path: "src/cart.ts", line: 11, body: "Synthetic defect" }] });
+const cutOff: Reply = { content: '{"findings":[{"path":"src/cart.ts","line":11,"body":"Synth', finishReason: "length" };
+
+describe.each(reviewers)("%s retryOnLength", (_name, run) => {
+  it('default "append": the cut-off reply and the invalid-reply message are appended, reasoning unchanged', async () => {
+    const { client, requests } = scripted([cutOff, { content: finding }]);
+    const out = await run(client, {});
+    expect(out.comments).toHaveLength(1);
+    expect(requests[1]!.messages).toHaveLength(4);
+    expect(requests[1]!.messages[2]).toEqual({ role: "assistant", content: cutOff.content });
+    expect(requests[1]!.chat_template_kwargs).toEqual(requests[0]!.chat_template_kwargs);
+  });
+
+  it('"fresh": retries the original messages with reasoning off and the same max_tokens', async () => {
+    const { client, requests } = scripted([cutOff, { content: finding }]);
+    const out = await run(client, { retryOnLength: "fresh" });
+    expect(out.comments).toHaveLength(1);
+    expect(requests[0]!.chat_template_kwargs).toEqual({ enable_thinking: true });
+    expect(requests[1]).toEqual({ ...requests[0], chat_template_kwargs: { enable_thinking: false } });
+    expect(requests[1]!.max_tokens).toBe(32_000);
+  });
+
+  it('"fresh" leaves a reply that stopped normally to the append retry', async () => {
+    const { client, requests } = scripted([{ content: "not json", finishReason: "stop" }, { content: finding }]);
+    await run(client, { retryOnLength: "fresh" });
+    expect(requests[1]!.messages).toHaveLength(4);
+  });
+});

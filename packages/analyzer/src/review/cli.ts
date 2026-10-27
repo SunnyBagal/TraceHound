@@ -18,7 +18,7 @@ import { DROP_REASONS, reviewPull, type PullInput, type ReviewOutput } from "./r
 const WORKSPACE_ROOT = path.resolve(import.meta.dirname, "../../../..");
 const STATE_DIR = path.join(WORKSPACE_ROOT, ".tracehound");
 const USAGE =
-  "usage: tracehound review (--pr <file> | --prs <dir>) --out <file|dir> [--model <id>] [--reasoning on|off] [--concurrency <n>] [--summary <file>]";
+  "usage: tracehound review (--pr <file> | --prs <dir>) --out <file|dir> [--model <id>] [--reasoning on|off] [--concurrency <n>] [--summary <file>] [--retry-on-length append|fresh]";
 
 function readInput(file: string): PullInput {
   const j = JSON.parse(readFileSync(file, "utf8")) as { title?: unknown; body?: unknown; description?: unknown; diff?: unknown; number?: unknown };
@@ -38,9 +38,14 @@ export async function main(argv: string[]): Promise<number> {
       reasoning: { type: "string", default: "on" },
       concurrency: { type: "string", default: "2" },
       summary: { type: "string" },
+      "retry-on-length": { type: "string", default: "append" },
     },
   });
   if (!values.out || !!values.pr === !!values.prs || !["on", "off"].includes(values.reasoning!)) {
+    console.error(USAGE);
+    return 1;
+  }
+  if (!["append", "fresh"].includes(values["retry-on-length"]!)) {
     console.error(USAGE);
     return 1;
   }
@@ -60,7 +65,11 @@ export async function main(argv: string[]): Promise<number> {
     cache: new ResponseCache(path.join(STATE_DIR, "cache")),
     timeoutMs: 600_000, // a reasoning model over a 60,000-character chunk can take minutes
   });
-  const opts = { model: values.model!, reasoning: values.reasoning as "on" | "off" };
+  const opts = {
+    model: values.model!,
+    reasoning: values.reasoning as "on" | "off",
+    ...(values["retry-on-length"] === "fresh" && { retryOnLength: "fresh" as const }),
+  };
 
   const jobs: { input: PullInput; out: string; name: string }[] = values.pr
     ? [{ input: readInput(values.pr), out: values.out, name: path.basename(values.pr) }]

@@ -142,6 +142,8 @@ export interface ReviewOptions {
   reasoning?: "on" | "off";
   maxTokens?: number;
   chunkLimit?: number;
+  /** retry after finish_reason "length": "append" (default, today) or "fresh" */
+  retryOnLength?: "append" | "fresh";
 }
 
 export async function reviewPull(client: ChatClient, input: PullInput, opts: ReviewOptions): Promise<ReviewOutput> {
@@ -204,7 +206,9 @@ export async function reviewPull(client: ChatClient, input: PullInput, opts: Rev
         { role: "assistant", content: a1.reply.content },
         { role: "user", content: `Your reply was invalid: ${parsed.why}. Reply again with only the JSON object in the shape given.` },
       ];
-      const a2 = await attempt({ ...first, messages });
+      // "fresh": a reply cut off at max_tokens is retried as the original request with reasoning off
+      const fresh = opts.retryOnLength === "fresh" && a1.reply.finishReason === "length";
+      const a2 = await attempt(fresh ? { ...first, ...REASONING_OFF } : { ...first, messages });
       if ("error" in a2) {
         rec.status = "CHUNK_FAILED";
         rec.failure = `${firstWhy}; retry ${a2.error}`;
