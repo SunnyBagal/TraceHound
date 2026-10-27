@@ -273,7 +273,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
     if (!key || prFitted.current === key) { if (!key) prFitted.current = null; return; }
     prFitted.current = key;
     const ids = [prNode!.id, ...prTargets!].map((id) => ({ id }));
-    requestAnimationFrame(() => void fitView({ ...fitRef.current, nodes: ids, maxZoom: 1, duration: 450, ...(occludeRight ? { padding: { top: 0.15, bottom: 0.25, left: 0.1, right: `${occludeRight + MARGIN}px` } } : { padding: { top: 0.12, bottom: 0.3, left: 0.12, right: 0.12 } }) }));
+    requestAnimationFrame(() => void fitView({ ...fitRef.current, nodes: ids, maxZoom: 1, duration: 450, ...(occludeRight ? { padding: { top: 0.15, bottom: 0.25, left: 0.1, right: `${occludeRight + MARGIN}px` } } : { padding: { top: window.innerWidth < 640 ? 0.45 : 0.12, bottom: 0.3, left: 0.12, right: 0.12 } }) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- per PR selection
   }, [prNode?.id, prTargets, nodesInitialized]);
   const displayEdges = useMemo(

@@ -917,3 +917,7 @@ html:has(.landing) body {
 .verdict[data-tone="loss"] { background: color-mix(in srgb, var(--diff-removed) 12%, transparent); color: #ffb4ae; }
 .verdict[data-tone="flat"] { background: rgba(255, 255, 255, 0.05); color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .bench-dot { animation: none; } }
+@media (max-width: 640px) {
+  .pr-summary { top: 8px; left: 8px; width: calc(100% - 16px); padding: 10px 12px; font-size: 13px; }
+  .pr-summary [role="status"] { display: none; }
+}
