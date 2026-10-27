@@ -7,8 +7,6 @@ claims come from the brain's `submission/numbers.md` (27 Oct) only.
 
 - `[[TBD-SEEDED]]`: the seeded-PR run on the current config (job seed-01): PRs opened, seeded
   lines caught / total, links (numbers.md §7).
-- `[[TBD-ULTRA]]`: Ultra run 11 and the 2-run mean, from 071b (numbers.md §5).
-- `[[TBD-LEVERS]]`: the levers v2 replay result and table (numbers.md §9).
 - `[[SUNNY: …]]`: a question only Sunny can answer. Each one is also listed in `checklist.md`.
 
 Rules this text follows (numbers.md §0): no other reviewer is named, in text or logo (say "five
@@ -98,8 +96,11 @@ the scorer of record) with a second judge alongside.
   it would have cost about $107 with VAT (measured: $3.45 per 25-PR round) against a $43.52
   balance.
 - **Nemotron 3 Ultra (report only, free NVIDIA API, not Token Factory, not the product).** The 550B
-  Nemotron 3 Ultra did not review better than 3.5 Super on our pipeline (report only). Run 11:
-  [[TBD-ULTRA]].
+  Nemotron 3 Ultra did not review better than 3.5 Super on our pipeline (report only). Over 2 dev
+  runs (judge v1), its pool-verify-v1 mean F was 47.1, against 3.5 Super's 50.4 and 3 Super's 42.3,
+  with no interval-backed difference. Its unverified-pool (pool-raw) mean F was 43.6 against 3.5's
+  53.9 (−10.2 [−17.7, −3.2]), the only interval that excludes 0. Under the second judge: 54.9 and
+  51.4.
 - **Seeded PRs on the live config:** [[TBD-SEEDED]].
 
 Full tables, intervals, limits and every loss: `docs/bench/results.md`, `docs/bench/v2-calcom.md`,
@@ -238,9 +239,16 @@ Codex, Cursor, Devin, Grok and Gemini.
 
 - Recover chunks lost to invalid JSON (JSON repair or schema-constrained output; a retry with
   reasoning off mostly failed in our recall-first experiment).
-- A per-PR comment cap, against noise in posted reviews: [[TBD-LEVERS]].
-- The verifier doesn't pay on 3.5: the unverified pool scored at least as well as pool-verify on
-  our 40-PR dev set and on ReviewBench. [[TBD-LEVERS]].
+- A per-PR comment cap, against noise in posted reviews: replayed on saved dev runs at $0, no cap
+  on the shipped, verified pipeline improves F with an interval excluding 0; small gains appear
+  only on the unverified pool at k = 4–5. A hypothesis, not adopted.
+- The verifier: on our 40-PR dev set, verified scores above the unverified pool with an interval
+  excluding 0 in 2 of 9 runs; on 3.5 neither run shows a difference (−1.6 and −5.4, intervals
+  include 0); on ReviewBench the unverified pool scores higher in both models. An open question,
+  not a finding.
+- A cheaper 2-of-3 vote across runs: no gain established.
+- Where the misses are: both 3.5 dev runs miss 35 of 74 Medium+ golden comments; none of the 7
+  Critical ones is missed by both; the most missed repo is sentry (14 of 21 Medium+).
 - Cheaper experiments: run-to-run spread exceeds most effects, so replay on saved records before
   paying for new runs.
 
