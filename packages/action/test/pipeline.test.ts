@@ -357,3 +357,26 @@ describe("poolNullLines option", () => {
     await f.cleaned();
   });
 });
+
+describe("capOrder option", () => {
+  const ranked = [{ ...finding, line: 10, body: "D10 diff only" }, { ...finding, line: 30, body: "C30 ctx only" },
+    { ...finding, line: 50, body: "B50 both reviewers" }, { ...finding, line: 70, body: "D70 diff only" }];
+  it.each([
+    [undefined, ["D10", "C30"]],
+    ["pool", ["D10", "C30"]],
+    ["agreement-first", ["B50", "D10"]],
+  ] as const)("capOrder %s posts %j under max-comments 2", async (capOrder, kept) => {
+    const f = fake();
+    await runAction(event, { ...options, maxComments: 2, ...(capOrder && { capOrder }) }, { ...f.deps,
+      runPipeline: async () => ({ comments: ranked, sources: ["diff", "ctx", "both", "diff"],
+        review: { model: "fake-model", chunkFailed: 0 }, pipeline: { pool: 4, kept: 4 } }) });
+    const text = [f.posts[0]!.body, ...f.posts[0]!.comments.map(c => c.body)].join("\n");
+    for (const tag of ["D10", "C30", "B50", "D70"]) expect(text.includes(tag), tag).toBe(kept.includes(tag as never));
+    expect(f.posts[0]!.body).toContain("2 findings omitted by max-comments.");
+  });
+
+  it("rejects an unknown capOrder", async () => {
+    const f = fake();
+    await expect(runAction(event, { ...options, capOrder: "volume" as "pool" }, f.deps)).rejects.toThrow("Invalid capOrder option");
+  });
+});

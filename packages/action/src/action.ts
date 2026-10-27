@@ -49,6 +49,8 @@ export interface Options {
   learn?: "on" | "off";
   contracts?: "on" | "off";
   serverUrl?: string;
+  /** order before the max-comments cap: "pool" (default, today) or "agreement-first" (both, then diff, then ctx; stable) */
+  capOrder?: "pool" | "agreement-first";
 }
 
 export interface Dependencies {
@@ -218,6 +220,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     throw new Error("Invalid reviewer");
   }
   if (options.fixes !== undefined && options.fixes !== "on" && options.fixes !== "off") throw new Error("Invalid fixes input");
+  if (options.capOrder !== undefined && options.capOrder !== "pool" && options.capOrder !== "agreement-first") throw new Error("Invalid capOrder option");
   if (event.repository.full_name.toLowerCase() === "calcom/cal.com") {
     deps.log("TraceHound: benchmark test-set repository refused; nothing posted.");
     return;
@@ -290,6 +293,12 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     output.comments = filtered.kept;
     sources = filtered.indexes.map(index => sources[index]!);
     suppressed = filtered.suppressed;
+  }
+  if (options.capOrder === "agreement-first") {
+    const rank: Record<FindingSource, number> = { both: 0, diff: 1, ctx: 2 };
+    const order = output.comments.map((_, i) => i).sort((a, b) => rank[sources[a]!] - rank[sources[b]!] || a - b);
+    output.comments = order.map(i => output.comments[i]!);
+    sources = order.map(i => sources[i]!);
   }
   if (!output.comments.length && !suppressed?.length && !contractsResult.findings.length) {
     deps.log(`TraceHound: reviewer returned no findings; nothing posted${pipeline && stages
