@@ -20,11 +20,18 @@ export interface PipelineCounts {
   reviewerChunks?: number;
 }
 export type FindingSource = "diff" | "ctx" | "both";
+
+/** Stage counts for the "nothing posted" log lines; "-" where a stage did not finish. */
+export interface StageCounts { chunksOk?: number; chunksFailed?: number; pool?: number; kept?: number; posted?: number }
+export const formatStageCounts = (c: StageCounts) =>
+  `chunks ok ${c.chunksOk ?? "-"}, failed ${c.chunksFailed ?? "-"}; pool ${c.pool ?? "-"}; kept ${c.kept ?? "-"}; posted ${c.posted ?? 0}`;
 export interface PipelineOutput {
   comments: Finding[];
   sources: FindingSource[];
   review: { model: string; chunkFailed: number };
   pipeline: PipelineCounts;
+  /** reviewer chunk counts for logs; never posted */
+  stages?: { chunksOk: number; chunksFailed: number };
 }
 
 export class MissingHeadError extends Error {
@@ -94,6 +101,7 @@ export async function runPipeline(
   log: (message: string) => void, exec: Execute = execute,
 ): Promise<PipelineOutput | null> {
   let directory: string | undefined;
+  const counts: StageCounts = {};
   try {
     directory = await mkdtemp(path.join(tmpdir(), "tracehound-pool-"));
     const inputPath = path.join(directory, "input.json");
@@ -131,9 +139,12 @@ export async function runPipeline(
     const ctx = ctxResult!.value;
     const chunkFailed = diff.chunkFailed + ctx.chunkFailed;
     const reviewerChunks = diff.chunks + ctx.chunks;
+    counts.chunksOk = reviewerChunks - chunkFailed;
+    counts.chunksFailed = chunkFailed;
     if (chunkFailed > 0 && chunkFailed === reviewerChunks) throw new StageError("reviewers");
     const pool = poolFindings(diff.comments, ctx.comments);
     const sources = poolSources(diff.comments, ctx.comments);
+    counts.pool = pool.length;
     await stage("pool", () => writeFile(poolPath, JSON.stringify({
       pr_title: input.title, pr_number: input.number, comments: pool,
     }), { mode: 0o600 }));
@@ -174,11 +185,12 @@ export async function runPipeline(
       // Use the CLI's kept file directly, including its VERIFY_FAILED decisions.
       return { comments, sources: keptSources, review: { model: [...new Set([diff.model, ctx.model, verifyModel])].join(", "), chunkFailed },
         pipeline: { pool: pool.length, kept: comments.length,
-          ...(chunkFailed > 0 && { chunkFailed: { diff: diff.chunkFailed, ctx: ctx.chunkFailed }, reviewerChunks }) } };
+          ...(chunkFailed > 0 && { chunkFailed: { diff: diff.chunkFailed, ctx: ctx.chunkFailed }, reviewerChunks }) },
+        stages: { chunksOk: reviewerChunks - chunkFailed, chunksFailed: chunkFailed } };
     });
   } catch (error) {
     const name = error instanceof StageError ? error.stage : "pool-verify-v1";
-    log(`TraceHound: ${name} failed or returned invalid output; nothing posted.`);
+    log(`TraceHound: ${name} failed or returned invalid output; nothing posted (${formatStageCounts(counts)}).`);
     return null;
   } finally {
     if (directory) await rm(directory, { recursive: true, force: true });

@@ -1,5 +1,5 @@
 import { newSideLines, parseDiff } from "../../analyzer/src/review/diff.ts";
-import type { FindingSource, PipelineCounts, PipelineOutput } from "./pipeline.ts";
+import { formatStageCounts, type FindingSource, type PipelineCounts, type PipelineOutput } from "./pipeline.ts";
 import type { Fix, FixOutput } from "./fix.ts";
 import { filterFeedback, readFeedback, type SuppressedFinding } from "./learn.ts";
 import { contractsSection, placeContracts, settleContracts, type ContractDelivery, type ContractsResult, type ContractsSummary } from "./contracts.ts";
@@ -246,6 +246,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
   }
   let output: ReturnType<typeof readOutput>;
   let pipeline: PipelineCounts | undefined;
+  let stages: PipelineOutput["stages"];
   let sources: FindingSource[] = [];
   const contractsTask = contractsMode === "on"
     ? settleContracts(deps.runContracts && (() => deps.runContracts!(options.repoDir ?? "",
@@ -256,6 +257,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
       const result = await deps.runPipeline(buildInput(event, diff), options.model, options.repoDir ?? "", event.pull_request.head.sha);
       if (!result) { await contractsTask; return; }
       pipeline = result.pipeline;
+      stages = result.stages;
       sources = result.sources;
       output = readOutput(result);
     } else {
@@ -290,7 +292,8 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     suppressed = filtered.suppressed;
   }
   if (!output.comments.length && !suppressed?.length && !contractsResult.findings.length) {
-    deps.log("TraceHound: reviewer returned no findings; nothing posted.");
+    deps.log(`TraceHound: reviewer returned no findings; nothing posted${pipeline && stages
+      ? ` (${formatStageCounts({ ...stages, pool: pipeline.pool, kept: pipeline.kept, posted: 0 })})` : ""}.`);
     return;
   }
   const model = output.model || options.model || "reviewer default";

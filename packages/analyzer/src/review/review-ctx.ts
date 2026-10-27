@@ -10,6 +10,7 @@ import { buildChunkContext, CONTEXT_BUDGET_CHARS, type ContextRecord, type GitSo
 import { chunkDiff, CHUNK_LIMIT_CHARS, parseDiff, renderChunk } from "./diff.ts";
 import { REVIEW_CTX_SYSTEM_PROMPT, REVIEW_CTX_VERSION, reviewCtxUserMessage } from "./prompt-ctx.ts";
 import {
+  attemptDetail,
   DiffIndex,
   DROP_REASONS,
   parseReviewReply,
@@ -81,7 +82,9 @@ export async function reviewPullWithContext(
     const attempt = async (request: ChatRequest) => {
       rec.attempts++;
       try {
-        return { reply: await call(request) };
+        const reply = await call(request);
+        (rec.attemptsDetail ??= []).push(attemptDetail(reply));
+        return { reply };
       } catch (err) {
         if (err instanceof BudgetExceededError) throw err; // the run stops; never a silent empty chunk
         return { error: `request failed: ${(err as Error).message}` };

@@ -316,3 +316,21 @@ describe("pipeline failure paths", () => {
     await f.cleaned();
   });
 });
+
+describe("stage counts in nothing-posted log lines", () => {
+  it("prints the counts reached when a stage fails", async () => {
+    const f = fake();
+    f.errors.add("verify-ctx");
+    expect(await runPipeline(input, "fake-model", "/fake/repo", "abc123", f.log, f.exec)).toBeNull();
+    expect(f.log).toHaveBeenLastCalledWith(expect.stringContaining("; nothing posted (chunks ok 2, failed 0; pool 2; kept -; posted 0)."));
+    await f.cleaned();
+  });
+
+  it("prints pool and kept when pool-verify-v1 keeps nothing", async () => {
+    const f = fake();
+    await runAction(event, options, { ...f.deps, runPipeline: async () => ({ comments: [], sources: [],
+      review: { model: "fake-model", chunkFailed: 0 }, pipeline: { pool: 2, kept: 0 }, stages: { chunksOk: 2, chunksFailed: 0 } }) });
+    expect(f.log).toHaveBeenLastCalledWith("TraceHound: reviewer returned no findings; nothing posted (chunks ok 2, failed 0; pool 2; kept 0; posted 0).");
+    expect(f.posts).toEqual([]);
+  });
+});

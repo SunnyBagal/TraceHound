@@ -86,7 +86,15 @@
        "path-not-in-diff": 0,
        "file-deleted": 0,
        "line-not-in-new-version": 0
-      }
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ]
      },
      {
       "index": 1,
@@ -105,6 +113,20 @@
        "file-deleted": 0,
        "line-not-in-new-version": 0
       },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       },
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ],
       "failure": "the reply is not valid JSON; after one retry: the reply is not valid JSON"
      },
      {
@@ -124,6 +146,20 @@
        "file-deleted": 0,
        "line-not-in-new-version": 0
       },
+      "attemptsDetail": [
+       {
+        "finishReason": "length",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       },
+       {
+        "finishReason": "length",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ],
       "failure": "the reply is not valid JSON; after one retry: the reply is not valid JSON"
      },
      {
@@ -143,6 +179,20 @@
        "file-deleted": 0,
        "line-not-in-new-version": 0
       },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": true
+       },
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": true
+       }
+      ],
       "failure": "the reply is not valid JSON; after one retry: the reply is not valid JSON"
      },
      {
@@ -161,7 +211,15 @@
        "path-not-in-diff": 0,
        "file-deleted": 0,
        "line-not-in-new-version": 0
-      }
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ]
      }
     ],
     "chunkFailed": 3,
@@ -222,7 +280,15 @@
        "path-not-in-diff": 0,
        "file-deleted": 0,
        "line-not-in-new-version": 0
-      }
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ]
      },
      {
       "index": 1,
@@ -241,6 +307,20 @@
        "file-deleted": 0,
        "line-not-in-new-version": 0
       },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       },
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ],
       "failure": "the reply is not valid JSON; after one retry: the reply is not valid JSON"
      },
      {
@@ -260,6 +340,20 @@
        "file-deleted": 0,
        "line-not-in-new-version": 0
       },
+      "attemptsDetail": [
+       {
+        "finishReason": "length",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       },
+       {
+        "finishReason": "length",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ],
       "failure": "the reply is not valid JSON; after one retry: the reply is not valid JSON"
      },
      {
@@ -279,6 +373,20 @@
        "file-deleted": 0,
        "line-not-in-new-version": 0
       },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": true
+       },
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": true
+       }
+      ],
       "failure": "the reply is not valid JSON; after one retry: the reply is not valid JSON"
      },
      {
@@ -297,7 +405,15 @@
        "path-not-in-diff": 0,
        "file-deleted": 0,
        "line-not-in-new-version": 0
-      }
+      },
+      "attemptsDetail": [
+       {
+        "finishReason": "stop",
+        "reasoningTokens": 10,
+        "outputTokens": 50,
+        "contentEmpty": false
+       }
+      ]
      }
     ],
     "chunkFailed": 3,

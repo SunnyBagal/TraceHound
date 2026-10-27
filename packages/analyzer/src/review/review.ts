@@ -6,7 +6,7 @@
 // plus a `review` record of chunks, failures, drops and usage, so no pull request is silently empty.
 import { createHash } from "node:crypto";
 import type { ChatClient } from "../agent/decider.ts";
-import { BudgetExceededError, type ChatMessage, type ChatRequest } from "../llm/client.ts";
+import { BudgetExceededError, type ChatMessage, type ChatRequest, type ChatResult } from "../llm/client.ts";
 import type { ReasoningMode } from "../naming/llm.ts";
 import { chunkDiff, CHUNK_LIMIT_CHARS, newSideLines, parseDiff, renderChunk, type DiffFile } from "./diff.ts";
 import { REVIEW_SYSTEM_PROMPT, REVIEW_VERSION, reviewUserMessage } from "./prompt.ts";
@@ -46,6 +46,25 @@ export interface ChunkRecord {
   findings: number; // findings in the accepted reply
   kept: number;
   dropped: Record<DropReason, number>;
+  /** one entry per reply received, in order; absent when no reply was received */
+  attemptsDetail?: AttemptDetail[];
+}
+
+/** What the provider said about one reply; the reply text itself is not kept. */
+export interface AttemptDetail {
+  finishReason?: string;
+  reasoningTokens?: number;
+  outputTokens?: number;
+  contentEmpty: boolean;
+}
+
+export function attemptDetail(r: ChatResult): AttemptDetail {
+  return {
+    ...(r.finishReason !== undefined && { finishReason: r.finishReason }),
+    ...(r.reasoningTokens !== undefined && { reasoningTokens: r.reasoningTokens }),
+    ...(r.outputTokens !== undefined && { outputTokens: r.outputTokens }),
+    contentEmpty: !r.content?.trim(),
+  };
 }
 
 export interface ReviewOutput {
@@ -163,7 +182,9 @@ export async function reviewPull(client: ChatClient, input: PullInput, opts: Rev
     const attempt = async (request: ChatRequest) => {
       rec.attempts++;
       try {
-        return { reply: await call(request) };
+        const reply = await call(request);
+        (rec.attemptsDetail ??= []).push(attemptDetail(reply));
+        return { reply };
       } catch (err) {
         if (err instanceof BudgetExceededError) throw err; // the run stops; never a silent empty chunk
         return { error: `request failed: ${(err as Error).message}` };
