@@ -410,7 +410,7 @@ describe("the feature tabs: every terminal line is the repo's", () => {
 
   it("pin: the demo snapshot's owners of every file the saved pull requests change", () => {
     const s = json(DEMO.snapshot);
-    expect([s.repo.commitSha.slice(0, 7), s.components.length]).toEqual([DEMO.short, DEMO.components]);
+    expect([s.repo.commitSha.slice(0, 7), s.components.length, s.edges.length, s.evidence.length]).toEqual([DEMO.short, DEMO.components, DEMO.edges, DEMO.evidence]);
     const owner = new Map<string, { id: string; name: string }>();
     for (const c of s.components) for (const f of c.files) owner.set(f, c);
     const saved = json("viewer/public/reviews/SunnyBagal__tracehound-demo.json");
@@ -440,5 +440,26 @@ describe("the feature tabs: every terminal line is the repo's", () => {
     // the landing names no other reviewer outside the hero's approved marks
     const tabs = screen.getByTestId("feature-tabs").textContent!;
     for (const name of ["augment", "cursor", "greptile", "copilot", "coderabbit", "cal.com"]) expect(tabs.toLowerCase()).not.toContain(name);
+  });
+});
+
+describe("the trust section: snapshot counts and the benchmark's cost table", () => {
+  it("shows each snapshot's evidence and its components / edges, and the cost table's medians and maxima", () => {
+    reducedMotion(true);
+    render(<Home />);
+    const trust = screen.getByTestId("trust");
+    expect(within(trust).getByRole("heading", { level: 2 }).textContent).toBe("Built to be checked.");
+    const stats = screen.getByTestId("trust-stats").textContent!;
+    for (const [r, short] of [[ANALYZE_RUNS[0], ANALYZE_RUNS[0].short], [ANALYZE_RUNS[1], ANALYZE_RUNS[1].short], [DEMO, DEMO.short]] as const) {
+      expect(stats).toContain(`@${short}`);
+      expect(stats).toContain(`${r.evidence.toLocaleString("en-US")}evidence`);
+      expect(stats).toContain(`${r.components} / ${r.edges}`);
+    }
+    const cost = BENCHMARK_TABLES.find((t) => t.title.startsWith("Dev cost per pull request"))!;
+    const col = (h: string) => (cost.headers as readonly string[]).indexOf(h);
+    const figure = within(screen.getByTestId("trust-cost")).getByRole("img").getAttribute("aria-label")!;
+    for (const row of cost.rows.slice(0, 2)) expect(figure).toContain(`${row[0].split(" (")[0]}: median ${row[col("cost median")]}, max ${row[col("cost max")]}`);
+    // nothing armed under reduced motion: every figure shows at once
+    for (const el of trust.querySelectorAll("[data-reveal]")) expect((el as HTMLElement).dataset.reveal).not.toBe("armed");
   });
 });

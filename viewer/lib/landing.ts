@@ -233,6 +233,8 @@ export const DEMO = {
   snapshot: "snapshots/efc58448e828167d909bedca5b3f7a697449c7fd/0.10.0.json",
   short: "efc5844",
   components: 7,
+  edges: 6,
+  evidence: 277,
   owners: [
     { id: "recall-backend:shared", name: "Shared Utilities", files: ["recall-backend/services/linkDetector.ts", "recall-backend/db/schema.ts"] },
     { id: "recall-backend:brainly-server", name: "Content API Service", files: ["recall-backend/middleware/middleware.ts", "recall-backend/index.ts"] },

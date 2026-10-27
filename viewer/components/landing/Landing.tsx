@@ -33,6 +33,7 @@ import { RepoToGraph } from "./RepoToGraph";
 import { RepoToGraphWide } from "./RepoToGraphWide";
 import { RoadmapFlow } from "./RoadmapFlow";
 import { Strike } from "./StrikeLine";
+import { TrustSection } from "./TrustSection";
 
 const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -179,6 +180,8 @@ export function Landing() {
         </div>
         <FeatureTabs features={FEATURES} />
       </section>
+
+      <TrustSection />
 
       <main className="flex flex-col">
         <section aria-labelledby="agents-write">
