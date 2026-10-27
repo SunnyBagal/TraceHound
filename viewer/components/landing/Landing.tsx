@@ -1,4 +1,4 @@
-import { LogoLink } from "@/components/Logo";
+import { LogoButton, LogoLink } from "@/components/Logo";
 import {
   ADDED_EDGE,
   CHANGES_HREF,
@@ -153,7 +153,10 @@ export function Landing() {
       {/* the caption under the picture, then the snow fades into the night the rest of the page sits in */}
       <div className="lp-fig">
         <div className="lp-col flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-ink/10 pt-4">
-          <span className="mono text-[11px] uppercase tracking-[0.18em] text-ink/70">Fig. 01: The hound and the pack</span>
+          <span className="inline-flex items-center gap-3">
+            <LogoButton className="text-ink" markClassName="size-7" />
+            <span className="mono text-[11px] uppercase tracking-[0.18em] text-ink/70">Fig. 01: The hound and the pack</span>
+          </span>
           <span className="font-display text-[17px] italic text-ink/80">Every edge points at code.</span>
         </div>
       </div>

@@ -381,54 +381,86 @@ html:has(.landing) body {
 
 /* ---------- landing hero (components/landing/Hero.tsx) ---------- */
 /*
- * The picture is 2000×1124. --W is its on-screen width: it covers the viewport on landscape
- * screens; on portrait ones it is a wide band in the middle, blended into the sky above and the
- * snow below. The gap between the noses (FOCUS 46.5%, 48%) is pinned to the same screen point
- * (--fx, --fy) at every size, and --p (0→1, set by the scroll hook) zooms the picture around it.
+ * After nuphos: nothing is pinned. The copy and the buttons flow down the page; the picture
+ * (2000×1124) hangs from .hero-anchor, the centre of "Connect GitHub", by the point between the
+ * two noses (46.5%, 48%), so the button always sits between them; the app window follows. --W is
+ * the picture's width: the screen's on landscape screens (the pack reaches the right edge), a wide
+ * band on portrait ones. --fx is where the noses' gap falls across the screen: as near the centre
+ * as the picture's edges allow. --z (set by Hero.tsx while scrolling) zooms around the noses.
  */
 .hero {
   --sky: #e9ddce;
   --snow: #f1e5dc;
-  /* wide enough to reach the bottom of the screen with the noses at --fy; the sky above the
-     picture is the page's own sky colour, feathered in */
-  --W: max(100vw, calc(100svh * 1.3));
+  --W: 100vw;
   --H: calc(var(--W) * 0.562);
-  /* as near the centre as the picture's edges allow (it always covers the width) */
   --fx: clamp(calc(100vw - var(--W) * 0.535), 50vw, calc(var(--W) * 0.465));
-  --fy: 64svh;
-  --p: 0;
+  --z: 1;
   --mx: 0;
   --my: 0;
   position: relative;
-  height: 230svh;
-  background: linear-gradient(var(--sky), var(--snow));
+  isolation: isolate;
+  overflow: clip;
+  padding-bottom: 28px;
+  background: linear-gradient(var(--sky), var(--snow) 60%);
   color: var(--ink);
 }
-@media (max-aspect-ratio: 4/5) {
-  .hero { --W: 235vw; --fy: 64svh; }
+@media (max-aspect-ratio: 4/5) { .hero { --W: 200vw; } }
+
+/* the copy is centred on the noses' gap, not the screen */
+/* neither creates a stacking context: the picture (z-index -1 inside .hero-cta) must paint
+   behind the copy, in .hero's own context */
+.hero-copy, .hero-cta {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(860px, 100% - 32px);
+  margin-left: calc(var(--fx) - min(430px, 50vw - 16px));
+  text-align: center;
 }
-.hero-pin {
-  position: sticky;
-  top: 0;
-  height: 100svh;
-  min-height: 600px;
-  overflow: hidden;
+.hero-copy { padding-top: clamp(88px, 10svh, 120px); }
+/* a soft light behind the words, so the mountains never cost them contrast */
+.hero-copy::before {
+  content: "";
+  position: absolute;
+  inset: 40px -10% -20px;
+  z-index: -1;
+  background: radial-gradient(50% 55% at 50% 50%, rgba(246, 239, 228, 0.85), rgba(246, 239, 228, 0) 72%);
 }
+.hero-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(2.4rem, 1rem + 3.7vw, 4.75rem);
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.hero-title em { font-style: italic; }
+.hero-line {
+  margin-top: 16px;
+  max-width: 42ch;
+  font-size: clamp(0.98rem, 0.92rem + 0.3vw, 1.12rem);
+  line-height: 1.5;
+  color: #2a2830;
+  text-wrap: balance;
+}
+/* the buttons: the gap from the copy keeps the wolves' ears (0.2 of the picture above the noses)
+   below the words */
+.hero-cta { margin-top: max(28px, calc(var(--H) * 0.205 - 8px)); gap: 10px; }
+.hero-anchor { position: absolute; left: 50%; top: 23px; width: 0; height: 0; z-index: -1; }
 .hero-stage {
   position: absolute;
   width: var(--W);
   height: var(--H);
-  left: calc(var(--fx) - var(--W) * 0.465);
-  top: calc(var(--fy) - var(--H) * 0.48);
+  left: calc(var(--W) * -0.465);
+  top: calc(var(--H) * -0.48);
   transform-origin: 46.5% 48%;
-  transform: scale(calc(1 + var(--p) * 0.85));
+  transform: scale(var(--z));
   will-change: transform;
-  /* feather the top and bottom so a portrait band melts into the page */
-  -webkit-mask: linear-gradient(transparent, #000 9%, #000 90%, transparent);
-  mask: linear-gradient(transparent, #000 9%, #000 90%, transparent);
-}
-@media (min-aspect-ratio: 4/5) {
-  .hero-stage { -webkit-mask: linear-gradient(transparent, #000 9%); mask: linear-gradient(transparent, #000 9%); }
+  /* the top melts into the sky above, the bottom into the snow below */
+  -webkit-mask: linear-gradient(transparent, #000 10%, #000 86%, transparent);
+  mask: linear-gradient(transparent, #000 10%, #000 86%, transparent);
 }
 .hero-image { display: block; width: 100%; height: 100%; user-select: none; }
 
@@ -436,7 +468,7 @@ html:has(.landing) body {
   position: absolute;
   aspect-ratio: 1;
   translate: -50% -50%;
-  transform: rotate(var(--r)) translate(calc(var(--mx) * -6px), calc(var(--my) * -4px));
+  transform: rotate(var(--r)) translate(calc(var(--mx) * -5px), calc(var(--my) * -3px));
   transition: transform 600ms var(--ease-out);
   animation: mark-in 700ms var(--ease-spring) calc(280ms + var(--i) * 90ms) both;
 }
@@ -447,72 +479,9 @@ html:has(.landing) body {
   height: 100%;
   box-shadow: 0 10px 28px -10px rgba(10, 10, 16, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
 }
-.hero-mark-tile[style*="transparent"] { box-shadow: none; filter: drop-shadow(0 8px 14px rgba(10, 10, 16, 0.35)); }
 .hero-mark-tile > * { display: block; }
 @keyframes mark-in { from { opacity: 0; scale: 0.6; } }
 
-.hero-copy {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  pointer-events: none;
-  /* the copy drifts up and fades as the app rises */
-  transform: translateY(calc(var(--p) * -26svh));
-  opacity: calc(1 - var(--p) * 1.6);
-}
-.hero-copy > * { pointer-events: auto; }
-.hero-copy-top {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: min(880px, 100% - 32px);
-  /* centred over the gap, not the screen */
-  margin-left: calc(var(--fx) - 50vw);
-  padding-top: clamp(88px, 11svh, 132px);
-  text-align: center;
-}
-/* a soft light behind the words, so the mountains never cost them contrast */
-.hero-copy-top::before {
-  content: "";
-  position: absolute;
-  inset: 4svh 0 auto;
-  height: 46svh;
-  z-index: -1;
-  background: radial-gradient(48% 56% at 50% 48%, rgba(246, 239, 228, 0.82), rgba(246, 239, 228, 0) 72%);
-}
-.hero-title {
-  margin-top: 12px;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: var(--text-hero);
-  line-height: 0.98;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  text-wrap: balance;
-}
-.hero-title em { font-style: italic; }
-.hero-line {
-  margin-top: 18px;
-  max-width: 44ch;
-  font-size: clamp(1rem, 0.94rem + 0.3vw, 1.15rem);
-  line-height: 1.5;
-  color: #2a2830;
-  text-wrap: balance;
-}
-/* the buttons sit in the gap between the wolves, a little under the noses where it widens */
-.hero-cta {
-  position: absolute;
-  left: var(--fx);
-  top: calc(var(--fy) + var(--H) * 0.1);
-  translate: -50% 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-@media (max-aspect-ratio: 4/5) { .hero-cta { top: calc(var(--fy) + var(--H) * 0.4); } }
 .hero-connect {
   display: inline-flex;
   align-items: center;
@@ -548,14 +517,12 @@ html:has(.landing) body {
 .hero-ghost:hover, .hero-ghost:focus-visible { background: #fff; box-shadow: 0 6px 20px -10px rgba(10, 10, 16, 0.45); }
 .hero-connect:focus-visible, .hero-ghost:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
-/* the app window rises over the snow while the hero is pinned */
+/* the app window follows the buttons and covers the picture's lower half */
 .hero-window {
-  position: absolute;
-  left: 50%;
-  bottom: 0;
+  position: relative;
+  z-index: 1;
   width: min(1100px, 100% - 32px);
-  /* at rest only the title bar peeks over the snow; it is fully up when the pin ends */
-  translate: -50% calc((1 - var(--p)) * (100% - 7svh) + 2svh);
+  margin: clamp(28px, 4svh, 44px) auto 0;
 }
 
 /* ---------- the app window (components/landing/AppWindow.tsx) ---------- */
@@ -629,11 +596,9 @@ html:has(.landing) body {
 }
 @keyframes tab-fill { from { transform: scaleX(0); } }
 
-/* reduced motion: no pin, no zoom; the window sits under the picture */
+/* reduced motion: no zoom, nothing moves */
 @media (prefers-reduced-motion: reduce) {
-  .hero { height: auto; --p: 0 !important; }
-  .hero-pin { position: relative; height: auto; min-height: 100svh; padding-bottom: 48px; }
-  .hero-window { position: relative; left: auto; translate: none; margin: 62svh auto 0; }
+  .hero { --z: 1 !important; }
   .hero-mark { animation: none; transition: none; transform: rotate(var(--r)); }
   .app-window-body img { transition: none; }
 }
