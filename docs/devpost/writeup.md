@@ -1,23 +1,22 @@
 # Devpost write-up (draft)
 
-Fields in the order Devpost asks for them. Paste each section's body into its field. Everything
-in `[[…]]` is filled on 26–27 Oct; nothing else in this file needs new numbers.
+Fields in the order Devpost asks for them. Paste each section's body into its field. Numbers and
+claims come from the brain's `submission/numbers.md` (27 Oct) only.
 
-**Placeholders and what fills each one**
+**Open slots**
 
-- `[[RB-FINAL]]`: the ReviewBench final result for TraceHound's image, as recorded in its
-  results doc on 26 Oct.
-- `[[SEEDED]]`: the 26 Oct seeded test on the demo repo, run from `review-freeze-2` (`0aeef06`):
-  how many seeded defects got a comment on the seeded file and line, and what the control PR got.
-- `[[CALCOM-V2]]`: the v2 Cal.com run (decision 069): pool-verify-v1 on Nemotron 3.5 Super from
-  `review-freeze-2`, P / R / F under bench-judge-v1 with bench-judge-x1 alongside, n.
-- `[[ALL50-V2]]`: the all-50 table recomputed with the v2 Cal.com run: TraceHound's F and its
-  rank of 6 under both judges.
+- `[[TBD-SEEDED]]`: the seeded-PR run on the current config (job seed-01): PRs opened, seeded
+  lines caught / total, links (numbers.md §7).
+- `[[TBD-ULTRA]]`: Ultra run 11 and the 2-run mean, from 071b (numbers.md §5).
+- `[[TBD-LEVERS]]`: the levers v2 replay result and table (numbers.md §9).
 - `[[SUNNY: …]]`: a question only Sunny can answer. Each one is also listed in `checklist.md`.
 
-Rules this text follows: no other reviewer is named (say "five commercial reviewers" and link the
-results doc); never "beats"; never "3rd of 6" as a ranking; 3.5 on dev is "2 dev runs", and the
-second judge's interval includes 0.
+Rules this text follows (numbers.md §0): no other reviewer is named, in text or logo (say "five
+commercial reviewers" or "the leading commercial reviewer"); never "beats", "best", "state of the
+art" or "outperforms"; "ahead of / behind" only where the 95% interval excludes 0, otherwise
+"statistically tied"; "3rd of 6" only with "point estimate"; dev numbers say "on our 40-PR dev
+set" and 3.5 on dev is "2 dev runs"; ReviewBench results are test runs, never a leaderboard rank;
+Ultra is report only.
 
 ---
 
@@ -53,7 +52,8 @@ gets one review:
   shown as GitHub's native suggestion block with its **Commit suggestion** button.
 - **Cross-file contracts**: a section listing files the pull request did *not* edit that depend
   on an export, route, queue, Redis key, environment variable or event it changed. This part is
-  deterministic: no model, no network. It doesn't install dependencies, run the pull request's
+  deterministic: no model calls; network only for a credential-free git fetch of the base commit.
+  It doesn't install dependencies, run the pull request's
   scripts or load TypeScript plugins. It does parse the pull request's `tsconfig.json` and type
   files with TraceHound's bundled TypeScript, and those can reference files outside the checkout.
   So contracts, like the rest of the Action, are for same-repository pull requests only: fork pull
@@ -69,25 +69,41 @@ The dashboard, https://tracehound-tau.vercel.app, has three parts: `/reviews` (t
 reviews as bug cards with fix diffs), `/benchmark` (the results tables; a test fails the build if
 they differ from `docs/bench/results.md`), and the graph (the repo map the project started as).
 
-**Results.** On 10 blind pull requests (the Cal.com repo of a public benchmark, 5 repos × 10 PRs),
-compared with five commercial reviewers' recorded reviews (see the results doc):
+**Trying it without a key.** Judges can browse the recorded reviews, the dashboard and the seeded
+PRs ([[TBD-SEEDED]]) without a Nebius key. They can't trigger a new review on the demo repo: that
+needs write access, because the Action runs only on same-repository pull requests (forks get no
+repository secrets) and every review spends our Token Factory key. The demo repo runs the Action
+pinned to `0aeef06` with the 3.5 model set explicitly; on demo PR #2 that config posted no findings
+(24 Oct). The older reviews on the demo repo came from earlier generators on Nemotron Nano, not the
+current config.
 
-[[SUNNY: decision 066's claim names three of the five reviewers, and the Devpost text must name
-none. Default below replaces the names with descriptions; confirm, or choose another wording.]]
+**Results.** Every result here is the product as it ships: pool-verify-v1 on Nemotron 3.5 Super
+(`nvidia/Nemotron-3.5-Super-VL`) at tag `review-freeze-2` (`0aeef06`), via Nebius Token Factory.
+The benchmark is a public one (5 repos × 10 PRs, human-written golden comments). We compare with
+five commercial reviewers' recorded reviews in that dataset, scored by our judge (Nemotron 3 Super,
+the scorer of record) with a second judge alongside.
 
-> On 10 blind PRs, statistically tied with the two reviewers just above and below it; run-1 F 58.3
-> vs 36.7 for the lowest-scoring reviewer, but not a significant lead (the 95% interval includes 0;
-> ahead in 96% of resamples). 4th of 6 across all 50 under both judges. Every loss is published.
+- **Blind test, 10 Cal.com PRs (n = 23 golden comments).** Pre-registered before the run; chosen
+  on dev before this look; no tuning after; one run. Precision 63.2% (12/19), recall 52.2% (12/23),
+  F 57.1% (58.5% under the second judge). On 10 blind Cal.com PRs, TraceHound is statistically tied
+  with four of five commercial reviewers and ahead of one (only 10 PRs). This is the second blind
+  look at Cal.com; the first, on Nemotron 3 Super (`review-freeze-1`), had F 58.3%.
+- **All 50 PRs (n = 97).** F 52.2% (55.4% under the second judge). Across all 50 PRs: behind the
+  leading reviewer, statistically tied with the next two, ahead of the last two (3rd of 6 as a
+  point estimate). 40 of the 50 are our dev set, which we tuned on.
+- **ReviewBench test runs (25 PRs, one round, ReviewBench's own judge); not a leaderboard
+  submission.** We ran six pre-registered configurations on the same 25 PRs, so the top score
+  among them carries selection bias. The product scored grounded F1 12.2; the pre-registered winner
+  (pool-raw-x2 on Nemotron 3 Super, no verifier, two passes) scored 21.3. There is no final run:
+  it would have cost about $107 with VAT (measured: $3.45 per 25-PR round) against a $43.52
+  balance.
+- **Nemotron 3 Ultra (report only, free NVIDIA API, not Token Factory, not the product).** The 550B
+  Nemotron 3 Ultra did not review better than 3.5 Super on our pipeline (report only). Run 11:
+  [[TBD-ULTRA]].
+- **Seeded PRs on the live config:** [[TBD-SEEDED]].
 
-Those numbers are the first freeze (`review-freeze-1`, Nemotron 3 Super). The Action now runs
-Nemotron 3.5 Super (below). Its results on the frozen v2 configuration:
-
-- Cal.com, v2: [[CALCOM-V2]]
-- All 50 pull requests, v2: [[ALL50-V2]]
-- ReviewBench: [[RB-FINAL]]
-- Seeded defects on the demo repo: [[SEEDED]]
-
-Full tables, limits and every loss: `docs/bench/results.md`.
+Full tables, intervals, limits and every loss: `docs/bench/results.md`, `docs/bench/v2-calcom.md`,
+`docs/bench/v2-intervals.md`.
 
 ## How we built it
 
@@ -148,11 +164,11 @@ contains the finding's line and changes something. Otherwise the comment is post
 
 **Stack:** TypeScript on Node 24 (native type stripping), pnpm workspaces, ts-morph, Zod, a
 composite GitHub Action, Next.js static export with React Flow and ELK on Vercel, Vitest
-(1,305 tests on 23 Oct), and Docker as the repair sandbox. 68 decisions, each with the alternative
-we rejected, are in `docs/decisions.md`.
+(1,305 tests on 23 Oct), and Docker as the repair sandbox. Every decision, with the alternative we
+rejected, is in `docs/decisions.md`.
 
-[[SUNNY: whether to say which AI coding assistants built it; `docs/reviewer-plan.md` lists the
-lanes. Naming other companies' products may conflict with the trademark rule.]]
+**AI coding assistants:** the code and docs were written with AI coding assistants: Claude Code,
+Codex, Cursor, Devin, Grok and Gemini.
 
 ## Challenges we ran into
 
@@ -181,13 +197,18 @@ lanes. Naming other companies' products may conflict with the trademark rule.]]
   the one that was adopted: a confidence-threshold verifier (056, no gain), context for the reviewer
   alone (057, F did not move), a context verifier alone (058, under its bar), voting across five
   runs (064, failed the second judge's condition), and an evidence-quoting verifier with a
-  deterministic gate (065, failed every condition). Also published: a wrong prediction, void
-  runs, runs stopped at the spending cap, a $0.0113 ledger gap we could not explain, and the graph
-  result above.
+  deterministic gate (065, failed every condition). Since then: a recall-first variant (070, both
+  arms below their pre-registered precision floor; it was measured partly hampered by truncation
+  and a per-PR cap, and 2 defects an automated review found in it are documented, not fixed) and
+  Nemotron 3 Ultra (071). Also published: a wrong prediction, void runs, runs stopped at the
+  spending cap, a $0.0113 ledger gap we could not explain, no ReviewBench final (money), and the
+  graph result above.
 - A blind, pre-registered test on 10 PRs, with the plan, freeze tag and predictions written before
-  any TraceHound result on that repo existed.
-- A reviewer that ships as one YAML block and costs cents per PR (dev median $0.063 per PR on 3.5,
-  fixes excluded, prices from third-party listings).
+  any TraceHound result on that repo existed, and a second blind look for the product config
+  (3.5), whose plan and freeze tag (`review-freeze-2`) were also pushed before its first call.
+- A reviewer that ships as one YAML block and costs cents per PR: about $0.06–0.07 per PR on 3.5
+  (pre-VAT; dev median $0.063, mean $0.074, fixes excluded), about 2 minutes wall time per PR
+  (median on dev). The whole project's Nebius spend was $57.05 + VAT (30 days to 24 Oct).
 - Cross-file contracts that look for breaks in files the PR didn't touch, with no model and a
   90-second budget. On the 40 dev PRs they made 0 findings (decision 065), so they are not yet
   measured on real breaks.
@@ -203,6 +224,9 @@ lanes. Naming other companies' products may conflict with the trademark rule.]]
 - Our gap to the top two reviewers on the blind run was precision, and stages we added on dev did
   not close it. Switching the model from 3 Super to 3.5 Super moved mean dev precision more (40.5%
   to 54.8%, 2 dev runs) than any stage we added.
+- A gain on our own dev set doesn't carry over by itself. 3.5 beat 3 Super on our dev set but lost
+  on ReviewBench in both pipelines (12.2 vs 13.9 with the verifier; 13.5 vs 16.0 without).
+  ReviewBench's grounded metric rewards volume (findings), which the product's verifier cuts.
 - Context alone did not move F, in the reviewer (057) or in the verifier (058). Pooling the context
   reviewer's extra findings and filtering them with the context verifier did (059), by 0.6 points
   over its bar.
@@ -212,14 +236,13 @@ lanes. Naming other companies' products may conflict with the trademark rule.]]
 
 ## What's next
 
-- Fill and publish the v2 results ([[CALCOM-V2]], [[ALL50-V2]], [[RB-FINAL]], [[SEEDED]]).
-- Measure maintainer-feedback learning on real repositories: what it suppresses, and whether
-  maintainers reject fewer comments.
-- Run the reviewer at NVIDIA's recommended temperature (1.0) and measure the spread.
-- A separate reasoning budget, if the API offers one, to cut 3.5's invalid-JSON chunks without
-  changing the prompt.
-- A Token Factory Sandboxes provider for the repair harness when access exists.
-- [[SUNNY: anything else, e.g. beyond TypeScript, or a hosted version]]
+- Recover chunks lost to invalid JSON (JSON repair or schema-constrained output; a retry with
+  reasoning off mostly failed in our recall-first experiment).
+- A per-PR comment cap, against noise in posted reviews: [[TBD-LEVERS]].
+- The verifier doesn't pay on 3.5: the unverified pool scored at least as well as pool-verify on
+  our 40-PR dev set and on ReviewBench. [[TBD-LEVERS]].
+- Cheaper experiments: run-to-run spread exceeds most effects, so replay on saved records before
+  paying for new runs.
 
 ## Built with
 
