@@ -139,6 +139,8 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
                       occludeRight={occludeRight}
                       highlight={highlight.active ?? warningHighlight}
                       pr={pr}
+                      prTitle={overlayData?.title}
+                      onFindings={(id) => (entry?.type === "node" && entry.id === id ? nav.setTab("findings") : nav.open({ type: "node", id, tab: "findings" }))}
                     />
                     {laneRepo && lane.overlay && <PrSummary repo={laneRepo} overlay={lane.overlay} model={pr ?? null} />}
                     {!changes && (
@@ -155,7 +157,7 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
                 </div>
               </>
             )}
-            <Inspector snapshot={snapshot} nav={nav} bind={highlight.bind} changes={changes} />
+            <Inspector snapshot={snapshot} nav={nav} bind={highlight.bind} changes={changes} findings={pr && laneRepo && overlayData ? { repo: laneRepo, number: pr.number, reviewId: overlayData.reviewId, byComponent: pr.findings } : undefined} />
           </main>
         </div>
       </div>

@@ -321,3 +321,17 @@ html:has(.landing) body {
 }
 @keyframes pr-summary-in { from { opacity: 0; transform: translateY(-6px); } }
 @media (prefers-reduced-motion: reduce) { .pr-summary { animation: none; } .pr-chip { transition: none; } }
+
+/* findings pinned to the graph: the callout hangs from its card by a short dashed stem */
+.finding-callout::before {
+  content: ""; position: absolute; left: 24px; top: -15px; height: 14px;
+  border-left: 1.5px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.finding-callout { animation: callout-in 260ms cubic-bezier(.2,.8,.2,1) both; }
+.findings-badge { animation: badge-in 320ms cubic-bezier(.2,1.4,.4,1) both; }
+.pr-node { animation: pr-summary-in 260ms ease-out both; }
+.pr-edge { animation: pr-dash 1.2s linear infinite; }
+@keyframes callout-in { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes badge-in { from { opacity: 0; transform: scale(.4); } }
+@keyframes pr-dash { to { stroke-dashoffset: -12; } }
+@media (prefers-reduced-motion: reduce) { .finding-callout, .findings-badge, .pr-node, .pr-edge { animation: none; } }

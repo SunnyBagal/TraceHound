@@ -121,3 +121,27 @@ it("shows no lane for a repo without a mapping", async () => {
   await screen.findAllByTestId("component-node");
   expect(screen.queryByTestId("pr-lane")).toBeNull();
 });
+
+it("pins findings: a badge and callout on the component, a labelled PR overlay edge, findings in the inspector", async () => {
+  vi.stubGlobal("fetch", github());
+  window.history.replaceState(null, "", "/graph?repo=tracehound-demo&pr=2");
+  render(<Viewer snapshot={snapshot} repoId="tracehound-demo" />);
+  const badge = await screen.findByTestId("findings-badge", {}, { timeout: 3000 });
+  const card = badge.closest<HTMLElement>('[data-testid="component-node"]')!;
+  expect(card.dataset.componentId).toBe(inGraph.id);
+  expect(badge.textContent).toBe("1");
+  const callout = within(card).getByTestId("finding-callout");
+  expect(callout.textContent).toContain("This can cause search to miss every description.");
+  expect(callout.textContent).toContain(`${file}:3`);
+  expect(callout.textContent).toContain("model-generated, not tested");
+  // one overlay edge, to the one component with a changed file; evidence edges keep their own type
+  await waitFor(() => expect(screen.getAllByTestId("pr-edge-label").map((l) => l.textContent)).toEqual(["changed in #2"]));
+  expect(document.querySelectorAll('[data-id^="pr:2->"]')).toHaveLength(1);
+  expect(document.querySelector(`[data-id="pr:2->${inGraph.id}"]`)).toBeTruthy();
+  // the finding outside the graph is listed, not dropped
+  expect(within(screen.getByTestId("outside-graph")).getByText("scripts/outside.ts:9")).toBeTruthy();
+  fireEvent.click(badge);
+  const panel = await screen.findByTestId("inspector-findings");
+  const finding = within(panel).getByTestId("review-finding");
+  expect(within(finding).getAllByRole("link").some((a) => a.getAttribute("href")!.endsWith("/pull/2#discussion_r101"))).toBe(true);
+});
