@@ -5,7 +5,8 @@ import type { ChatClient } from "../src/agent/decider.ts";
 import type { ChatRequest, ChatResult } from "../src/llm/client.ts";
 import type { GitSource } from "../src/review/context.ts";
 import { reviewPullWithContext } from "../src/review/review-ctx.ts";
-import { reviewPull, type ReviewOptions } from "../src/review/review.ts";
+import { extractJson, parseReviewReply, reviewPull, type ReviewOptions } from "../src/review/review.ts";
+import { parseVerdictReply, verifyReviewWithContext } from "../src/review/verify-ctx.ts";
 
 type Reply = Partial<ChatResult> & { content: string };
 function scripted(replies: Reply[]) {
@@ -85,5 +86,56 @@ describe.each(reviewers)("%s retryOnLength", (_name, run) => {
     const { client, requests } = scripted([{ content: "not json", finishReason: "stop" }, { content: finding }]);
     await run(client, { retryOnLength: "fresh" });
     expect(requests[1]!.messages).toHaveLength(4);
+  });
+});
+
+const FENCED = "Here is my review:\n```json\n" + finding + "\n```\nThanks.";
+
+describe("parser: lenient", () => {
+  it.each([
+    ["prose around a fence", FENCED],
+    ["prose, no fence, braces inside strings, a later non-JSON brace pair",
+      `I found one: ${JSON.stringify({ findings: [{ path: "src/cart.ts", line: 11, body: "use {} not {" }] })} and also {not json}.`],
+    ["two objects: the last one with findings wins", `draft {"findings":[]} final ${finding}`],
+  ])("%s: strict fails, lenient parses one finding", (_name, text) => {
+    expect(parseReviewReply(text).ok).toBe(false);
+    expect(parseReviewReply(text, "lenient")).toMatchObject({ ok: true, findings: [{ path: "src/cart.ts", line: 11 }] });
+  });
+
+  it.each([finding, "```json\n" + finding + "\n```", '{"findings":[]}', cutOff.content, "", "not json"])(
+    "matches strict on what strict decides alone: %j", (text) => {
+      if (parseReviewReply(text).ok) expect(parseReviewReply(text, "lenient")).toEqual(parseReviewReply(text));
+      else expect(parseReviewReply(text, "lenient").ok).toBe(text === finding);
+    });
+
+  it("extracts the verifier's object by its verdict key", () => {
+    const text = 'Verdict: {"verdict":"keep","reason":"stub"} -- done';
+    expect(extractJson(text, "findings")).toBeNull();
+    expect(parseVerdictReply(text).ok).toBe(false);
+    expect(parseVerdictReply(text, "lenient")).toEqual({ ok: true, verdict: "keep", reason: "stub" });
+  });
+});
+
+describe.each(reviewers)("%s parser option", (_name, run) => {
+  it("default strict: a fenced reply with prose fails twice", async () => {
+    const out = await run(scripted([{ content: FENCED }, { content: FENCED }]).client, {});
+    expect(out.review.chunks[0]).toMatchObject({ status: "CHUNK_FAILED", attempts: 2 });
+  });
+  it("lenient: the same reply is accepted on the first attempt", async () => {
+    const out = await run(scripted([{ content: FENCED }]).client, { parser: "lenient" });
+    expect(out.review.chunks[0]).toMatchObject({ status: "OK", attempts: 1, kept: 1 });
+  });
+});
+
+describe("verify-ctx-v1 parser option", () => {
+  const review = { pr_title: "Synthetic", comments: [{ path: "src/cart.ts", line: 11, body: "Synthetic defect" }] };
+  const prose = { content: 'Verdict: {"verdict":"drop","reason":"stub"} done' };
+  const verify = (replies: Reply[], parser?: "lenient") =>
+    verifyReviewWithContext(scripted(replies).client, input, review, { source: emptyRepo, head: "abc" }, parser ? { parser } : {});
+  it("default strict: prose around the verdict is VERIFY_FAILED", async () => {
+    expect((await verify([prose, prose])).comments[0]).toMatchObject({ status: "VERIFY_FAILED", attempts: 2 });
+  });
+  it("lenient: the verdict is read on the first attempt", async () => {
+    expect((await verify([prose], "lenient")).comments[0]).toMatchObject({ status: "VERIFIED", verdict: "drop", attempts: 1 });
   });
 });

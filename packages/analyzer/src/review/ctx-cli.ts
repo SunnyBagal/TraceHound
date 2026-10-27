@@ -23,7 +23,7 @@ import { DROP_REASONS, type PullInput } from "./review.ts";
 const WORKSPACE_ROOT = path.resolve(import.meta.dirname, "../../../..");
 const STATE_DIR = path.join(WORKSPACE_ROOT, ".tracehound");
 const USAGE =
-  "usage: tracehound review-ctx (--pr <file> --head <sha> | --prs <dir> --heads <file>) --repo <git dir> --out <file|dir> [--model <id>] [--reasoning on|off] [--concurrency <n>] [--summary <file>] [--context-only] [--retry-on-length append|fresh]";
+  "usage: tracehound review-ctx (--pr <file> --head <sha> | --prs <dir> --heads <file>) --repo <git dir> --out <file|dir> [--model <id>] [--reasoning on|off] [--concurrency <n>] [--summary <file>] [--context-only] [--retry-on-length append|fresh] [--parser strict|lenient]";
 
 function readInput(file: string): PullInput {
   const j = JSON.parse(readFileSync(file, "utf8")) as { title?: unknown; body?: unknown; description?: unknown; diff?: unknown; number?: unknown };
@@ -52,6 +52,7 @@ export async function main(argv: string[]): Promise<number> {
       concurrency: { type: "string", default: "2" },
       summary: { type: "string" },
       "retry-on-length": { type: "string", default: "append" },
+      parser: { type: "string", default: "strict" },
       "context-only": { type: "boolean", default: false },
     },
   });
@@ -93,7 +94,7 @@ export async function main(argv: string[]): Promise<number> {
     return 0;
   }
 
-  if (!["append", "fresh"].includes(values["retry-on-length"]!)) {
+  if (!["append", "fresh"].includes(values["retry-on-length"]!) || !["strict", "lenient"].includes(values.parser!)) {
     console.error(USAGE);
     return 1;
   }
@@ -117,6 +118,7 @@ export async function main(argv: string[]): Promise<number> {
     model: values.model!,
     reasoning: values.reasoning as "on" | "off",
     ...(values["retry-on-length"] === "fresh" && { retryOnLength: "fresh" as const }),
+    ...(values.parser === "lenient" && { parser: "lenient" as const }),
   };
 
   const results: { name: string; r: ReviewCtxOutput }[] = [];

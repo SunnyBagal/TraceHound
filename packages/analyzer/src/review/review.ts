@@ -97,8 +97,39 @@ interface RawFinding {
 }
 
 /** Shape check of a reply: `{"findings": [...]}`, optionally in a ```json fence. Items are checked one by one later. */
-export function parseReviewReply(content: string): { ok: true; findings: RawFinding[] } | { ok: false; why: string } {
+/** For the "lenient" parser: the JSON in a reply with prose around it. A fence whose body parses
+ * as an object with `key` comes first; otherwise the last balanced {…} that does. */
+export function extractJson(content: string, key: string): string | null {
+  const has = (text: string) => {
+    try {
+      const v: unknown = JSON.parse(text);
+      return typeof v === "object" && v !== null && !Array.isArray(v) && key in v;
+    } catch {
+      return false;
+    }
+  };
+  for (const m of content.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/g)) if (has(m[1]!)) return m[1]!;
+  let best: string | null = null;
+  const open: number[] = [];
+  let inString = false;
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+    if (inString) {
+      if (ch === "\\") i++;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"' && open.length) inString = true;
+    else if (ch === "{") open.push(i);
+    else if (ch === "}" && open.length) {
+      const text = content.slice(open.pop()!, i + 1);
+      if (text.includes(`"${key}"`) && has(text)) best = text;
+    }
+  }
+  return best;
+}
+
+export function parseReviewReply(content: string, mode: "strict" | "lenient" = "strict"): { ok: true; findings: RawFinding[] } | { ok: false; why: string } {
   let text = content.trim();
+  if (mode === "lenient") text = extractJson(text, "findings") ?? text;
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(text);
   if (fenced) text = fenced[1]!;
   let json: unknown;
@@ -144,6 +175,8 @@ export interface ReviewOptions {
   chunkLimit?: number;
   /** retry after finish_reason "length": "append" (default, today) or "fresh" */
   retryOnLength?: "append" | "fresh";
+  /** reply parsing: "strict" (default, today) or "lenient" (extractJson) */
+  parser?: "strict" | "lenient";
 }
 
 export async function reviewPull(client: ChatClient, input: PullInput, opts: ReviewOptions): Promise<ReviewOutput> {
@@ -198,7 +231,7 @@ export async function reviewPull(client: ChatClient, input: PullInput, opts: Rev
       rec.failure = a1.error;
       continue;
     }
-    let parsed = parseReviewReply(a1.reply.content);
+    let parsed = parseReviewReply(a1.reply.content, opts.parser);
     if (!parsed.ok) {
       const firstWhy = parsed.why;
       const messages: ChatMessage[] = [
@@ -214,7 +247,7 @@ export async function reviewPull(client: ChatClient, input: PullInput, opts: Rev
         rec.failure = `${firstWhy}; retry ${a2.error}`;
         continue;
       }
-      parsed = parseReviewReply(a2.reply.content);
+      parsed = parseReviewReply(a2.reply.content, opts.parser);
       if (!parsed.ok) {
         rec.status = "CHUNK_FAILED";
         rec.failure = `${firstWhy}; after one retry: ${parsed.why}`;

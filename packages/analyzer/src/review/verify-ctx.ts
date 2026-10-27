@@ -10,7 +10,7 @@ import type { ChatClient } from "../agent/decider.ts";
 import type { PullReview } from "../bench/types.ts";
 import { BudgetExceededError, type ChatMessage, type ChatRequest } from "../llm/client.ts";
 import type { GitSource } from "./context.ts";
-import { REASONING_OFF, REASONING_ON, type PullInput } from "./review.ts";
+import { extractJson, REASONING_OFF, REASONING_ON, type PullInput } from "./review.ts";
 import { buildFindingContext, type FindingContextRecord } from "./verify-context.ts";
 import { VERIFY_CTX_SYSTEM_PROMPT, VERIFY_CTX_VERSION, verifyCtxUserMessage } from "./verify-ctx-prompt.ts";
 
@@ -67,8 +67,9 @@ export interface CtxKeptReview {
 }
 
 /** Shape check of a reply: `{"verdict": "keep" | "drop", "reason": "..."}`, optionally in a ```json fence. */
-export function parseVerdictReply(content: string): { ok: true; verdict: Verdict; reason: string } | { ok: false; why: string } {
+export function parseVerdictReply(content: string, mode: "strict" | "lenient" = "strict"): { ok: true; verdict: Verdict; reason: string } | { ok: false; why: string } {
   let text = content.trim();
+  if (mode === "lenient") text = extractJson(text, "verdict") ?? text;
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(text);
   if (fenced) text = fenced[1]!;
   let json: unknown;
@@ -95,6 +96,8 @@ export interface CtxVerifyOptions {
   maxTokens?: number;
   /** findings of one pull request verified at once */
   concurrency?: number;
+  /** reply parsing: "strict" (default, today) or "lenient" (extractJson in review.ts) */
+  parser?: "strict" | "lenient";
 }
 
 export async function verifyReviewWithContext(
@@ -148,7 +151,7 @@ export async function verifyReviewWithContext(
       c.failure = a1.error;
       return;
     }
-    let parsed = parseVerdictReply(a1.reply.content);
+    let parsed = parseVerdictReply(a1.reply.content, opts.parser);
     if (!parsed.ok) {
       const firstWhy = parsed.why;
       const messages: ChatMessage[] = [
@@ -161,7 +164,7 @@ export async function verifyReviewWithContext(
         c.failure = `${firstWhy}; retry ${a2.error}`;
         return;
       }
-      parsed = parseVerdictReply(a2.reply.content);
+      parsed = parseVerdictReply(a2.reply.content, opts.parser);
       if (!parsed.ok) {
         c.failure = `${firstWhy}; after one retry: ${parsed.why}`;
         return;

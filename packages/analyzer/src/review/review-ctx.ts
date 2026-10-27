@@ -96,7 +96,7 @@ export async function reviewPullWithContext(
       rec.failure = a1.error;
       continue;
     }
-    let parsed = parseReviewReply(a1.reply.content);
+    let parsed = parseReviewReply(a1.reply.content, opts.parser);
     if (!parsed.ok) {
       const firstWhy = parsed.why;
       const messages: ChatMessage[] = [
@@ -112,7 +112,7 @@ export async function reviewPullWithContext(
         rec.failure = `${firstWhy}; retry ${a2.error}`;
         continue;
       }
-      parsed = parseReviewReply(a2.reply.content);
+      parsed = parseReviewReply(a2.reply.content, opts.parser);
       if (!parsed.ok) {
         rec.status = "CHUNK_FAILED";
         rec.failure = `${firstWhy}; after one retry: ${parsed.why}`;
