@@ -114,10 +114,49 @@ describe("parser: lenient", () => {
 
   it("extracts the verifier's object by its verdict key", () => {
     const text = 'Verdict: {"verdict":"keep","reason":"stub"} -- done';
-    expect(extractJson(text, "findings")).toBeNull();
+    expect(extractJson(text, "findings", (t) => parseReviewReply(t).ok)).toBeNull();
     expect(parseVerdictReply(text).ok).toBe(false);
     expect(parseVerdictReply(text, "lenient")).toEqual({ ok: true, verdict: "keep", reason: "stub" });
   });
+});
+
+describe("parser: lenient picks the last candidate that passes the strict shape check", () => {
+  const fence = (json: string) => "```json\n" + json + "\n```";
+  const other = JSON.stringify({ findings: [{ path: "src/cart.ts", line: 10, body: "Earlier draft" }] });
+  it("reviewer: a {\"findings\":null} draft fence, then a valid fence: the valid one wins", () => {
+    const text = `Draft:\n${fence('{"findings":null}')}\nFinal:\n${fence(finding)}`;
+    expect(parseReviewReply(text, "lenient")).toMatchObject({ ok: true, findings: [{ path: "src/cart.ts", line: 11 }] });
+  });
+  it("reviewer: two valid fences: the last one wins", () => {
+    const text = `First:\n${fence(other)}\nSecond:\n${fence(finding)}`;
+    expect(parseReviewReply(text, "lenient")).toMatchObject({ ok: true, findings: [{ line: 11 }] });
+  });
+  it("reviewer: a valid fence, then an invalid one: the valid one is still taken", () => {
+    const text = `${fence(finding)}\nCorrection:\n${fence('{"findings":"none"}')}`;
+    expect(parseReviewReply(text, "lenient")).toMatchObject({ ok: true, findings: [{ line: 11 }] });
+  });
+  it.each([`Draft:\n${fence('{"findings":null}')}\nthat is all`, '  {"findings":{}}  ', "no json here", ""])(
+    "reviewer: no candidate passes: same result as strict on the trimmed text: %j", (text) => {
+      expect(parseReviewReply(text, "lenient")).toEqual(parseReviewReply(text));
+    });
+
+  const keep = '{"verdict":"keep","reason":"real defect"}';
+  const drop = '{"verdict":"drop","reason":"not a defect"}';
+  it("verifier: an invalid draft fence (empty reason), then a valid fence: the valid one wins", () => {
+    const text = `Draft:\n${fence('{"verdict":"keep","reason":""}')}\nFinal:\n${fence(drop)}`;
+    expect(parseVerdictReply(text, "lenient")).toEqual({ ok: true, verdict: "drop", reason: "not a defect" });
+  });
+  it("verifier: a bad verdict draft, then a valid one", () => {
+    const text = `Draft:\n${fence('{"verdict":"maybe","reason":"unsure"}')}\nFinal:\n${fence(keep)}`;
+    expect(parseVerdictReply(text, "lenient")).toEqual({ ok: true, verdict: "keep", reason: "real defect" });
+  });
+  it("verifier: two valid fences: the last one wins", () => {
+    expect(parseVerdictReply(`${fence(keep)}\nOn reflection:\n${fence(drop)}`, "lenient")).toEqual({ ok: true, verdict: "drop", reason: "not a defect" });
+  });
+  it.each([`Draft:\n${fence('{"verdict":"maybe","reason":"x"}')}`, '{"verdict":"keep"}', "no json here", ""])(
+    "verifier: no candidate passes: same result as strict on the trimmed text: %j", (text) => {
+      expect(parseVerdictReply(text, "lenient")).toEqual(parseVerdictReply(text));
+    });
 });
 
 describe.each(reviewers)("%s parser option", (_name, run) => {

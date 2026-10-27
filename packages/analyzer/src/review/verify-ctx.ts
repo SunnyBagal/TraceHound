@@ -68,8 +68,11 @@ export interface CtxKeptReview {
 
 /** Shape check of a reply: `{"verdict": "keep" | "drop", "reason": "..."}`, optionally in a ```json fence. */
 export function parseVerdictReply(content: string, mode: "strict" | "lenient" = "strict"): { ok: true; verdict: Verdict; reason: string } | { ok: false; why: string } {
+  if (mode === "lenient") {
+    const picked = extractJson(content, "verdict", (text) => parseVerdictReply(text).ok);
+    if (picked !== null) return parseVerdictReply(picked);
+  }
   let text = content.trim();
-  if (mode === "lenient") text = extractJson(text, "verdict") ?? text;
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(text);
   if (fenced) text = fenced[1]!;
   let json: unknown;

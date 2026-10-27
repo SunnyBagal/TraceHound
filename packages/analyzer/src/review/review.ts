@@ -96,20 +96,10 @@ interface RawFinding {
   body: unknown;
 }
 
-/** Shape check of a reply: `{"findings": [...]}`, optionally in a ```json fence. Items are checked one by one later. */
-/** For the "lenient" parser: the JSON in a reply with prose around it. A fence whose body parses
- * as an object with `key` comes first; otherwise the last balanced {…} that does. */
-export function extractJson(content: string, key: string): string | null {
-  const has = (text: string) => {
-    try {
-      const v: unknown = JSON.parse(text);
-      return typeof v === "object" && v !== null && !Array.isArray(v) && key in v;
-    } catch {
-      return false;
-    }
-  };
-  for (const m of content.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/g)) if (has(m[1]!)) return m[1]!;
-  let best: string | null = null;
+/** For the "lenient" parser: the last candidate in a reply that `accept` takes. Candidates are every
+ * fenced block, then every balanced {…} (in closing order) that mentions `key`. */
+export function extractJson(content: string, key: string, accept: (text: string) => boolean): string | null {
+  const candidates = [...content.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/g)].map((m) => m[1]!);
   const open: number[] = [];
   let inString = false;
   for (let i = 0; i < content.length; i++) {
@@ -121,15 +111,19 @@ export function extractJson(content: string, key: string): string | null {
     else if (ch === "{") open.push(i);
     else if (ch === "}" && open.length) {
       const text = content.slice(open.pop()!, i + 1);
-      if (text.includes(`"${key}"`) && has(text)) best = text;
+      if (text.includes(`"${key}"`)) candidates.push(text);
     }
   }
-  return best;
+  return candidates.findLast(accept) ?? null;
 }
 
+/** Shape check of a reply: `{"findings": [...]}`, optionally in a ```json fence. Items are checked one by one later. */
 export function parseReviewReply(content: string, mode: "strict" | "lenient" = "strict"): { ok: true; findings: RawFinding[] } | { ok: false; why: string } {
+  if (mode === "lenient") {
+    const picked = extractJson(content, "findings", (text) => parseReviewReply(text).ok);
+    if (picked !== null) return parseReviewReply(picked);
+  }
   let text = content.trim();
-  if (mode === "lenient") text = extractJson(text, "findings") ?? text;
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(text);
   if (fenced) text = fenced[1]!;
   let json: unknown;
