@@ -2,10 +2,20 @@
 
 An open-source GitHub Action that reviews pull requests with NVIDIA Nemotron on Nebius Token Factory.
 
+## See it without a key
+
+- [https://tracehound-tau.vercel.app](https://tracehound-tau.vercel.app) — reviews as bug cards, the benchmark page, and the component graph.
+- [Demo repo](https://github.com/SunnyBagal/tracehound-demo).
+- On 10 blind Cal.com PRs, TraceHound is statistically tied with four of five commercial reviewers and ahead of one (CodeRabbit; only 10 PRs). [Results](docs/bench/results.md).
+- Locally, `pnpm install`, `pnpm fixture`, and `pnpm test` need no key; see [Quick start](#quick-start).
+
 ## Try it
 
-Add a repository secret `NEBIUS_API_KEY` (your Token Factory key), then save this as
-`.github/workflows/tracehound-review.yml`:
+Running the Action needs a Nebius Token Factory key as the repository secret `NEBIUS_API_KEY`.
+It runs on same-repository pull requests only; pull requests from forks are skipped because forks
+don't get repository secrets. Reviews cost about $0.06–0.07 per pull request on 3.5, pre-VAT.
+When a chunk returns invalid JSON (about 7 of 40 dev pull requests per run), the review is partial
+and says so. Save this as `.github/workflows/tracehound-review.yml`:
 
 ```yaml
 name: TraceHound review
@@ -42,8 +52,7 @@ jobs:
 ```
 
 This is the review job of [the example workflow](docs/action/example-workflow.yml) without its
-graph-history job. Pull requests from forks are skipped, because forks don't get repository
-secrets. Inputs, permissions and limits are in [docs/action/README.md](docs/action/README.md).
+graph-history job. Inputs, permissions and limits are in [docs/action/README.md](docs/action/README.md).
 
 ## How it works
 
@@ -273,9 +282,9 @@ pnpm --filter @tracehound/viewer dev    # http://localhost:3000, serving the com
 ```
 
 `pnpm demo` (= `pnpm fixture` + analyze) re-analyzes the demo repo and **overwrites the
-committed snapshot in `snapshots/`**. Without `NEBIUS_API_KEY` it writes heuristic names there,
-and the viewer tests, which expect the committed model-written names, then fail;
-`git checkout snapshots/` restores them.
+committed `snapshots/`**. Without `NEBIUS_API_KEY` it does not stop: it uses heuristic component
+names. The viewer tests, which expect the committed model-written names, then fail;
+`git checkout -- snapshots/` restores them.
 
 The optional Nemotron naming pass: put `NEBIUS_API_KEY=...` in `.env` (see `.env.example`).
 Spend is capped by `TRACEHOUND_BUDGET_RUN_USD` (default $1) and `TRACEHOUND_BUDGET_TOTAL_USD`
