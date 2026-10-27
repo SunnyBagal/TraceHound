@@ -1,0 +1,64 @@
+name: Action install matrix
+
+# Runs the composite action's install steps under each reviewed-repo root package.json.
+# Install steps only: no key, no model call.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/actions/**'
+      - '.github/workflows/action-install-matrix.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: install (${{ matrix.package-manager || 'no packageManager' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        package-manager: ['pnpm@9.0.0', 'pnpm@10.0.0', 'pnpm@11.20.0', 'yarn@4.5.0', 'npm@10.8.0', '']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: th
+          persist-credentials: false
+
+      - name: Write the reviewed repo's root package.json
+        env:
+          PM: ${{ matrix.package-manager }}
+        run: |
+          node -e 'const pm = process.env.PM; const p = { name: "reviewed-repo", private: true, ...(pm && { packageManager: pm }) }; require("fs").writeFileSync("package.json", JSON.stringify(p, null, 2) + "\n")'
+          cat package.json
+
+      # The action's review step runs whenever the event is pull_request, so on pull_request this
+      # job uses a copy of action.yml cut just before that step: the same install steps, verbatim.
+      - name: Install-only copy of the action (pull_request)
+        if: github.event_name == 'pull_request'
+        run: |
+          src=th/.github/actions/tracehound-review/action.yml
+          dst=th/.github/actions/tracehound-install-only
+          grep -q '^    - name: Review and post findings$' "$src"
+          mkdir -p "$dst"
+          awk '/^    - name: Review and post findings$/ { exit } { print }' "$src" > "$dst/action.yml"
+          cat "$dst/action.yml"
+
+      - if: github.event_name == 'pull_request'
+        uses: ./th/.github/actions/tracehound-install-only
+        with:
+          nebius-api-key: ''
+
+      # Any other event (workflow_dispatch): the action itself; its review step is skipped.
+      - if: github.event_name != 'pull_request'
+        uses: ./th/.github/actions/tracehound-review
+        with:
+          nebius-api-key: ''
+
+      - name: Check the install
+        working-directory: th
+        run: |
+          test "$(pnpm --version)" = 11.20.0
+          test -d packages/analyzer/node_modules

@@ -26,6 +26,10 @@
 //   node scripts/bench/run-test-set.ts --set dev --run 4|5|6 [--restart] [--bench <dir>]
 //   node scripts/bench/run-test-set.ts --set dev --run 7|8|9 [--model <id>] [--restart] [--bench <dir>]
 //   TRACEHOUND_TEST_RUN=069 node scripts/bench/run-test-set.ts --set cal_dot_com --run 4 --model nvidia/Nemotron-3.5-Super-VL [--restart] [--bench <dir>]
+// Decision 071 adds dev runs 10–11 on Nemotron 3 Ultra via the free NVIDIA API: the reviewer and
+// verifier stages get TRACEHOUND_NVIDIA_API=1 (judges unchanged), records in run-<n>-<model slug>/,
+// a $3 Nebius cap for the judges, and a freeze check against review-freeze-2.
+//   node scripts/bench/run-test-set.ts --set dev --run 10|11 --model nvidia/nemotron-3-ultra-550b-a55b [--restart] [--bench <dir>]
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -39,7 +43,7 @@ import { GoldenFile, type ReviewComment } from "../../packages/analyzer/src/benc
 import { cleanGitEnv } from "../../packages/analyzer/src/git-env.ts";
 import { Budget, capsFromEnv } from "../../packages/analyzer/src/llm/budget.ts";
 import { ResponseCache } from "../../packages/analyzer/src/llm/cache.ts";
-import { BudgetExceededError, TokenFactoryClient } from "../../packages/analyzer/src/llm/client.ts";
+import { BudgetExceededError, nvidiaApiFromEnv, TokenFactoryClient, type NvidiaApiOptions } from "../../packages/analyzer/src/llm/client.ts";
 import { SpendLedger } from "../../packages/analyzer/src/llm/ledger.ts";
 import { loadPriceTable } from "../../packages/analyzer/src/llm/prices.ts";
 import { gitSource, type GitSource } from "../../packages/analyzer/src/review/context.ts";
@@ -50,25 +54,31 @@ import { checkReuse, ctxOnlyFindings } from "./pool-verify.ts";
 import {
   cal069RunDir,
   checkCal069,
+  checkDev071,
   checkRun,
+  dev071RunDir,
   EXTRA_ITEMS,
   inputPaths,
   isCal069Run,
   isDev067Run,
+  isDev071Run,
   isDevExtraRun,
   isRequestFailure,
   ITEMS,
   ITEMS_067,
   ITEMS_069,
+  ITEMS_071,
   modelRunDir,
   modelSlug,
   planCal069Item,
   planDev067Item,
+  planDev071Item,
   planExtraItem,
   planItem,
   readItemStates,
   readStates067,
   readStates069,
+  readStates071,
   readStatesOf,
   reposOf,
   rowReviews,
@@ -76,6 +86,7 @@ import {
   rowsFor,
   runDir,
   type Dev067Run,
+  type Dev071Run,
   type DevExtraRun,
   type Row,
   type RunNumber,
@@ -113,7 +124,7 @@ export const EXTRA_FROZEN_PATHS = [...FROZEN_PATHS, ":(exclude)scripts/bench/run
  * has cache reads off: every request is sent, and the cache is still refreshed. `judge` may read
  * the cache. The per-process cap is the smaller of TRACEHOUND_BUDGET_RUN_USD and the item's allowance.
  */
-export function buildClients(opts: { apiKey: string; stateDir: string; pricesFile: string; allowanceUSD: number; env: NodeJS.ProcessEnv; fetch?: typeof fetch }) {
+export function buildClients(opts: { apiKey: string; stateDir: string; pricesFile: string; allowanceUSD: number; env: NodeJS.ProcessEnv; fetch?: typeof fetch; nvidiaApi?: NvidiaApiOptions }) {
   const ledger = new SpendLedger(join(opts.stateDir, "spend.jsonl"));
   const caps = capsFromEnv(opts.env);
   const budget = new Budget({ totalUSD: caps.totalUSD, runUSD: Math.min(caps.runUSD, opts.allowanceUSD) }, ledger.totalUSD());
@@ -126,7 +137,7 @@ export function buildClients(opts: { apiKey: string; stateDir: string; pricesFil
     cache: new ResponseCache(join(opts.stateDir, "cache")),
     ...(opts.fetch && { fetch: opts.fetch }),
   };
-  const reviewer = new TokenFactoryClient({ ...common, readCache: false, timeoutMs: 600_000 });
+  const reviewer = new TokenFactoryClient({ ...common, readCache: false, timeoutMs: 600_000, ...(opts.nvidiaApi && { nvidiaApi: opts.nvidiaApi }) });
   const judge = new TokenFactoryClient({ ...common, readCache: true, timeoutMs: 300_000 });
   return { reviewer, judge, budget, ledger };
 }
@@ -247,6 +258,26 @@ export function freezeCheck069(root = REPO_ROOT): { ok: boolean; why?: string; h
   return { ok: true, head };
 }
 
+/**
+ * Decision 071's freeze check for dev runs 10–11: nothing under FROZEN_PATHS that review-freeze-2 has
+ * may differ from it, except these files (the runner and its gates, the free Ultra price, the CLI
+ * dispatcher no pipeline stage imports, and the LLM client, whose change is the opt-in NVIDIA API
+ * route); files added since the tag are allowed. Nothing uncommitted or untracked under FROZEN_PATHS.
+ */
+export const ALLOWED_MODIFIED_071 = Object.freeze(["config/prices.json", "packages/analyzer/src/bin.ts", "packages/analyzer/src/llm/client.ts", "scripts/bench/run-test-set.ts", "scripts/bench/test-set.ts"]);
+export function freezeCheck071(root = REPO_ROOT): { ok: boolean; why?: string; head: string } {
+  const git = (args: string[]) => spawnSync("git", ["-C", root, ...args], { encoding: "utf8", env: cleanGitEnv() });
+  const head = git(["rev-parse", "HEAD"]).stdout.trim();
+  if (git(["rev-parse", "--verify", "--quiet", `${FREEZE_TAG_069}^{commit}`]).status !== 0) return { ok: false, why: `no tag ${FREEZE_TAG_069}`, head };
+  const d = git(["diff", "--name-only", "--no-renames", "--diff-filter=DMTUXB", FREEZE_TAG_069, "HEAD", "--", ...FROZEN_PATHS]);
+  if (d.status !== 0) return { ok: false, why: `git diff ${FREEZE_TAG_069} HEAD failed`, head };
+  const changed = d.stdout.split("\n").filter((f) => f && !ALLOWED_MODIFIED_071.includes(f));
+  if (changed.length) return { ok: false, why: `changed since ${FREEZE_TAG_069} outside 071's allowed list: ${changed.join(", ")}`, head };
+  const st = git(["status", "--porcelain", "--untracked-files=all", "--", ...FROZEN_PATHS]);
+  if (st.status !== 0 || st.stdout.trim()) return { ok: false, why: `uncommitted changes under ${FROZEN_PATHS.join(" ")}`, head };
+  return { ok: true, head };
+}
+
 // ---- the run ----
 
 export interface Deps {
@@ -288,16 +319,19 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
   let dev067: boolean;
   let model: string;
   let cal069: boolean;
+  let dev071: boolean;
   try {
     const { values } = parseArgs({ args: argv, options: { set: { type: "string" }, run: { type: "string" }, restart: { type: "boolean", default: false }, bench: { type: "string" }, model: { type: "string" } }, strict: true });
     extra = isDevExtraRun(values.set, values.run);
     dev067 = isDev067Run(values.set, values.run);
     cal069 = isCal069Run(values.set, values.run);
     if (cal069) checkCal069(values.model, deps.env);
-    if (values.model !== undefined && !dev067 && !cal069) throw new Error("refusing --model: it applies to --set dev --run 7|8|9 only (decision 067) and to --set cal_dot_com --run 4 (decision 069)");
+    dev071 = isDev071Run(values.set, values.run);
+    if (dev071) checkDev071(values.model);
+    if (values.model !== undefined && !dev067 && !cal069 && !dev071) throw new Error("refusing --model: it applies to --set dev --run 7|8|9 only (decision 067) and to --set cal_dot_com --run 4 (decision 069)");
     if (values.model === "") throw new Error("refusing --model: empty");
     model = values.model ?? REVIEW_MODEL;
-    ({ set, run } = cal069 ? { set: "cal_dot_com", run: 4 } : extra || dev067 ? { set: "dev", run: Number(values.run) as DevExtraRun | Dev067Run } : checkRun(values.set, values.run, deps.env));
+    ({ set, run } = cal069 ? { set: "cal_dot_com", run: 4 } : extra || dev067 || dev071 ? { set: "dev", run: Number(values.run) as DevExtraRun | Dev067Run | Dev071Run } : checkRun(values.set, values.run, deps.env));
     restart = values.restart!;
   } catch (e) {
     deps.err(`[run-test-set] ${(e as Error).message}`);
@@ -306,18 +340,18 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
   const bench = deps.bench;
   const label = `${set} run ${run}${restart ? " (restarted)" : ""}`;
   const slug = model === REVIEW_MODEL ? null : modelSlug(model);
-  const items = cal069 ? ITEMS_069 : dev067 ? ITEMS_067 : extra ? EXTRA_ITEMS : ITEMS;
-  const states = cal069 ? readStates069(bench) : dev067 ? readStates067(bench, slug) : extra ? readStatesOf(bench, EXTRA_ITEMS) : readItemStates(bench);
+  const items = dev071 ? ITEMS_071 : cal069 ? ITEMS_069 : dev067 ? ITEMS_067 : extra ? EXTRA_ITEMS : ITEMS;
+  const states = dev071 ? readStates071(bench) : cal069 ? readStates069(bench) : dev067 ? readStates067(bench, slug) : extra ? readStatesOf(bench, EXTRA_ITEMS) : readItemStates(bench);
   const idx = states.findIndex((_, i) => items[i]!.set === set && items[i]!.run === run);
   // 061a: the void run's spend, ledger included, counts toward the item before the restart's allowance
-  const voidRun = restart && states[idx] && !states[idx].restarted ? voidRunReport(cal069 ? cal069RunDir(bench) : dev067 ? modelRunDir(bench, run as Dev067Run, slug) : runDir(bench, set, run), deps.stateDir) : null;
+  const voidRun = restart && states[idx] && !states[idx].restarted ? voidRunReport(dev071 ? dev071RunDir(bench, run as Dev071Run) : cal069 ? cal069RunDir(bench) : dev067 ? modelRunDir(bench, run as Dev067Run, slug) : runDir(bench, set, run), deps.stateDir) : null;
   if (voidRun) states[idx] = { ...states[idx]!, costUSD: voidRun.costUSD };
-  const plan = cal069 ? planCal069Item(states, restart) : dev067 ? planDev067Item(run as Dev067Run, states, restart) : extra ? planExtraItem(run as DevExtraRun, states, restart) : planItem(set, run, states, restart);
+  const plan = dev071 ? planDev071Item(run as Dev071Run, states, restart) : cal069 ? planCal069Item(states, restart) : dev067 ? planDev067Item(run as Dev067Run, states, restart) : extra ? planExtraItem(run as DevExtraRun, states, restart) : planItem(set, run, states, restart);
   if (!plan.ok) {
     deps.err(`[run-test-set] refusing ${label}: ${plan.why}`);
     return 1;
   }
-  const freeze = deps.freezeCheck ? deps.freezeCheck() : cal069 ? freezeCheck069() : dev067 ? freezeCheck067() : freezeCheck(extra ? EXTRA_FROZEN_PATHS : FROZEN_PATHS);
+  const freeze = deps.freezeCheck ? deps.freezeCheck() : dev071 ? freezeCheck071() : cal069 ? freezeCheck069() : dev067 ? freezeCheck067() : freezeCheck(extra ? EXTRA_FROZEN_PATHS : FROZEN_PATHS);
   if (!freeze.ok) {
     deps.err(`[run-test-set] refusing ${label}: ${freeze.why}`);
     return 1;
@@ -325,6 +359,14 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
   const apiKey = deps.env.NEBIUS_API_KEY;
   if (!apiKey) {
     deps.err("[run-test-set] NEBIUS_API_KEY is not set (put it in .env)");
+    return 1;
+  }
+  let nvidiaApi: NvidiaApiOptions | undefined;
+  try {
+    // 071: the reviewer and verifier stages only; the judges never route there
+    if (dev071) nvidiaApi = nvidiaApiFromEnv({ ...deps.env, TRACEHOUND_NVIDIA_API: "1" });
+  } catch (e) {
+    deps.err(`[run-test-set] ${(e as Error).message}`);
     return 1;
   }
   const repos = reposOf(set);
@@ -347,7 +389,7 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
     return 1;
   }
 
-  const dir = cal069 ? cal069RunDir(bench, restart) : dev067 ? modelRunDir(bench, run as Dev067Run, slug, restart) : runDir(bench, set, run, restart);
+  const dir = dev071 ? dev071RunDir(bench, run as Dev071Run, restart) : cal069 ? cal069RunDir(bench, restart) : dev067 ? modelRunDir(bench, run as Dev067Run, slug, restart) : runDir(bench, set, run, restart);
   mkdirSync(dirname(dir), { recursive: true });
   try {
     mkdirSync(dir); // not recursive: fails if the run directory exists
@@ -360,8 +402,8 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
     // counts only: the error's name; its message stays in both run.json files
     deps.log(`${label}: void run-${run}/ left untouched, never scored · spend $${restartOf.costUSD.toFixed(4)} (run.json $${restartOf.recordedCostUSD.toFixed(4)}, ledger since its start $${restartOf.ledgerSinceStartUSD.toFixed(4)}) · stopped at ${restartOf.stoppedAt} · error ${restartOf.error ? restartOf.error.split(":")[0] : "none recorded (the process died)"}`);
   }
-  const { reviewer, judge, budget } = buildClients({ apiKey, stateDir: deps.stateDir, pricesFile: deps.pricesFile, allowanceUSD: plan.allowanceUSD, env: deps.env, fetch: deps.fetch });
-  const decision = cal069 ? "069" : dev067 ? "067" : extra ? "064" : "061";
+  const { reviewer, judge, budget } = buildClients({ apiKey, stateDir: deps.stateDir, pricesFile: deps.pricesFile, allowanceUSD: plan.allowanceUSD, env: deps.env, fetch: deps.fetch, ...(nvidiaApi && { nvidiaApi }) });
+  const decision = dev071 ? "071" : cal069 ? "069" : dev067 ? "067" : extra ? "064" : "061";
   const state = {
     decision,
     set,
@@ -374,7 +416,7 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
     allowanceUSD: plan.allowanceUSD,
     costUSD: 0,
     ledgerBeforeUSD: budget.spentBeforeRun,
-    trace: { head: freeze.head, freezeTag: cal069 ? FREEZE_TAG_069 : FREEZE_TAG, ...(cal069 && { frozenPaths: FROZEN_PATHS_069, testRunGate: TEST_RUN_ID_069 }), ...(extra && { frozenPaths: EXTRA_FROZEN_PATHS }), ...(dev067 && { frozenPaths: FROZEN_PATHS, allowedModified: ALLOWED_MODIFIED_067 }) },
+    trace: { head: freeze.head, freezeTag: cal069 || dev071 ? FREEZE_TAG_069 : FREEZE_TAG, ...(dev071 && { frozenPaths: FROZEN_PATHS, allowedModified: ALLOWED_MODIFIED_071 }), ...(cal069 && { frozenPaths: FROZEN_PATHS_069, testRunGate: TEST_RUN_ID_069 }), ...(extra && { frozenPaths: EXTRA_FROZEN_PATHS }), ...(dev067 && { frozenPaths: FROZEN_PATHS, allowedModified: ALLOWED_MODIFIED_067 }) },
     config: {
       reviewModel: model,
       reasoning: REVIEW_REASONING,
@@ -388,11 +430,13 @@ export async function runTestSet(argv: string[], deps: Deps): Promise<number> {
     scored: [] as { row: Row; judge: string; repo: string; judgeFailed: number; calls: number; cached: number; costUSD: number }[],
     stoppedAt: null as string | null,
     error: null as string | null,
+    ...(dev071 && { nvidiaApi: reviewer.nvidiaApiStats }),
   };
   const runJson = join(dir, "run.json");
   writeNew(runJson, state);
   const save = () => {
     state.costUSD = budget.runSpent;
+    if (dev071) state.nvidiaApi = reviewer.nvidiaApiStats;
     writeFileSync(runJson, JSON.stringify(state, null, 1) + "\n"); // this run's own file
   };
 

@@ -316,3 +316,67 @@ describe("pipeline failure paths", () => {
     await f.cleaned();
   });
 });
+
+describe("stage counts in nothing-posted log lines", () => {
+  it("prints the counts reached when a stage fails", async () => {
+    const f = fake();
+    f.errors.add("verify-ctx");
+    expect(await runPipeline(input, "fake-model", "/fake/repo", "abc123", f.log, f.exec)).toBeNull();
+    expect(f.log).toHaveBeenLastCalledWith(expect.stringContaining("; nothing posted (chunks ok 2, failed 0; pool 2; kept -; posted 0)."));
+    await f.cleaned();
+  });
+
+  it("prints pool and kept when pool-verify-v1 keeps nothing", async () => {
+    const f = fake();
+    await runAction(event, options, { ...f.deps, runPipeline: async () => ({ comments: [], sources: [],
+      review: { model: "fake-model", chunkFailed: 0 }, pipeline: { pool: 2, kept: 0 }, stages: { chunksOk: 2, chunksFailed: 0 } }) });
+    expect(f.log).toHaveBeenLastCalledWith("TraceHound: reviewer returned no findings; nothing posted (chunks ok 2, failed 0; pool 2; kept 0; posted 0).");
+    expect(f.posts).toEqual([]);
+  });
+});
+
+describe("poolNullLines option", () => {
+  const fileLevel = { ...finding, line: null };
+  it.each([
+    ["same path, both lines null", [fileLevel], [{ ...fileLevel, path: "./src/widget.ts", body: "other words" }], 1, ["both"]],
+    ["different paths, both lines null", [fileLevel], [{ ...fileLevel, path: "src/other.ts" }], 2, ["diff", "ctx"]],
+    ["one line null", [finding], [fileLevel], 2, ["diff", "ctx"]],
+  ] as const)('"merge": %s', (_name, diff, ctx, size, sources) => {
+    expect(poolFindings([...diff], [...ctx], "merge")).toHaveLength(size);
+    expect(poolSources([...diff], [...ctx], "merge")).toEqual(sources);
+    expect(poolFindings([...diff], [...ctx])).toHaveLength(diff.length + ctx.length);
+  });
+
+  it.each([[undefined, 2, ["diff", "ctx"]], ["merge", 1, ["both"]]] as const)("runPipeline with poolNullLines %s", async (mode, pool, sources) => {
+    const f = fake();
+    f.overrides.review = { pr_title: input.title, pr_number: input.number, comments: [fileLevel],
+      review: { model: "fake-model", chunkFailed: 0, chunks: [{ status: "OK" }] } };
+    const result = await runPipeline(input, "fake-model", "/fake/repo", "abc123", f.log, f.exec, mode ? { poolNullLines: mode } : {});
+    expect(result?.pipeline.pool).toBe(pool);
+    expect(result?.sources).toEqual(sources);
+    await f.cleaned();
+  });
+});
+
+describe("capOrder option", () => {
+  const ranked = [{ ...finding, line: 10, body: "D10 diff only" }, { ...finding, line: 30, body: "C30 ctx only" },
+    { ...finding, line: 50, body: "B50 both reviewers" }, { ...finding, line: 70, body: "D70 diff only" }];
+  it.each([
+    [undefined, ["D10", "C30"]],
+    ["pool", ["D10", "C30"]],
+    ["agreement-first", ["B50", "D10"]],
+  ] as const)("capOrder %s posts %j under max-comments 2", async (capOrder, kept) => {
+    const f = fake();
+    await runAction(event, { ...options, maxComments: 2, ...(capOrder && { capOrder }) }, { ...f.deps,
+      runPipeline: async () => ({ comments: ranked, sources: ["diff", "ctx", "both", "diff"],
+        review: { model: "fake-model", chunkFailed: 0 }, pipeline: { pool: 4, kept: 4 } }) });
+    const text = [f.posts[0]!.body, ...f.posts[0]!.comments.map(c => c.body)].join("\n");
+    for (const tag of ["D10", "C30", "B50", "D70"]) expect(text.includes(tag), tag).toBe(kept.includes(tag as never));
+    expect(f.posts[0]!.body).toContain("2 findings omitted by max-comments.");
+  });
+
+  it("rejects an unknown capOrder", async () => {
+    const f = fake();
+    await expect(runAction(event, { ...options, capOrder: "volume" as "pool" }, f.deps)).rejects.toThrow("Invalid capOrder option");
+  });
+});
