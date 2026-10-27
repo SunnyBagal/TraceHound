@@ -23,7 +23,7 @@ import { LEGACY_REDIRECT_SCRIPT } from "@/lib/legacy";
 import { reviewsHref } from "@/lib/reviews";
 import { AnimatedFigure } from "./AnimatedFigure";
 import { DiffToDeclarations } from "./DiffToDeclarations";
-import { bricolage, jetbrains } from "./fonts";
+import { inter, jetbrains } from "./fonts";
 import { Pipeline } from "./Pipeline";
 import { PipelineWide } from "./PipelineWide";
 import { RepoToGraph } from "./RepoToGraph";
@@ -87,7 +87,7 @@ const modelNamed = GRAPH_COMPONENTS.filter((c) => c.model).map((c) => c.name);
 
 export function Landing() {
   return (
-    <div className={`landing relative isolate min-h-dvh text-text ${bricolage.variable} ${jetbrains.variable}`} data-testid="landing">
+    <div className={`landing relative isolate min-h-dvh text-text ${inter.variable} ${jetbrains.variable}`} data-testid="landing">
       {/* old viewer links (/?repo=, ?changes=, ?impact=) go on to /graph before anything paints */}
       <script dangerouslySetInnerHTML={{ __html: LEGACY_REDIRECT_SCRIPT }} />
 

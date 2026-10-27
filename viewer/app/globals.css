@@ -8,7 +8,11 @@
 }
 
 /*
- * TraceHound palette: every colour lives here. Surfaces are sampled from Railway's project canvas
+ * TraceHound design system (ui v2): every colour, the type scale, spacing, radii, shadows and
+ * motion live in this :root. Direction: dark, confident, crisp type, luminous accents, purposeful
+ * motion (inspired by the Vite sites, not copied: TraceHound's own amber and glacier glow).
+ *
+ * Palette history: the surfaces began Surfaces are sampled from Railway's project canvas
  * (a 1442×840 screenshot, the most common pixel of each region): page and canvas #13111b, node and
  * panel fill #17161f, node border #24232c, panel border #282630, dot #292731 (the brightest dot
  * pixels; the screenshot is downscaled, so the 1px dots are blended there). The hover fill, strong
@@ -19,17 +23,18 @@
  */
 :root {
   /* surfaces */
-  --page-bg: #13111b;
-  --canvas-bg: #13111b;
+  /* ui v2: one step deeper and cooler than the Railway sample, so the luminous accents carry */
+  --page-bg: #0e0e13;
+  --canvas-bg: #0e0e13;
   /* brighter than the sampled dot (#292731), by the owner's request */
   --canvas-dot: #5c5968;
-  --node-bg: #17161f;
-  --node-bg-hover: #1c1b25;
-  --node-border: #24232c;
-  --node-border-strong: #383641;
-  --panel-bg: #17161f;
-  --panel-border: #282630;
-  --panel-raised: #1d1c26;
+  --node-bg: #16161d;
+  --node-bg-hover: #1b1b24;
+  --node-border: #25252e;
+  --node-border-strong: #393945;
+  --panel-bg: #14141b;
+  --panel-border: #272731;
+  --panel-raised: #1b1b24;
   /* text */
   --text: #e6ebf5;
   --muted: #a6b1c8;
@@ -73,6 +78,46 @@
   /* the landing column's side gutter (max-width 1200px between them) */
   --landing-gutter: clamp(20px, 5vw, 64px);
 
+  /* luminous accents: amber (TraceHound's selection) and glacier (the snow of the hero) */
+  --glacier: #8fd3ff;
+  --glow-amber: radial-gradient(60% 80% at 50% 0%, rgba(245, 165, 36, 0.28), transparent 70%);
+  --glow-ice: radial-gradient(60% 80% at 50% 100%, rgba(143, 211, 255, 0.22), transparent 70%);
+  --aurora: linear-gradient(115deg, #f5a524 0%, #ffcf7a 28%, #8fd3ff 62%, #5b8cff 100%);
+  --hairline: rgba(255, 255, 255, 0.07);
+
+  /* type: Inter for UI, Instrument Serif for the hero only, JetBrains Mono for code and kickers */
+  --font-ui: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
+  --display-font: var(--font-serif), "Instrument Serif", ui-serif, Georgia, serif;
+  --font-code: var(--font-jetbrains), "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --text-2xs: 0.6875rem; /* 11px kicker labels, uppercase, tracked */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem);
+  --text-3xl: clamp(2rem, 1.3rem + 2.6vw, 3.25rem);
+  --text-hero: clamp(2.75rem, 1.4rem + 5.2vw, 6rem);
+  --tracking-tight: -0.025em;
+  --tracking-kicker: 0.16em;
+
+  /* spacing (4px base) and radii */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-6: 24px;
+  --space-8: 32px; --space-12: 48px; --space-16: 64px; --space-24: 96px;
+  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px; --radius-xl: 20px; --radius-pill: 999px;
+
+  /* shadows */
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 16px 48px -16px var(--scrim);
+  --shadow-glow: 0 0 0 1px var(--accent), 0 0 28px -6px var(--accent-glow);
+
+  /* motion: short and eased; everything honours prefers-reduced-motion */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.2, 1.4, 0.4, 1);
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 420ms;
+
   /* aliases used by the utility classes */
   --bg: var(--canvas-bg);
   --page: var(--page-bg);
@@ -114,8 +159,11 @@
   --color-on-ink: var(--on-ink);
   --color-glass: var(--glass);
   --color-glass-line: var(--glass-line);
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-glacier: var(--glacier);
+  --color-hairline: var(--hairline);
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-code);
+  --font-display: var(--display-font);
 }
 
 html,
@@ -172,11 +220,11 @@ html:has(.landing) body {
   html:has(.landing) { scroll-behavior: auto; }
 }
 .landing {
-  font-family: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   overflow-x: clip; /* only the hero image is wider than the column, and it is clipped to the page */
 }
 .landing .mono {
-  font-family: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
 }
 /* the one content column: nav, hero content and every section share these edges */
 .lp-col {
@@ -335,3 +383,10 @@ html:has(.landing) body {
 @keyframes badge-in { from { opacity: 0; transform: scale(.4); } }
 @keyframes pr-dash { to { stroke-dashoffset: -12; } }
 @media (prefers-reduced-motion: reduce) { .finding-callout, .findings-badge, .pr-node, .pr-edge { animation: none; } }
+
+/* shell: the active rail item carries a short amber bar on its left edge */
+.rail-link[aria-current="page"]::before {
+  content: ""; position: absolute; left: -9px; top: 10px; bottom: 10px; width: 2px;
+  border-radius: 2px; background: var(--accent); box-shadow: 0 0 12px var(--accent-glow);
+}
+.rail-link { transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast); }

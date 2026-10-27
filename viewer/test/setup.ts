@@ -35,5 +35,5 @@ globalThis.requestAnimationFrame ??= ((cb: FrameRequestCallback) => setTimeout((
 // loader's shape without fonts.
 vi.mock("next/font/google", () => {
   const font = (variable: string) => () => ({ className: "", variable, style: { fontFamily: "" } });
-  return { Bricolage_Grotesque: font("font-bricolage"), JetBrains_Mono: font("font-jetbrains") };
+  return { Inter: font("font-inter"), Instrument_Serif: font("font-serif"), JetBrains_Mono: font("font-jetbrains") };
 });
