@@ -230,6 +230,7 @@ are not the current config. Seeded PRs on the current config: 30 on
 
 ## What's next
 
+- The reviewer's retry doesn't tell a reply cut off at the token limit from malformed JSON; an automated code review (Devin) found this. Fixes are on main behind off-by-default options, not measured (docs/post-freeze-fixes.md).
 - Recover chunks lost to invalid JSON (JSON repair or schema-constrained output; a retry with
   reasoning off mostly failed in 070).
 - A per-PR comment cap, against product noise: replayed on saved dev runs ($0,
