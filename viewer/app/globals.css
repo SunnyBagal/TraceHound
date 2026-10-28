@@ -928,7 +928,7 @@ html:has(.landing) body {
 .bx { --plot-h: 300px; --ax: 56px; position: relative; padding-left: var(--ax); }
 .bx-overlay { position: absolute; left: var(--ax); right: 0; top: 0; height: var(--plot-h); border-left: 1px solid var(--line-strong); border-bottom: 1px solid #5c6275; pointer-events: none; }
 .bx-tick { position: absolute; left: 0; right: 0; bottom: calc(var(--t) * 1%); border-top: 1px solid rgba(255, 255, 255, 0.07); }
-.bx-tick > span { position: absolute; right: calc(100% + 10px); translate: 0 -50%; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--faint); }
+.bx-tick > span { position: absolute; right: calc(100% + 10px); translate: 0 -50%; font-family: var(--font-code); font-size: 11px; color: var(--faint); }
 .bx-band { position: absolute; left: 0; right: 0; bottom: calc(var(--lo) * 1%); height: calc((var(--hi) - var(--lo)) * 1%); border-block: 1px dashed color-mix(in srgb, var(--glacier) 55%, transparent); background: color-mix(in srgb, var(--glacier) 6%, transparent); }
 .bx-band > span { position: absolute; right: 8px; top: 6px; font-family: var(--font-code); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--glacier); }
 .bx-axis-title { position: absolute; left: 0; top: 0; height: var(--plot-h); display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; rotate: 180deg; font-size: 12.5px; color: var(--faint); }
@@ -944,7 +944,7 @@ html:has(.landing) body {
 .bx-label { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 4px 0; text-align: center; font-size: 13.5px; line-height: 1.3; color: var(--muted); }
 .bx-col[data-ours] .bx-label { color: var(--text); font-weight: 600; }
 .bx-col[data-band="outside"] .bx-bar { opacity: 0.6; }
-.bx-col[data-ours] .bx-track { background: color-mix(in srgb, var(--accent) 7%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+.bx-col[data-ours] .bx-track { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 @media (max-width: 639px) {
   .bx { --name-w: 112px; --val-w: 40px; padding: 0 0 26px; }
   .bx-overlay { left: calc(var(--name-w) + 12px); right: var(--val-w); top: 0; bottom: 26px; height: auto; border-bottom: 0; }
@@ -977,9 +977,9 @@ html:has(.landing) body {
 
 /* sections: a serif heading over its figures and tables, with room around them (the Opus page) */
 .bench-part { margin-top: clamp(72px, 9vw, 120px); }
-.bench-h2 { margin-bottom: 36px; font-family: var(--display-font); font-size: clamp(2.3rem, 1.6rem + 2.2vw, 3.4rem); font-weight: 400; letter-spacing: -0.01em; line-height: 1.05; color: var(--text); }
+.bench-h2 { margin-bottom: 36px; font-size: clamp(1.9rem, 1.2rem + 2.2vw, 2.9rem); font-weight: 500; letter-spacing: -0.03em; line-height: 1.08; color: var(--text); }
 .bench-fig-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 24px; }
-.bench-fig-meta { font-size: 14px; color: var(--muted); }
+.bench-fig-meta { font-family: var(--font-code); font-size: 12.5px; color: var(--muted); }
 /* chart tabs as plain words, the active one bright */
 .bench-tabs { gap: 0; }
 .bench-tabs [data-slot="tabs-list"] { flex-wrap: wrap; gap: 8px 28px; height: auto; margin-bottom: 18px; padding: 0; }
@@ -1001,16 +1001,23 @@ html:has(.landing) body {
 .bench-table tr > :first-child, .bench-table .bt-gap + * { border-left: 1px solid var(--grid); }
 .bench-table thead tr > * { border-top: 1px solid var(--grid); }
 .bench-table thead th { font-weight: 600; white-space: normal; }
-/* a turned table fits the frame: a fixed label column, the reviewers share the rest; under 900px it scrolls */
-.bench-table[data-turned] { table-layout: fixed; min-width: 900px; }
-.bench-table[data-turned] .bt-corner { width: 170px; }
-.bench-table[data-turned] .bt-gap { width: 14px; min-width: 14px; }
-.bench-table[data-turned] :is(th, td):not(.bt-label, .bt-corner, .bt-gap) { padding-inline: 12px; }
-.bench-table[data-turned] .bt-head { flex-direction: column; align-items: flex-start; gap: 8px; }
-.bench-table[data-turned] .bt-label { min-width: 0; }
+/* every table but the levers one: centred, sized by its content (names and words never break inside),
+   so it is never squeezed; wider than its frame, it scrolls in its own region. Row labels stay left. */
+.bench-table:not([data-keep]) { width: 100%; }
+.bench-table:not([data-keep]) :is(th, td) { padding: 15px 13px; text-align: center; }
+.bench-table:not([data-keep]) :is(th, td).bt-label { text-align: left; padding-inline: 18px; }
+.bench-table:not([data-keep]) thead th:first-child:not([data-ours]) { text-align: left; padding-inline: 18px; }
+.bench-table:not([data-keep]) .bt-name, .bench-table:not([data-keep]) .bt-main, .bench-table:not([data-keep]) .bt-word { white-space: nowrap; }
+.bench-table:not([data-keep]) td:not([data-prose]) { white-space: nowrap; }
+.bench-table:not([data-keep]) td .bt-detail, .bench-table:not([data-keep]) thead .bt-detail { font-family: var(--font-code); font-size: 11.5px; }
+.bench-table:not([data-keep]) .bt-detail { white-space: normal; text-wrap: balance; }
+.bench-table[data-turned] .bt-head { flex-direction: column; align-items: center; gap: 8px; }
+.bench-table[data-turned] .bt-label { min-width: 11rem; }
+.bench-table[data-turned] :is(th, td).bt-gap { width: 14px; min-width: 14px; padding: 0; }
+.bench-table[data-turned] td[data-prose] { min-width: 9rem; max-width: 11rem; }
+.bench-table[data-keep] thead th { text-align: center; }
 @media (max-width: 899px) {
-  .bench-table[data-turned] { min-width: 980px; }
-  .bench-table[data-turned] .bt-corner { width: 124px; }
+  .bench-table[data-turned] .bt-label { min-width: 9.5rem; }
   .bench-table[data-turned] :is(.bt-label, .bt-corner) { position: sticky; left: 0; z-index: 1; padding-inline: 12px; background: var(--page); }
 }
 .bench-table thead .bt-corner { border-top: 0; border-left: 0; }
@@ -1025,14 +1032,9 @@ html:has(.landing) body {
 .bench-table [data-best] .bt-main { font-weight: 700; }
 .bench-table td[data-best]:not([data-ours]) { background: rgba(255, 255, 255, 0.05); }
 .bench-table [data-ref] { background: var(--panel-raised); color: var(--muted); }
-.bench-table :is(th, td)[data-ours] { background: color-mix(in srgb, var(--accent) 7%, transparent); }
-.bench-table :is(th, td)[data-ours="primary"] { background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: inset 2px 0 0 var(--accent), inset -2px 0 0 var(--accent); }
-.bench-table thead :is(th, td)[data-ours="primary"] { box-shadow: inset 2px 0 0 var(--accent), inset -2px 0 0 var(--accent), inset 0 2px 0 var(--accent); }
-.bench-table tbody tr:last-child > [data-ours="primary"] { box-shadow: inset 2px 0 0 var(--accent), inset -2px 0 0 var(--accent), inset 0 -2px 0 var(--accent); }
-.bench-table [data-ours] .bt-name { color: var(--accent); }
-.bench-table tr[data-ours="primary"] > * { background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent); }
-.bench-table tr[data-ours="primary"] > :first-child { box-shadow: inset 2px 0 0 var(--accent), inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent); }
-.bench-table tr[data-ours="primary"] > :last-child { box-shadow: inset -2px 0 0 var(--accent), inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent); }
+/* TraceHound: one quiet cue, the same in every table and chart: a faint amber tint (and its amber wolf) */
+.bench-table { --ours: color-mix(in srgb, var(--accent) 7%, transparent); }
+.bench-table :is(th, td)[data-ours], .bench-table tr[data-ours] > * { background: var(--ours); }
 .bench-table tr[data-tint] > * { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .bench-note { max-width: 92ch; margin: 16px auto 0; text-align: center; font-size: 13.5px; line-height: 1.6; color: var(--faint); }
 .bench-who { display: inline-flex; align-items: center; gap: 10px; }
@@ -1042,6 +1044,18 @@ html:has(.landing) body {
 [data-ours] .bench-mark-wolf svg { color: var(--accent); }
 [data-ref] .bench-mark { opacity: 0.55; }
 .bench-limits { max-width: 75ch; margin-bottom: 72px; }
+.bench-limits[data-glow] { padding: clamp(22px, 3vw, 34px); }
+.bench-limits[data-glow] .bench-h2 { margin-bottom: 20px; }
+[data-glow] {
+  --glow: linear-gradient(115deg, #3214a8, #7657ff 35%, #2fb0e8 75%, #8fd3ff);
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.1) 0 1px, transparent 1px 5px) border-box,
+    var(--glow) border-box;
+}
+[data-glow="glacier"] { --glow: linear-gradient(115deg, #0a587e, #2fb0e8 35%, #36c066 75%, #5ee68f); }
+[data-glow="amber"] { --glow: linear-gradient(115deg, #7c3304, #f0890f 35%, #7657ff 80%, #3214a8); }
 .bench-limits ul { list-style: disc; padding-left: 1.2em; font-size: 16px; line-height: 1.6; color: var(--muted); }
 .bench-limits li + li { margin-top: 8px; }
 
@@ -1049,16 +1063,16 @@ html:has(.landing) body {
 .sx { --plot-h: 400px; --ax: 52px; position: relative; padding: 0 16px 56px var(--ax); }
 .sx-plot { position: relative; height: var(--plot-h); border-left: 1px solid #5c6275; border-bottom: 1px solid #5c6275; }
 .sx-hline { position: absolute; left: 0; right: 0; bottom: calc(var(--t) * 1%); border-top: 1px solid rgba(255, 255, 255, 0.07); }
-.sx-hline > span { position: absolute; right: calc(100% + 10px); translate: 0 -50%; font-size: 12px; color: var(--faint); }
+.sx-hline > span { position: absolute; right: calc(100% + 10px); translate: 0 -50%; font-family: var(--font-code); font-size: 11px; color: var(--faint); }
 .sx-vtick { position: absolute; top: 100%; left: calc(var(--t) * 1%); height: 6px; border-left: 1px solid #5c6275; }
-.sx-vtick > span { position: absolute; top: 10px; translate: -50% 0; font-size: 12px; color: var(--faint); }
+.sx-vtick > span { position: absolute; top: 10px; translate: -50% 0; font-family: var(--font-code); font-size: 11px; color: var(--faint); }
 .sx-ytitle { position: absolute; left: 0; top: 0; height: var(--plot-h); display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; rotate: 180deg; font-size: 12.5px; color: var(--faint); }
 .sx-xtitle { position: absolute; bottom: 0; left: var(--ax); right: 16px; text-align: center; font-size: 12.5px; color: var(--faint); }
 .sx-path { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .sx-path line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; }
 .sx-pt { position: absolute; left: calc(var(--x) * 1%); bottom: calc(var(--y) * 1%); width: 0; height: 0; }
 .sx-dot { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--page); background: #8a96b0; }
-.sx-pt[data-kind="ours"] .sx-dot { background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+.sx-pt[data-kind="ours"] .sx-dot { background: var(--accent); }
 .sx-pt[data-kind="history"] .sx-dot { border: 2px solid var(--accent); background: var(--panel); }
 .sx-label { position: absolute; bottom: 14px; left: 0; translate: -50% 0; display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--muted); white-space: nowrap; }
 .sx-label .bench-mark { width: 15px; height: 15px; }

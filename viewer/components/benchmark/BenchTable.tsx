@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BENCHMARK_TABLES } from "@/lib/benchmark";
 import { bestRows, byReviewer, columnHead, isSecondary, metricLabel, orderedRows, productMark, splitCell } from "@/lib/benchmark-view";
@@ -13,10 +14,16 @@ function Verdict({ text }: { text: string }) {
   return <span className="verdict" data-tone={tone}>{text}</span>;
 }
 
+/** Text that may wrap only between words, never inside one ("pool-verify-v1" stays whole). */
+function Words({ text }: { text: string }) {
+  const words = text.split(" ").reduce<string[]>((ws, w) => (w === "·" && ws.length ? [...ws.slice(0, -1), `${ws.at(-1)} ·`] : [...ws, w]), []);
+  return <>{words.map((w, i) => <Fragment key={i}>{i > 0 && " "}<span className="bt-word">{w}</span></Fragment>)}</>;
+}
+
 /** A value, with its count or interval in small grey type under it. */
 function Value({ cell }: { cell: string }) {
   const { main, detail } = splitCell(cell);
-  return <><span className="bt-main">{main}</span>{detail && <span className="bt-detail">{detail}</span>}</>;
+  return <><span className="bt-main">{main}</span>{detail && <span className="bt-detail">{detail.startsWith("[") ? <span className="bt-word">{detail}</span> : <Words text={detail} />}</span>}</>;
 }
 
 /**
@@ -26,10 +33,12 @@ function Value({ cell }: { cell: string }) {
  */
 export function BenchTable({ t, id }: { t: T; id: string }) {
   const turned = byReviewer(t);
+  // the owner keeps this table exactly as it is; only its header row is centred
+  const keep = t.title.startsWith("Precision levers");
   const region = { tabIndex: 0, role: "region", "aria-label": `${t.title} table, scroll horizontally on small screens`, className: "bench-table-scroll" };
   return <section aria-labelledby={id} className="bench-section">
     <h3 id={id} className="bench-table-title">{t.title}</h3>
-    <Table className="bench-table" data-turned={turned || undefined} containerProps={region}>
+    <Table className="bench-table" data-turned={turned || undefined} data-keep={keep || undefined} containerProps={region}>
       <TableCaption className="sr-only">{t.title}</TableCaption>
       {turned ? <Turned t={t} /> : <Plain t={t} />}
     </Table>
@@ -55,7 +64,7 @@ function Turned({ t }: { t: T }) {
           const head = columnHead(row[0]!);
           return <TableHead key={row[0]} scope="col" data-ours={ours(row)} data-ref={isSecondary(row[0]!) || undefined} title={row[0]}>
             <span className="bt-head"><ReviewerMark name={row[0]!} /><span className="bt-name">{head.name}</span></span>
-            {head.sub && <span className="bt-detail">{head.sub}</span>}
+            {head.sub && <span className="bt-detail"><Words text={head.sub} /></span>}
           </TableHead>;
         }, <TableCell key="gap" className="bt-gap" aria-hidden />)}
       </TableRow>
@@ -66,7 +75,7 @@ function Turned({ t }: { t: T }) {
         const best = bestRows(t, h);
         const [label, sub] = metricLabel(h);
         return <TableRow key={h} className="hover:bg-transparent">
-          <TableHead scope="row" className="bt-label" title={h}><span className="bt-name">{label}</span>{sub && <span className="bt-detail">{sub}</span>}</TableHead>
+          <TableHead scope="row" className="bt-label" title={h}><span className="bt-name">{label}</span>{sub && <span className="bt-detail"><Words text={sub} /></span>}</TableHead>
           {columns((row) => <TableCell key={row[0]} data-ours={ours(row)} data-ref={isSecondary(row[0]!) || undefined} data-best={best.has(index(row)) || undefined} data-prose={prose(h) || undefined}>
             {prose(h) ? row[c] : <Value cell={row[c]!} />}
           </TableCell>, <TableCell key="gap" className="bt-gap" aria-hidden />)}

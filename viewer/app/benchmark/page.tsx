@@ -57,12 +57,12 @@ export default function BenchmarkPage() {
           <TabsTrigger value="pr">Precision vs recall</TabsTrigger>
         </TabsList>
         <TabsContent value="f">
-          <Figure id="fig-blind" title="F by reviewer" meta="Cal.com · 10 pull requests · n = 23" captionTestId="bench-caption" caption={<>{gapSentence} PR-level paired bootstrap, 95% intervals.</>}>
+          <Figure id="fig-blind" glow="violet" title="F by reviewer" meta="Cal.com · 10 pull requests · n = 23" captionTestId="bench-caption" caption={<>{gapSentence} PR-level paired bootstrap, 95% intervals.</>}>
             <BlindFigure />
           </Figure>
         </TabsContent>
         <TabsContent value="pr">
-          <Figure id="fig-pr" title="Precision vs recall" meta="Cal.com · bench-judge-v1 counts" caption={<>Up and right is better. The dashed line runs from v1 to v2: precision {up(v2.p, v1.p)}, recall {up(v2.r, v1.r)}.</>}>
+          <Figure id="fig-pr" glow="violet" title="Precision vs recall" meta="Cal.com · bench-judge-v1 counts" caption={<>Up and right is better. The dashed line runs from v1 to v2: precision {up(v2.p, v1.p)}, recall {up(v2.r, v1.r)}.</>}>
             <ScatterFigure />
           </Figure>
         </TabsContent>
@@ -73,7 +73,7 @@ export default function BenchmarkPage() {
 
     <section className="bench-part" aria-labelledby="part-full">
       <h2 id="part-full" className="bench-h2">Dev and blind sets together</h2>
-      <Figure id="fig-full" title="F by reviewer" meta={`n = ${fullN}`} caption="Ranked by bench-judge-v1, the scorer of record. v2 was tuned on the dev set.">
+      <Figure id="fig-full" glow="glacier" title="F by reviewer" meta={`n = ${fullN}`} caption="Ranked by bench-judge-v1, the scorer of record. v2 was tuned on the dev set.">
         <FullFigure />
       </Figure>
       <BenchTable t={ALL50} id="table-all-v1" />
@@ -97,7 +97,7 @@ export default function BenchmarkPage() {
       <BenchTable t={COST} id="table-cost" />
     </section>
 
-    <aside className="bench-part bench-limits" aria-labelledby="limits">
+    <aside className="bench-part bench-limits" data-glow="amber" aria-labelledby="limits">
       <h2 id="limits" className="bench-h2">Limits</h2>
       <ul>
         <li>The test set is 10 pull requests and 23 golden findings. Differences of a few points are within noise.</li>
