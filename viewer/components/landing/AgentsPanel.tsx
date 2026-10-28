@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { boxCorners, fitProjection, iso, type Plan } from "@/components/iso/iso-kit";
+import { boxCorners, fitProjection, iso, topMatrix, type Plan } from "@/components/iso/iso-kit";
 import { prefersReducedMotion } from "@/components/Logo";
 import { IsoSlab } from "./IsoSlab";
 
@@ -31,6 +31,7 @@ const SPOTS: readonly (readonly [number, number])[] = [
   [330, 40],
 ];
 const MS = 96;
+const EYE_W = 58;
 const W = 520;
 const H = 410;
 const plans = SPOTS.map(([x, y]): Plan => ({ x, y, w: MS, d: MS, r: 18 }));
@@ -73,6 +74,17 @@ function Figure({ agent }: { agent: Agent }) {
         return (
           <g key={m.id} className="ag-model-slab" data-on={on || undefined}>
             <IsoSlab P={P} plan={plans[i]!} h={18} tone={on ? m.tone : "#3a3c47"} id={`ag-m-${m.id}`} dim={!on} />
+            {m.id !== "none" && (
+              // NVIDIA's eye lies flat on the Nemotron slabs, square with their edges like the wolf on the agent's
+              <image
+                href={`${base}/icons/nvidia-color-eye.svg`}
+                width={EYE_W}
+                height={EYE_W * (166 / 249.5)}
+                transform={topMatrix([plans[i]!.x + (MS - EYE_W) / 2, plans[i]!.y + (MS - EYE_W * (166 / 249.5)) / 2], 18, P, "x")}
+                className="ag-eye"
+                data-on={on || undefined}
+              />
+            )}
             <text x={cx} y={ly + 30} textAnchor="middle" className="ag-model-label">
               {m.label}
             </text>

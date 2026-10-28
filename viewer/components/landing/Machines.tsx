@@ -1,4 +1,4 @@
-import { boxCorners, cylinder, fitProjection, insetPlan, iso, lineOnTop, planOutline, segment, sideArc, sideMatrix, sideRing, slabOf, towardViewer, axisVector, type Plan, type Point3, type Projection, type SolidPaths } from "@/components/iso/iso-kit";
+import { boxCorners, cylinder, fitProjection, insetPlan, iso, lineOnTop, planOutline, segment, sideMatrix, sideRing, slabOf, axisVector, type Plan, type Point3, type Projection, type SolidPaths } from "@/components/iso/iso-kit";
 import { GRAPH_COMPONENTS, GRAPH_EDGES, type GraphComponentId } from "@/lib/landing";
 
 /*
@@ -19,7 +19,7 @@ const RAMP: Record<Tone, { side: [string, string, string, string]; top: string }
   ink: { side: ["#16171d", "#22232b", "#2d2f38", "#3a3c47"], top: "#30323c" },
 };
 
-function Solid({ p, tone = "paper", className, style }: { p: SolidPaths; tone?: Tone; className?: string; style?: React.CSSProperties }) {
+export function Solid({ p, tone = "paper", className, style }: { p: SolidPaths; tone?: Tone; className?: string; style?: React.CSSProperties }) {
   const r = RAMP[tone];
   return (
     <g className={className} style={style}>
@@ -32,14 +32,14 @@ function Solid({ p, tone = "paper", className, style }: { p: SolidPaths; tone?: 
     </g>
   );
 }
-const Halo = ({ plan, P }: { plan: Plan; P: Projection }) => <path d={slabOf(insetPlan(plan, -10), 0, 0, P).fill} className="mc-halo" />;
-const Text = ({ m, size, children, anchor, className = "mc-text" }: { m: string; size: number; children: React.ReactNode; anchor?: "start" | "middle" | "end"; className?: string }) => (
+export const Halo = ({ plan, P }: { plan: Plan; P: Projection }) => <path d={slabOf(insetPlan(plan, -10), 0, 0, P).fill} className="mc-halo" />;
+export const Text = ({ m, size, children, anchor, className = "mc-text" }: { m: string; size: number; children: React.ReactNode; anchor?: "start" | "middle" | "end"; className?: string }) => (
   <text transform={m} fontSize={size} textAnchor={anchor} className={className}>
     {children}
   </text>
 );
 /** a screen-space tag: white pill, ink rim */
-function Tag({ at, text, size = 9, lit }: { at: readonly [number, number]; text: string; size?: number; lit?: boolean }) {
+export function Tag({ at, text, size = 9, lit }: { at: readonly [number, number]; text: string; size?: number; lit?: boolean }) {
   const w = text.length * size * 0.62 + size * 1.2;
   const h = size * 1.8;
   return (
@@ -246,89 +246,6 @@ export function PatchPanelFigure({ named, total }: { named: number; total: numbe
           <Tag at={mid} text={`${e.file}:${e.line}`} size={8.5} lit={e.kind !== "imports"} />
         </g>
       ))}
-    </svg>
-  );
-}
-
-/* ======================= 3 · the coin tubes: cents per pull request ======================= */
-
-export interface CostTube {
-  model: string;
-  median: string;
-  max: string;
-  tone: "violet" | "green";
-}
-
-export function CoinTubesFigure({ tubes, label }: { tubes: readonly CostTube[]; label: string }) {
-  const cents = (cell: string) => Number.parseFloat(cell.replace("$", "")) * 100;
-  const PITCH = 2.6;
-  const top = Math.ceil(Math.max(...tubes.map((t) => cents(t.max))) / 5) * 5;
-  const FLOOR = 14;
-  const H = top * PITCH + 8;
-  const BASE: Plan = { x: 0, y: 0, w: 230, d: 64, r: 8 };
-  const xs = [82, 168];
-  const R = 22;
-  // seen from the front and only a little above, so the fill levels line up against one scale
-  const P = fitProjection([...boxCorners(BASE, 0, FLOOR + H)], 520, 440, { pad: 34, azimuth: 90, elevation: 12 });
-  P.origin = [P.origin[0] + 14, P.origin[1] - 24];
-  const zOf = (c: number) => FLOOR + 2 + c * PITCH;
-  const screenY = (c: number) => iso([0, BASE.d, zOf(c)], P)[1];
-  const left = iso([BASE.x, BASE.d, 0], P)[0];
-  const right = iso([BASE.x + BASE.w, BASE.d, 0], P)[0];
-  const below = iso([0, BASE.d, 0], P)[1];
-  return (
-    <svg viewBox="0 0 520 440" className="mc-fig" role="img" aria-label={label}>
-      {/* the scale: a line every cent, a number every five, across the whole bench */}
-      {Array.from({ length: top + 1 }, (_, c) => (
-        <g key={c}>
-          <path d={`M${left - (c % 5 ? 6 : 12)} ${screenY(c)} H${left - 2}`} className="mc-tick" />
-          {c % 5 === 0 && (
-            <>
-              <path d={`M${left} ${screenY(c)} H${right}`} className="mc-guide" />
-              <text x={left - 16} y={screenY(c) + 4} textAnchor="end" className="mc-scale">
-                {c}¢
-              </text>
-            </>
-          )}
-        </g>
-      ))}
-      <Halo plan={BASE} P={P} />
-      <Solid p={slabOf(BASE, 0, FLOOR - 2, P, 6, 1)} tone="ink" />
-      <Text m={sideMatrix([12, BASE.d], 8, P, "left")} size={5.6} className="mc-text-on">
-        ¢ PER PULL REQUEST · PIPELINE ONLY · ONE COIN = ONE CENT
-      </Text>
-      {tubes.map((t, k) => {
-        const cx = xs[k]!;
-        const cy = BASE.d / 2;
-        const tube = cylinder(cx, cy, R, FLOOR, H, P, 56);
-        const coins = Math.round(cents(t.median));
-        const yMax = screenY(cents(t.max));
-        const tubeL = iso([cx - R, cy, 0], P)[0];
-        const tubeR = iso([cx + R, cy, 0], P)[0];
-        return (
-          <g key={t.model}>
-            <Solid p={cylinder(cx, cy, R + 5, FLOOR - 2, 3, P, 48, 0.6)} />
-            <path d={tube.top} className="mc-glass-rim" />
-            {Array.from({ length: coins }, (_, j) => (
-              <Solid key={j} p={cylinder(cx, cy, R - 3, FLOOR + 2 + j * PITCH, PITCH - 0.5, P, 48)} tone="amber" className="mc-coin" style={{ "--i": j + k * 3 } as React.CSSProperties} />
-            ))}
-            <path d={tube.fill} className="mc-glass" />
-            <path d={tube.outline} className="mc-ink" />
-            {/* the costliest pull request: a red band across the tube at its level */}
-            <path d={`M${tubeL} ${yMax} H${tubeR}`} className="mc-max" />
-            <Tag at={[k ? tubeR + 46 : tubeL - 46, yMax]} text={`max ${t.max}`} size={10} />
-            <text x={(tubeL + tubeR) / 2} y={below + 26} textAnchor="middle" className="mc-cap">
-              {t.model}
-            </text>
-            <text x={(tubeL + tubeR) / 2} y={below + 43} textAnchor="middle" className="mc-cap-sub">
-              median {t.median}
-            </text>
-            <text x={(tubeL + tubeR) / 2} y={below + 58} textAnchor="middle" className="mc-cap-sub">
-              {coins} coins
-            </text>
-          </g>
-        );
-      })}
     </svg>
   );
 }

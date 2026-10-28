@@ -1,7 +1,8 @@
 import { Check } from "lucide-react";
 import { table } from "@/lib/benchmark-view";
 import { ANALYZE_RUNS, DEMO, fmt, GRAPH_COMPONENTS } from "@/lib/landing";
-import { CatalogueFigure, CoinTubesFigure, GloveboxFigure, PatchPanelFigure } from "./Machines";
+import { CoinTubesFigure } from "./CoinTubes";
+import { CatalogueFigure, GloveboxFigure, PatchPanelFigure } from "./Machines";
 import { Reveal } from "./Reveal";
 
 /*
@@ -79,11 +80,11 @@ export function TrustSection() {
           <article className="trust-cell">
             <h3 className="trust-h3">Cents per pull request</h3>
             <p className="trust-text">
-              One coin is one cent. The reviewer the product runs costs <span className="trust-em">{PRODUCT.median} per pull request</span> at the median on {PRODUCT.model}; the red ring marks the costliest one. Judges excluded, pre-VAT.
+              One coin is one cent. The reviewer the product runs costs <span className="trust-em">{PRODUCT.median} per pull request</span> at the median on {PRODUCT.model}; the red band marks the costliest one. Judges excluded, pre-VAT.
             </p>
             <Reveal className="trust-art" testId="trust-cost" threshold={0.25}>
               <CoinTubesFigure
-                tubes={COSTS.map((c, i) => ({ model: c.model, median: c.median, max: c.max, tone: i ? "green" : "violet" }))}
+                tubes={COSTS.map((c) => ({ model: c.model, median: c.median, max: c.max }))}
                 label={COSTS.map((c) => `${c.model}: median ${c.median}, max ${c.max} per pull request`).join("; ")}
               />
             </Reveal>
