@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { boxCorners, fitProjection, iso, topMatrix, type Plan } from "@/components/iso/iso-kit";
 import { prefersReducedMotion } from "@/components/Logo";
-import { IsoSlab } from "./IsoSlab";
+import { WOLF_PATH } from "@/lib/wolf";
 
 const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -15,85 +14,83 @@ export interface Agent {
 
 /* the three places an agent's work can go; an agent lights the ones its model string names */
 const MODELS = [
-  { id: "none", label: "no model", sub: "deterministic", tone: "#9aa1b2" },
-  { id: "nano", label: "Nemotron Nano", sub: "30B-A3B", tone: "#76b900" },
-  { id: "super", label: "Nemotron Super", sub: "120B-A12B", tone: "#76b900" },
+  { id: "none", label: "no model", sub: "deterministic" },
+  { id: "nano", label: "Nemotron Nano", sub: "30B-A3B" },
+  { id: "super", label: "Nemotron Super", sub: "120B-A12B" },
 ] as const;
 type ModelId = (typeof MODELS)[number]["id"];
 const modelsOf = (model: string): ModelId[] => (model === "no model" ? ["none"] : [...(model.includes("Nano") ? ["nano" as const] : []), ...(model.includes("Super") ? ["super" as const] : [])]);
 
-/* the world: the agent's slab at the back (top of the picture), the three model slabs on one line
-   in front of it (x + y equal, so they sit side by side on screen) */
-const AGENT: Plan = { x: 0, y: 0, w: 130, d: 130, r: 24 };
-const SPOTS: readonly (readonly [number, number])[] = [
-  [40, 330],
-  [185, 185],
-  [330, 40],
-];
-const MS = 96;
-const EYE_W = 58;
+/* vite+'s integrations figure, our way: the agent's tile in the middle with a gradient rim, "no model"
+   on the left, the two Nemotron tiles on the right on a square bracket; straight wires, square corners */
 const W = 520;
-const H = 410;
-const plans = SPOTS.map(([x, y]): Plan => ({ x, y, w: MS, d: MS, r: 18 }));
-const P = fitProjection([...boxCorners(AGENT, 0, 26), ...plans.flatMap((p) => boxCorners(p, 0, 18))], W, H, { pad: 14, headroom: 58 });
-const agentBottom = iso([AGENT.x + AGENT.w, AGENT.y + AGENT.d, 0], P);
-const modelTop = (i: number) => iso([plans[i]!.x + MS / 2, plans[i]!.y + MS / 2, 18], P);
-const BUS = (agentBottom[1] + Math.min(...plans.map((_, i) => modelTop(i)[1]))) / 2;
-/** agent → down to the bus → across → down to the model slab, with rounded corners */
-const wire = (i: number) => {
-  const [x0, y0] = agentBottom;
-  const [x1, y1] = modelTop(i);
-  if (Math.abs(x1 - x0) < 1) return `M${x0} ${y0 + 6} V${y1}`;
-  const r = 14;
-  const dir = Math.sign(x1 - x0);
-  return `M${x0} ${y0 + 6} V${BUS - r} Q${x0} ${BUS} ${x0 + dir * r} ${BUS} H${x1 - dir * r} Q${x1} ${BUS} ${x1} ${BUS + r} V${y1}`;
+const H = 360;
+const C = { cx: 260, cy: 160, s: 136 };
+const T = 92;
+const TILES: Record<ModelId, { cx: number; cy: number }> = { none: { cx: 70, cy: 160 }, nano: { cx: 450, cy: 78 }, super: { cx: 450, cy: 262 } };
+const TRUNK = (C.cx + C.s / 2 + TILES.nano.cx - T / 2) / 2;
+const WIRES: Record<ModelId, string> = {
+  none: `M${C.cx - C.s / 2} ${C.cy} H${TILES.none.cx + T / 2}`,
+  nano: `M${C.cx + C.s / 2} ${C.cy} H${TRUNK} V${TILES.nano.cy} H${TILES.nano.cx - T / 2}`,
+  super: `M${C.cx + C.s / 2} ${C.cy} H${TRUNK} V${TILES.super.cy} H${TILES.super.cx - T / 2}`,
 };
+const EYE_W = 54;
+const MARK = 74;
 
 function Figure({ agent }: { agent: Agent }) {
   const lit = modelsOf(agent.model);
-  const name = iso([AGENT.x + AGENT.w / 2, AGENT.y + AGENT.d / 2, 26], P);
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="ag-fig" role="img" aria-label={`${agent.name}: ${agent.model}`}>
-      {MODELS.map((m, i) => (
+      <defs>
+        <linearGradient id="ag-rim" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#3214a8" />
+          <stop offset="0.4" stopColor="#7657ff" />
+          <stop offset="0.72" stopColor="#2fb0e8" />
+          <stop offset="1" stopColor="#7657ff" />
+        </linearGradient>
+        <pattern id="ag-grain" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+          <rect width="1" height="5" fill="rgba(255, 255, 255, 0.28)" />
+        </pattern>
+        <linearGradient id="ag-line" gradientUnits="userSpaceOnUse" x1={TILES.none.cx} y1="0" x2={TILES.nano.cx} y2="0">
+          <stop offset="0" stopColor="#5ee68f" />
+          <stop offset="0.5" stopColor="#2fb0e8" />
+          <stop offset="1" stopColor="#5ee68f" />
+        </linearGradient>
+      </defs>
+      {MODELS.map((m) => (
         <g key={m.id} className="ag-route" data-on={lit.includes(m.id) || undefined}>
-          <path d={wire(i)} className="ag-wire" />
-          {lit.includes(m.id) && <path key={agent.name} d={wire(i)} className="ag-pulse" pathLength={1} />}
+          <path d={WIRES[m.id]} className="ag-wire" />
+          {lit.includes(m.id) && <path key={agent.name} d={WIRES[m.id]} className="ag-pulse" pathLength={1} />}
         </g>
       ))}
-      <IsoSlab P={P} plan={AGENT} h={26} tone="#5ee68f" id="ag-agent" mark />
-      <g className="ag-name">
-        <rect x={name[0] - agent.name.length * 4.6 - 16} y={name[1] - 118} width={agent.name.length * 9.2 + 32} height={34} rx={9} />
-        <text x={name[0]} y={name[1] - 96} textAnchor="middle" fontSize={16}>
-          {agent.name}
-        </text>
-      </g>
-      {MODELS.map((m, i) => {
+      {MODELS.map((m) => {
         const on = lit.includes(m.id);
-        const ly = iso([plans[i]!.x + MS, plans[i]!.y + MS, 0], P)[1];
-        const cx = modelTop(i)[0];
+        const { cx, cy } = TILES[m.id];
         return (
-          <g key={m.id} className="ag-model-slab" data-on={on || undefined}>
-            <IsoSlab P={P} plan={plans[i]!} h={18} tone={on ? m.tone : "#3a3c47"} id={`ag-m-${m.id}`} dim={!on} />
-            {m.id !== "none" && (
-              // NVIDIA's eye lies flat on the Nemotron slabs, square with their edges and facing right, like the wolf
-              <image
-                href={`${base}/icons/nvidia-color-eye.svg`}
-                width={EYE_W}
-                height={EYE_W * (166 / 249.5)}
-                transform={topMatrix([plans[i]!.x + (MS - EYE_W * (166 / 249.5)) / 2, plans[i]!.y + (MS + EYE_W) / 2], 18, P, "y")}
-                className="ag-eye"
-                data-on={on || undefined}
-              />
+          <g key={m.id} className="ag-tile" data-on={on || undefined}>
+            <rect x={cx - T / 2} y={cy - T / 2} width={T} height={T} rx={20} className="ag-tile-box" />
+            {m.id === "none" ? (
+              <text x={cx} y={cy + 10} textAnchor="middle" className="ag-tile-glyph">{"{ }"}</text>
+            ) : (
+              <image href={`${base}/icons/nvidia-color-eye.svg`} x={cx - EYE_W / 2} y={cy - (EYE_W * (166 / 249.5)) / 2} width={EYE_W} height={EYE_W * (166 / 249.5)} className="ag-eye" data-on={on || undefined} />
             )}
-            <text x={cx} y={ly + 30} textAnchor="middle" className="ag-model-label">
-              {m.label}
-            </text>
-            <text x={cx} y={ly + 48} textAnchor="middle" className="ag-model-sub">
-              {m.sub}
-            </text>
+            <text x={cx} y={cy + T / 2 + 22} textAnchor="middle" className="ag-model-label">{m.label}</text>
+            <text x={cx} y={cy + T / 2 + 39} textAnchor="middle" className="ag-model-sub">{m.sub}</text>
           </g>
         );
       })}
+      <g className="ag-hub">
+        <rect x={C.cx - C.s / 2} y={C.cy - C.s / 2} width={C.s} height={C.s} rx={30} className="ag-hub-box" />
+        <rect x={C.cx - C.s / 2} y={C.cy - C.s / 2} width={C.s} height={C.s} rx={30} className="ag-hub-rim" stroke="url(#ag-rim)" />
+        <rect x={C.cx - C.s / 2} y={C.cy - C.s / 2} width={C.s} height={C.s} rx={30} className="ag-hub-rim" stroke="url(#ag-grain)" />
+        <path d={WOLF_PATH} fillRule="evenodd" className="ag-hub-mark" transform={`translate(${C.cx - MARK / 2} ${C.cy - MARK / 2}) scale(${MARK / 600}) translate(-55 -55)`} />
+      </g>
+      <g className="ag-name">
+        <rect x={C.cx - agent.name.length * 4.6 - 16} y={C.cy + C.s / 2 + 18} width={agent.name.length * 9.2 + 32} height={34} rx={9} />
+        <text x={C.cx} y={C.cy + C.s / 2 + 40} textAnchor="middle" fontSize={16}>
+          {agent.name}
+        </text>
+      </g>
     </svg>
   );
 }

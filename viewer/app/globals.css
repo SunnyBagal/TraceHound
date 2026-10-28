@@ -1736,16 +1736,27 @@ ul.trust-guards li { display: flex; align-items: center; gap: 10px; padding: 0; 
 
 /* agents figure (portrait): routed wires from the agent's slab to the model slabs it calls */
 .ag-card { padding: 8px 6px; }
-.ag-route .ag-wire { stroke: rgba(255, 255, 255, 0.14); stroke-width: 1.6; }
-.ag-route[data-on] .ag-wire { stroke: #5ee68f; stroke-width: 2; filter: drop-shadow(0 0 5px rgba(94, 230, 143, 0.8)); }
+.ag-route .ag-wire { stroke: rgba(255, 255, 255, 0.12); stroke-width: 1.5; stroke-linejoin: miter; }
+.ag-route[data-on] .ag-wire { stroke: url(#ag-line); stroke-width: 2; filter: drop-shadow(0 0 4px rgba(47, 176, 232, 0.7)); }
+/* the hub: the agent's tile, dark, with the homepage's violet-to-glacier rim, textured like vite+'s */
+.ag-hub-box { fill: #07070b; filter: drop-shadow(0 0 22px rgba(118, 87, 255, 0.35)); }
+.ag-hub-rim { fill: none; stroke-width: 4; }
+.ag-hub-mark { fill: var(--text); }
+/* the model tiles: dim until the agent's wire reaches them */
+.ag-tile-box { fill: #0f0f15; stroke: rgba(255, 255, 255, 0.1); stroke-width: 1; transition: stroke var(--dur-slow); }
+.ag-tile { opacity: 0.5; transition: opacity var(--dur-slow); }
+.ag-tile[data-on] { opacity: 1; }
+.ag-tile[data-on] .ag-tile-box { stroke: rgba(255, 255, 255, 0.28); }
+.ag-tile-glyph { font-family: var(--font-code); font-size: 28px; fill: var(--muted); }
+.ag-tile[data-on] .ag-tile-glyph { fill: var(--text); }
 .ag-pulse { fill: none; stroke: #eafff1; stroke-width: 3.4; stroke-linecap: round; stroke-dasharray: 0.06 1; animation: ag-pulse 1.8s linear infinite; filter: drop-shadow(0 0 6px #5ee68f); }
 @keyframes ag-pulse { from { stroke-dashoffset: 0.06; } to { stroke-dashoffset: -1; } }
 .ag-name rect { fill: #0b0b10; stroke: #5ee68f; stroke-width: 1.4; filter: drop-shadow(0 0 8px rgba(94, 230, 143, 0.55)); }
 .ag-name text { font-family: var(--font-ui); font-weight: 600; fill: var(--text); }
 .ag-model-label { font-family: var(--font-ui); font-size: 15px; font-weight: 600; fill: var(--faint); transition: fill var(--dur-slow); }
 .ag-model-sub { font-family: var(--font-code); font-size: 11.5px; fill: #4c4f5c; transition: fill var(--dur-slow); }
-.ag-model-slab[data-on] .ag-model-label { fill: var(--text); }
-.ag-model-slab[data-on] .ag-model-sub { fill: #a3d94f; }
+.ag-tile[data-on] .ag-model-label { fill: var(--text); }
+.ag-tile[data-on] .ag-model-sub { fill: #8fd3ff; }
 @media (prefers-reduced-motion: reduce) { .ag-pulse { animation: none; stroke-dasharray: none; opacity: 0.5; } }
 .mc-guide { fill: none; stroke: rgba(22, 23, 29, 0.1); stroke-width: 1; stroke-dasharray: 2 4; }
 .mc-scale { font-family: var(--font-code); font-size: 11px; fill: #6b6f7b; }
