@@ -154,14 +154,30 @@ Image `9b9a5127`, pre-registered in P008 ([reviewbench.md](docs/bench/reviewbenc
 
 - **No final run, no leaderboard entry.** The final (219 PRs × 3 rounds) would cost about $107 with
   VAT, measured from #331 ($3.45 per 25-PR round), against a $43.52 balance (P008 amendment 8).
-- Six configs on the same 25 PRs: the best of them is subject to selection bias.
+- Six configs on the same 25 PRs: subject to selection bias.
 - **3.5 won on our dev set but lost on ReviewBench**, in both pipelines (pool-verify-v1 12.2 vs 13.9;
   pool-raw 13.5 vs 16.0). ReviewBench's grounded metric rewards volume (findings), which the
   product's verifier cuts.
 
 ### Seeded pull requests on the live config
 
-[[TBD-SEEDED]]
+On 30 pre-registered seeded PRs, TraceHound caught 9 of 22 seeded defects and stayed silent on all 8 clean controls. It caught 5 of 6 bugs inside the diff but only 4 of 16 that break files the PR didn't touch, and 3 of those 4 came from the deterministic contract check, not the model.
+
+| class | caught | Recall | Linea |
+|---|---|---|---|
+| in-diff (D) | **5/6** | 3/3 | 2/3 |
+| cross-file, typed | 2/6 | 2/3 | 0/3 |
+| cross-file, keyed | 2/6 | 1/3 | 1/3 |
+| cross-file, semantic | 0/4 | 0/2 | 0/2 |
+| **all seeded** | **9/22** | 6/11 | 3/11 |
+| controls with a comment | **0/8** | 0/4 | 0/4 |
+
+- Pre-registered 19 Oct: seeds, key and scorer committed at `a4a6c83`, hashes published before any PR.
+- Scored 28 Oct by the committed scorer, automatic rule only: [RESULTS.md](https://github.com/SunnyBagal/tracehound-seeds/blob/main/RESULTS.md).
+- 3 of the 4 cross-file catches came from the deterministic contract check (no model); 1 came from the model.
+- Not run: CodeRabbit, Greptile, Bugbot (so no comparison with any other reviewer).
+- Model 3.5, not the 3 Super the 19 Oct plan assumed; Recall ran the Action at `0aeef06`, Linea at `86fd5d7` (the install fix).
+- Deviations: Linea opened after the Action fix, same order; open-PR script copy with 4 disclosed changes; linea#1 base re-set once (no content change) and re-triggered twice; a third-party review app auto-commented on the first 3 PRs (not scored; removed); first-PR gate widened to 3 PRs.
 
 The rule: every number links to its run record; every loss is published. Full results, losses and
 limits: [docs/bench/results.md](docs/bench/results.md).
@@ -174,6 +190,7 @@ limits: [docs/bench/results.md](docs/bench/results.md).
 - v3 was measured partly hampered (truncation, a per-PR cap); 2 v3 defects found by Bugbot are
   documented, not fixed.
 - No ReviewBench final run (money; see above).
+- The seeded test: 4 of 16 cross-file defects caught (0 of 4 semantic), 3 of them by the deterministic contract check.
 
 Nemotron 3 Ultra (report only, free NVIDIA API, not Token Factory, not the product): the 550B
 Nemotron 3 Ultra did not review better than 3.5 Super on our pipeline. Over dev runs 10 and 11
@@ -194,7 +211,9 @@ the only interval that excludes 0. Under judge x1: pool-verify-v1 54.9, pool-raw
 [`SunnyBagal/tracehound-demo`](https://github.com/SunnyBagal/tracehound-demo) runs the Action pinned
 to `review-freeze-2.1` (`86fd5d7`) with the 3.5 model set explicitly. On demo PR #2, the current config posted no
 findings (24 Oct). The older reviews posted there came from earlier generators on Nemotron Nano and
-are not the current config. Seeded PRs on the current config: [[TBD-SEEDED]].
+are not the current config. Seeded PRs on the current config: 30 on
+[SunnyBagal/recall-seeded](https://github.com/SunnyBagal/recall-seeded) and
+[SunnyBagal/linea-seeded](https://github.com/SunnyBagal/linea-seeded) (results above).
 
 ## Built with
 
