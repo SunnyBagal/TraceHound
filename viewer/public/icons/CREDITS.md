@@ -67,3 +67,18 @@ reviews (and NVIDIA, whose Nemotron models it runs on). Unmodified files:
 
 The NVIDIA mark on the hero reuses `nvidia.svg` above. Single-colour files are drawn as CSS
 masks filled with the brand's colour on its tile.
+
+## Code reviewers (benchmark page)
+
+The `/benchmark` page marks each reviewer's row with its logo. All are drawn as single-colour CSS
+masks in the surrounding text colour (`viewer/components/benchmark/ReviewerMark.tsx`), so a file's
+own colours never show. Vendored unmodified on 2026-10-28. Trademarks belong to their owners; the
+logos only label that company's reviewer in an aggregate results table.
+
+| File | Reviewer | Source | Licence of the file | sha256 |
+| --- | --- | --- | --- | --- |
+| `brands/augment.svg` | Augment Code | https://www.augmentcode.com/favicon.svg (the company's own favicon; not in Simple Icons, svgl or Lobe Icons) | the company's | `5151bb83fc6ee1f848f183923f25ea92fc2125ec0e7495e2a55b47dc4fd10e81` |
+| `brands/cursor.svg` | Cursor | reused from the row above | MIT (Lobe Icons) | |
+| `brands/greptile.svg` | Greptile | https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.101.0/icons/greptile.svg | MIT (Lobe Icons) | `ee036d35f5234a4c64ddfc0a4ca42095211ed842c777ca9e8d01f345f5c7d667` |
+| `brands/githubcopilot.svg` | GitHub Copilot | https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.101.0/icons/githubcopilot.svg | MIT (Lobe Icons) | `bbc7fddc13448236e5edea8c399d2072dc40aa5da5bca07f7a2f412405c500a3` |
+| `brands/coderabbit.svg` | CodeRabbit | https://cdn.jsdelivr.net/npm/simple-icons@16.3.0/icons/coderabbit.svg | CC0-1.0 (Simple Icons) | `8132ef42750b608836a8b1de6a29a218cfe25251fdb4c3a58fb37929499ec042` |

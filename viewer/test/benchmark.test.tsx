@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import BenchmarkPage from "@/app/benchmark/page";
 import { BENCHMARK_SOURCE, BENCHMARK_TABLES } from "@/lib/benchmark";
+import { bandFor, blindRanked, blindRows, reviewerOf, tiedNames } from "@/lib/benchmark-view";
 afterEach(cleanup);
 it("copies every aggregate table exactly from the report", () => {
   const source = readFileSync(path.resolve(import.meta.dirname, "../../docs/bench/results.md"), "utf8");
@@ -54,4 +55,27 @@ it("the cost tile is the cost table's 3.5 Super median, and figure 1 draws bars 
   const median = cost.rows.find((r) => r[0].startsWith("3.5 Super"))![(cost.headers as readonly string[]).indexOf("cost median")]!;
   expect(screen.getByTestId("tile-cost").textContent).toContain(median);
   expect(screen.getByTestId("bench-dots").textContent).toContain("0%");
+});
+it("ranks figure 1 and table 1 by F, so v2 sits where its F puts it, and the x1 band follows table 2", () => {
+  render(<BenchmarkPage />);
+  const blind = BENCHMARK_TABLES.find((t) => t.title.startsWith("Blind test: Cal.com, v2"))!;
+  const f = (blind.headers as readonly string[]).indexOf("F (v1)");
+  const ranked = blind.rows.filter((r) => !r[0].includes("secondary")).sort((a, b) => Number.parseFloat(b[f]!) - Number.parseFloat(a[f]!)).map((r) => r[0]);
+  expect(screen.getAllByTestId("bench-row").map((r) => r.querySelector(".bench-name")!.getAttribute("title"))).toEqual(ranked);
+  const table = screen.getAllByRole("table").find((t) => t.querySelector("caption")?.textContent === blind.title)!;
+  const names = [...table.querySelectorAll("tbody tr")].map((tr) => tr.querySelector("th")!.textContent);
+  expect(names.slice(0, ranked.length)).toEqual(ranked);
+  expect(names.slice(ranked.length).every((n) => n!.includes("secondary"))).toBe(true);
+  expect(ranked[0]).not.toMatch(/^TraceHound v2/);
+  // under x1 the order and the band are recomputed from the x1 column
+  const x1 = (blind.headers as readonly string[]).indexOf("F (x1)");
+  expect(bandFor("x1").max).toBe(Math.max(...blindRows.filter((r) => r.kind === "ours" || tiedNames.has(r.name)).map((r) => Number.parseFloat(blind.rows.find((b) => b[0] === r.name)![x1]!))));
+  expect(blindRanked("x1").map((r) => r.by.x1.f)).toEqual([...blindRows.map((r) => r.by.x1.f)].sort((a, b) => b - a));
+});
+it("every reviewer row in the figures and tables carries its logo", () => {
+  render(<BenchmarkPage />);
+  for (const row of screen.getAllByTestId("bench-row")) expect(row.querySelector(".bench-mark"), row.textContent!).toBeTruthy();
+  const reviewerCells = screen.getAllByRole("rowheader").filter((th) => reviewerOf(th.textContent!));
+  expect(reviewerCells.length).toBeGreaterThan(20);
+  for (const th of reviewerCells) expect(th.querySelector(".bench-mark")?.getAttribute("data-reviewer"), th.textContent!).toBe(reviewerOf(th.textContent!));
 });
