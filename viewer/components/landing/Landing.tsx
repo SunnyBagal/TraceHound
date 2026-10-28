@@ -9,7 +9,9 @@ import {
   fmt,
   GITHUB_URL,
   GRAPH_COMPONENTS,
+  FILE_IMPORTS,
   GRAPH_EDGES,
+  GRAPH_FILES,
   GRAPH_HREF,
   GRAPH_PATH_PREFIX,
   GRAPH_TREE,
@@ -22,14 +24,19 @@ import {
 import { LEGACY_REDIRECT_SCRIPT } from "@/lib/legacy";
 import { reviewsHref } from "@/lib/reviews";
 import { AnimatedFigure } from "./AnimatedFigure";
-import { DiffToDeclarations } from "./DiffToDeclarations";
-import { bricolage, jetbrains } from "./fonts";
+import { DIFF_BEATS, DiffToDeclarations } from "./DiffToDeclarations";
+import { inter, jetbrains, serif } from "./fonts";
+import { Hero } from "./Hero";
+import { FeatureTabs } from "./FeatureTabs";
+import { FEATURES } from "./features";
 import { Pipeline } from "./Pipeline";
-import { PipelineWide } from "./PipelineWide";
-import { RepoToGraph } from "./RepoToGraph";
-import { RepoToGraphWide } from "./RepoToGraphWide";
+import { GRAPH_BEATS, RepoToGraph, RepoToGraphWide } from "./RepoToGraph";
 import { RoadmapFlow } from "./RoadmapFlow";
+import { RunsOn } from "./RunsOn";
+import { HowlingWolf } from "./HowlingWolf";
+import { AgentsPanel } from "./AgentsPanel";
 import { Strike } from "./StrikeLine";
+import { TrustSection } from "./TrustSection";
 
 const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -72,9 +79,8 @@ const NAV = [
 
 const focusInk = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
 const focusAccent = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
-const h2 = "text-[clamp(2rem,1.3rem+2.6vw,3.25rem)] font-bold leading-[1.05] tracking-[-0.02em] text-text";
-/** every section below the hero: a dark glass card over the sky, rising in as it scrolls into view */
-const glass = "lp-col lp-reveal rounded-[28px] border border-glass-line bg-glass p-5 backdrop-blur-xl sm:p-10 lg:p-14";
+/** every section below the hero: a hairline-ruled band on the night page (Vite's grid), rising in as it scrolls into view */
+const glass = "lp-col lp-reveal vsection";
 
 /** The NVIDIA eye in colour (public/icons/CREDITS.md). */
 function NvidiaEye({ className = "h-3.5 w-5" }: { className?: string }) {
@@ -82,95 +88,101 @@ function NvidiaEye({ className = "h-3.5 w-5" }: { className?: string }) {
   return <img src={`${base}/icons/nvidia-color-eye.svg`} alt="" aria-hidden className={`inline-block shrink-0 object-contain ${className}`} />;
 }
 
+function GithubMark({ className = "size-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z" />
+    </svg>
+  );
+}
+
 const mono = (text: React.ReactNode) => <span className="mono text-text">{text}</span>;
 const modelNamed = GRAPH_COMPONENTS.filter((c) => c.model).map((c) => c.name);
 
+
+
 export function Landing() {
   return (
-    <div className={`landing relative isolate min-h-dvh text-text ${bricolage.variable} ${jetbrains.variable}`} data-testid="landing">
+    <div className={`landing relative isolate min-h-dvh text-text ${inter.variable} ${jetbrains.variable} ${serif.variable}`} data-testid="landing">
       {/* old viewer links (/?repo=, ?changes=, ?impact=) go on to /graph before anything paints */}
       <script dangerouslySetInnerHTML={{ __html: LEGACY_REDIRECT_SCRIPT }} />
 
-      {/* the sky, fixed behind the whole page: the hero shows it bare, every section below sits on glass over it */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-page">
-        <picture>
-          <source media="(max-width: 640px)" srcSet={`${base}/landing/hero-phone.webp`} type="image/webp" width={706} height={942} />
-          {/* eslint-disable-next-line @next/next/no-img-element -- a static export: next/image would not optimise it */}
-          <img
-            src={`${base}/landing/hero-1920.webp`}
-            alt=""
-            width={1920}
-            height={1084}
-            fetchPriority="high"
-            className="lp-sky h-full w-full object-cover"
-            data-testid="hero-image"
-          />
-        </picture>
-      </div>
-
-      <header className="flex min-h-[max(600px,min(100svh,980px))] flex-col">
-        <nav aria-label="Main" className="lp-col pt-4 sm:pt-6">
-          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-2xl bg-veil px-4 py-2.5 text-ink backdrop-blur-md sm:px-5">
-            <LogoLink
-              href={`${base}/`}
-              label="TraceHound home"
-              title="TraceHound"
-              testId="nav-logo"
-              markClassName="size-7"
-              className="text-[19px] font-bold tracking-[-0.01em] text-ink! focus-visible:outline-ink!"
-            >
-              TraceHound
-            </LogoLink>
-            <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px] font-medium sm:gap-x-5 sm:text-[15px]">
-              {NAV.map((l) => (
-                <li key={l.href}>
-                  <a href={l.href} className={`rounded-sm underline-offset-4 hover:underline ${focusInk}`}>
-                    {l.label}
-                  </a>
-                </li>
-              ))}
-              <li>
-                <a href={GITHUB_URL} className={`rounded-sm underline-offset-4 hover:underline ${focusInk}`}>
-                  GitHub
+      <nav aria-label="Main" className="lp-nav">
+        <div className="lp-nav-bar">
+          <LogoLink
+            href={`${base}/`}
+            label="TraceHound home"
+            title="TraceHound"
+            testId="nav-logo"
+            markClassName="size-7"
+            className="lp-nav-logo shrink-0 text-[18px] font-semibold tracking-[-0.01em]"
+          >
+            TraceHound
+          </LogoLink>
+          <ul className="lp-nav-links">
+            {NAV.map((l) => (
+              <li key={l.href}>
+                <a href={l.href} className={`lp-nav-link ${focusInk}`}>
+                  {l.label}
                 </a>
               </li>
-            </ul>
-          </div>
-        </nav>
-
-        <div className="lp-col flex flex-1 items-center justify-center py-14">
-          <div className="lp-hero-drift flex w-full max-w-[900px] flex-col items-center rounded-[28px] bg-veil px-5 py-9 text-center text-ink backdrop-blur-md sm:px-12 sm:py-12" data-testid="hero-veil">
-            <LogoButton className="text-ink" markClassName="size-24" />
-            <h1 className="mt-6 text-[clamp(2.25rem,1.35rem+3.4vw,4.25rem)] font-bold leading-[1.02] tracking-[-0.025em] text-ink">
-              Understand your code. <br className="hidden sm:inline" />
-              Fix what breaks.
-            </h1>
-            <p className="mt-5 max-w-[34ch] text-[clamp(1.05rem,0.95rem+0.5vw,1.3rem)] font-medium leading-snug text-ink" data-testid="hero-line">
-              AI agents that review and test pull requests with full context of the codebase.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <a href={reviewsHref()} className={`inline-flex h-12 items-center rounded-full bg-ink px-7 text-[16px] font-semibold text-on-ink hover:bg-ink/85 ${focusInk}`} data-testid="get-started">
-                Get started
-              </a>
-              <a href={GRAPH_HREF} className={`inline-flex h-12 items-center rounded-full border-2 border-ink px-7 text-[16px] font-semibold text-ink hover:bg-white/40 ${focusInk}`}>
-                Explore graph
-              </a>
-            </div>
+            ))}
+          </ul>
+          <div className="flex shrink-0 items-center gap-2">
+            <a href={GITHUB_URL} className={`lp-nav-link lp-nav-gh inline-flex items-center gap-1.5 ${focusInk}`}>
+              <GithubMark className="size-4" />
+              <span className="max-sm:sr-only">GitHub</span>
+            </a>
+            <a href={GRAPH_HREF} className={`lp-nav-cta ${focusInk}`}>
+              <GithubMark className="size-3.5" />
+              Connect GitHub
+            </a>
           </div>
         </div>
-      </header>
+      </nav>
 
-      <main className="flex flex-col gap-10 pb-10 sm:gap-14 sm:pb-14">
+      <Hero />
+
+      {/* the caption under the picture; the night the rest of the page sits in starts right below it */}
+      <div className="lp-fig">
+        <div className="lp-fig-row">
+          <span className="inline-flex items-center gap-2.5">
+            <LogoButton className="text-[#252522]" markClassName="size-5" />
+            <span className="lp-fig-label">Fig. 01 — The hound and the pack</span>
+          </span>
+          <em>Every edge points at code.</em>
+        </div>
+      </div>
+
+      <RunsOn />
+
+      <section aria-labelledby="features-title" className="vband">
+        <div className="lp-col pb-16 pt-24 text-center sm:pb-20 sm:pt-32">
+          <p className="vkicker">The graph is the review surface</p>
+          <h2 id="features-title" className="vh2 mx-auto mt-4 max-w-[18ch]">
+            Read the architecture, not the diff.
+          </h2>
+          <p className="mx-auto mt-5 max-w-[56ch] text-[17px] leading-relaxed text-muted">
+            TraceHound draws your repo as components and the evidence between them, then reviews each pull request against that map, and pins what it finds to the part of the system it touches.
+          </p>
+        </div>
+        <FeatureTabs features={FEATURES} />
+      </section>
+
+      <TrustSection />
+
+      <main className="flex flex-col">
         <section aria-labelledby="agents-write">
           <div className={glass}>
-            <h2 id="agents-write" className="text-[clamp(2.6rem,1rem+6.6vw,7rem)] font-extrabold leading-[0.98] tracking-[-0.035em] text-text">
+            <p className="sec-kicker" data-tone="amber">Change sets</p>
+            <h2 id="agents-write" className="sec-h2">
               Understand what agents write.
             </h2>
-            <p className="mt-2 text-[clamp(2.6rem,1rem+6.6vw,7rem)] font-extrabold leading-[0.98] tracking-[-0.035em] text-text" data-testid="strike-line">
+            <p className="sec-strike" data-testid="strike-line">
               Don&apos;t read <Strike>{fmt(COMMIT_LINES)}</Strike> lines. Read {COMMIT_DECLARATIONS}.
             </p>
-            <p className="mt-8">
-              <a href={CHANGES_HREF} className={`mono inline rounded-sm text-[14px] leading-relaxed text-muted underline decoration-line-strong underline-offset-4 hover:text-text hover:decoration-accent sm:text-[15px] ${focusAccent}`} data-testid="commit-caption">
+            <p className="mt-7">
+              <a href={CHANGES_HREF} className={`sec-chip ${focusAccent}`} data-testid="commit-caption">
                 Recall commit {COMMIT.short} · {COMMIT.files} files · {fmt(COMMIT.linesAdded)} added, {fmt(COMMIT.linesRemoved)} removed → {COMMIT.declarationsAdded} declarations added,{" "}
                 {COMMIT.declarationsModified} modified, {COMMIT.edgesAdded} new edge
               </a>
@@ -178,10 +190,10 @@ export function Landing() {
             <div className="mt-14">
               <AnimatedFigure
                 name="diff"
-                layout="beside"
+                art="amber"
                 title="Diff → declarations"
                 steps={[
-                  { title: "The pull request", text: <>{mono(COMMIT.files)} files, {mono(fmt(COMMIT_LINES))} lines.</>, t: 0 },
+                  { title: "The pull request", text: <>{mono(COMMIT.files)} files, {mono(fmt(COMMIT_LINES))} lines.</>, t: DIFF_BEATS[0] },
                   {
                     title: "Drop the files with no declaration",
                     text: (
@@ -189,7 +201,7 @@ export function Landing() {
                         {mono(IGNORED_FILES)} under {mono("bench/")}, which Recall&apos;s config ignores; {mono(COMMIT_FILES.length - KEPT_FILES - IGNORED_FILES)} that are not TypeScript.
                       </>
                     ),
-                    t: 1700,
+                    t: DIFF_BEATS[1],
                   },
                   {
                     title: `Open the ${KEPT_FILES} files left`,
@@ -198,7 +210,7 @@ export function Landing() {
                         {mono(COMMIT_DECLARATIONS)} declarations: {mono(COMMIT.declarationsAdded)} added, {mono(COMMIT.declarationsModified)} modified.
                       </>
                     ),
-                    t: 3200,
+                    t: DIFF_BEATS[2],
                   },
                   {
                     title: "Frame them by component",
@@ -207,7 +219,7 @@ export function Landing() {
                         Recall API and Shared Recall, with the new {mono(ADDED_EDGE.kind)} edge at {mono(`${ADDED_EDGE.file.slice(GRAPH_PATH_PREFIX.length)}:${ADDED_EDGE.line}`)}.
                       </>
                     ),
-                    t: 4700,
+                    t: DIFF_BEATS[3],
                   },
                 ]}
                 note={
@@ -225,7 +237,8 @@ export function Landing() {
 
         <section id="how-it-works" aria-labelledby="how-it-works-title" className="lp-anchor">
           <div className={glass}>
-            <h2 id="how-it-works-title" className={h2}>
+            <p className="sec-kicker" data-tone="glacier">The graph</p>
+            <h2 id="how-it-works-title" className="sec-h2">
               How it works
             </h2>
             <div className="mt-12 flex flex-col gap-16">
@@ -234,26 +247,10 @@ export function Landing() {
                 title="Repo → graph"
                 wide={<RepoToGraphWide />}
                 steps={[
-                  { title: "Files", text: <>Recall&apos;s {mono(GRAPH_TREE.length)} backend files at {mono(RECALL.short)}.</>, t: 0 },
-                  { title: "Facts", text: "The extractors find imports, queue calls and env reads, each at a file and line.", t: 1020 },
-                  {
-                    title: "Components",
-                    text: (
-                      <>
-                        The files group into {mono(GRAPH_COMPONENTS.length - 1)} components; the queue they share becomes a fifth.
-                      </>
-                    ),
-                    t: 2465,
-                  },
-                  {
-                    title: "Edges",
-                    text: (
-                      <>
-                        {mono(GRAPH_EDGES.length)} edges, each labelled with its evidence. Then a dot follows the queue: API, queue, worker.
-                      </>
-                    ),
-                    t: 4505,
-                  },
+                  { title: "Files", text: <>Recall&apos;s {mono(GRAPH_TREE.length)} backend files at {mono(RECALL.short)}, and the {mono(FILE_IMPORTS.length)} imports between them.</>, t: GRAPH_BEATS[0] },
+                  { title: "Facts", text: <>A plate of facts rises: {mono(GRAPH_FILES.length)} queue calls and env reads, each on a thread down to its file and line.</>, t: GRAPH_BEATS[1] },
+                  { title: "Components", text: <>The graph plate rises with {mono(GRAPH_COMPONENTS.length)} components; every file takes its component&apos;s colour.</>, t: GRAPH_BEATS[2] },
+                  { title: "Edges", text: <>{mono(GRAPH_EDGES.length)} edges draw, and each drops a pin to the file and line that proves it.</>, t: GRAPH_BEATS[3] },
                 ]}
                 note={
                   <>
@@ -267,113 +264,97 @@ export function Landing() {
               >
                 <RepoToGraph />
               </AnimatedFigure>
-              <AnimatedFigure
-                name="pipeline"
-                title="Find → reproduce → repair → verify"
-                wide={<PipelineWide />}
-                steps={[
-                  { title: "Find", text: "A rule over the graph emits a hypothesis: one narrow question. No model.", t: 0 },
-                  { title: "Reproduce", text: "Nemotron writes one test. A fresh sandbox runs it twice; it must fail on an assertion in the same cases.", t: 1360 },
-                  { title: "Repair", text: "Nemotron edits the repo in a Docker sandbox with the network off.", t: 3230 },
-                  { title: "Verify", text: "The harness, not the agent, runs the reproduction test, the existing tests and the typecheck.", t: 4505 },
-                ]}
-                note="The finder's claims have not been through the reproduce stage yet; the reproduce stage and the repair agent have run on seeded claims and tasks."
-              >
+              <div className="fig-wrap">
+                <h3 className="fig-title">Find → reproduce → repair → verify</h3>
                 <Pipeline />
-              </AnimatedFigure>
+                <p className="fig-after">The finder&apos;s claims have not been through the reproduce stage yet; the reproduce stage and the repair agent have run on seeded claims and tasks.</p>
+              </div>
             </div>
           </div>
         </section>
 
         <section id="agents" aria-labelledby="agents-title" className="lp-anchor">
           <div className={glass}>
-            <h2 id="agents-title" className={h2}>
+            <p className="sec-kicker" data-tone="green">On NVIDIA Nemotron</p>
+            <h2 id="agents-title" className="sec-h2">
               Agents
             </h2>
-            <ul className="mt-10 divide-y divide-panel-line border-y border-panel-line" data-testid="agent-rows">
-              {AGENTS.map((a) => (
-                <li key={a.name} className="grid gap-1 py-5 sm:grid-cols-[170px_1fr_260px] sm:gap-8">
-                  <span className="text-[17px] font-semibold text-text">{a.name}</span>
-                  <span className="text-[16px] leading-relaxed text-muted">{a.does}</span>
-                  <span className="mono flex items-center gap-2 text-[13px] leading-relaxed text-text sm:justify-end">
-                    {a.model.startsWith("Nemotron") && <NvidiaEye />}
-                    {a.model}
-                  </span>
-                </li>
-              ))}
-            </ul>
-
-            <div className="mt-16 flex flex-wrap items-center gap-x-5 gap-y-3">
-              <h3 className="text-xl font-semibold text-text">Models</h3>
-              {/* eslint-disable-next-line @next/next/no-img-element -- a vendored static logo */}
-              <img src={`${base}/icons/nvidia-color.svg`} alt="NVIDIA" width={351} height={259} className="h-9 w-auto" data-testid="nvidia-logo" />
+            <p className="sec-lede">Five agents, two of them deterministic. Pick one to see which model it calls.</p>
+            <div className="mt-10">
+              <AgentsPanel agents={AGENTS} />
             </div>
-            <ul className="mt-5 divide-y divide-panel-line border-y border-panel-line">
-              {MODELS.map((m) => (
-                <li key={m.id} className="grid gap-1 py-4 sm:grid-cols-[180px_1fr_auto] sm:items-center sm:gap-8">
-                  <span className="flex items-center gap-2 text-[16px] font-semibold text-text">
-                    <NvidiaEye className="h-4 w-6" />
-                    {m.name}
-                  </span>
-                  <span className="mono break-all text-[13px] leading-relaxed text-text">{m.id}</span>
-                  <span className="text-[15px] text-muted">{m.use}</span>
-                </li>
-              ))}
-            </ul>
 
-            <h3 className="mt-16 text-xl font-semibold text-text">Held-out evaluation</h3>
-            <p className="mt-4 max-w-prose text-[16px] leading-relaxed text-muted">
-              <span className="mono text-text">{HELDOUT.tasks}</span> seeded tasks, graph on and graph off, Nano and Super, <span className="mono text-text">{HELDOUT.repeats}</span> repeats
-              each: <span className="mono text-text">{HELDOUT.runs}</span> runs. The graph did not help the repair agent. It called a graph tool{" "}
-              <span className="mono text-text">{HELDOUT.graphToolCalls}</span> times in <span className="mono text-text">{HELDOUT.graphOnRuns}</span> graph-on runs.
-            </p>
-            <div className="mt-6 max-w-[640px] overflow-hidden rounded-xl border border-panel-line">
-              <table className="w-full border-collapse text-left text-[15px]" data-testid="heldout-table">
-                <caption className="sr-only">Held-out results, out of {HELDOUT.perArm} runs per model and arm</caption>
-                <thead className="bg-panel text-muted">
-                  <tr>
-                    <th scope="col" className="px-4 py-3 font-medium">
-                      Model
-                    </th>
-                    <th scope="col" className="px-4 py-3 font-medium">
-                      Graph on
-                    </th>
-                    <th scope="col" className="px-4 py-3 font-medium">
-                      Graph off
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-panel-line">
-                  {HELDOUT.rows.flatMap((r) => [
-                    { label: `${r.model}, resolved`, on: r.resolvedOn, off: r.resolvedOff },
-                    { label: `${r.model}, verified at stop`, on: r.verifiedOn, off: r.verifiedOff },
-                  ]).map((row) => (
-                    <tr key={row.label}>
-                      <th scope="row" className="px-4 py-3 font-medium text-text">
-                        {row.label}
-                      </th>
-                      <td className="mono px-4 py-3 text-text">
-                        {row.on} of {HELDOUT.perArm}
-                      </td>
-                      <td className="mono px-4 py-3 text-text">
-                        {row.off} of {HELDOUT.perArm}
-                      </td>
-                    </tr>
+            <div className="ag-grid mt-6">
+              <article className="ag-cell">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="ag-h3">Models</h3>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- a vendored static logo */}
+                  <img src={`${base}/icons/nvidia-color.svg`} alt="NVIDIA" width={351} height={259} className="h-9 w-auto" data-testid="nvidia-logo" />
+                </div>
+                <ul className="mt-5 grid gap-3">
+                  {MODELS.map((m, i) => (
+                    <li key={m.id} className="ag-model-card" data-tone={i ? "violet" : "green"}>
+                      <span className="flex items-center gap-2 text-[16px] font-semibold text-text">
+                        <NvidiaEye className="h-4 w-6" />
+                        {m.name}
+                      </span>
+                      <span className="mono mt-2 block break-all text-[12.5px] text-[color:var(--tone)]">{m.id}</span>
+                      <span className="mt-1.5 block text-[14px] text-muted">{m.use}</span>
+                    </li>
                   ))}
-                </tbody>
-              </table>
+                </ul>
+              </article>
+              <article className="ag-cell">
+                <h3 className="ag-h3">Held-out evaluation</h3>
+                <p className="mt-3 text-[15px] leading-relaxed text-muted">
+                  <span className="mono text-text">{HELDOUT.tasks}</span> seeded tasks, graph on and graph off, Nano and Super, <span className="mono text-text">{HELDOUT.repeats}</span> repeats each:{" "}
+                  <span className="mono text-text">{HELDOUT.runs}</span> runs.
+                </p>
+                <p className="ag-verdict">
+                  The graph did not help the repair agent. It called a graph tool <span className="mono">{HELDOUT.graphToolCalls}</span> times in <span className="mono">{HELDOUT.graphOnRuns}</span> graph-on runs.
+                </p>
+                <table className="ag-table" data-testid="heldout-table">
+                  <caption className="sr-only">Held-out results, out of {HELDOUT.perArm} runs per model and arm</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Model</th>
+                      <th scope="col">Graph on</th>
+                      <th scope="col">Graph off</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {HELDOUT.rows.flatMap((r) => [
+                      { label: `${r.model}, resolved`, on: r.resolvedOn, off: r.resolvedOff },
+                      { label: `${r.model}, verified at stop`, on: r.verifiedOn, off: r.verifiedOff },
+                    ]).map((row) => (
+                      <tr key={row.label}>
+                        <th scope="row">{row.label}</th>
+                        {[row.on, row.off].map((n, k) => (
+                          <td key={k} data-arm={k ? "off" : "on"}>
+                            <span className="ag-bar" style={{ "--w": `${(n / HELDOUT.perArm) * 100}%` } as React.CSSProperties} aria-hidden />
+                            <span className="mono">
+                              {n} of {HELDOUT.perArm}
+                            </span>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-4">
+                  <a href={`${GITHUB_URL}/blob/main/docs/eval/heldout-results.md`} className={`mono rounded-sm text-[13px] text-muted underline decoration-line-strong underline-offset-4 hover:text-text ${focusAccent}`}>
+                    docs/eval/heldout-results.md
+                  </a>
+                </p>
+              </article>
             </div>
-            <p className="mt-4 text-[15px] text-muted">
-              <a href={`${GITHUB_URL}/blob/main/docs/eval/heldout-results.md`} className={`mono rounded-sm text-[13px] underline decoration-line-strong underline-offset-4 hover:text-text ${focusAccent}`}>
-                docs/eval/heldout-results.md
-              </a>
-            </p>
           </div>
         </section>
 
         <section id="roadmap" aria-labelledby="roadmap-title" className="lp-anchor">
           <div className={glass}>
-            <h2 id="roadmap-title" className={h2}>
+            <p className="sec-kicker" data-tone="violet">Next</p>
+            <h2 id="roadmap-title" className="sec-h2">
               Roadmap
             </h2>
             <div className="mt-12">
@@ -383,14 +364,37 @@ export function Landing() {
         </section>
       </main>
 
-      <footer className="pb-8">
-        <div className="lp-col flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-glass-line bg-glass px-6 py-5 text-[15px] text-muted backdrop-blur-xl">
-          <a href={GITHUB_URL} className={`rounded-sm hover:text-text ${focusAccent}`}>
-            GitHub
-          </a>
-          <a href={LICENSE_URL} className={`rounded-sm hover:text-text ${focusAccent}`}>
-            MIT License
-          </a>
+      <section aria-labelledby="cta-title" className="cta">
+        <div className="lp-col cta-grid">
+          <div className="cta-copy">
+            <p className="sec-kicker" data-tone="amber">Every edge points at code</p>
+            <h2 id="cta-title" className="sec-h2 max-w-[14ch]">See your pull requests on the map.</h2>
+            <p className="mt-5 max-w-[42ch] text-[17px] leading-relaxed text-muted">Open the graph, pick a pull request, and read its findings where they land.</p>
+            <div className="mt-9 flex flex-wrap items-center gap-3">
+              <a href={GRAPH_HREF} className={`vbtn vbtn-primary ${focusAccent}`}>
+                <GithubMark className="size-4" /> Connect GitHub
+              </a>
+              <a href={reviewsHref()} className={`vbtn ${focusAccent}`}>Read the reviews</a>
+              <a href={`${base}/benchmark`} className={`vbtn ${focusAccent}`}>Benchmark</a>
+            </div>
+          </div>
+          <div className="cta-wolf">
+            <HowlingWolf className="cta-canvas" />
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-hairline">
+        <div className="lp-col flex flex-wrap items-center justify-between gap-4 py-8 text-[14px] text-muted">
+          <span className="inline-flex items-center gap-2 text-text">TraceHound <span className="text-faint">· graph + reviewer on NVIDIA Nemotron</span></span>
+          <span className="flex items-center gap-6">
+            <a href={GITHUB_URL} className={`rounded-sm hover:text-text ${focusAccent}`}>
+              GitHub
+            </a>
+            <a href={LICENSE_URL} className={`rounded-sm hover:text-text ${focusAccent}`}>
+              MIT License
+            </a>
+          </span>
         </div>
       </footer>
     </div>

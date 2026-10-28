@@ -9,6 +9,9 @@ export const GITHUB_URL = "https://github.com/SunnyBagal/TraceHound";
 export const LICENSE_URL = `${GITHUB_URL}/blob/main/LICENSE`;
 export const GRAPH_HREF = `${base}/graph`;
 
+/** Under the hero, and in CREDITS.md with the marks it shows (test/landing.test.tsx checks both). */
+export const HERO_TRADEMARKS = "Logos are trademarks of their owners and are used only to name the coding agents whose pull requests TraceHound reviews. No affiliation or endorsement.";
+
 /**
  * Recall commit 7943212 (changesets/recall-7943212.json). Files and lines: `files` (11 added + 4
  * modified) and the sum of its linesAdded / linesRemoved, which equal GitHub's `stats` for the
@@ -169,3 +172,101 @@ export const HELDOUT = {
     { model: "Nemotron Super", resolvedOn: 28, resolvedOff: 26, verifiedOn: 30, verifiedOff: 31 },
   ],
 } as const;
+
+/**
+ * `pnpm tracehound analyze` (packages/analyzer/src/cli.ts:120-129) as it prints for each published
+ * snapshot: repo@sha · analyzer, then the counts line and the naming line, then the file it wrote.
+ * The run time (`· Nms`) is not recorded in a snapshot, so it is left off. test/landing.test.tsx
+ * checks every field against the snapshot file.
+ */
+export const ANALYZE_RUNS = [
+  {
+    label: "Recall",
+    repo: "./Recall",
+    config: "configs/recall.tracehound.json",
+    model: null,
+    snapshot: "snapshots/5d2165aa9654f17a148f6663bc478a3fd9f7fc6b/0.10.0.json",
+    name: "SunnyBagal/Recall",
+    short: "5d2165a",
+    analyzerVersion: "0.10.0",
+    files: 51, components: 7, edges: 6, evidence: 196, warnings: 2,
+    named: 4, calls: 4, namingModel: "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", tokens: 1461, cached: 4, cost: "0.00000",
+  },
+  {
+    label: "CEX exchange",
+    repo: "./cex-v2-boilercode",
+    config: "configs/cex-v2-boilercode.tracehound.json",
+    model: null,
+    snapshot: "snapshots/da0e3d640a9c02f815fcca48f8328c94558cc058/0.10.0.json",
+    name: "SunnyBagal/cex-v2-boilercode",
+    short: "da0e3d6",
+    analyzerVersion: "0.10.0",
+    files: 22, components: 9, edges: 17, evidence: 115, warnings: 1,
+    named: 7, calls: 7, namingModel: "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", tokens: 2513, cached: 7, cost: "0.00000",
+  },
+  {
+    label: "Recall · Super names",
+    repo: "./Recall",
+    config: "configs/recall.tracehound.json",
+    model: "nvidia/nemotron-3-super-120b-a12b",
+    snapshot: "snapshots/20ac149ea593ccc032426674ec36927da3f30f16/0.10.0.json",
+    name: "SunnyBagal/Recall",
+    short: "20ac149",
+    analyzerVersion: "0.10.0",
+    files: 55, components: 7, edges: 6, evidence: 214, warnings: 2,
+    named: 4, calls: 4, namingModel: "nvidia/nemotron-3-super-120b-a12b", tokens: 1483, cached: 0, cost: "0.00053",
+  },
+] as const;
+
+/** Edge labels per published snapshot (`confidenceLabel` counts), for the analyze terminal. */
+export const EDGE_LABELS = {
+  "5d2165a": { proven: 6, "resolved-default": 0, dynamic: 0 },
+  da0e3d6: { proven: 13, "resolved-default": 2, dynamic: 2 },
+  "20ac149": { proven: 6, "resolved-default": 0, dynamic: 0 },
+} as const;
+
+/**
+ * The demo repo the reviews run on (snapshots/efc5844…/0.10.0.json) and, for each file its saved
+ * pull requests change (public/reviews/SunnyBagal__tracehound-demo.json), the component that holds
+ * it there, by the snapshot's name. Files in no component are not listed. The landing feeds these
+ * to the graph's own overlay function (lib/pulls.ts prOverlay); the test checks them against the
+ * snapshot.
+ */
+export const DEMO = {
+  snapshot: "snapshots/efc58448e828167d909bedca5b3f7a697449c7fd/0.10.0.json",
+  short: "efc5844",
+  components: 7,
+  edges: 6,
+  evidence: 277,
+  owners: [
+    { id: "recall-backend:shared", name: "Shared Utilities", files: ["recall-backend/services/linkDetector.ts", "recall-backend/db/schema.ts"] },
+    { id: "recall-backend:brainly-server", name: "Content API Service", files: ["recall-backend/middleware/middleware.ts", "recall-backend/index.ts"] },
+    { id: "recall-backend:worker", name: "Recall Backend Worker", files: ["recall-backend/worker.ts"] },
+  ],
+} as const;
+
+/**
+ * The imports between the 15 files of GRAPH_TREE (each file's `imports` in the Recall snapshot
+ * with a `target` in the tree, type-only ones left out), with the line each import is on. Paths
+ * drop GRAPH_PATH_PREFIX. The repo → graph figure draws them on its file layer.
+ */
+export const FILE_IMPORTS: readonly (readonly [from: string, to: string, line: number])[] = [
+  ["config/db.ts", "db/schema.ts", 2],
+  ["index.ts", "middleware/middleware.ts", 8],
+  ["index.ts", "services/searchService.ts", 9],
+  ["index.ts", "config/db.ts", 11],
+  ["index.ts", "db/schema.ts", 12],
+  ["index.ts", "services/linkDetector.ts", 13],
+  ["index.ts", "services/metadataFetcher.ts", 14],
+  ["index.ts", "config/queue.ts", 15],
+  ["index.ts", "services/embeddings.ts", 16],
+  ["services/searchService.ts", "config/db.ts", 4],
+  ["services/searchService.ts", "db/schema.ts", 5],
+  ["worker.ts", "config/db.ts", 6],
+  ["worker.ts", "db/schema.ts", 7],
+  ["worker.ts", "config/queue.ts", 8],
+  ["worker.ts", "services/linkDetector.ts", 9],
+  ["worker.ts", "services/textExtractor.ts", 10],
+  ["worker.ts", "services/aiProcessor.ts", 11],
+  ["worker.ts", "services/embeddings.ts", 12],
+];

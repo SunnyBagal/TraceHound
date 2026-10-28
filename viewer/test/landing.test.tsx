@@ -6,10 +6,14 @@ import GraphPage from "@/app/graph/page";
 import Home from "@/app/page";
 import {
   ADDED_EDGE,
+  ANALYZE_RUNS,
   CHANGE_COMPONENTS,
   COMMIT,
   COMMIT_FILES,
   DECLARATIONS,
+  DEMO,
+  EDGE_LABELS,
+  FILE_IMPORTS,
   FINDER_RULE,
   GRAPH_COMPONENTS,
   GRAPH_EDGES,
@@ -17,12 +21,14 @@ import {
   GRAPH_PATH_PREFIX,
   GRAPH_TREE,
   HELDOUT,
+  HERO_TRADEMARKS,
   IGNORED_BY_CONFIG,
   MODELS,
   RECALL,
   RECALL_COMPONENTS,
 } from "@/lib/landing";
 import { LEGACY_REDIRECT_SCRIPT } from "@/lib/legacy";
+import { BENCHMARK_TABLES } from "@/lib/benchmark";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const json = (file: string) => JSON.parse(readFileSync(path.join(ROOT, file), "utf8"));
@@ -62,10 +68,10 @@ describe('the landing page at "/"', () => {
     render(<Home />);
     expect(screen.getByTestId("landing")).toBeTruthy();
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Understand your code. Fix what breaks.");
-    expect(screen.getByTestId("hero-line").textContent).toBe("AI agents that review and test pull requests with full context of the codebase.");
-    for (const name of ["Understand what agents write.", "How it works", "Agents", "Roadmap"]) expect(screen.getByRole("heading", { level: 2, name })).toBeTruthy();
+    expect(screen.getByTestId("hero-line").textContent).toBe("An evidence-backed graph of your repo's architecture, and a pull-request reviewer on NVIDIA Nemotron through Nebius Token Factory.");
+    for (const name of ["Read the architecture, not the diff.", "Understand what agents write.", "How it works", "Agents", "Roadmap", "See your pull requests on the map."]) expect(screen.getByRole("heading", { level: 2, name })).toBeTruthy();
     const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual(["TraceHound", "Graph", "Reviews", "Benchmark", "How it works", "Agents", "Roadmap", "GitHub"]);
+    expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual(["TraceHound", "Graph", "Reviews", "Benchmark", "How it works", "Agents", "Roadmap", "GitHub", "Connect GitHub"]);
     expect(within(nav).getByRole("link", { name: "GitHub" }).getAttribute("href")).toBe("https://github.com/SunnyBagal/TraceHound");
     expect(within(nav).queryByText(/sign in|log in/i)).toBeNull();
     for (const id of ["how-it-works", "agents", "roadmap"]) expect(document.getElementById(id)).toBeTruthy();
@@ -74,10 +80,18 @@ describe('the landing page at "/"', () => {
     expect(within(footer).getAllByRole("link").map((a) => a.textContent)).toEqual(["GitHub", "MIT License"]);
   });
 
-  it('"Get started" opens demo reviews, with graph and agents navigation available', () => {
+  it('the hero: "Connect GitHub" opens the graph, "View on GitHub" the repo; reviews and agents navigation available', () => {
     render(<Home />);
-    expect(screen.getByRole("link", { name: "Get started" }).getAttribute("href")).toBe("/reviews?repo=SunnyBagal%2Ftracehound-demo");
-    expect(screen.getByRole("link", { name: "Explore graph" }).getAttribute("href")).toBe("/graph");
+    const hero = screen.getByTestId("hero");
+    expect(within(hero).getByRole("link", { name: "Connect GitHub" }).getAttribute("href")).toBe("/graph");
+    expect(within(hero).getByRole("link", { name: "View on GitHub" }).getAttribute("href")).toBe("https://github.com/SunnyBagal/TraceHound");
+    expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Reviews" }).getAttribute("href")).toBe("/reviews?repo=SunnyBagal%2Ftracehound-demo");
+    // the owner's layout: NVIDIA on the black wolf, the coding agents on the pack
+    expect(within(hero).getAllByTestId("hero-mark").map((m) => m.dataset.mark)).toEqual(["nvidia", "claude", "chatgpt", "antigravity", "opencode", "cursor"]);
+    expect(within(hero).getByTestId("hero-trademarks").textContent).toBe(HERO_TRADEMARKS);
+    const credits = text("CREDITS.md");
+    expect(credits).toContain(HERO_TRADEMARKS);
+    for (const label of ["NVIDIA", "Claude", "ChatGPT", "Antigravity", "OpenCode", "Cursor"]) expect(credits).toContain(label);
     expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Agents" }).getAttribute("href")).toBe("#agents");
   });
 
@@ -214,7 +228,7 @@ describe("the strikethrough line and its caption", () => {
 });
 
 describe("the animations", () => {
-  const figures = ["diff", "graph", "pipeline"] as const;
+  const figures = ["diff", "graph"] as const;
 
   it("under reduced motion each shows its final frame, static, not a button, with its caption as the text alternative", () => {
     reducedMotion(true);
@@ -227,7 +241,7 @@ describe("the animations", () => {
       const img = within(figure).getByRole("img");
       expect(document.getElementById(img.getAttribute("aria-labelledby")!)!.tagName).toBe("FIGCAPTION");
     }
-    // the final frames: 8 declarations and both components; 5 nodes and 6 labelled edges; the test passing
+    // the final frames: 8 declarations and both components; 5 nodes and 6 labelled edges
     const diff = screen.getByTestId("anim-diff");
     expect(within(diff).getByTestId("diff-counter").textContent).toBe("8 declarations");
     expect(within(diff).getAllByTestId("dropped-file")).toHaveLength(11);
@@ -235,24 +249,31 @@ describe("the animations", () => {
     expect(within(diff).getAllByTestId("declaration-row")).toHaveLength(8);
     expect(within(diff).getAllByTestId("change-component-name").map((c) => c.textContent)).toEqual(["Recall API", "Shared Recall"]);
     expect(within(diff).getByTestId("new-edge").textContent).toBe("calls · index.ts:320");
-    // repo → graph and the pipeline: a wide drawing (lg and up) and a narrow one, both final
+    // repo → graph: a wide drawing (lg and up) and a narrow one, both final
     const variant = (name: string, v: "wide" | "narrow") => screen.getByTestId(`anim-${name}`).querySelector<HTMLElement>(`[data-variant="${v}"]`)!;
     const labels = ["index.ts:153", "worker.ts:111", "index.ts:15", "index.ts:11", "worker.ts:8", "worker.ts:6"];
     for (const v of ["wide", "narrow"] as const) {
       const graph = variant("graph", v);
       expect(within(graph).getAllByTestId("graph-node"), v).toHaveLength(5);
       expect(within(graph).getAllByTestId("edge-label").map((l) => l.textContent), v).toEqual(labels);
-      const pipeline = variant("pipeline", v);
-      expect(within(pipeline).getAllByTestId("pipeline-stage").map((s) => s.querySelector("text")!.textContent), v).toEqual(["find", "reproduce", "repair", "verify"]);
     }
     const wide = variant("graph", "wide");
     expect(within(wide).getAllByTestId("tree-row")).toHaveLength(15);
     expect(within(wide).getAllByTestId("fact-chip").map((c) => c.textContent)).toEqual(["env L4", "new Queue L10", "queue.add L153", "new Worker L111"]);
-    expect(within(variant("pipeline", "wide")).getAllByTestId("verify-check").map((c) => c.textContent)).toEqual(["✓reproduction test", "✓existing tests", "✓typecheck"]);
-    expect(within(variant("pipeline", "wide")).getByTestId("test-passes").textContent).toBe("RESOLVED");
-    expect(within(variant("pipeline", "narrow")).getByTestId("test-passes").textContent).toContain("test passes");
     // every caption is a numbered list of four steps
     for (const name of figures) expect(within(screen.getByTestId(`anim-${name}`)).getAllByRole("listitem"), name).toHaveLength(4);
+  });
+
+  it("find → reproduce → repair → verify is a static grid (no animation): four stages, the finder's rule, the verify checks", () => {
+    reducedMotion(false);
+    render(<Home />);
+    const pipeline = screen.getByTestId("pipeline");
+    expect(within(pipeline).queryByRole("button")).toBeNull();
+    expect(within(pipeline).getAllByTestId("pipeline-stage").map((s) => s.dataset.stage)).toEqual(["find", "reproduce", "repair", "verify"]);
+    expect(pipeline.textContent).toContain(FINDER_RULE.id);
+    expect(pipeline.textContent).toContain(FINDER_RULE.question);
+    expect(within(pipeline).getAllByTestId("verify-check").map((c) => c.textContent)).toEqual(["✓reproduction test", "✓existing tests", "✓typecheck"]);
+    expect(within(pipeline).getByTestId("test-passes").textContent).toBe("RESOLVED");
   });
 
   it("with motion each is a replay button (paused until in view; jsdom has no IntersectionObserver, so it plays)", () => {
@@ -327,6 +348,15 @@ describe("every name and number in the animations and sections comes from the re
     expect([...GRAPH_TREE].sort((a, b) => a.path.localeCompare(b.path))).toEqual(expected.sort((a, b) => a.path.localeCompare(b.path)));
   });
 
+  it("repo → graph's file layer: the snapshot's imports between the tree's files, with their lines", () => {
+    const snapshot = json(RECALL_SNAPSHOT);
+    const tree = new Set(GRAPH_TREE.map((f) => f.path));
+    const expected = (snapshot.files as { path: string; imports: { target?: string; typeOnly: boolean; evidenceId: string }[] }[])
+      .filter((f) => tree.has(f.path))
+      .flatMap((f) => f.imports.filter((i) => i.target && tree.has(i.target) && !i.typeOnly).map((i) => [f.path.slice(GRAPH_PATH_PREFIX.length), i.target!.slice(GRAPH_PATH_PREFIX.length), Number(/#L(\d+)/.exec(i.evidenceId)![1])]));
+    expect([...FILE_IMPORTS].map((x) => [...x])).toEqual(expected);
+  });
+
   it("the pipeline's rule and question are the finder's, word for word", () => {
     const rules = text("packages/analyzer/src/finder/rules.ts");
     expect(rules).toContain(`RULES["${FINDER_RULE.id}"]`);
@@ -348,5 +378,110 @@ describe("every name and number in the animations and sections comes from the re
     expect(doc).toContain(`${HELDOUT.tasks} seeded tasks`);
     expect(doc).toContain(`${HELDOUT.repeats} repeats, concurrency 1: ${HELDOUT.runs} counted runs`);
     expect(doc).toContain(`The agent never called a graph tool in ${HELDOUT.graphOnRuns} graph-on runs`);
+  });
+});
+
+describe("the feature tabs: every terminal line is the repo's", () => {
+  it("four panels under one sticky tab row, each with its terminal", () => {
+    reducedMotion(true);
+    render(<Home />);
+    const tabs = screen.getByRole("navigation", { name: "Features" });
+    expect(within(tabs).getAllByRole("link").map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+      ["analyze", "#feature-analyze"],
+      ["review", "#feature-review"],
+      ["pin", "#feature-pin"],
+      ["verify", "#feature-verify"],
+    ]);
+    for (const id of ["analyze", "review", "pin", "verify"]) {
+      expect(document.getElementById(`feature-${id}`)).toBeTruthy();
+      // reduced motion: the finished frame, no lines held back
+      expect(screen.getByTestId(`terminal-${id}`).dataset.mode).toBe("done");
+    }
+  });
+
+  it("analyze prints what `pnpm tracehound analyze` prints for each published snapshot", () => {
+    for (const r of ANALYZE_RUNS) {
+      const s = json(r.snapshot);
+      expect(json("snapshots/index.json").repos.some((x: { versions: { path: string }[] }) => x.versions.some((v) => `snapshots/${v.path}` === r.snapshot)), r.snapshot).toBe(true);
+      expect(text(r.config).length).toBeGreaterThan(0);
+      expect([s.repo.name, s.repo.commitSha.slice(0, 7), s.analyzerVersion]).toEqual([r.name, r.short, r.analyzerVersion]);
+      expect([s.files.length, s.components.length, s.edges.length, s.evidence.length, s.warnings.length]).toEqual([r.files, r.components, r.edges, r.evidence, r.warnings]);
+      const calls = s.llmCalls as { model: string; totalTokens?: number; estCostUSD: number; cached?: boolean }[];
+      expect([s.components.filter((c: { naming: { source: string } }) => c.naming.source === "llm").length, calls.length, calls[0]!.model]).toEqual([r.named, r.calls, r.namingModel]);
+      expect(calls.reduce((n, c) => n + (c.totalTokens ?? 0), 0)).toBe(r.tokens);
+      expect(calls.filter((c) => c.cached).length).toBe(r.cached);
+      expect(calls.reduce((n, c) => n + c.estCostUSD, 0).toFixed(5)).toBe(r.cost);
+      if (r.model) expect(r.model).toBe(r.namingModel);
+      const labels: Record<string, number> = { proven: 0, "resolved-default": 0, dynamic: 0 };
+      for (const e of s.edges as { confidenceLabel: string }[]) labels[e.confidenceLabel]!++;
+      expect(labels).toEqual(EDGE_LABELS[r.short]);
+    }
+    // the counts line and the naming line, in the CLI's own format (src/cli.ts)
+    const cli = text("packages/analyzer/src/cli.ts");
+    expect(cli).toContain("files · ${snapshot.components.length} components · ${snapshot.edges.length} edges · ${snapshot.evidence.length} evidence · ${snapshot.warnings.length} warnings");
+    expect(cli).toContain("naming: ${named}/${snapshot.llmCalls.length} named by ${snapshot.llmCalls[0]!.model} · ${tokens} tokens · ${cached} cached · ~$${cost.toFixed(5)}");
+    reducedMotion(true);
+    render(<Home />);
+    const t = screen.getByTestId("terminal-analyze").textContent!;
+    const r = ANALYZE_RUNS[0];
+    expect(t).toContain(`$ pnpm tracehound analyze --repo ${r.repo} --config ${r.config}`);
+    expect(t).toContain(`${r.name}@${r.short} · analyzer ${r.analyzerVersion}`);
+    expect(t).toContain(`${r.files} files · ${r.components} components · ${r.edges} edges · ${r.evidence} evidence · ${r.warnings} warnings`);
+    expect(t).toContain(`→\u00a0${r.snapshot}`);
+  });
+
+  it("pin: the demo snapshot's owners of every file the saved pull requests change", () => {
+    const s = json(DEMO.snapshot);
+    expect([s.repo.commitSha.slice(0, 7), s.components.length, s.edges.length, s.evidence.length]).toEqual([DEMO.short, DEMO.components, DEMO.edges, DEMO.evidence]);
+    const owner = new Map<string, { id: string; name: string }>();
+    for (const c of s.components) for (const f of c.files) owner.set(f, c);
+    const saved = json("viewer/public/reviews/SunnyBagal__tracehound-demo.json");
+    const listed = new Map<string, string>(DEMO.owners.flatMap((o) => o.files.map((f) => [f, o.id] as [string, string])));
+    for (const o of DEMO.owners) for (const f of o.files) expect([owner.get(f)?.id, owner.get(f)?.name], f).toEqual([o.id, o.name]);
+    for (const p of saved.pulls) for (const { filename } of p.files) expect(listed.get(filename), filename).toBe(owner.get(filename)?.id);
+    reducedMotion(true);
+    render(<Home />);
+    const t = screen.getByTestId("terminal-pin").textContent!;
+    expect(t).toContain("open /graph?repo=tracehound-demo&pr=6");
+    expect(t).toContain("Shared Utilities");
+    expect(t).toContain(".github/workflows/tracehound-review.yml (in no component)");
+  });
+
+  it("review and verify: the saved review and the benchmark's cells, with no reviewer named", () => {
+    reducedMotion(true);
+    render(<Home />);
+    const review = screen.getByTestId("terminal-review").textContent!;
+    expect(review).toContain("TraceHound: posted review with 1 findings.");
+    expect(text("packages/action/src/action.ts")).toContain("TraceHound: posted review with ${");
+    expect(review).toContain("recall-backend/services/linkDetector.ts:150");
+    expect(review).toContain("model-generated, not tested");
+    const verify = screen.getByTestId("terminal-verify").textContent!;
+    const blind = BENCHMARK_TABLES.find((t) => t.title.startsWith("Blind test"))!;
+    const v2 = blind.rows.find((r) => r[0].startsWith("TraceHound v2"))!;
+    for (const h of ["TP", "FP", "FN", "P (n)", "R (n)", "F (v1)"]) expect(verify).toContain(v2[(blind.headers as readonly string[]).indexOf(h)]!);
+    // the landing names no other reviewer outside the hero's approved marks
+    const tabs = screen.getByTestId("feature-tabs").textContent!;
+    for (const name of ["augment", "cursor", "greptile", "copilot", "coderabbit", "cal.com"]) expect(tabs.toLowerCase()).not.toContain(name);
+  });
+});
+
+describe("the trust section: snapshot counts and the benchmark's cost table", () => {
+  it("shows each snapshot's evidence and its components / edges, and the cost table's medians and maxima", () => {
+    reducedMotion(true);
+    render(<Home />);
+    const trust = screen.getByTestId("trust");
+    expect(within(trust).getByRole("heading", { level: 2 }).textContent).toBe("Built to be checked.");
+    const stats = screen.getByTestId("trust-stats").textContent!;
+    for (const [r, short] of [[ANALYZE_RUNS[0], ANALYZE_RUNS[0].short], [ANALYZE_RUNS[1], ANALYZE_RUNS[1].short], [DEMO, DEMO.short]] as const) {
+      expect(stats).toContain(`@${short}`);
+      expect(stats).toContain(`${r.evidence.toLocaleString("en-US")}evidence`);
+      expect(stats).toContain(`${r.components} / ${r.edges}`);
+    }
+    const cost = BENCHMARK_TABLES.find((t) => t.title.startsWith("Dev cost per pull request"))!;
+    const col = (h: string) => (cost.headers as readonly string[]).indexOf(h);
+    const figure = within(screen.getByTestId("trust-cost")).getByRole("img").getAttribute("aria-label")!;
+    for (const row of cost.rows.slice(0, 2)) expect(figure).toContain(`${row[0].split(" (")[0]}: median ${row[col("cost median")]}, max ${row[col("cost max")]}`);
+    // nothing armed under reduced motion: every figure shows at once
+    for (const el of trust.querySelectorAll("[data-reveal]")) expect((el as HTMLElement).dataset.reveal).not.toBe("armed");
   });
 });

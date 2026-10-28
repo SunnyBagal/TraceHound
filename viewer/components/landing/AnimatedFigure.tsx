@@ -51,19 +51,24 @@ export interface Step {
   t: number;
 }
 
+/** the colour of each step's rail, in order (the landing's tab tones) */
+const TONES = ["amber", "violet", "glacier", "green"] as const;
+
 /**
- * One landing animation: paused at its first frame until it scrolls into view, then it plays once;
- * a click (or Enter / Space) replays it. With prefers-reduced-motion it shows the final frame,
- * static, and is not a button. The caption is the text alternative: numbered steps that light up
- * as the drawing reaches each one, then an optional note. `wide` is the drawing for large screens
- * (lg and up); `children` the one for narrower screens (or for all, without `wide`).
+ * One landing animation, in a bordered box (coderabbit's layout, our tones): the steps on the left,
+ * each with a coloured rail that lights while the drawing is on its beat; the drawing on the right,
+ * on the landing's grainy gradient when `art` names a tone. It is paused at its first frame until it
+ * scrolls into view, then plays once; a click (or Enter / Space) replays it. With
+ * prefers-reduced-motion it shows the final frame, static, and is not a button. The caption (the
+ * steps and an optional note) is the text alternative. `wide` is the drawing for large screens (lg
+ * and up); `children` the one for narrower screens (or for all, without `wide`).
  */
 export function AnimatedFigure({
   name,
   title,
   steps,
   note,
-  layout = "below",
+  art,
   wide,
   children,
 }: {
@@ -71,7 +76,8 @@ export function AnimatedFigure({
   title: string;
   steps: Step[];
   note?: React.ReactNode;
-  layout?: "beside" | "below";
+  /** the stage's gradient tone; none = the plain night panel */
+  art?: (typeof TONES)[number];
   wide?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -79,6 +85,15 @@ export function AnimatedFigure({
   const captionId = useId();
   const [state, setState] = usePlayOnView(ref);
   const [run, setRun] = useState(0);
+  const [active, setActive] = useState(-1);
+
+  // the lit step follows the drawing's beats while it plays
+  useEffect(() => {
+    if (state !== "play") return;
+    setActive(0);
+    const timers = steps.slice(1).map((s, i) => setTimeout(() => setActive(i + 1), s.t));
+    return () => timers.forEach(clearTimeout);
+  }, [state, run, steps]);
 
   const drawing = (
     // a span: a button may only hold phrasing content
@@ -97,18 +112,25 @@ export function AnimatedFigure({
       )}
     </span>
   );
-  const beside = layout === "beside";
   return (
-    <figure
-      className={beside ? "grid gap-6 lg:grid-cols-[minmax(0,600px)_minmax(0,1fr)] lg:items-center lg:gap-x-14" : "flex flex-col gap-6"}
-      data-testid={`anim-${name}`}
-      data-state={state}
-    >
-      <div className={beside ? "flex flex-col gap-4" : "contents"}>
-        <h3 className="text-lg font-semibold text-text">{title}</h3>
-        <div ref={ref} className="rounded-2xl border border-panel-line bg-panel p-1.5 sm:p-6">
+    <div className="fig-wrap">
+      <h3 className="fig-title">{title}</h3>
+      <figure className="fig" data-testid={`anim-${name}`} data-state={state}>
+        <figcaption id={captionId} className="fig-steps">
+          <ol>
+            {steps.map((s, i) => (
+              <li key={s.title} className="fig-step" data-tone={TONES[i % TONES.length]} data-on={state === "static" || i === active || undefined}>
+                <span className="fig-step-title">{s.title}</span>
+                <span className="fig-step-text">{s.text}</span>
+              </li>
+            ))}
+          </ol>
+          {note && <p className="fig-note">{note}</p>}
+        </figcaption>
+        <div ref={ref} className={`fig-stage ${art ? "fx-art" : ""}`} data-tone={art}>
+          {art && <span className="fx-beams" aria-hidden />}
           {state === "static" ? (
-            <div role="img" aria-labelledby={captionId}>
+            <div role="img" aria-labelledby={captionId} className="fig-drawing">
               {drawing}
             </div>
           ) : (
@@ -120,29 +142,13 @@ export function AnimatedFigure({
               }}
               aria-label={`Replay the animation: ${title}`}
               aria-describedby={captionId}
-              className="block w-full cursor-pointer rounded-lg text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+              className="fig-drawing cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
             >
               {drawing}
             </button>
           )}
         </div>
-      </div>
-      <figcaption id={captionId}>
-        <ol key={run} className={`lp-anim grid gap-x-8 gap-y-5 ${beside ? "" : "sm:grid-cols-2 lg:grid-cols-4"}`} data-state={state} data-testid="anim-steps">
-          {steps.map((s, i) => (
-            <li key={s.title} className="flex gap-3" data-anim="step" style={{ "--t": `${s.t}ms`, "--d": "400ms" } as React.CSSProperties}>
-              <span className="mono grid size-7 shrink-0 place-items-center rounded-full border border-accent text-[12px] text-accent" aria-hidden>
-                {i + 1}
-              </span>
-              <span className="flex flex-col gap-1">
-                <span className="text-[16px] font-semibold text-text">{s.title}</span>
-                <span className="text-[15px] leading-relaxed text-muted">{s.text}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
-        {note && <p className="mt-5 flex items-start gap-2 text-[14px] leading-relaxed text-faint">{note}</p>}
-      </figcaption>
-    </figure>
+      </figure>
+    </div>
   );
 }

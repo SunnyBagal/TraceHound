@@ -1,127 +1,112 @@
+import { Check } from "lucide-react";
 import { FINDER_RULE } from "@/lib/landing";
+import { PipelineTrack } from "./PipelineTrack";
 
 /**
- * The findings pipeline, one stage at a time: a finder rule emits a hypothesis (a question), the
- * reproduce stage writes one test that fails on an assertion, the repair agent writes a patch, and
- * the harness runs the test again in a Docker sandbox with the network off, where it passes.
+ * Find → reproduce → repair → verify, as rows on a rail that draws itself as the page scrolls
+ * (PipelineTrack; no other motion): each stage says who
+ * does the work and shows the one artefact it hands on. Sources: the finder's rule
+ * (packages/analyzer/src/finder/rules.ts, via lib/landing.ts), the reproduce stage's four checks
+ * (decision 048), the Docker sandbox's settings (decision 036, docker-provider@2) and the harness's
+ * three gates (decisions 026, 043).
  */
 
-const SPEED = 0.85;
-const at = (t: number, d?: number) => ({ "--t": `${Math.round(t * SPEED)}ms`, ...(d ? { "--d": `${Math.round(d * SPEED)}ms` } : {}) }) as React.CSSProperties;
-
-/** Wrap the rule's question at word boundaries, at most `width` characters a line. */
-export function wrap(text: string, width: number): string[] {
-  const lines: string[] = [];
-  let line = "";
-  for (const word of text.split(" ")) {
-    if (line && line.length + 1 + word.length > width) {
-      lines.push(line);
-      line = word;
-    } else line = line ? `${line} ${word}` : word;
-  }
-  return [...lines, line];
-}
-
-const STAGES = [
-  { name: "find", model: "no model", y: 16, t: 0 },
-  { name: "reproduce", model: "Nemotron", y: 160, t: 1900 },
-  { name: "repair", model: "Nemotron", y: 288, t: 3800 },
-  { name: "verify", model: "no model", y: 370, t: 5150 },
+const REPRO_CHECKS = [
+  "exactly one new test file, and nothing else",
+  "it fails on an AssertionError, with no new tsc error",
+  "the same cases fail on a second run",
+  "the per-test rule holds with the file in the suite",
 ] as const;
 
-const text = (fill: string) => ({ fill: `var(--${fill})` });
+const SANDBOX = [
+  ["image", "tracehound-sandbox:bun1.4.2-ts5.9.3-2"],
+  ["user", "uid 1000, not root"],
+  ["capabilities", "dropped"],
+  ["limits", "2 GB · 2 CPUs · 512 pids"],
+  ["network", "disconnected after setup"],
+  ["mounts", "none, no Docker socket"],
+] as const;
+
+const VERIFY = ["reproduction test", "existing tests", "typecheck"] as const;
+
+function Stage({ id, tone, who, title, text, children }: { id: string; tone: string; who: string; title: string; text: string; children: React.ReactNode }) {
+  return (
+    <article className="pl-cell" data-tone={tone} data-stage={id} data-testid="pipeline-stage">
+      <span className="pl-node" aria-hidden />
+      <div className="pl-copy">
+        <p className="pl-kicker">
+          {id}
+          <span className="pl-who">{who}</span>
+        </p>
+        <h4 className="pl-title">{title}</h4>
+        <p className="pl-text">{text}</p>
+      </div>
+      <div className="pl-art">{children}</div>
+    </article>
+  );
+}
 
 export function Pipeline() {
-  const question = wrap(FINDER_RULE.question, 44);
+  const [before, after] = FINDER_RULE.question.split("<METHOD> <path>");
   return (
-    <svg viewBox="0 0 360 424" className="block h-auto w-full" aria-hidden data-testid="pipeline">
-      {/* the stages and the line that joins them */}
-      {STAGES.slice(1).map((s, i) => (
-        <path key={s.name} className="lp-path" data-anim="draw" style={{ ...at(s.t - 400, 400), fill: "none", stroke: "var(--line-strong)" }} pathLength={1} strokeWidth={1.5} d={`M14 ${STAGES[i]!.y + 7} V${s.y - 7}`} />
-      ))}
-      {STAGES.map((s) => (
-        <g key={s.name} data-anim="in" style={at(s.t, 350)} data-testid="pipeline-stage">
-          <circle cx={14} cy={s.y} r={5} style={{ fill: "var(--accent)" }} />
-          <text x={28} y={s.y + 4.5} className="mono" fontSize={12.5} fontWeight={700} style={text("text")}>
-            {s.name}
-          </text>
-          <text x={352} y={s.y + 4} textAnchor="end" className="mono" fontSize={11} style={text("faint")}>
-            {s.model}
-          </text>
-        </g>
-      ))}
-
-      {/* find: a rule emits a hypothesis */}
-      <g data-anim="in" style={at(200, 350)}>
-        <rect x={28} y={30} width={186} height={22} rx={11} strokeWidth={1.25} style={{ fill: "var(--panel-raised)", stroke: "var(--line-strong)" }} />
-        <text x={40} y={45} className="mono" fontSize={11}>
-          <tspan style={text("faint")}>rule</tspan>
-          <tspan dx={6} style={text("text")}>
-            {FINDER_RULE.id}
-          </tspan>
-        </text>
-      </g>
-      <path className="lp-path" data-anim="draw" style={{ ...at(600, 200), fill: "none", stroke: "var(--line-strong)" }} pathLength={1} strokeWidth={1.25} d="M44 52 V62" />
-      <g data-anim="in" style={at(750, 350)} data-testid="hypothesis">
-        <rect x={28} y={62} width={324} height={18 + question.length * 15 + 8} rx={8} strokeWidth={1.25} style={{ fill: "var(--card)", stroke: "var(--highlight)" }} />
-        <text x={40} y={77} className="mono" fontSize={10.5} style={text("highlight")}>
-          hypothesis
-        </text>
-      </g>
-      {question.map((line, i) => (
-        <text key={i} x={40} y={94 + i * 15} fontSize={12.5} data-anim="in" style={{ ...at(900 + i * 110, 300), ...text("text") }}>
-          {line}
-        </text>
-      ))}
-
-      {/* reproduce: one test, written, failing */}
-      <g data-anim="in" style={at(2050, 350)}>
-        <rect x={28} y={174} width={324} height={58} rx={8} strokeWidth={1.25} style={{ fill: "var(--card)", stroke: "var(--line-strong)" }} />
-        <text x={40} y={190} className="mono" fontSize={11} style={text("faint")}>
-          + 1 new test file
-        </text>
-      </g>
-      {[180, 250, 140].map((w, i) => (
-        <rect key={i} x={40 + (i === 1 ? 14 : 0)} y={200 + i * 10} width={w} height={4} rx={2} data-anim="grow" style={{ ...at(2250 + i * 200, 350), fill: "var(--muted)" }} opacity={0.6} />
-      ))}
-      <g data-anim="in" style={at(3050, 350)} data-testid="test-fails">
-        <rect x={28} y={240} width={236} height={22} rx={11} strokeWidth={1.25} style={{ fill: "none", stroke: "var(--diff-removed)" }} />
-        <text x={40} y={255} className="mono" fontSize={11} style={text("diff-removed")}>
-          ✗ fails on an assertion, twice
-        </text>
-      </g>
-
-      {/* repair: a patch */}
-      <g data-anim="in" style={at(3950, 350)}>
-        <rect x={28} y={302} width={324} height={48} rx={8} strokeWidth={1.25} style={{ fill: "var(--card)", stroke: "var(--line-strong)" }} />
-        <text x={40} y={321} className="mono" fontSize={12} fontWeight={700} style={text("diff-removed")}>
-          −
-        </text>
-        <text x={40} y={340} className="mono" fontSize={12} fontWeight={700} style={text("diff-added")}>
-          +
-        </text>
-      </g>
-      <rect x={56} y={315} width={170} height={4} rx={2} data-anim="grow" style={{ ...at(4150, 350), fill: "var(--diff-removed)" }} opacity={0.75} />
-      <rect x={56} y={334} width={214} height={4} rx={2} data-anim="grow" style={{ ...at(4400, 350), fill: "var(--diff-added)" }} opacity={0.75} />
-
-      {/* verify: the same test passes in the sandbox, network off */}
-      <g data-anim="in" style={at(5300, 350)} data-testid="test-passes">
-        <rect x={28} y={384} width={324} height={32} rx={8} strokeWidth={1.25} style={{ fill: "var(--card)", stroke: "var(--diff-added)" }} />
-        <text x={40} y={404} className="mono" fontSize={11.5} fontWeight={700} style={text("diff-added")}>
-          ✓ test passes
-        </text>
-      </g>
-      {[
-        { label: "Docker sandbox", x: 150, w: 100 },
-        { label: "network off", x: 258, w: 86 },
-      ].map((chip, i) => (
-        <g key={chip.label} data-anim="in" style={at(5550 + i * 150, 300)}>
-          <rect x={chip.x} y={390} width={chip.w} height={20} rx={10} strokeWidth={1} style={{ fill: "var(--panel-raised)", stroke: "var(--line-strong)" }} />
-          <text x={chip.x + chip.w / 2} y={404} textAnchor="middle" className="mono" fontSize={10.5} style={text("muted")}>
-            {chip.label}
-          </text>
-        </g>
-      ))}
-    </svg>
+    <PipelineTrack>
+      <Stage id="find" tone="amber" who="no model" title="A rule asks one narrow question" text="A rule over the graph reads the code at its evidence and emits a hypothesis that a single test can settle.">
+        <div className="pl-card">
+          <p className="pl-card-head">
+            <span className="pl-chip">{FINDER_RULE.id}</span>
+            <span className="text-faint">finder-rules@1</span>
+          </p>
+          <p className="pl-question">
+            {before}
+            <code>&lt;METHOD&gt; &lt;path&gt;</code>
+            {after}
+          </p>
+        </div>
+      </Stage>
+      <Stage id="reproduce" tone="violet" who="Nemotron" title="One test has to fail first" text="Nemotron writes one test for the claim. A fresh sandbox, independent of the agent, checks it.">
+        <div className="pl-card">
+          <p className="pl-card-head">
+            <span className="text-text">repro-v1</span>
+            <span className="pl-state" data-tone="violet">REPRODUCED</span>
+          </p>
+          <ul className="pl-checks">
+            {REPRO_CHECKS.map((c) => (
+              <li key={c}>
+                <Check className="size-3.5 shrink-0" strokeWidth={2.5} aria-hidden />
+                {c}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Stage>
+      <Stage id="repair" tone="glacier" who="Nemotron" title="The fix is made in a sealed box" text="Nemotron edits the repo in a local Docker sandbox; the network is off before the agent starts.">
+        <div className="pl-card pl-card-art fx-art" data-tone="glacier">
+          <span className="fx-beams" aria-hidden />
+          <dl className="pl-spec">
+            {SANDBOX.map(([k, v]) => (
+              <div key={k}>
+                <dt>{k}</dt>
+                <dd>{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </Stage>
+      <Stage id="verify" tone="green" who="no model" title="The harness, not the agent, says done" text="The patch counts only when the reproduction test passes, the repo's own tests still pass and the typecheck adds no new error.">
+        <div className="pl-card">
+          <ul className="pl-checks pl-checks-big">
+            {VERIFY.map((c) => (
+              <li key={c} data-testid="verify-check">
+                <span aria-hidden>✓</span>
+                {c}
+              </li>
+            ))}
+          </ul>
+          <p className="pl-resolved" data-testid="test-passes">
+            RESOLVED
+          </p>
+        </div>
+      </Stage>
+    </PipelineTrack>
   );
 }

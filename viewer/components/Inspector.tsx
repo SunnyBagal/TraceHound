@@ -19,6 +19,12 @@ import { ModelMark, NvidiaLogo } from "./ModelMark";
 import { NameSourceBadge } from "./NameSourceBadge";
 import { ExpandableSourceRow } from "./ExpandableSourceRow";
 import { fileEvidence } from "@/lib/source";
+import type { Finding } from "@/lib/reviews";
+import { ReviewFinding } from "./ReviewFinding";
+
+/** PR lane: the selected PR's findings for the open component (task 4). */
+export interface InspectorFindings { repo: string; number: number; reviewId?: number; byComponent: Map<string, Finding[]> }
+const FINDINGS_TAB: { id: Tab; label: string } = { id: "findings", label: "Findings" };
 
 const CHANGES_TAB: { id: Tab; label: string } = { id: "changes", label: "Changes" };
 const NODE_TABS: { id: Tab; label: string }[] = [
@@ -81,7 +87,7 @@ function Tabs({ tabs, active, onChange, counts }: { tabs: { id: Tab; label: stri
           aria-controls="inspector-tabpanel"
           onClick={() => onChange(t.id)}
           className={[
-            "-mb-px shrink-0 whitespace-nowrap border-b-2 px-2 py-2.5 text-[14px] font-medium transition-colors",
+            "inspector-tab -mb-px shrink-0 whitespace-nowrap border-b-2 px-2 py-2.5 text-[14px] font-medium transition-colors",
             active === t.id ? "border-accent text-text" : "border-transparent text-muted hover:text-text",
           ].join(" ")}
         >
@@ -460,15 +466,16 @@ function Breadcrumbs({ snapshot, nav }: { snapshot: Snapshot; nav: PanelNavigati
  * from the canvas's edges (numbers in lib/inspector.ts). Phones: a full-screen sheet. `bind` wires
  * rows that point at the canvas (connections, files, endpoints) to the transient hover highlight.
  */
-export function Inspector({ snapshot, nav, bind = noHighlight, changes }: { snapshot: Snapshot; nav: PanelNavigation; bind?: BindHighlight; changes?: ChangeModel }) {
+export function Inspector({ snapshot, nav, bind = noHighlight, changes, findings }: { snapshot: Snapshot; nav: PanelNavigation; bind?: BindHighlight; changes?: ChangeModel; findings?: InspectorFindings }) {
   const entry = current(nav.stack);
   const component = entry?.type === "node" ? snapshot.components.find((c) => c.id === entry.id) : undefined;
   const edge = entry?.type === "edge" ? snapshot.edges.find((e) => e.id === entry.id) : undefined;
   const open = Boolean(component || edge);
   const facts = useMemo(() => (component ? techFacts(snapshot, component) : []), [snapshot, component]);
   // change view: a component opens on its Changes tab (files → declarations)
-  const tabs = edge ? EDGE_TABS : changes ? [CHANGES_TAB, ...NODE_TABS] : NODE_TABS;
-  const tab = tabs.some((t) => t.id === entry?.tab) ? entry!.tab! : changes && component ? "changes" : "overview";
+  const componentFindings = component ? findings?.byComponent.get(component.id) : undefined;
+  const tabs = edge ? EDGE_TABS : changes ? [CHANGES_TAB, ...NODE_TABS] : componentFindings?.length ? [FINDINGS_TAB, ...NODE_TABS] : NODE_TABS;
+  const tab = tabs.some((t) => t.id === entry?.tab) ? entry!.tab! : changes && component ? "changes" : componentFindings?.length ? "findings" : "overview";
   const openNode = (id: string) => nav.push({ type: "node", id });
 
   let header: ReactNode = null;
@@ -496,8 +503,14 @@ export function Inspector({ snapshot, nav, bind = noHighlight, changes }: { snap
         </div>
       </div>
     );
+    if (componentFindings?.length) counts.findings = componentFindings.length;
     body =
-      tab === "changes" && changes ? (
+      tab === "findings" && componentFindings?.length && findings ? (
+        <section className="space-y-4 px-5 py-6 sm:px-7" data-testid="inspector-findings">
+          <p className="text-sm text-muted">TraceHound&apos;s review of <a className="text-text hover:text-accent" href={`https://github.com/${findings.repo}/pull/${findings.number}`} target="_blank" rel="noreferrer">#{findings.number}</a>: {componentFindings.length} finding{componentFindings.length === 1 ? "" : "s"} in this component.</p>
+          {componentFindings.map((f) => <ReviewFinding key={f.id} finding={f} repo={findings.repo} number={findings.number} reviewId={findings.reviewId ?? 0} />)}
+        </section>
+      ) : tab === "changes" && changes ? (
         <section className="px-7 py-6">
           <ComponentChanges model={changes} componentId={component.id} onOpen={openNode} bind={bind} />
         </section>
@@ -552,7 +565,7 @@ export function Inspector({ snapshot, nav, bind = noHighlight, changes }: { snap
       inert={!open}
       data-testid="inspector"
       className={[
-        "fixed inset-0 z-30 flex flex-col bg-panel transition-transform duration-300 ease-out",
+        "inspector-panel fixed inset-0 z-30 flex flex-col bg-panel transition-transform duration-300 ease-out",
         // lib/inspector.ts: clamp(480px, 50vw, 760px) wide, 10px inside the canvas (whose box sits
         // 6px in from main's right and bottom edges, so right/bottom are 16px here)
         "md:absolute md:bottom-4 md:left-auto md:right-4 md:top-2.5 md:z-20 md:w-[clamp(480px,50vw,760px)] md:overflow-hidden md:rounded-xl md:border md:border-panel-line md:shadow-[0_16px_48px_-16px_var(--scrim)]",

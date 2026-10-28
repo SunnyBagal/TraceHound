@@ -50,3 +50,35 @@ cropped to that path (`56.5 31.2 249.5 166`; sha256 `3d0ff94ca476e49e5e94cf00a01
 badge size. The viewer uses it, in colour at the owner's request, for every model-written
 name (`viewer/components/ModelMark.tsx`), always beside the disclosure text or with it as the
 tooltip. It replaces the single-colour `nvidia.svg` above, which stays vendored but unused.
+
+## Landing hero brand marks (`brands/`)
+
+Vendored on 2026-10-27 for the landing page's hero only, with the owner's approval; trademarks
+belong to their owners and the marks only name the coding agents whose pull requests TraceHound
+reviews (and NVIDIA, whose Nemotron models it runs on). Unmodified files:
+
+| File | Mark | Source | Licence of the file |
+| --- | --- | --- | --- |
+| `brands/claude.svg` | Claude | https://cdn.jsdelivr.net/npm/simple-icons@15/icons/claude.svg | CC0-1.0 (Simple Icons) |
+| `brands/openai.svg` | ChatGPT / OpenAI | https://cdn.jsdelivr.net/npm/simple-icons@15/icons/openai.svg | CC0-1.0 (Simple Icons) |
+| `brands/cursor.svg` | Cursor | https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1/icons/cursor.svg | MIT (Lobe Icons) |
+| `brands/antigravity-color.svg` | Google Antigravity | https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1/icons/antigravity-color.svg | MIT (Lobe Icons) |
+| `brands/opencode.svg` | OpenCode | https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1/icons/opencode.svg | MIT (Lobe Icons) |
+
+The NVIDIA mark on the hero reuses `nvidia.svg` above. Single-colour files are drawn as CSS
+masks filled with the brand's colour on its tile.
+
+## Code reviewers (benchmark page)
+
+The `/benchmark` page marks each reviewer's row with its logo. All are drawn as single-colour CSS
+masks in the surrounding text colour (`viewer/components/benchmark/ReviewerMark.tsx`), so a file's
+own colours never show. Vendored unmodified on 2026-10-28. Trademarks belong to their owners; the
+logos only label that company's reviewer in an aggregate results table.
+
+| File | Reviewer | Source | Licence of the file | sha256 |
+| --- | --- | --- | --- | --- |
+| `brands/augment.svg` | Augment Code | https://www.augmentcode.com/favicon.svg (the company's own favicon; not in Simple Icons, svgl or Lobe Icons) | the company's | `5151bb83fc6ee1f848f183923f25ea92fc2125ec0e7495e2a55b47dc4fd10e81` |
+| `brands/cursor.svg` | Cursor | reused from the row above | MIT (Lobe Icons) | |
+| `brands/greptile.svg` | Greptile | https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.101.0/icons/greptile.svg | MIT (Lobe Icons) | `ee036d35f5234a4c64ddfc0a4ca42095211ed842c777ca9e8d01f345f5c7d667` |
+| `brands/githubcopilot.svg` | GitHub Copilot | https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.101.0/icons/githubcopilot.svg | MIT (Lobe Icons) | `bbc7fddc13448236e5edea8c399d2072dc40aa5da5bca07f7a2f412405c500a3` |
+| `brands/coderabbit.svg` | CodeRabbit | https://cdn.jsdelivr.net/npm/simple-icons@16.3.0/icons/coderabbit.svg | CC0-1.0 (Simple Icons) | `8132ef42750b608836a8b1de6a29a218cfe25251fdb4c3a58fb37929499ec042` |

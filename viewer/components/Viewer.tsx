@@ -7,7 +7,8 @@ import { useHighlight, type Highlight } from "@/lib/highlight";
 import { impactParam, type ImpactReport } from "@/lib/impact";
 import { inspectorOcclusion } from "@/lib/inspector";
 import { current, usePanelNavigation } from "@/lib/navigation";
-import type { RepoInfo } from "@/lib/repos";
+import { prLaneRepo, type RepoInfo } from "@/lib/repos";
+import { prOverlay } from "@/lib/pulls";
 import type { Snapshot } from "@/lib/types";
 import { ChangeList } from "./ChangeList";
 import { ChangeSummaryBar } from "./ChangeSummaryBar";
@@ -16,6 +17,7 @@ import { GraphCanvas, type Selection } from "./GraphCanvas";
 import { ImpactPanel } from "./ImpactPanel";
 import { Inspector } from "./Inspector";
 import { Rail } from "./Rail";
+import { PrLane, usePrLane } from "./PrLane";
 import { TopBar } from "./TopBar";
 import { WarningsControl } from "./WarningsControl";
 
@@ -100,6 +102,12 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
 
   const listView = Boolean(changes) && phone;
 
+  // PR lane: only on the plain graph (the change and impact views have their own highlight)
+  const laneRepo = changes || impact ? undefined : prLaneRepo(repoId);
+  const lane = usePrLane(laneRepo);
+  const overlayData = lane.overlay?.status === "ready" ? lane.overlay.data : null;
+  const pr = useMemo(() => (overlayData ? prOverlay(snapshot, overlayData.number, overlayData.files, overlayData.findings) : undefined), [overlayData, snapshot]);
+
   return (
     <ReactFlowProvider>
       <div className="flex h-dvh overflow-hidden bg-page">
@@ -114,11 +122,12 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
               <>
                 {impact && <ImpactPanel name={impactName ?? "impact"} impact={impact} snapshot={snapshot} onSelect={nav.open} />}
                 {changes && <ChangeWarningsPanel model={changes} activeId={activeWarning} onToggle={toggleWarning} onOpen={(id) => nav.open({ type: "node", id })} />}
+                {laneRepo && lane.list && <PrLane repo={laneRepo} list={lane.list} selected={lane.selected} onSelect={lane.select} overlay={lane.overlay} model={pr ?? null} />}
                 {/* Railway's boxed canvas: a rounded, bordered panel inset in the chrome, so the
                     chrome's colour shows around it; nodes, edges and the canvas buttons are
                     clipped by its corners. At 640px+ the rail's own width is the left gutter. */}
-                <div className={`min-w-0 flex-1 pb-1.5 pr-1.5 ${impact || changes ? "pl-1.5" : "pl-1.5 sm:pl-0"}`}>
-                  <div className="relative size-full overflow-hidden rounded-xl border border-line bg-bg" data-testid="canvas-panel">
+                <div className={`min-w-0 flex-1 pb-1.5 pr-1.5 ${impact || changes ? "pl-1.5" : laneRepo && lane.list ? "pl-1.5 md:pl-0" : "pl-1.5 sm:pl-0"}`}>
+                  <div className="canvas-glow relative size-full overflow-hidden rounded-xl border border-line bg-bg" data-testid="canvas-panel">
                     <GraphCanvas
                       snapshot={snapshot}
                       selection={selection}
@@ -129,6 +138,8 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
                       changes={changes}
                       occludeRight={occludeRight}
                       highlight={highlight.active ?? warningHighlight}
+                      pr={pr}
+                      onFindings={(id) => (entry?.type === "node" && entry.id === id ? nav.setTab("findings") : nav.open({ type: "node", id, tab: "findings" }))}
                     />
                     {!changes && (
                       <WarningsControl
@@ -144,7 +155,7 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
                 </div>
               </>
             )}
-            <Inspector snapshot={snapshot} nav={nav} bind={highlight.bind} changes={changes} />
+            <Inspector snapshot={snapshot} nav={nav} bind={highlight.bind} changes={changes} findings={pr && laneRepo && overlayData ? { repo: laneRepo, number: pr.number, reviewId: overlayData.reviewId, byComponent: pr.findings } : undefined} />
           </main>
         </div>
       </div>

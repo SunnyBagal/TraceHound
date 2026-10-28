@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sessionCachedFetch } from "./ghcache.ts";
 
 export const DEFAULT_REVIEW_REPO = "SunnyBagal/tracehound-demo";
 export const MODEL_DISCLOSURE = "model-generated, not tested";
@@ -27,6 +28,9 @@ export interface Finding {
   body: string; suggestion?: string; original?: string; source?: FindingSource; outdated: boolean;
 }
 export interface PullReview { pull: PullRequest; review?: TraceReview; findings: Finding[] }
+/** One entry of GET /repos/{o}/{r}/pulls/{n}/files, as the PR lane uses it. */
+export interface PullFile { filename: string; status: string; additions: number; deletions: number; previous_filename?: string }
+export type { GitHubComment, GitHubReview };
 
 export class ReviewsError extends Error {
   readonly rateLimited: boolean;
@@ -161,6 +165,10 @@ export function createReviewsClient(fetcher: typeof fetch) {
       }
       return { pulls, rateLimited };
     },
+    async files(repo: string, number: number): Promise<PullFile[]> {
+      if (!Number.isSafeInteger(number) || number < 1) throw new ReviewsError("Enter a valid pull request number.");
+      return (await pages<PullFile>(`${endpoint(repo)}/pulls/${number}/files`)).map(({ filename, status, additions, deletions, previous_filename }) => ({ filename, status, additions, deletions, ...(previous_filename ? { previous_filename } : {}) }));
+    },
     async detail(repo: string, number: number): Promise<PullReview> {
       if (!Number.isSafeInteger(number) || number < 1) throw new ReviewsError("Enter a valid pull request number.");
       const base = `${endpoint(repo)}/pulls/${number}`;
@@ -172,6 +180,6 @@ export function createReviewsClient(fetcher: typeof fetch) {
 }
 
 let pageClient: ReturnType<typeof createReviewsClient> | undefined;
-const client = () => pageClient ??= createReviewsClient((...args) => fetch(...args));
+const client = () => pageClient ??= createReviewsClient(sessionCachedFetch((...args) => fetch(...args)));
 export const loadReviewList = (repo: string) => client().list(repo);
 export const loadPullReview = (repo: string, number: number) => client().detail(repo, number);

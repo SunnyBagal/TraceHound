@@ -18,10 +18,10 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
-describe("node size (Railway's 2:1 card)", () => {
-  it("cards are half as tall as they are wide, and ELK lays out that size", () => {
+describe("node size (Railway's tall card)", () => {
+  it("cards are 272×176, and ELK lays out that size", () => {
     expect(NODE_WIDTH).toBe(272);
-    expect(NODE_HEIGHT).toBe(NODE_WIDTH / 2);
+    expect(NODE_HEIGHT).toBe(176);
     const graph = layoutGraph(
       cex.components.map((c) => c.id),
       cex.edges,

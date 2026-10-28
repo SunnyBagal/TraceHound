@@ -42,3 +42,43 @@ it("lays out mixed expanded and collapsed heights with no overlaps", async () =>
     expect(p.x + NODE_WIDTH <= q.x || q.x + NODE_WIDTH <= p.x || p.y + heights[a]! <= q.y || q.y + heights[b]! <= p.y, `${a} / ${b}`).toBe(true);
   }
 });
+it("a toggle changes only that card's height: other cards and dragged positions stay put", async () => {
+  // dragged positions, far apart so nothing needs pushing (lib/positions.ts key per repo)
+  const saved = Object.fromEntries(snapshot.components.map((c, i) => [c.id, { x: (i % 3) * 900 + 7, y: Math.floor(i / 3) * 900 + 3 }]));
+  window.localStorage.setItem(`tracehound:positions:repo:${snapshot.repo.name}`, JSON.stringify(saved));
+  render(<ReactFlowProvider><GraphCanvas snapshot={snapshot} selection={null} onSelect={vi.fn()} /></ReactFlowProvider>);
+  const button = await screen.findByRole("button", { name: `Expand ${api.name}` });
+  const transforms = () => Object.fromEntries(screen.getAllByTestId("component-node").map((n) => [n.dataset.componentId!, n.parentElement!.style.transform]));
+  await waitFor(() => expect(transforms()[api.id]).toContain(`${saved[api.id]!.x}px`));
+  const before = transforms();
+  fireEvent.click(button);
+  const card = button.closest<HTMLElement>('[data-testid="component-node"]')!;
+  await waitFor(() => expect(card.style.height).toBe(`${expandedHeight(nodeContents(snapshot, api))}px`));
+  await new Promise((r) => setTimeout(r, 50)); // an ELK re-run would land here
+  expect(transforms()).toEqual(before);
+  fireEvent.click(screen.getByRole("button", { name: `Collapse ${api.name}` }));
+  await waitFor(() => expect(card.style.height).toBe(`${NODE_HEIGHT}px`));
+  await new Promise((r) => setTimeout(r, 50));
+  expect(transforms()).toEqual(before);
+  window.localStorage.clear();
+});
+it("expanding pushes down only the cards it would overlap, by no more than it must", async () => {
+  // a stack in one column: the API, a card right under it, and one far to the side
+  const [a, b, c] = [api, ...snapshot.components.filter((x) => x.id !== api.id)];
+  const saved: Record<string, { x: number; y: number }> = Object.fromEntries(snapshot.components.map((x, i) => [x.id, { x: 4000 + i * 900, y: 0 }]));
+  saved[a.id] = { x: 0, y: 0 };
+  saved[b!.id] = { x: 40, y: NODE_HEIGHT + 20 };
+  saved[c!.id] = { x: NODE_WIDTH + 200, y: 10 };
+  window.localStorage.setItem(`tracehound:positions:repo:${snapshot.repo.name}`, JSON.stringify(saved));
+  render(<ReactFlowProvider><GraphCanvas snapshot={snapshot} selection={null} onSelect={vi.fn()} /></ReactFlowProvider>);
+  const button = await screen.findByRole("button", { name: `Expand ${api.name}` });
+  const at = (id: string) => screen.getAllByTestId("component-node").find((n) => n.dataset.componentId === id)!.parentElement!.style.transform;
+  await waitFor(() => expect(at(b!.id)).toBe(`translate(40px,${NODE_HEIGHT + 20}px)`));
+  const side = at(c!.id);
+  fireEvent.click(button);
+  const h = expandedHeight(nodeContents(snapshot, api));
+  await waitFor(() => expect(at(b!.id)).toBe(`translate(40px,${h + 20}px)`));
+  expect(at(a.id)).toBe("translate(0px,0px)");
+  expect(at(c!.id)).toBe(side);
+  window.localStorage.clear();
+});

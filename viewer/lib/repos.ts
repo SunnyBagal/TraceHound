@@ -35,3 +35,23 @@ export function repoHref(pathname: string, search: string, repoId: string, chang
   if (changesId) params.set("changes", changesId);
   return `${pathname}?${params.toString()}`;
 }
+
+/**
+ * The PR lane (/graph): which GitHub repo's pull requests sit beside a snapshot. Data only. A repo
+ * with no entry, or whose flag is off, shows no lane and makes no request.
+ */
+export const PR_LANE_FLAGS = {
+  /** recall-seeded's PRs were blind until scored; scoring finished 28 Oct, so they are public results */
+  recallSeeded: true,
+} as const;
+export const PR_LANE_REPOS: Record<string, { github: string; flag?: keyof typeof PR_LANE_FLAGS }> = {
+  "tracehound-demo": { github: "SunnyBagal/tracehound-demo" },
+  recall: { github: "SunnyBagal/recall-seeded", flag: "recallSeeded" },
+};
+
+/** owner/name of the repo whose pull requests the lane shows for this snapshot, if any. */
+export function prLaneRepo(repoId: string | undefined, flags: Record<string, boolean> = PR_LANE_FLAGS): string | undefined {
+  const entry = repoId ? PR_LANE_REPOS[repoId] : undefined;
+  if (!entry || (entry.flag && !flags[entry.flag])) return undefined;
+  return entry.github;
+}

@@ -1,0 +1,262 @@
+{
+  "version": 1,
+  "repo": "SunnyBagal/tracehound-demo",
+  "generatedAt": "2026-10-27T13:49:58.717Z",
+  "pulls": [
+    {
+      "pull": {
+        "number": 6,
+        "title": "Demo: contracts catch an export rename in untouched consumers",
+        "state": "open",
+        "merged_at": null,
+        "head": {
+          "sha": "71c5f497310370a994008fa56f2a883ac17fc95e"
+        },
+        "updated_at": "2026-10-21T07:33:48Z"
+      },
+      "files": [
+        {
+          "filename": ".github/workflows/tracehound-review.yml",
+          "status": "modified",
+          "additions": 2,
+          "deletions": 1
+        },
+        {
+          "filename": "recall-backend/services/linkDetector.ts",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 1
+        }
+      ],
+      "review": {
+        "id": 5596353396,
+        "footer": {
+          "version": 1,
+          "pipeline": "pool-verify-v1",
+          "headSha": "71c5f497310370a994008fa56f2a883ac17fc95e",
+          "pool": 1,
+          "kept": 1,
+          "posted": 1,
+          "fixes": {
+            "attempted": 1,
+            "valid": 1,
+            "rejected": 0
+          },
+          "findings": [
+            {
+              "path": "recall-backend/services/linkDetector.ts",
+              "line": 150,
+              "startLine": 150,
+              "source": "both",
+              "hasSuggestion": true
+            }
+          ]
+        }
+      },
+      "comments": [
+        {
+          "id": 4334171346,
+          "pull_request_review_id": 5596353396,
+          "user": {
+            "login": "github-actions[bot]"
+          },
+          "path": "recall-backend/services/linkDetector.ts",
+          "body": "The exported function was renamed from detectLinkType to classifyLinkType, but the rename breaks the public contract with untouched consumers that still import detectLinkType, causing compilation errors for those files.\n\nSuggested fix (model-generated, not tested):\n```suggestion\nexport function detectLinkType(rawUrl: string) : LinkDetectionResult {\n```",
+          "line": 150,
+          "original_line": 150,
+          "start_line": null,
+          "original_start_line": null,
+          "diff_hunk": "@@ -147,7 +147,7 @@ function detectArticle(url: URL): boolean {\n   return false\n }\n \n-export function detectLinkType(rawUrl: string) : LinkDetectionResult {\n+export function classifyLinkType(rawUrl: string) : LinkDetectionResult {",
+          "commit_id": "71c5f497310370a994008fa56f2a883ac17fc95e"
+        }
+      ]
+    },
+    {
+      "pull": {
+        "number": 5,
+        "title": "Clarify the local token payload name",
+        "state": "open",
+        "merged_at": null,
+        "head": {
+          "sha": "45b9862246f0749d4fdf6b69458865fcd6d47e92"
+        },
+        "updated_at": "2026-10-17T22:16:26Z"
+      },
+      "files": [
+        {
+          "filename": "recall-backend/middleware/middleware.ts",
+          "status": "modified",
+          "additions": 3,
+          "deletions": 3
+        }
+      ],
+      "comments": []
+    },
+    {
+      "pull": {
+        "number": 4,
+        "title": "Use default ordering for chat context",
+        "state": "open",
+        "merged_at": null,
+        "head": {
+          "sha": "2d48bb5f8b31d5e006684b0d297aa8ebbee7b6ef"
+        },
+        "updated_at": "2026-10-17T11:05:42Z"
+      },
+      "files": [
+        {
+          "filename": "recall-backend/index.ts",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 1
+        }
+      ],
+      "comments": []
+    },
+    {
+      "pull": {
+        "number": 3,
+        "title": "Adjust session token verification options",
+        "state": "open",
+        "merged_at": null,
+        "head": {
+          "sha": "99147bd04fa355ca465bc1b7c512924edc8bfcff"
+        },
+        "updated_at": "2026-10-18T18:26:31Z"
+      },
+      "files": [
+        {
+          "filename": "recall-backend/middleware/middleware.ts",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 1
+        }
+      ],
+      "review": {
+        "id": 5563330418,
+        "footer": {
+          "version": 1,
+          "pipeline": "pool-verify-v1",
+          "headSha": "99147bd04fa355ca465bc1b7c512924edc8bfcff",
+          "pool": 1,
+          "kept": 1,
+          "posted": 1,
+          "fixes": {
+            "attempted": 1,
+            "valid": 1,
+            "rejected": 0
+          },
+          "findings": [
+            {
+              "path": "recall-backend/middleware/middleware.ts",
+              "line": 14,
+              "startLine": 14,
+              "source": "both",
+              "hasSuggestion": true
+            }
+          ]
+        }
+      },
+      "comments": [
+        {
+          "id": 4307345922,
+          "pull_request_review_id": 5563330418,
+          "user": {
+            "login": "github-actions[bot]"
+          },
+          "path": "recall-backend/middleware/middleware.ts",
+          "body": "Disables token expiration check, allowing expired or revoked tokens to be accepted, which is a security vulnerability.\n\nSuggested fix (model-generated, not tested):\n```suggestion\n    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;\n```",
+          "line": 14,
+          "original_line": 14,
+          "start_line": null,
+          "original_start_line": null,
+          "diff_hunk": "@@ -11,7 +11,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction)\n   }\n \n   try {\n-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;\n+    const decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true }) as JwtPayload;",
+          "commit_id": "99147bd04fa355ca465bc1b7c512924edc8bfcff"
+        }
+      ]
+    },
+    {
+      "pull": {
+        "number": 2,
+        "title": "Streamline weighted search vector generation",
+        "state": "open",
+        "merged_at": null,
+        "head": {
+          "sha": "45224e8753fe4f3ce5228d9546454c82b647d7ec"
+        },
+        "updated_at": "2026-10-23T13:08:10Z"
+      },
+      "files": [
+        {
+          "filename": "recall-backend/db/schema.ts",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 1
+        }
+      ],
+      "review": {
+        "id": 5563639934,
+        "footer": {
+          "version": 1,
+          "pipeline": "pool-verify-v1",
+          "headSha": "45224e8753fe4f3ce5228d9546454c82b647d7ec",
+          "pool": 1,
+          "kept": 1,
+          "posted": 1,
+          "fixes": {
+            "attempted": 1,
+            "valid": 1,
+            "rejected": 0
+          },
+          "findings": [
+            {
+              "path": "recall-backend/db/schema.ts",
+              "line": 60,
+              "startLine": 60,
+              "source": "both",
+              "hasSuggestion": true
+            }
+          ]
+        }
+      },
+      "comments": [
+        {
+          "id": 4307559331,
+          "pull_request_review_id": 5563639934,
+          "user": {
+            "login": "github-actions[bot]"
+          },
+          "path": "recall-backend/db/schema.ts",
+          "body": "The generated search vector expression omits the weight 'D' for og_description, removing that field from the search vector and potentially causing incomplete search results and loss of og_description data from the index.\n\nSuggested fix (model-generated, not tested):\n```suggestion\n    sql`setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(og_title, '')), 'B') || setweight(to_tsvector('english', coalesce(summary, '')), 'C') || setweight(to_tsvector('english', coalesce(og_description, '')), 'D')`,\n```",
+          "line": 60,
+          "original_line": 60,
+          "start_line": null,
+          "original_start_line": null,
+          "diff_hunk": "@@ -57,7 +57,7 @@ export const contents = pgTable(\"contents\", {\n   // og_description=D. coalesce keeps the expression null-safe; the explicit\n   // 'english' config keeps it IMMUTABLE (required for a generated column).\n   searchVector:     tsvector(\"search_vector\").generatedAlwaysAs(\n-    sql`setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(og_title, '')), 'B') || setweight(to_tsvector('english', coalesce(summary, '')), 'C') || setweight(to_tsvector('english', coalesce(og_description, '')), 'D')`,\n+    sql`setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(og_title, '')), 'B') || setweight(to_tsvector('english', coalesce(summary, '')), 'C')`,",
+          "commit_id": "45224e8753fe4f3ce5228d9546454c82b647d7ec"
+        }
+      ]
+    },
+    {
+      "pull": {
+        "number": 1,
+        "title": "Simplify summary length handling",
+        "state": "open",
+        "merged_at": null,
+        "head": {
+          "sha": "2c98f69a28dfe64b86055603aaa38695f0efa445"
+        },
+        "updated_at": "2026-10-17T22:16:22Z"
+      },
+      "files": [
+        {
+          "filename": "recall-backend/worker.ts",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 1
+        }
+      ],
+      "comments": []
+    }
+  ]
+}

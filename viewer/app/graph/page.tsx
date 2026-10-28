@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Logo } from "@/components/Logo";
 import { Viewer } from "@/components/Viewer";
+import { WolfLoader } from "@/components/WolfLoader";
 import { changesParam } from "@/lib/changes";
 import { impactParam } from "@/lib/impact";
 import { loadChanges, loadImpact, loadRepo, type Loaded } from "@/lib/load";
@@ -26,11 +27,14 @@ export default function GraphPage() {
   return (
     <div className="grid h-dvh place-items-center px-6 text-center">
       <div>
-        <Logo className="mx-auto size-10" />
         {state.status === "loading" ? (
-          <p className="mt-3 text-sm text-muted">Loading snapshot…</p>
+          <>
+            <WolfLoader className="mx-auto" />
+            <p className="mt-3 text-sm text-muted">Loading snapshot…</p>
+          </>
         ) : (
           <>
+            <Logo className="mx-auto size-10" />
             <p className="mt-3 text-sm text-text">Couldn&apos;t load a snapshot</p>
             <p className="mt-1 font-mono text-sm text-faint">{state.message}</p>
           </>

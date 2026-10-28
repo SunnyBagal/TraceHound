@@ -1,4 +1,5 @@
 import { ArrowUpRight, Code2, FileCode2 } from "lucide-react";
+import { findingParts } from "@/lib/pulls";
 import { MODEL_DISCLOSURE, pullHref, type Finding } from "@/lib/reviews";
 import { CodeBlock } from "./CodeSnippet";
 
@@ -20,23 +21,31 @@ export function FixDiff({ finding }: { finding: Finding }) {
   </div>;
 }
 
-export function ReviewFinding({ finding, repo, number, reviewId }: { finding: Finding; repo: string; number: number; reviewId: number }) {
+export function ReviewFinding({ finding, repo, number, reviewId, index }: { finding: Finding; repo: string; number: number; reviewId: number; index?: number }) {
   const comment = pullHref(repo, number, finding.commentId ? `#discussion_r${finding.commentId}` : `#pullrequestreview-${reviewId}`);
   const files = pullHref(repo, number, finding.commentId ? `/files#r${finding.commentId}` : "/files");
   const hasFix = finding.suggestion !== undefined;
-  return <article id={`finding-${finding.id}`} aria-label={`Finding in ${finding.path}`} className="rounded-2xl border border-panel-line bg-panel p-5 sm:p-7" data-testid="review-finding">
-    <header className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0">
-        <a href={comment} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-start gap-2 text-sm font-medium text-text hover:text-accent"><FileCode2 className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden /><span className="break-all font-mono">{finding.path}{finding.line !== null ? `:${finding.line}` : ""}</span><ArrowUpRight className="mt-0.5 size-4 shrink-0 text-faint" aria-hidden /></a>
-        <p className="mt-2 text-sm leading-relaxed text-muted">{MODEL_DISCLOSURE}{finding.outdated ? " · earlier version of this code" : ""}</p>
+  const { title, more } = findingParts(finding.body);
+  return <article id={`finding-${finding.id}`} aria-label={`Finding in ${finding.path}`} className="review-card rv-card" data-testid="review-finding">
+    <header className="rv-card-head">
+      {index !== undefined && <span className="rv-card-n" aria-hidden>{String(index).padStart(2, "0")}</span>}
+      <div className="min-w-0 flex-1">
+        {/* effect first (R15): the sentence that says what breaks, verbatim from the comment */}
+        <h3 className="rv-card-title" data-testid="finding-title">{title}</h3>
+        <div className="rv-card-tags">
+          <a href={comment} target="_blank" rel="noreferrer" className="rv-loc"><FileCode2 className="size-3.5 shrink-0" aria-hidden /><span className="break-all">{finding.path}{finding.line !== null ? `:${finding.line}` : ""}</span><ArrowUpRight className="size-3.5 shrink-0 opacity-60" aria-hidden /></a>
+          <span className="rv-disclosure">{MODEL_DISCLOSURE}</span>
+          {finding.outdated && <span className="rv-tag">earlier version of this code</span>}
+          <span className="rv-tag">{finding.source ? <>Source: <span className="font-mono text-text">{finding.source}</span></> : "Source not recorded"}</span>
+        </div>
       </div>
-      <span className="shrink-0 rounded-md border border-line-strong px-2.5 py-1 text-sm text-muted">{finding.source ? <>Source: <span className="font-mono text-text">{finding.source}</span></> : "Source not recorded"}</span>
     </header>
-    <div className="my-6"><CommentText body={finding.body} /></div>
+    {/* a one-sentence comment is its title; otherwise the whole comment follows */}
+    {more ? <div className="rv-card-body"><CommentText body={finding.body} /></div> : <div className="h-5" />}
     <FixDiff finding={finding} />
-    <footer className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-panel-line pt-5">
+    <footer className="rv-card-foot">
       <p className="max-w-[60ch] text-sm leading-relaxed text-muted">{hasFix ? "Review and commit the suggestion in GitHub’s Files tab." : "Read the full discussion on GitHub."}</p>
-      <a href={hasFix ? files : comment} target="_blank" rel="noreferrer" className={`inline-flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium ${hasFix ? "border-accent/60 bg-accent-soft text-accent hover:bg-accent/20" : "border-line-strong text-text hover:bg-card-hover"}`}>
+      <a href={hasFix ? files : comment} target="_blank" rel="noreferrer" className={`rv-action ${hasFix ? "rv-action-fix" : ""}`}>
         <Code2 className="size-4" aria-hidden />{hasFix ? "Commit fix on GitHub" : "Open finding on GitHub"}<ArrowUpRight className="size-4" aria-hidden />
       </a>
     </footer>

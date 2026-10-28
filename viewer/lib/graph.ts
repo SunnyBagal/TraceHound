@@ -4,10 +4,11 @@ import type { ImpactRole } from "./impact";
 import { techFacts, type TechFact } from "./tech";
 import type { Component, ComponentEdge, Resolution, Snapshot, Warning } from "./types";
 import { nodeContents, type ContentItem } from "./contents";
+import type { Finding } from "./reviews";
 
-/** Every card is 2:1 like Railway's: icon and name on the top row, the kind line at the bottom. */
+/** Every card is tall like Railway's: icon and name on the top row, the kind line at the bottom, the drop-down strip under it. */
 export const NODE_WIDTH = 272;
-export const NODE_HEIGHT = NODE_WIDTH / 2;
+export const NODE_HEIGHT = 176;
 
 /** Stroke style per confidence label. The legend and the edge inspector name it in words; canvas labels don't. */
 export const EDGE_STYLES: Record<Resolution, { dash?: string; text: string; meaning: string }> = {
@@ -35,6 +36,10 @@ export type ComponentNodeData = {
   change?: ComponentDiff | null;
   /** change view: the component exists only in the change set (no published snapshot has it) */
   changeSetOnly?: boolean;
+  /** PR lane: the selected PR's changed files and findings in this component; null = it touched nothing here */
+  pr?: { number: number; files: string[]; findings: Finding[] } | null;
+  /** PR lane: open this component's findings in the inspector */
+  onFindings?: () => void;
 };
 export type ComponentNode = Node<ComponentNodeData, "component">;
 

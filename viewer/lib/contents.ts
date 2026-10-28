@@ -1,4 +1,5 @@
 import type { Component, Snapshot } from "./types";
+import { NODE_HEIGHT } from "./graph";
 
 export interface ContentItem { label: string; method?: string; detail?: string }
 export function nodeContents(snapshot: Snapshot, component: Component): ContentItem[] {
@@ -22,5 +23,5 @@ export const METHOD_COLORS: Record<string, string> = {
 };
 
 export function expandedHeight(items: ContentItem[]): number {
-  return 136 + Math.max(1, Math.min(items.length, 8)) * 32 + (items.length > 8 ? 36 : 12);
+  return NODE_HEIGHT + Math.max(1, Math.min(items.length, 8)) * 32 + (items.length > 8 ? 36 : 12);
 }
