@@ -75,12 +75,12 @@ function Figure({ agent }: { agent: Agent }) {
           <g key={m.id} className="ag-model-slab" data-on={on || undefined}>
             <IsoSlab P={P} plan={plans[i]!} h={18} tone={on ? m.tone : "#3a3c47"} id={`ag-m-${m.id}`} dim={!on} />
             {m.id !== "none" && (
-              // NVIDIA's eye lies flat on the Nemotron slabs, square with their edges like the wolf on the agent's
+              // NVIDIA's eye lies flat on the Nemotron slabs, square with their edges and facing right, like the wolf
               <image
                 href={`${base}/icons/nvidia-color-eye.svg`}
                 width={EYE_W}
                 height={EYE_W * (166 / 249.5)}
-                transform={topMatrix([plans[i]!.x + (MS - EYE_W) / 2, plans[i]!.y + (MS - EYE_W * (166 / 249.5)) / 2], 18, P, "x")}
+                transform={topMatrix([plans[i]!.x + (MS - EYE_W * (166 / 249.5)) / 2, plans[i]!.y + (MS + EYE_W) / 2], 18, P, "y")}
                 className="ag-eye"
                 data-on={on || undefined}
               />

@@ -38,9 +38,10 @@ export function IsoSlab({ P, plan, z = 0, h, tone, id, mark, dim }: { P: Project
       <path d={s.crease} className="islab-crease" />
       <path d={s.outline} className="islab-outline" />
       {mark && (
-        // the mark lies flat on the top face, its square aligned with the slab's edges, its head
-        // toward the far right edge (the face's +x / −y axes, as topMatrix lays it)
-        <path d={WOLF_PATH} fillRule="evenodd" className="islab-mark" transform={`${topMatrix([plan.x + (plan.w - markSize) / 2, plan.y + (plan.d - markSize) / 2], z + h, P, "x")} scale(${markSize / 600}) translate(-55 -55)`} />
+        // the mark lies flat on the top face, its square aligned with the slab's edges, facing
+        // right: topMatrix "y" lays its width along −y and its height along +x, so the chin points
+        // to the near right edge
+        <path d={WOLF_PATH} fillRule="evenodd" className="islab-mark" transform={`${topMatrix([plan.x + (plan.w - markSize) / 2, plan.y + (plan.d + markSize) / 2], z + h, P, "y")} scale(${markSize / 600}) translate(-55 -55)`} />
       )}
     </g>
   );
