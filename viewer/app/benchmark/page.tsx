@@ -31,7 +31,7 @@ export default function BenchmarkPage() {
       <p className="text-sm leading-relaxed text-muted">Source: <a href={BENCHMARK_SOURCE} className="rv-inline-link">docs/bench/results.md</a> · decisions 067–071 · <span className="font-mono">{BENCHMARK_REVISION.slice(0, 7)}</span></p>
     </ShellHero>
 
-    <section aria-label="Headline numbers" className="bench-tiles mb-12">
+    <section aria-label="Headline numbers" className="bench-tiles mb-12" data-glow="green">
       <div className="bench-tile" data-testid="tile-rank">
         <span className="bench-n">rank {preRegistered[RANK]} of {rankOf}</span>
         <span className="bench-l">Dev and test sets together, pre-registered v2 row, bench-judge-v1</span>
@@ -71,7 +71,7 @@ export default function BenchmarkPage() {
       <BenchTable t={GAPS} id="table-gaps" />
     </section>
 
-    <section className="bench-part" aria-labelledby="part-full">
+    <section className="bench-part" data-band="light" aria-labelledby="part-full">
       <h2 id="part-full" className="bench-h2">Dev and blind sets together</h2>
       <Figure id="fig-full" glow="glacier" title="F by reviewer" meta={`n = ${fullN}`} caption="Ranked by bench-judge-v1, the scorer of record. v2 was tuned on the dev set.">
         <FullFigure />
@@ -86,7 +86,7 @@ export default function BenchmarkPage() {
       <BenchTable t={table("Precision levers tried on dev")} id="table-levers" />
     </section>
 
-    <section className="bench-part" aria-labelledby="part-other">
+    <section className="bench-part" data-band="light" aria-labelledby="part-other">
       <h2 id="part-other" className="bench-h2">Other runs</h2>
       <BenchTable t={table("ReviewBench test runs")} id="table-reviewbench" />
       <BenchTable t={V1} id="table-v1" />

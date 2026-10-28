@@ -53,13 +53,13 @@ describe("GraphCanvas with the demo snapshot", () => {
     for (const t of labels) expect(t).not.toMatch(/proven|resolved-default|dynamic/);
   });
 
-  it("cards show the name, snapshot summary and kind; every model-written name gets the NVIDIA mark", async () => {
+  it("cards show the name and kind; every model-written name gets the NVIDIA mark", async () => {
     const view = within(renderCanvas().container);
     const nodes = await view.findAllByTestId("component-node", {}, { timeout: 5000 });
     for (const c of snapshot.components) {
       const card = nodes.find((n) => n.dataset.componentId === c.id)!;
       const kind = `${KIND_META[c.kind].label} · ${c.counts.files} files${c.counts.routes > 0 ? ` · ${c.counts.routes} routes` : ""}`;
-      expect(card.textContent, c.id).toBe(`${c.name}${c.summary ?? c.subtitle}${kind}`);
+      expect(card.textContent, c.id).toBe(`${c.name}${kind}`);
       expect(card.style.height).toBe(`${NODE_HEIGHT}px`); // every card the same height
       const mark = within(card).queryByTestId("model-name-mark");
       if (c.naming.source === "llm") {
@@ -71,7 +71,7 @@ describe("GraphCanvas with the demo snapshot", () => {
     }
   });
 
-  it("shows only the snapshot summary or its existing heuristic subtitle on every node", async () => {
+  it("keeps the summary off every node (the inspector shows it) and gives each a plain, text-free expand strip", async () => {
     for (const s of [snapshot, repoSnapshot("recall")]) {
       const { container, unmount } = render(
         <div style={{ width: 1200, height: 800 }}>
@@ -84,10 +84,11 @@ describe("GraphCanvas with the demo snapshot", () => {
       await waitFor(() => expect(within(container).getAllByTestId("edge-label")).toHaveLength(s.edges.length), { timeout: 5000 });
       for (const c of s.components) {
         const card = container.querySelector(`[data-component-id="${c.id}"]`)!;
-        const summary = within(card as HTMLElement).getByTestId("node-summary");
-        expect(summary.textContent).toBe(c.summary ?? c.subtitle);
-        expect(summary.className).toContain("truncate");
-        expect(summary.getAttribute("title")).toBe(summary.textContent);
+        expect(within(card as HTMLElement).queryByTestId("node-summary"), c.id).toBeNull();
+        expect(card.textContent, c.id).not.toContain(c.summary ?? c.subtitle);
+        const strip = within(card as HTMLElement).getByTestId("node-toggle");
+        expect(strip.getAttribute("aria-label")).toBe(`Expand ${c.name}`);
+        expect(strip.textContent).toBe("");
       }
       unmount();
     }

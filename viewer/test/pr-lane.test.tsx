@@ -114,6 +114,24 @@ it("selecting a PR lights its components, dims the rest, lists files outside the
   expect(window.location.search).not.toContain("pr=");
 });
 
+it("the PR panel toggles from its top-left button, and stays closed across visits", async () => {
+  vi.stubGlobal("fetch", github());
+  window.localStorage.removeItem("tracehound:pr-panel");
+  const first = render(<Viewer snapshot={snapshot} repoId="tracehound-demo" />);
+  await within(await screen.findByTestId("pr-lane")).findAllByTestId("pr-chip");
+  fireEvent.click(screen.getByTestId("pr-toggle"));
+  expect(screen.queryByTestId("pr-lane")).toBeNull();
+  const button = screen.getByTestId("pr-toggle");
+  expect(button.getAttribute("aria-expanded")).toBe("false");
+  expect(button.textContent).toContain("Pull requests");
+  first.unmount();
+  render(<Viewer snapshot={snapshot} repoId="tracehound-demo" />);
+  await waitFor(() => expect(screen.getByTestId("pr-toggle").getAttribute("aria-expanded")).toBe("false"));
+  fireEvent.click(screen.getByTestId("pr-toggle"));
+  expect(await screen.findByTestId("pr-lane")).toBeTruthy();
+  window.localStorage.removeItem("tracehound:pr-panel");
+});
+
 it("shows no lane for a repo without a mapping", async () => {
   const cex = repoSnapshot("cex-v2-boilercode");
   vi.stubGlobal("fetch", github());
@@ -122,7 +140,7 @@ it("shows no lane for a repo without a mapping", async () => {
   expect(screen.queryByTestId("pr-lane")).toBeNull();
 });
 
-it("pins findings: a badge and callout on the component, a labelled PR overlay edge, findings in the inspector", async () => {
+it("pins findings: a badge and callout on the component, its card outlined (no PR node or edges on the graph), findings in the inspector", async () => {
   vi.stubGlobal("fetch", github());
   window.history.replaceState(null, "", "/graph?repo=tracehound-demo&pr=2");
   render(<Viewer snapshot={snapshot} repoId="tracehound-demo" />);
@@ -134,10 +152,11 @@ it("pins findings: a badge and callout on the component, a labelled PR overlay e
   expect(callout.textContent).toContain("This can cause search to miss every description.");
   expect(callout.textContent).toContain(`${file}:3`);
   expect(callout.textContent).toContain("model-generated, not tested");
-  // one overlay edge, to the one component with a changed file; evidence edges keep their own type
-  await waitFor(() => expect(screen.getAllByTestId("pr-edge-label").map((l) => l.textContent)).toEqual(["changed in #2"]));
-  expect(document.querySelectorAll('[data-id^="pr:2->"]')).toHaveLength(1);
-  expect(document.querySelector(`[data-id="pr:2->${inGraph.id}"]`)).toBeTruthy();
+  // the PR is a panel row, not a graph node: only its card is outlined, nothing is drawn for the PR
+  expect(card.dataset.pr).toBe("touched");
+  expect(within(screen.getByTestId("pr-lane")).getByTestId("pr-summary")).toBeTruthy();
+  expect(document.querySelectorAll('[data-id^="pr:"]')).toHaveLength(0);
+  expect(screen.queryByTestId("pr-node")).toBeNull();
   // the finding outside the graph is listed, not dropped
   expect(within(screen.getByTestId("outside-graph")).getByText("scripts/outside.ts:9")).toBeTruthy();
   fireEvent.click(badge);

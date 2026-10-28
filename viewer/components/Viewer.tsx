@@ -17,7 +17,7 @@ import { GraphCanvas, type Selection } from "./GraphCanvas";
 import { ImpactPanel } from "./ImpactPanel";
 import { Inspector } from "./Inspector";
 import { Rail } from "./Rail";
-import { PrLane, PrSummary, usePrLane } from "./PrLane";
+import { PrLane, usePrLane } from "./PrLane";
 import { TopBar } from "./TopBar";
 import { WarningsControl } from "./WarningsControl";
 
@@ -115,7 +115,6 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar snapshot={snapshot} repos={repos} repoId={repoId} changeSets={changeSets} changes={changes} />
           {changes && <ChangeSummaryBar model={changes} />}
-          {laneRepo && lane.list && <PrLane repo={laneRepo} list={lane.list} selected={lane.selected} onSelect={lane.select} />}
           <main className="relative flex min-h-0 flex-1">
             {listView && changes ? (
               <ChangeList model={changes} onOpen={(id) => nav.open({ type: "node", id })} />
@@ -123,10 +122,11 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
               <>
                 {impact && <ImpactPanel name={impactName ?? "impact"} impact={impact} snapshot={snapshot} onSelect={nav.open} />}
                 {changes && <ChangeWarningsPanel model={changes} activeId={activeWarning} onToggle={toggleWarning} onOpen={(id) => nav.open({ type: "node", id })} />}
+                {laneRepo && lane.list && <PrLane repo={laneRepo} list={lane.list} selected={lane.selected} onSelect={lane.select} overlay={lane.overlay} model={pr ?? null} />}
                 {/* Railway's boxed canvas: a rounded, bordered panel inset in the chrome, so the
                     chrome's colour shows around it; nodes, edges and the canvas buttons are
                     clipped by its corners. At 640px+ the rail's own width is the left gutter. */}
-                <div className={`min-w-0 flex-1 pb-1.5 pr-1.5 ${impact || changes ? "pl-1.5" : "pl-1.5 sm:pl-0"}`}>
+                <div className={`min-w-0 flex-1 pb-1.5 pr-1.5 ${impact || changes ? "pl-1.5" : laneRepo && lane.list ? "pl-1.5 md:pl-0" : "pl-1.5 sm:pl-0"}`}>
                   <div className="canvas-glow relative size-full overflow-hidden rounded-xl border border-line bg-bg" data-testid="canvas-panel">
                     <GraphCanvas
                       snapshot={snapshot}
@@ -139,10 +139,8 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
                       occludeRight={occludeRight}
                       highlight={highlight.active ?? warningHighlight}
                       pr={pr}
-                      prTitle={overlayData?.title}
                       onFindings={(id) => (entry?.type === "node" && entry.id === id ? nav.setTab("findings") : nav.open({ type: "node", id, tab: "findings" }))}
                     />
-                    {laneRepo && lane.overlay && <PrSummary repo={laneRepo} overlay={lane.overlay} model={pr ?? null} />}
                     {!changes && (
                       <WarningsControl
                         snapshot={snapshot}

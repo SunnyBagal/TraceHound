@@ -7,7 +7,7 @@ const NAV = [["Graph", `${base}/graph`], ["Reviews", reviewsHref()], ["Benchmark
 
 /** The reviews and benchmark pages: the landing's night theme, a hairline frame and mono tabs. */
 export function ReviewShell({ children, active = "Reviews" }: { children: ReactNode; active?: "Reviews" | "Benchmark" }) {
-  return <div className="page-shell h-dvh overflow-y-auto overflow-x-hidden bg-page text-text">
+  return <div className="page-shell h-dvh overflow-y-auto overflow-x-hidden bg-page text-text" data-page={active.toLowerCase()}>
     <header className="rv-top">
       <nav aria-label="Main" className="rv-top-bar">
         <LogoLink href={`${base}/`} label="TraceHound home" title="TraceHound" markClassName="size-7" className="text-[17px] font-semibold tracking-[-0.01em]"><span className="max-[480px]:sr-only">TraceHound</span></LogoLink>

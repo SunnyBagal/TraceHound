@@ -49,9 +49,9 @@
   --edge-active: var(--accent);
   /* inspector-row hover/focus on the canvas: distinct from the amber selection */
   --highlight: #c4b5fd;
-  /* the wolf mark: silver, 14.5:1 on the canvas and 13.9:1 on the panels; a neutral, so it never
+  /* the wolf mark: white on the dark surfaces (black on light ones); a neutral, so it never
      reads as the amber selection, the yellow warnings or any diff/impact colour */
-  --logo: #dde3ee;
+  --logo: #fff;
   /* the Redis "R" (a single-colour Simple Icons path): Redis's brand red, from Simple Icons' data */
   --logo-redis: #ff4438;
   --impact-changed: var(--accent);
@@ -441,19 +441,10 @@ html:has(.landing) body {
 }
 @keyframes lp-reveal { from { opacity: 0; transform: translateY(56px) scale(0.98); } }
 
-/* PR lane (/graph): the strip of pull requests and the selected PR's summary over the canvas */
-.lane-scroll { scrollbar-width: thin; scroll-snap-type: x proximity; }
-.lane-scroll > li { scroll-snap-align: start; }
-.pr-chip { transition: border-color 160ms ease-out, background-color 160ms ease-out, box-shadow 200ms ease-out, color 160ms; }
-.pr-summary {
-  position: absolute; top: 12px; left: 12px; z-index: 10;
-  width: min(360px, calc(100% - 24px)); max-height: calc(100% - 96px); overflow-y: auto;
-  border: 1px solid var(--panel-border); border-radius: 12px; padding: 14px 16px;
-  background: color-mix(in srgb, var(--panel-bg) 92%, transparent); backdrop-filter: blur(10px);
-  box-shadow: 0 16px 48px -16px var(--scrim);
-  animation: pr-summary-in 220ms ease-out both;
-}
-@keyframes pr-summary-in { from { opacity: 0; transform: translateY(-6px); } }
+/* PR panel (/graph): the repo's pull requests left of the canvas; the selected one opens its summary in place */
+.pr-chip { transition: color 160ms; }
+.pr-summary { animation: pr-summary-in 220ms ease-out both; }
+@keyframes pr-summary-in { from { opacity: 0; transform: translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .pr-summary { animation: none; } .pr-chip { transition: none; } }
 
 /* findings pinned to the graph: the callout hangs from its card by a short dashed stem */
@@ -463,12 +454,9 @@ html:has(.landing) body {
 }
 .finding-callout { animation: callout-in 260ms cubic-bezier(.2,.8,.2,1) both; }
 .findings-badge { animation: badge-in 320ms cubic-bezier(.2,1.4,.4,1) both; }
-.pr-node { animation: pr-summary-in 260ms ease-out both; }
-.pr-edge { animation: pr-dash 1.2s linear infinite; }
 @keyframes callout-in { from { opacity: 0; transform: translateY(-6px); } }
 @keyframes badge-in { from { opacity: 0; transform: scale(.4); } }
-@keyframes pr-dash { to { stroke-dashoffset: -12; } }
-@media (prefers-reduced-motion: reduce) { .finding-callout, .findings-badge, .pr-node, .pr-edge { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .finding-callout, .findings-badge { animation: none; } }
 
 /* shell: the active rail item carries a short amber bar on its left edge */
 .rail-link[aria-current="page"]::before {
@@ -850,7 +838,7 @@ html:has(.landing) body {
 .lp-nav .lp-nav-logo { color: #252522; }
 .lp-nav .lp-nav-logo:focus-visible { outline-color: #252522; }
 .lp-nav[data-night] .lp-nav-bar { border-color: var(--hairline); }
-.lp-nav[data-night] .lp-nav-bar .lp-nav-logo { color: var(--text); }
+.lp-nav[data-night] .lp-nav-bar .lp-nav-logo { color: var(--logo); }
 .lp-nav[data-night] .lp-nav-link { color: var(--muted); }
 .lp-nav[data-night] .lp-nav-link:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
 .lp-nav[data-night] .lp-nav-cta { background: var(--text); color: var(--page-bg); }
@@ -875,9 +863,8 @@ html:has(.landing) body {
 }
 .inspector-tab { transition: color var(--dur-fast), border-color var(--dur-base) var(--ease-out); }
 .inspector-tab[aria-selected="true"] { text-shadow: 0 0 18px var(--accent-glow); }
-.pr-chip:hover { translate: 0 -1px; }
 @media (prefers-reduced-motion: reduce) {
-  .th-node:hover, .pr-chip:hover { translate: none; }
+  .th-node:hover { translate: none; }
   .react-flow__node.selected .th-node { animation: none; }
 }
 
@@ -1029,21 +1016,40 @@ html:has(.landing) body {
 .bt-detail { display: block; margin-top: 4px; font-size: 12.5px; font-weight: 400; line-height: 1.4; color: var(--faint); white-space: normal; }
 .bench-table td[data-prose] { min-width: 15rem; max-width: 30rem; white-space: normal; line-height: 1.5; }
 .bench-table[data-turned] td[data-prose] { min-width: 8rem; }
+.bench-table :is(td, tbody th) { vertical-align: middle; }
 .bench-table [data-best] .bt-main { font-weight: 700; }
-.bench-table td[data-best]:not([data-ours]) { background: rgba(255, 255, 255, 0.05); }
-.bench-table [data-ref] { background: var(--panel-raised); color: var(--muted); }
-/* TraceHound: one quiet cue, the same in every table and chart: a faint amber tint (and its amber wolf) */
-.bench-table { --ours: color-mix(in srgb, var(--accent) 7%, transparent); }
-.bench-table :is(th, td)[data-ours], .bench-table tr[data-ours] > * { background: var(--ours); }
+.bench-table td[data-best]:not([data-ours="primary"], [data-ref]) { background: var(--best); }
+.bench-table [data-ref] { color: var(--muted); }
+/* as the Anthropic table: only TraceHound v2's column (or row) is outlined in amber and tinted;
+   a competitor's best value sits in a grey cell; the stage columns have no fill */
+.bench-table { --ours: color-mix(in srgb, var(--accent) 9%, transparent); --ours-line: var(--accent); --best: rgba(255, 255, 255, 0.09); }
+.bench-table :is(th, td)[data-ours="primary"], .bench-table tr[data-ours="primary"] > * { background: var(--ours); }
 .bench-table tr[data-tint] > * { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.bench-table :is(th, td)[data-ours="primary"] { box-shadow: inset 2px 0 var(--ours-line), inset -2px 0 var(--ours-line); }
+.bench-table thead :is(th, td)[data-ours="primary"] { box-shadow: inset 2px 0 var(--ours-line), inset -2px 0 var(--ours-line), inset 0 2px var(--ours-line); }
+.bench-table tbody tr:last-child > [data-ours="primary"] { box-shadow: inset 2px 0 var(--ours-line), inset -2px 0 var(--ours-line), inset 0 -2px var(--ours-line); }
+.bench-table tr[data-ours="primary"] > * { box-shadow: inset 0 2px var(--ours-line), inset 0 -2px var(--ours-line); }
+.bench-table tr[data-ours="primary"] > :first-child { box-shadow: inset 2px 0 var(--ours-line), inset 0 2px var(--ours-line), inset 0 -2px var(--ours-line); }
+.bench-table tr[data-ours="primary"] > :last-child { box-shadow: inset -2px 0 var(--ours-line), inset 0 2px var(--ours-line), inset 0 -2px var(--ours-line); }
 .bench-note { max-width: 92ch; margin: 16px auto 0; text-align: center; font-size: 13.5px; line-height: 1.6; color: var(--faint); }
 .bench-who { display: inline-flex; align-items: center; gap: 10px; }
 .bench-mark { display: inline-block; flex: none; width: 18px; height: 18px; background: var(--text); -webkit-mask: var(--logo-url) center / contain no-repeat; mask: var(--logo-url) center / contain no-repeat; }
 .bench-mark-wolf { background: none; -webkit-mask: none; mask: none; }
+/* the wolf in its own colours, never the accent: white on the black bands, black on the white ones */
 .bench-mark-wolf svg { color: var(--logo); }
-[data-ours] .bench-mark-wolf svg { color: var(--accent); }
+/* the wolf's box has room for the howl, so it draws smaller than the brand marks at the same size */
+.bench-table .bench-mark-wolf { width: 20px; height: 20px; margin: -1px; }
 [data-ref] .bench-mark { opacity: 0.55; }
-.bench-limits { max-width: 75ch; margin-bottom: 72px; }
+.bench-limits { max-width: 75ch; margin-inline: auto; margin-bottom: 72px; }
+[data-page="benchmark"] .rv-foot { text-align: center; }
+/* square corners everywhere on the page (the scatter's dots stay round) */
+[data-page="benchmark"] *:not(.sx-dot), [data-page="benchmark"] *::before, [data-page="benchmark"] *::after { border-radius: 0 !important; }
+/* the node/edge inspector: square inside (cards, rows, tags, tabs), the panel keeps its own rounded frame */
+.inspector-panel *, .inspector-panel *::before, .inspector-panel *::after { border-radius: 0 !important; }
+.bench-tiles[data-glow] { gap: 0; }
+.bench-tiles[data-glow] > .bench-tile { background: none; }
+.bench-tiles[data-glow] > .bench-tile + .bench-tile { border-top: 1px solid var(--hairline); }
+@media (min-width: 760px) { .bench-tiles[data-glow] > .bench-tile + .bench-tile { border-top: 0; border-left: 1px solid var(--hairline); } }
 .bench-limits[data-glow] { padding: clamp(22px, 3vw, 34px); }
 .bench-limits[data-glow] .bench-h2 { margin-bottom: 20px; }
 [data-glow] {
@@ -1056,6 +1062,19 @@ html:has(.landing) body {
 }
 [data-glow="glacier"] { --glow: linear-gradient(115deg, #0a587e, #2fb0e8 35%, #36c066 75%, #5ee68f); }
 [data-glow="amber"] { --glow: linear-gradient(115deg, #7c3304, #f0890f 35%, #7657ff 80%, #3214a8); }
+[data-glow="green"] { --glow: linear-gradient(115deg, #0e6a35, #36c066 35%, #5ee68f 75%, #b9f5cf); }
+/* the page in full-bleed bands: black, then white for "Dev and blind sets together" and "Other runs" */
+.bench-part[data-band="light"] {
+  --page: #f7f6f2; --panel: #ffffff; --panel-raised: #eeede8; --panel-line: #d6d5cf; --hairline: rgba(0, 0, 0, 0.1); --line-strong: #b9bac2;
+  --text: #16161c; --muted: #4b5262; --faint: #5d6576; --accent: #a86400; --logo: #000; --glacier: #0b6ea3; --diff-added: #187a3c;
+  margin-top: clamp(48px, 6vw, 80px); padding-block: clamp(56px, 7vw, 96px) clamp(8px, 2vw, 24px);
+  color: var(--text); background: var(--page); box-shadow: 0 0 0 100vmax var(--page); clip-path: inset(0 -100vmax);
+}
+.bench-part[data-band="light"] .bench-table { --grid: #2b2b31; --ours: color-mix(in srgb, #f5a524 20%, transparent); --ours-line: #d98a0b; --best: #dcdad2; }
+.bench-part[data-band="light"] :is(.bx, .bench-legend) { --fill-tool: #e4e6ec; --line-tool: #6b7488; --fill-ours: #f5a524; --line-ours: #b86e00; }
+.bench-part[data-band="light"] :is(.bx-tick, .sx-hline) { border-color: rgba(0, 0, 0, 0.09); }
+.bench-part[data-band="light"] .bx-overlay { border-bottom-color: #8a8f9c; }
+.bench-part[data-band="light"] .verdict[data-tone="loss"] { color: #b42318; }
 .bench-limits ul { list-style: disc; padding-left: 1.2em; font-size: 16px; line-height: 1.6; color: var(--muted); }
 .bench-limits li + li { margin-top: 8px; }
 
@@ -1093,10 +1112,6 @@ html:has(.landing) body {
 @media (prefers-reduced-motion: reduce) {
   [data-reveal] .bx-bar, [data-reveal] .bx-val, [data-reveal] .bx-band, [data-reveal] .bx-tick, [data-reveal] .sx-pt, [data-reveal] .sx-path { animation: none; opacity: 1; }
   .bx-bar { transition: none; }
-}
-@media (max-width: 640px) {
-  .pr-summary { top: 8px; left: 8px; width: calc(100% - 16px); padding: 10px 12px; font-size: 13px; }
-  .pr-summary [role="status"] { display: none; }
 }
 
 

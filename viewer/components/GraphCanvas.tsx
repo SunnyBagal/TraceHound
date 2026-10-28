@@ -4,7 +4,6 @@ import {
   Background,
   BackgroundVariant,
   Panel,
-  Position,
   ReactFlow,
   useNodesState,
   useNodesInitialized,
@@ -27,12 +26,11 @@ import { KindLegend } from "./KindLegend";
 import { useExpandedNodes } from "@/lib/expansion";
 import { expandedHeight } from "@/lib/contents";
 import { EdgeMarkers, EvidenceEdge } from "./EvidenceEdge";
-import { PR_NODE_HEIGHT, PR_NODE_WIDTH, PrEdgeComponent, PrNodeComponent, type PrEdge, type PrNode } from "./PrOverlayParts";
 
 export type Selection = { type: "node"; id: string } | { type: "edge"; id: string } | null;
 
-const nodeTypes = { component: ComponentNode, pr: PrNodeComponent };
-const edgeTypes = { evidence: EvidenceEdge, pr: PrEdgeComponent };
+const nodeTypes = { component: ComponentNode };
+const edgeTypes = { evidence: EvidenceEdge };
 
 export interface GraphCanvasProps {
   snapshot: Snapshot;
@@ -51,7 +49,6 @@ export interface GraphCanvasProps {
   highlight?: Highlight | null;
   /** PR lane selection: components with a changed file are lit, the rest dim (an overlay, not evidence) */
   pr?: PrOverlay;
-  prTitle?: string;
   /** a component's findings badge: open them in the inspector */
   onFindings?: (componentId: string) => void;
 }
@@ -70,7 +67,7 @@ function useMinZoom(): number {
 }
 const MARGIN = 32; // px kept clear around a selection brought into view
 
-export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focusNonce, impact, changes, occludeRight = 0, highlight = null, pr, prTitle = "", onFindings }: GraphCanvasProps) {
+export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focusNonce, impact, changes, occludeRight = 0, highlight = null, pr, onFindings }: GraphCanvasProps) {
   const prTargets = useMemo(() => (pr ? new Set(overlayTargets(pr)) : null), [pr]);
   const roles = useMemo(() => (impact ? impactRoles(impact) : null), [impact]);
   const chainEdges = useMemo(() => (impact ? impactEdges(impact) : null), [impact]);
@@ -248,34 +245,17 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
     [nodes, selection, focusSet, focusKey, roles, highlight, changes, expanded, toggle, onSelect, pr, prTargets, onFindings],
   );
 
-  // PR overlay: one node left of the graph, a dashed labelled edge to each component holding a
-  // changed file or a finding location (never anything else). Not in `nodes`, so never saved.
-  const prNode = useMemo((): PrNode | null => {
-    if (!pr || !prTargets?.size || !nodes.length) return null;
-    // a marker above the graph, centred over the components it points at
-    const targets = nodes.filter((n) => prTargets.has(n.id));
-    const top = Math.min(...nodes.map((n) => n.position.y));
-    const mid = targets.reduce((sum, n) => sum + n.position.x + NODE_WIDTH / 2, 0) / targets.length;
-    const files = [...pr.touched.values()].reduce((sum, f) => sum + f.length, 0) + pr.outsideFiles.length;
-    const findings = [...pr.findings.values()].reduce((sum, f) => sum + f.length, 0) + pr.outsideFindings.length;
-    return { id: `pr:${pr.number}`, type: "pr", position: { x: mid - PR_NODE_WIDTH / 2, y: top - PR_NODE_HEIGHT - 170 }, draggable: false, selectable: false, data: { number: pr.number, title: prTitle, files, findings }, width: PR_NODE_WIDTH, height: PR_NODE_HEIGHT,
-      handles: [{ type: "source", position: Position.Bottom, x: PR_NODE_WIDTH / 2 - 4, y: PR_NODE_HEIGHT - 4, width: 8, height: 8 }] };
-  }, [pr, prTargets, nodes, prTitle]);
-  const prEdges = useMemo((): PrEdge[] => (prNode && pr ? [...prTargets!].map((id) => ({
-    id: `pr:${pr.number}->${id}`, type: "pr", source: prNode.id, target: id, selectable: false, focusable: false,
-    data: { label: pr.touched.has(id) ? `changed in #${pr.number}` : `finding in #${pr.number}`, findings: pr.findings.get(id)?.length ?? 0, dimmed: Boolean(focusSet && !focusSet.has(id)) },
-  })) : []), [prNode, pr, prTargets, focusSet]);
-
-  // selecting a PR brings it and what it touched into view (once per PR, not per drag)
+  // selecting a PR (left panel) brings the components it touched into view, once per PR, not per
+  // drag. The PR itself isn't drawn: its cards are outlined and tagged instead.
   const prFitted = useRef<string | null>(null);
   useEffect(() => {
-    const key = prNode ? `${prNode.id}:${[...prTargets!].join(",")}` : null;
+    const key = pr && prTargets?.size && nodes.length ? `${pr.number}:${[...prTargets].join(",")}` : null;
     if (!key || prFitted.current === key) { if (!key) prFitted.current = null; return; }
     prFitted.current = key;
-    const ids = [prNode!.id, ...prTargets!].map((id) => ({ id }));
+    const ids = [...prTargets!].map((id) => ({ id }));
     requestAnimationFrame(() => void fitView({ ...fitRef.current, nodes: ids, maxZoom: 1, duration: 450, ...(occludeRight ? { padding: { top: 0.15, bottom: 0.25, left: 0.1, right: `${occludeRight + MARGIN}px` } } : { padding: { top: window.innerWidth < 640 ? 0.45 : 0.12, bottom: 0.3, left: 0.12, right: 0.12 } }) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- per PR selection
-  }, [prNode?.id, prTargets, nodesInitialized]);
+  }, [pr?.number, prTargets, nodesInitialized]);
   const displayEdges = useMemo(
     () =>
       base.edges.map((e): EvidenceEdgeType => {
@@ -312,8 +292,8 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
     <div ref={containerRef} className="relative size-full" data-testid="graph-canvas">
       <EdgeMarkers />
       <ReactFlow
-        nodes={prNode ? [prNode, ...displayNodes] as ComponentNodeType[] : displayNodes}
-        edges={prEdges.length ? [...displayEdges, ...prEdges] as EvidenceEdgeType[] : displayEdges}
+        nodes={displayNodes}
+        edges={displayEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
@@ -321,7 +301,7 @@ export function GraphCanvas({ snapshot, selection, onSelect, focusIds = [], focu
         onNodeClick={(event, node) => { if (node.type === "component") onNodeClick(event, node); }}
         // an added component edge the published snapshot lacks has no snapshot evidence to inspect:
         // open its source component, whose Changes tab lists the declaration edges behind it
-        onEdgeClick={(_, edge) => { if ((edge.type as string) === "pr") return onSelect({ type: "node", id: edge.target }); onSelect(edge.data?.extra ? { type: "node", id: edge.source } : { type: "edge", id: edge.id }); }}
+        onEdgeClick={(_, edge) => { onSelect(edge.data?.extra ? { type: "node", id: edge.source } : { type: "edge", id: edge.id }); }}
         onPaneClick={() => onSelect(null)}
         onNodeMouseEnter={(_, n) => { if (n.type === "component") setHoverId(n.id); }}
         onNodeMouseLeave={() => setHoverId(null)}

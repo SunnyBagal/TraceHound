@@ -36,7 +36,7 @@ export function ComponentIcon({ kind, tech, size = "md", tint }: { kind: Compone
   if (size === "node") {
     return (
       <span className="grid size-[22px] shrink-0 place-items-center" style={{ color: tint }} {...props}>
-        {primary ? <TechLogo fact={primary} tint={tint} className="size-[22px]" /> : <Icon className="-m-[2px] size-[26px]" aria-hidden />}
+        {primary ? <TechLogo fact={primary} className="size-[22px]" /> : <Icon className="-m-[2px] size-[26px]" aria-hidden />}
       </span>
     );
   }
