@@ -5,13 +5,10 @@ claims come from the brain's `submission/numbers.md` (27 Oct) only.
 
 **Open slots**
 
-- `[[TBD-SEEDED]]`: the seeded-PR run on the current config (job seed-01): PRs opened, seeded
-  lines caught / total, links (numbers.md §7).
 - `[[SUNNY: …]]`: a question only Sunny can answer. Each one is also listed in `checklist.md`.
 
 Rules this text follows (numbers.md §0): no other reviewer is named, in text or logo (say "five
-commercial reviewers" or "the leading commercial reviewer"); never "beats", "best", "state of the
-art" or "outperforms"; "ahead of / behind" only where the 95% interval excludes 0, otherwise
+commercial reviewers" or "the leading commercial reviewer"); "ahead of / behind" only where the 95% interval excludes 0, otherwise
 "statistically tied"; "3rd of 6" only with "point estimate"; dev numbers say "on our 40-PR dev
 set" and 3.5 on dev is "2 dev runs"; ReviewBench results are test runs, never a leaderboard rank;
 Ultra is report only.
@@ -67,8 +64,10 @@ The dashboard, https://tracehound-tau.vercel.app, has three parts: `/reviews` (t
 reviews as bug cards with fix diffs), `/benchmark` (the results tables; a test fails CI if
 they differ from `docs/bench/results.md`), and the graph (the repo map the project started as).
 
-**Trying it without a key.** Judges can browse the recorded reviews, the dashboard and the seeded
-PRs ([[TBD-SEEDED]]) without a Nebius key. They can't trigger a new review on the demo repo: that
+**Trying it without a key.** Judges can browse the recorded reviews, the dashboard and
+the 30 seeded PRs on two public mirror repos
+([Recall](https://github.com/SunnyBagal/recall-seeded) and
+[Linea](https://github.com/SunnyBagal/linea-seeded)) without a Nebius key. They can't trigger a new review on the demo repo: that
 needs write access, because the Action runs only on same-repository pull requests (forks get no
 repository secrets) and every review spends our Token Factory key. The demo repo runs the Action
 pinned to `review-freeze-2.1` (`86fd5d7`), the measured pipeline with an install fix,
@@ -102,7 +101,15 @@ the scorer of record) with a second judge alongside.
   with no interval-backed difference. Its unverified-pool (pool-raw) mean F was 43.6 against 3.5's
   53.9 (−10.2 [−17.7, −3.2]), the only interval that excludes 0. Under the second judge: 54.9 and
   51.4.
-- **Seeded PRs on the live config:** [[TBD-SEEDED]].
+- **Seeded PRs on the live config:** On 30 pre-registered seeded PRs, TraceHound caught 9 of 22 seeded defects and stayed silent on all 8 clean controls. It caught 5 of 6 bugs inside the diff but only 4 of 16 that break files the PR didn't touch, and 3 of those 4 came from the deterministic contract check, not the model.
+  Pre-registered 19 Oct (seeds, key and scorer committed at `a4a6c83`, hashes published before any PR);
+  scored 28 Oct by the committed scorer, automatic rule only
+  ([RESULTS.md](https://github.com/SunnyBagal/tracehound-seeds/blob/main/RESULTS.md)).
+  Not run: no other reviewer was run on these PRs. Model 3.5, not the 3 Super the 19 Oct plan assumed;
+  Recall ran the Action at `0aeef06`, Linea at `86fd5d7` (the install fix).
+  Deviations: Linea opened after the Action fix, same order; open-PR script copy with 4 disclosed
+  changes; linea#1 base re-set once (no content change) and re-triggered twice; a third-party review
+  app auto-commented on the first 3 PRs (not scored; removed); first-PR gate widened to 3 PRs.
 
 Full tables, intervals, limits and every loss: `docs/bench/results.md`, `docs/bench/v2-calcom.md`,
 `docs/bench/v2-intervals.md`.
