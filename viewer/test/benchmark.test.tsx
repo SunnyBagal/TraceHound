@@ -20,7 +20,7 @@ it("renders sourced tables and the small-sample limitations", () => {
 it("says all 50 PRs only in the all-50 tables' own headings and captions", () => {
   render(<BenchmarkPage />);
   const mentions = screen.queryAllByText(/all 50 PRs/i);
-  expect(mentions.map((node) => node.tagName).sort()).toEqual(["CAPTION", "CAPTION", "H2", "H2"]);
+  expect(mentions.map((node) => node.tagName).sort()).toEqual(["CAPTION", "CAPTION", "H3", "H3"]);
   expect(document.body.textContent?.match(/all 50 PRs/gi)).toHaveLength(mentions.length);
 });
 it("never states 3rd of six as a ranking", () => {
@@ -62,10 +62,12 @@ it("ranks figure 1 and table 1 by F, so v2 sits where its F puts it, and the x1 
   const f = (blind.headers as readonly string[]).indexOf("F (v1)");
   const ranked = blind.rows.filter((r) => !r[0].includes("secondary")).sort((a, b) => Number.parseFloat(b[f]!) - Number.parseFloat(a[f]!)).map((r) => r[0]);
   expect(screen.getAllByTestId("bench-row").map((r) => r.querySelector(".bench-name")!.getAttribute("title"))).toEqual(ranked);
+  // table 1 is turned: one column per reviewer, in the same order, the pipeline's stages after them
   const table = screen.getAllByRole("table").find((t) => t.querySelector("caption")?.textContent === blind.title)!;
-  const names = [...table.querySelectorAll("tbody tr")].map((tr) => tr.querySelector("th")!.textContent);
+  const names = [...table.querySelectorAll("thead th[scope=col]")].map((th) => th.getAttribute("title"));
   expect(names.slice(0, ranked.length)).toEqual(ranked);
   expect(names.slice(ranked.length).every((n) => n!.includes("secondary"))).toBe(true);
+  expect(table.querySelector('thead [data-ours="primary"]')!.getAttribute("title")).toMatch(/^TraceHound v2/);
   expect(ranked[0]).not.toMatch(/^TraceHound v2/);
   // under x1 the order and the band are recomputed from the x1 column
   const x1 = (blind.headers as readonly string[]).indexOf("F (x1)");
@@ -75,7 +77,7 @@ it("ranks figure 1 and table 1 by F, so v2 sits where its F puts it, and the x1 
 it("every reviewer row in the figures and tables carries its logo", () => {
   render(<BenchmarkPage />);
   for (const row of screen.getAllByTestId("bench-row")) expect(row.querySelector(".bench-mark"), row.textContent!).toBeTruthy();
-  const reviewerCells = screen.getAllByRole("rowheader").filter((th) => reviewerOf(th.textContent!));
+  const reviewerCells = screen.getAllByRole("columnheader").filter((th) => reviewerOf(th.getAttribute("title") ?? ""));
   expect(reviewerCells.length).toBeGreaterThan(20);
-  for (const th of reviewerCells) expect(th.querySelector(".bench-mark")?.getAttribute("data-reviewer"), th.textContent!).toBe(reviewerOf(th.textContent!));
+  for (const th of reviewerCells) expect(th.querySelector(".bench-mark")?.getAttribute("data-reviewer"), th.title).toBe(reviewerOf(th.title));
 });

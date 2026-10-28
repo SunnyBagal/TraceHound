@@ -38,6 +38,17 @@ export function reviewerOf(name: string): Reviewer | null {
   return (["augment", "cursor", "greptile", "copilot", "coderabbit"] as const).find((t) => n === t) ?? null;
 }
 
+const TOOL_NAMES: Record<string, string> = { augment: "Augment", cursor: "Cursor", greptile: "Greptile", copilot: "Copilot", coderabbit: "CodeRabbit" };
+/** A reviewer cell as a column head: a short name, and the rest of the cell under it. */
+export function columnHead(cell: string): { name: string; sub: string } {
+  const th = /^(TraceHound v[12])[:\s]*(.*)$/.exec(cell);
+  if (th) return { name: th[1]!, sub: th[2]!.replace(/^\((.*)\)$/, "$1") };
+  if (cell.startsWith("3 Super pool-verify-v1")) return { name: "TraceHound v1", sub: cell };
+  if (TOOL_NAMES[cell.toLowerCase()]) return { name: TOOL_NAMES[cell.toLowerCase()]!, sub: "" };
+  const i = cell.indexOf(" (");
+  return i < 0 ? { name: cell, sub: "" } : { name: cell.slice(0, i), sub: cell.slice(i + 1).replace(/\) \(/g, " · ").replace(/^\(|\)$/g, "") };
+}
+
 /* the blind run: TraceHound v2, v1 (history) and the five tools, not the pipeline's own stages */
 const BLIND_COL = { f: col(BLIND, "F (v1)"), fx: col(BLIND, "F (x1)"), p: col(BLIND, "P (n)"), r: col(BLIND, "R (n)"), tp: col(BLIND, "TP"), fp: col(BLIND, "FP"), fn: col(BLIND, "FN") };
 const secondary = (name: string) => name.includes("secondary") || name.includes("not ranked");
@@ -45,7 +56,7 @@ export const blindRows = BLIND.rows
   .filter((r) => !secondary(r[0]))
   .map((r) => ({
     name: r[0],
-    label: r[0].startsWith("TraceHound v2") ? "TraceHound v2" : r[0].startsWith("TraceHound v1") ? "TraceHound v1" : r[0],
+    label: columnHead(r[0]).name,
     f: pct(r[BLIND_COL.f]!), cell: r[BLIND_COL.f]!,
     by: { v1: { f: pct(r[BLIND_COL.f]!), cell: r[BLIND_COL.f]! }, x1: { f: pct(r[BLIND_COL.fx]!), cell: r[BLIND_COL.fx]! } },
     p: r[BLIND_COL.p]!, r: r[BLIND_COL.r]!, tp: r[BLIND_COL.tp]!, fp: r[BLIND_COL.fp]!, fn: r[BLIND_COL.fn]!,
@@ -74,18 +85,6 @@ const after = (prefix: string) => gapRows.filter((g) => g.sentence.startsWith(pr
 /** table 2's sentences, joined: "v2 is statistically tied with A, B and C, and ahead of D." */
 export const gapSentence = `v2 is statistically tied with ${list(after("statistically tied with "))}${after("ahead of ").length ? `, and ahead of ${list(after("ahead of "))}` : ""}.`;
 
-/* table 2's intervals, "−16.0 [−30.9, +3.5]" → numbers; rows ordered by the observed v1 gap, so the
-   reviewers ahead of v2 come first */
-const interval = (cell: string) => {
-  const m = /([-+]?[\d.]+)\s*\[([-+]?[\d.]+),\s*([-+]?[\d.]+)\]/.exec(cell.replaceAll("−", "-"));
-  if (!m) throw new Error(`not an interval: "${cell}"`);
-  return { obs: Number(m[1]), lo: Number(m[2]), hi: Number(m[3]), cell };
-};
-const GAP_COL = { v1: col(GAPS, "v1: observed [95%]"), x1: col(GAPS, "x1: observed [95%]") };
-export const gapIntervals = GAPS.rows
-  .map((r) => ({ name: r[0], label: r[0].startsWith("3 Super") ? "TraceHound v1" : r[0], sentence: r[SENTENCE]!, tied: r[SENTENCE]!.startsWith("statistically tied with"), by: { v1: interval(r[GAP_COL.v1]!), x1: interval(r[GAP_COL.x1]!) } }))
-  .sort((a, b) => a.by.v1.obs - b.by.v1.obs);
-
 /* the full benchmark: the pre-registered v2 row's point-estimate rank */
 export const RANK = col(ALL50, "rank of 6 (point estimate)");
 export const rankOf = /rank of (\d+)/.exec(ALL50.headers[RANK]!)![1];
@@ -106,15 +105,73 @@ export const spread = (xs: number[]) => `${Math.min(...xs).toFixed(1)}–${Math.
 
 /**
  * A table's rows in the order the page shows them: the blind test ranked by F (v1), table 2 by the
- * observed gap; pipeline stages that are not ranked stay last. Other tables keep the report's order.
+ * observed v1 gap (the same order: v2 minus a higher F is a lower gap); stages that are not ranked last. Other tables keep the report's order.
  */
 export function orderedRows(t: Table): readonly (readonly string[])[] {
   if (t === BLIND) {
     const f = BLIND_COL.f;
     return [...BLIND.rows.filter((r) => !secondary(r[0])).sort((a, b) => pct(b[f]!) - pct(a[f]!)), ...BLIND.rows.filter((r) => secondary(r[0]))];
   }
-  if (t === GAPS) return gapIntervals.map((g) => GAPS.rows.find((r) => r[0] === g.name)!);
+  if (t === GAPS) {
+    const gap = (r: readonly string[]) => Number.parseFloat(r[col(GAPS, "v1: observed [95%]")]!.replace("−", "-"));
+    return [...GAPS.rows].sort((a, b) => gap(a) - gap(b));
+  }
   return t.rows;
 }
 export const isSecondary = secondary;
+
+/* ---------- how the tables are drawn (display only: every value shown is still a cell) ---------- */
+
+/** A table whose rows are reviewers is drawn turned, reviewers as columns, as the Opus page does. */
+export const byReviewer = (t: Table) => t.rows.every((r) => reviewerOf(r[0]) !== null);
+
+/** "63.2% (12/19)" → 63.2% over 12/19; "−16.0 [−30.9, +3.5]" → −16.0 over the interval. */
+export function splitCell(cell: string): { main: string; detail: string } {
+  const m = /^(.+?)\s+(\((.+)\)|(\[.+\]))$/.exec(cell);
+  return m ? { main: m[1]!, detail: m[3] ?? m[4]! } : { main: cell, detail: "" };
+}
+
+/** A metric column's header as a row label: a plain name, and what it measures under it. */
+const METRICS: Record<string, [string, string]> = {
+  comments: ["Comments", "posted, Medium+"],
+  TP: ["True positives", "golden findings matched"],
+  FP: ["False positives", "comments matching none"],
+  FN: ["Missed", "golden findings not found"],
+  "P (n)": ["Precision", "TP / judged comments"],
+  "R (n)": ["Recall", "TP / golden findings"],
+  "F (v1)": ["F", "bench-judge-v1, scorer of record"],
+  "F (x1)": ["F", "bench-judge-x1"],
+  F: ["F", "harmonic mean of P and R"],
+  "rank of 6 (point estimate)": ["Rank", "point estimate"],
+  "v2 minus row [95%]": ["v2 minus reviewer", "F points [95% interval]"],
+  "v1: observed [95%]": ["v2 minus reviewer", "bench-judge-v1, F points [95%]"],
+  "x1: observed [95%]": ["v2 minus reviewer", "bench-judge-x1, F points [95%]"],
+  "sentence the rule allows": ["Verdict", "the rule's sentence"],
+};
+export const metricLabel = (header: string) => METRICS[header] ?? [header, ""];
+
+/* the best cell in a metric row, among the ranked reviewers: higher is better, except misses, false positives and rank */
+const LOWER = new Set(["FP", "FN", "rank of 6 (point estimate)"]);
+const HIGHER = new Set(["TP", "P (n)", "R (n)", "F (v1)", "F (x1)", "F"]);
+export function bestRows(t: Table, header: string): Set<number> {
+  if (!LOWER.has(header) && !HIGHER.has(header)) return new Set();
+  const c = col(t, header);
+  const rows = t.rows.map((r, i) => ({ i, v: pct(r[c]!) })).filter(({ i, v }) => !secondary(t.rows[i]![0]) && Number.isFinite(v));
+  const best = LOWER.has(header) ? Math.min(...rows.map((r) => r.v)) : Math.max(...rows.map((r) => r.v));
+  return new Set(rows.filter((r) => r.v === best).map((r) => r.i));
+}
+
+/**
+ * Where a TraceHound-only table marks the product (pool-verify-v1 on 3.5 Super): the dev table's
+ * 3.5 Super column, ReviewBench's "(= the product)" row, the cost table's first 3.5 Super row (the
+ * one the cost tile reads); the levers that were adopted are tinted.
+ */
+export function productMark(t: Table): { col?: number; row?: number; tint: Set<number> } {
+  const tint = new Set<number>();
+  if (t === DEV) return { col: DEV.headers.findIndex((h) => h.startsWith("3.5 Super")), tint };
+  if (t.title.startsWith("ReviewBench")) return { row: t.rows.findIndex((r) => r.some((c) => c.includes("(= the product)"))), tint };
+  if (t.title.startsWith("Dev cost per pull request")) return { row: t.rows.findIndex((r) => r[0].startsWith("3.5 Super")), tint };
+  if (t.title.startsWith("Precision levers")) t.rows.forEach((r, i) => { if (r[col(t, "verdict")]!.startsWith("Adopted")) tint.add(i); });
+  return { tint };
+}
 

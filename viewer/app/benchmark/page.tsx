@@ -3,13 +3,16 @@ import { BenchTable } from "@/components/benchmark/BenchTable";
 import { BlindFigure } from "@/components/benchmark/BlindFigure";
 import { Figure } from "@/components/benchmark/Figure";
 import { FullFigure } from "@/components/benchmark/FullFigure";
-import { GapFigure } from "@/components/benchmark/GapFigure";
-import { BENCHMARK_REVISION, BENCHMARK_SOURCE, BENCHMARK_TABLES } from "@/lib/benchmark";
+import { ScatterFigure } from "@/components/benchmark/ScatterFigure";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BENCHMARK_REVISION, BENCHMARK_SOURCE } from "@/lib/benchmark";
 
-import { aheadTools, BLIND, fullN, GAPS, gapSentence, preRegistered, RANK, rankOf, spread, table, tiedTools, tools, v1Runs, v2, word } from "@/lib/benchmark-view";
+import { aheadTools, ALL50, BLIND, blindRows, DEV, fullN, GAPS, gapSentence, preRegistered, RANK, rankOf, spread, table, tiedTools, tools, V1, v1Runs, v2, word } from "@/lib/benchmark-view";
 
 /* the cost table's 3.5 Super row (the product's model), its median cell */
 const COST = table("Dev cost per pull request");
+const v1 = blindRows.find((r) => r.kind === "history")!;
+const up = (now: string, before: string) => (Number.parseFloat(now) > Number.parseFloat(before) ? "up" : "down");
 const COST_MEDIAN = COST.rows.find((r) => r[0].startsWith("3.5 Super"))![(COST.headers as readonly string[]).indexOf("cost median")]!;
 
 export default function BenchmarkPage() {
@@ -46,25 +49,56 @@ export default function BenchmarkPage() {
       </div>
     </section>
 
-    <Figure id="fig-blind" title="Blind test: F by reviewer" captionTestId="bench-caption" caption={<>{gapSentence} 10 blind pull requests, n = 23; PR-level paired bootstrap, 95% intervals, probably too narrow at this size. Hatched: v1, history rather than a competitor.</>}>
-      <BlindFigure />
-    </Figure>
+    <section className="bench-part" aria-labelledby="part-blind">
+      <h2 id="part-blind" className="bench-h2">Blind test</h2>
+      <Tabs defaultValue="f" className="bench-tabs">
+        <TabsList variant="line" aria-label="Blind test charts">
+          <TabsTrigger value="f">F by reviewer</TabsTrigger>
+          <TabsTrigger value="pr">Precision vs recall</TabsTrigger>
+        </TabsList>
+        <TabsContent value="f">
+          <Figure id="fig-blind" title="F by reviewer" meta="Cal.com · 10 pull requests · n = 23" captionTestId="bench-caption" caption={<>{gapSentence} PR-level paired bootstrap, 95% intervals.</>}>
+            <BlindFigure />
+          </Figure>
+        </TabsContent>
+        <TabsContent value="pr">
+          <Figure id="fig-pr" title="Precision vs recall" meta="Cal.com · bench-judge-v1 counts" caption={<>Up and right is better. The dashed line runs from v1 to v2: precision {up(v2.p, v1.p)}, recall {up(v2.r, v1.r)}.</>}>
+            <ScatterFigure />
+          </Figure>
+        </TabsContent>
+      </Tabs>
+      <BenchTable t={BLIND} id="table-blind" />
+      <BenchTable t={GAPS} id="table-gaps" />
+    </section>
 
-    <Figure id="fig-gaps" title="v2 minus each reviewer, 95% intervals" caption="F points. An interval that crosses 0 is a tie.">
-      <GapFigure />
-    </Figure>
+    <section className="bench-part" aria-labelledby="part-full">
+      <h2 id="part-full" className="bench-h2">Dev and blind sets together</h2>
+      <Figure id="fig-full" title="F by reviewer" meta={`n = ${fullN}`} caption="Ranked by bench-judge-v1, the scorer of record. v2 was tuned on the dev set.">
+        <FullFigure />
+      </Figure>
+      <BenchTable t={ALL50} id="table-all-v1" />
+      <BenchTable t={table("All 50 PRs, bench-judge-x1")} id="table-all-x1" />
+    </section>
 
-    <BenchTable t={BLIND} id="table-blind" />
-    <BenchTable t={GAPS} id="table-gaps" />
+    <section className="bench-part" aria-labelledby="part-dev">
+      <h2 id="part-dev" className="bench-h2">Dev set</h2>
+      <BenchTable t={DEV} id="table-dev" />
+      <BenchTable t={table("Precision levers tried on dev")} id="table-levers" />
+    </section>
 
-    <Figure id="fig-full" title={`Dev and blind sets together: F by reviewer, n = ${fullN}`} caption="Ranked by bench-judge-v1, the scorer of record. v2 was tuned on the dev set; ranks are point estimates.">
-      <FullFigure />
-    </Figure>
+    <section className="bench-part" aria-labelledby="part-other">
+      <h2 id="part-other" className="bench-h2">Other runs</h2>
+      <BenchTable t={table("ReviewBench test runs")} id="table-reviewbench" />
+      <BenchTable t={V1} id="table-v1" />
+    </section>
 
-    {BENCHMARK_TABLES.filter((t) => t !== BLIND && t !== GAPS).map((t, i) => <BenchTable key={t.title} t={t} id={`table-${i}`} />)}
+    <section className="bench-part" aria-labelledby="part-cost">
+      <h2 id="part-cost" className="bench-h2">Cost</h2>
+      <BenchTable t={COST} id="table-cost" />
+    </section>
 
-    <aside className="bench-limits" aria-labelledby="limits">
-      <h2 id="limits" className="bench-table-title">Limits</h2>
+    <aside className="bench-part bench-limits" aria-labelledby="limits">
+      <h2 id="limits" className="bench-h2">Limits</h2>
       <ul>
         <li>The test set is 10 pull requests and 23 golden findings. Differences of a few points are within noise.</li>
         <li>Intervals cover pull-request sampling only, not run-to-run spread or judge error.</li>
