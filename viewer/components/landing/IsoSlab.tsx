@@ -1,4 +1,4 @@
-import { iso, screenRise, slabOf, type Plan, type Projection } from "@/components/iso/iso-kit";
+import { iso, slabOf, type Plan, type Projection } from "@/components/iso/iso-kit";
 import { WOLF_PATH } from "@/lib/wolf";
 
 /**
@@ -10,7 +10,8 @@ export function IsoSlab({ P, plan, z = 0, h, tone, id, mark, dim }: { P: Project
   const s = slabOf(plan, z, h, P, 10);
   const sides = s.shades.filter(Boolean).join("");
   const markAt = iso([plan.x + plan.w / 2, plan.y + plan.d / 2, z + h], P);
-  const markSize = screenRise(Math.min(plan.w, plan.d) * 0.5, P);
+  // half the top face's width on screen
+  const markSize = Math.abs(iso([plan.x + plan.w, plan.y, z + h], P)[0] - iso([plan.x, plan.y + plan.d, z + h], P)[0]) * 0.42;
   return (
     <g className="islab" data-dim={dim || undefined} style={{ "--c": tone } as React.CSSProperties}>
       <defs>
@@ -39,8 +40,9 @@ export function IsoSlab({ P, plan, z = 0, h, tone, id, mark, dim }: { P: Project
       <path d={s.crease} className="islab-crease" />
       <path d={s.outline} className="islab-outline" />
       {mark && (
-        // the mark stands upright over the top face's centre, so it reads as the wolf from any angle
-        <path d={WOLF_PATH} fillRule="evenodd" className="islab-mark" transform={`translate(${markAt[0] - markSize / 2} ${markAt[1] - markSize * 0.62}) scale(${markSize / 600}) translate(-55 -55)`} />
+        // the mark lies flat on the top face, facing the viewer (vite.dev's slab): the camera's tilt
+        // squashes its height by sin(elevation)
+        <path d={WOLF_PATH} fillRule="evenodd" className="islab-mark" transform={`translate(${markAt[0]} ${markAt[1]}) scale(${markSize / 600} ${(markSize / 600) * Math.sin(((P.elevation ?? 30) * Math.PI) / 180)}) translate(-355 -355)`} />
       )}
     </g>
   );

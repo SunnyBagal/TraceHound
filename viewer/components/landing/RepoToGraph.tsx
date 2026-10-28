@@ -11,6 +11,9 @@ import { FILE_IMPORTS, GRAPH_COMPONENTS, GRAPH_EDGES, GRAPH_FILES, GRAPH_PATH_PR
  *      its component's colour;
  *   4. the edges: the six edges draw on the top plate, and each drops a pin to the file and line
  *      that proves it.
+ * The words on a layer (plate names, the fact chips, the file:line of each pin) show only while
+ * that layer animates, then fade, so the finished drawing is the graph over its code; with
+ * reduced motion (the static frame) they all stay.
  * Pure SVG from lib/landing.ts, timed by --t / --d (globals.css .lp-anim). Two drawings, wide (lg
  * and up) and narrow, from the same scene.
  */
@@ -170,7 +173,7 @@ function Drawing({ scene, variant }: { scene: Scene; variant: "w" | "n" }) {
             </g>
           );
         })}
-        <text transform={topMatrix([PLATE.w - 18, PLATE.d - 14], top(0), P, "y")} fontSize={12} textAnchor="start" className="rg-mono rg-plate-name">
+        <text transform={topMatrix([PLATE.w - 18, PLATE.d - 14], top(0), P, "y")} fontSize={12} textAnchor="start" className="rg-mono rg-plate-name" data-anim="flash" style={at(200, B2)}>
           {`${GRAPH_TREE.length} FILES · ${GRAPH_PATH_PREFIX} @ ${RECALL.short}`}
         </text>
       </g>
@@ -187,7 +190,7 @@ function Drawing({ scene, variant }: { scene: Scene; variant: "w" | "n" }) {
       <g data-anim="move" style={{ ...at(B2, 900), "--from": `${rise(zFacts)}px` } as React.CSSProperties}>
         <g data-anim="fade" style={at(B2, 300)}>
           <Plate P={P} z={zFacts} tone="#9b84ff" glass id={id("facts")} />
-          <text transform={topMatrix([PLATE.w - 18, PLATE.d - 14], top(zFacts), P, "y")} fontSize={12} className="rg-mono rg-plate-name">
+          <text transform={topMatrix([PLATE.w - 18, PLATE.d - 14], top(zFacts), P, "y")} fontSize={12} className="rg-mono rg-plate-name" data-anim="flash" style={at(B2 + 600, B3 - B2)}>
             {`${FACT_FILES.length} FACTS · EACH AT A FILE AND LINE`}
           </text>
         </g>
@@ -201,7 +204,7 @@ function Drawing({ scene, variant }: { scene: Scene; variant: "w" | "n" }) {
       <g data-anim="move" style={{ ...at(B3, 1000), "--from": `${rise(zGraph)}px` } as React.CSSProperties}>
         <g data-anim="fade" style={at(B3, 300)}>
           <Plate P={P} z={zGraph} tone="#f5a524" glass id={id("graph")} />
-          <text transform={topMatrix([PLATE.w - 18, PLATE.d - 14], top(zGraph), P, "y")} fontSize={12} className="rg-mono rg-plate-name">
+          <text transform={topMatrix([PLATE.w - 18, PLATE.d - 14], top(zGraph), P, "y")} fontSize={12} className="rg-mono rg-plate-name" data-anim="flash" style={at(B3 + 600, B4 - B3)}>
             {`${GRAPH_COMPONENTS.length} COMPONENTS · ${GRAPH_EDGES.length} EDGES`}
           </text>
         </g>
@@ -213,7 +216,9 @@ function Drawing({ scene, variant }: { scene: Scene; variant: "w" | "n" }) {
         return (
           <g key={path} data-anim="pop" style={at(B2 + 800 + k * 120, 420)} data-testid="fact-chip">
             <circle cx={sx} cy={sy} r={3} className="rg-fact-dot" />
-            <Pill x={Math.max(sx - chipW(path) / 2 - 8, chipW(path) / 2 + 2)} y={sx - chipW(path) - 8 < 2 ? sy - font * 1.5 : sy} text={chipOf(path)} font={font - 1} color="#ffc46b" />
+            <g data-anim="flash" style={at(B2 + 800 + k * 120, B3 - B2 - k * 120)}>
+              <Pill x={Math.max(sx - chipW(path) / 2 - 8, chipW(path) / 2 + 2)} y={sx - chipW(path) - 8 < 2 ? sy - font * 1.5 : sy} text={chipOf(path)} font={font - 1} color="#ffc46b" />
+            </g>
           </g>
         );
       })}
@@ -242,7 +247,9 @@ function Drawing({ scene, variant }: { scene: Scene; variant: "w" | "n" }) {
         return (
           <g key={e.id} data-anim="in" style={at(B4 + 700 + k * 160, 400)}>
             {nth === 0 && <circle cx={fileDot[0]} cy={fileDot[1]} r={4.5} className="rg-pin-end" />}
-            <Pill x={x} y={y} text={`${e.file}:${e.line}`} font={font - 1} testId="edge-label" />
+            <g data-anim="flash" style={at(B4 + 700 + k * 160, 2600 - k * 160)}>
+              <Pill x={x} y={y} text={`${e.file}:${e.line}`} font={font - 1} testId="edge-label" />
+            </g>
           </g>
         );
       })}

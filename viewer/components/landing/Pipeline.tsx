@@ -1,8 +1,10 @@
 import { Check } from "lucide-react";
 import { FINDER_RULE } from "@/lib/landing";
+import { PipelineTrack } from "./PipelineTrack";
 
 /**
- * Find → reproduce → repair → verify, as vite.dev-style cells (no animation): each stage says who
+ * Find → reproduce → repair → verify, as rows on a rail that draws itself as the page scrolls
+ * (PipelineTrack; no other motion): each stage says who
  * does the work and shows the one artefact it hands on. Sources: the finder's rule
  * (packages/analyzer/src/finder/rules.ts, via lib/landing.ts), the reproduce stage's four checks
  * (decision 048), the Docker sandbox's settings (decision 036, docker-provider@2) and the harness's
@@ -30,13 +32,15 @@ const VERIFY = ["reproduction test", "existing tests", "typecheck"] as const;
 function Stage({ id, tone, who, title, text, children }: { id: string; tone: string; who: string; title: string; text: string; children: React.ReactNode }) {
   return (
     <article className="pl-cell" data-tone={tone} data-stage={id} data-testid="pipeline-stage">
-      <p className="pl-kicker">
-        <span className="pl-dot" aria-hidden />
-        {id}
-        <span className="pl-who">{who}</span>
-      </p>
-      <h4 className="pl-title">{title}</h4>
-      <p className="pl-text">{text}</p>
+      <span className="pl-node" aria-hidden />
+      <div className="pl-copy">
+        <p className="pl-kicker">
+          {id}
+          <span className="pl-who">{who}</span>
+        </p>
+        <h4 className="pl-title">{title}</h4>
+        <p className="pl-text">{text}</p>
+      </div>
       <div className="pl-art">{children}</div>
     </article>
   );
@@ -45,7 +49,7 @@ function Stage({ id, tone, who, title, text, children }: { id: string; tone: str
 export function Pipeline() {
   const [before, after] = FINDER_RULE.question.split("<METHOD> <path>");
   return (
-    <div className="pl" data-testid="pipeline">
+    <PipelineTrack>
       <Stage id="find" tone="amber" who="no model" title="A rule asks one narrow question" text="A rule over the graph reads the code at its evidence and emits a hypothesis that a single test can settle.">
         <div className="pl-card">
           <p className="pl-card-head">
@@ -103,6 +107,6 @@ export function Pipeline() {
           </p>
         </div>
       </Stage>
-    </div>
+    </PipelineTrack>
   );
 }

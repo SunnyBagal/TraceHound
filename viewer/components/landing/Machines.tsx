@@ -261,54 +261,70 @@ export interface CostTube {
 
 export function CoinTubesFigure({ tubes, label }: { tubes: readonly CostTube[]; label: string }) {
   const cents = (cell: string) => Number.parseFloat(cell.replace("$", "")) * 100;
-  const PITCH = 2.2;
-  const top = Math.ceil(Math.max(...tubes.map((t) => cents(t.max))) / 5) * 5 + 2;
-  const H = top * PITCH + 4;
-  const BASE: Plan = { x: 0, y: 0, w: 190, d: 84, r: 8 };
-  const xs = [56, 140];
-  const R = 17;
-  const P = fitProjection([...boxCorners(BASE, 0, 14 + H)], 520, 420, { pad: 30, headroom: 0 });
-  // leave room under the base for the captions
-  P.origin = [P.origin[0], P.origin[1] - 26];
-  const [vx, vy] = towardViewer(P);
+  const PITCH = 2.6;
+  const top = Math.ceil(Math.max(...tubes.map((t) => cents(t.max))) / 5) * 5;
+  const FLOOR = 14;
+  const H = top * PITCH + 8;
+  const BASE: Plan = { x: 0, y: 0, w: 230, d: 64, r: 8 };
+  const xs = [82, 168];
+  const R = 22;
+  // seen from the front and only a little above, so the fill levels line up against one scale
+  const P = fitProjection([...boxCorners(BASE, 0, FLOOR + H)], 520, 440, { pad: 34, azimuth: 90, elevation: 12 });
+  P.origin = [P.origin[0] + 14, P.origin[1] - 24];
+  const zOf = (c: number) => FLOOR + 2 + c * PITCH;
+  const screenY = (c: number) => iso([0, BASE.d, zOf(c)], P)[1];
+  const left = iso([BASE.x, BASE.d, 0], P)[0];
+  const right = iso([BASE.x + BASE.w, BASE.d, 0], P)[0];
+  const below = iso([0, BASE.d, 0], P)[1];
   return (
-    <svg viewBox="0 0 520 420" className="mc-fig" role="img" aria-label={label}>
+    <svg viewBox="0 0 520 440" className="mc-fig" role="img" aria-label={label}>
+      {/* the scale: a line every cent, a number every five, across the whole bench */}
+      {Array.from({ length: top + 1 }, (_, c) => (
+        <g key={c}>
+          <path d={`M${left - (c % 5 ? 6 : 12)} ${screenY(c)} H${left - 2}`} className="mc-tick" />
+          {c % 5 === 0 && (
+            <>
+              <path d={`M${left} ${screenY(c)} H${right}`} className="mc-guide" />
+              <text x={left - 16} y={screenY(c) + 4} textAnchor="end" className="mc-scale">
+                {c}¢
+              </text>
+            </>
+          )}
+        </g>
+      ))}
       <Halo plan={BASE} P={P} />
-      <Solid p={slabOf(BASE, 0, 12, P, 6, 1)} tone="ink" />
-      <path d={planOutline(insetPlan(BASE, 6), 12, P, 6)} className="mc-faint-on-ink" />
-      <Text m={sideMatrix([10, 84], 9, P, "left")} size={5.4} className="mc-text-on">
-        ¢ PER PULL REQUEST · PIPELINE ONLY
+      <Solid p={slabOf(BASE, 0, FLOOR - 2, P, 6, 1)} tone="ink" />
+      <Text m={sideMatrix([12, BASE.d], 8, P, "left")} size={5.6} className="mc-text-on">
+        ¢ PER PULL REQUEST · PIPELINE ONLY · ONE COIN = ONE CENT
       </Text>
       {tubes.map((t, k) => {
         const cx = xs[k]!;
-        const cy = 42;
-        const tube = cylinder(cx, cy, R, 14, H, P, 48);
+        const cy = BASE.d / 2;
+        const tube = cylinder(cx, cy, R, FLOOR, H, P, 56);
         const coins = Math.round(cents(t.median));
-        const zMax = 14 + 2 + cents(t.max) * PITCH;
-        const tick = (n: number) => {
-          const z = 14 + 2 + n * PITCH;
-          const len = n % 5 === 0 ? 5 : 2.6;
-          const fx = cx + R * vx;
-          const fy = cy + R * vy;
-          return segment([fx - vy * len, fy + vx * len, z], [fx + vy * len, fy - vx * len, z], P);
-        };
-        const maxAt = iso([cx + R * vx, cy + R * vy, zMax], P);
-        const below = Math.max(...boxCorners(BASE, 0, 0).map((c) => iso(c, P)[1]));
-        const foot = [0, below] as const;
+        const yMax = screenY(cents(t.max));
+        const tubeL = iso([cx - R, cy, 0], P)[0];
+        const tubeR = iso([cx + R, cy, 0], P)[0];
         return (
           <g key={t.model}>
-            <Solid p={cylinder(cx, cy, R + 5, 12, 3, P, 40, 0.6)} />
+            <Solid p={cylinder(cx, cy, R + 5, FLOOR - 2, 3, P, 48, 0.6)} />
             <path d={tube.top} className="mc-glass-rim" />
             {Array.from({ length: coins }, (_, j) => (
-              <Solid key={j} p={cylinder(cx, cy, R - 2.5, 16 + j * PITCH, PITCH - 0.4, P, 40)} tone="amber" className="mc-coin" style={{ "--i": j + k * 3 } as React.CSSProperties} />
+              <Solid key={j} p={cylinder(cx, cy, R - 3, FLOOR + 2 + j * PITCH, PITCH - 0.5, P, 48)} tone="amber" className="mc-coin" style={{ "--i": j + k * 3 } as React.CSSProperties} />
             ))}
             <path d={tube.fill} className="mc-glass" />
             <path d={tube.outline} className="mc-ink" />
-            <path d={Array.from({ length: Math.floor(top) + 1 }, (_, n) => tick(n)).join("")} className="mc-tick" />
-            <path d={sideArc(cx, cy, R + 0.6, zMax, P, 28)} className="mc-max" />
-            <Tag at={[maxAt[0] + (k ? 40 : -40), maxAt[1]]} text={`max ${t.max}`} size={9} />
-            <text x={260} y={foot[1] + 26 + k * 18} textAnchor="middle" className="mc-cap-sub">
-              <tspan className="mc-cap">{t.model}</tspan> · median {t.median} · {coins} coins · max {t.max}
+            {/* the costliest pull request: a red band across the tube at its level */}
+            <path d={`M${tubeL} ${yMax} H${tubeR}`} className="mc-max" />
+            <Tag at={[k ? tubeR + 46 : tubeL - 46, yMax]} text={`max ${t.max}`} size={10} />
+            <text x={(tubeL + tubeR) / 2} y={below + 26} textAnchor="middle" className="mc-cap">
+              {t.model}
+            </text>
+            <text x={(tubeL + tubeR) / 2} y={below + 43} textAnchor="middle" className="mc-cap-sub">
+              median {t.median}
+            </text>
+            <text x={(tubeL + tubeR) / 2} y={below + 58} textAnchor="middle" className="mc-cap-sub">
+              {coins} coins
             </text>
           </g>
         );
