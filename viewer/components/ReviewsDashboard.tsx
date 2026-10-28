@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowUpRight, Clock, GitPullRequest, MessageSquare, SearchCheck, Waypoints, Wrench } from "lucide-react";
 import { DEFAULT_REVIEW_REPO, MODEL_DISCLOSURE, loadPullReview, loadReviewList, pullHref, reviewFindings, reviewNumber, reviewRepo, ReviewsError, reviewsHref, type PullRequest, type PullReview, type ReviewList } from "@/lib/reviews";
 import { savedReviews } from "@/lib/pulls";
+import { WolfLoader } from "@/components/WolfLoader";
 import { ReviewFinding } from "./ReviewFinding";
 import { RepositoryForm, ReviewShell, ShellHero } from "./ReviewShell";
 
@@ -53,12 +54,10 @@ const plural = (count: number | undefined, noun: string) => `${noun}${count === 
 
 function LoadMessage({ state }: { state: Load<unknown> }) {
   if (state.status === "ready") return null;
-  if (state.status === "loading") return <div role="status" aria-label="Reading public reviews from GitHub…" data-testid="reviews-loading">
+  if (state.status === "loading") return <div role="status" aria-label="Reading public reviews from GitHub…" data-testid="reviews-loading" className="grid justify-items-center py-6">
     <p className="sr-only">Reading public reviews from GitHub…</p>
-    <p className="rv-loading-label" aria-hidden><span className="rv-pulse" />Reading public reviews from GitHub</p>
-    <ul className="rv-list" aria-hidden>
-      {[0, 1, 2].map((i) => <li key={i} className="rv-skel" style={{ "--i": i } as React.CSSProperties}><span className="skeleton h-4 w-10 rounded" /><span className="flex-1 space-y-2.5"><span className="skeleton block h-4 w-2/3 rounded" /><span className="skeleton block h-3 w-1/3 rounded" /></span></li>)}
-    </ul>
+    <WolfLoader />
+    <p className="rv-loading-label mt-3" aria-hidden>Reading public reviews from GitHub</p>
   </div>;
   return <EmptyState tone={/rate limit/i.test(state.message) ? "wait" : "info"}><span role="status">{state.message}</span></EmptyState>;
 }
