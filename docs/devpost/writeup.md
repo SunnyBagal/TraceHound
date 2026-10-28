@@ -248,6 +248,7 @@ Codex, Devin, Grok and Gemini.
 
 ## What's next
 
+- The reviewer's retry doesn't tell a reply cut off at the token limit from malformed JSON; an automated code review found this. Fixes are on main behind off-by-default options, not measured (docs/post-freeze-fixes.md).
 - Recover chunks lost to invalid JSON (JSON repair or schema-constrained output; a retry with
   reasoning off mostly failed in our recall-first experiment).
 - A per-PR comment cap, against noise in posted reviews: replayed on saved dev runs at $0, no cap
