@@ -21,6 +21,7 @@ import {
   GRAPH_PATH_PREFIX,
   GRAPH_TREE,
   HELDOUT,
+  HERO_TRADEMARKS,
   IGNORED_BY_CONFIG,
   MODELS,
   RECALL,
@@ -87,6 +88,10 @@ describe('the landing page at "/"', () => {
     expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Reviews" }).getAttribute("href")).toBe("/reviews?repo=SunnyBagal%2Ftracehound-demo");
     // the owner's layout: NVIDIA on the black wolf, the coding agents on the pack
     expect(within(hero).getAllByTestId("hero-mark").map((m) => m.dataset.mark)).toEqual(["nvidia", "claude", "chatgpt", "antigravity", "opencode", "cursor"]);
+    expect(within(hero).getByTestId("hero-trademarks").textContent).toBe(HERO_TRADEMARKS);
+    const credits = text("CREDITS.md");
+    expect(credits).toContain(HERO_TRADEMARKS);
+    for (const label of ["NVIDIA", "Claude", "ChatGPT", "Antigravity", "OpenCode", "Cursor"]) expect(credits).toContain(label);
     expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Agents" }).getAttribute("href")).toBe("#agents");
   });
 

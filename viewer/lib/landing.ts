@@ -9,6 +9,9 @@ export const GITHUB_URL = "https://github.com/SunnyBagal/TraceHound";
 export const LICENSE_URL = `${GITHUB_URL}/blob/main/LICENSE`;
 export const GRAPH_HREF = `${base}/graph`;
 
+/** Under the hero, and in CREDITS.md with the marks it shows (test/landing.test.tsx checks both). */
+export const HERO_TRADEMARKS = "Logos are trademarks of their owners and are used only to name the coding agents whose pull requests TraceHound reviews. No affiliation or endorsement.";
+
 /**
  * Recall commit 7943212 (changesets/recall-7943212.json). Files and lines: `files` (11 added + 4
  * modified) and the sum of its linesAdded / linesRemoved, which equal GitHub's `stats` for the

@@ -41,8 +41,8 @@ export function repoHref(pathname: string, search: string, repoId: string, chang
  * with no entry, or whose flag is off, shows no lane and makes no request.
  */
 export const PR_LANE_FLAGS = {
-  /** recall-seeded's PRs are blind until they are scored; flipped on after that, not before */
-  recallSeeded: false,
+  /** recall-seeded's PRs were blind until scored; scoring finished 28 Oct, so they are public results */
+  recallSeeded: true,
 } as const;
 export const PR_LANE_REPOS: Record<string, { github: string; flag?: keyof typeof PR_LANE_FLAGS }> = {
   "tracehound-demo": { github: "SunnyBagal/tracehound-demo" },

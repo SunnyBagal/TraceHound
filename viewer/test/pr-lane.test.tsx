@@ -36,10 +36,10 @@ function github(overrides: Record<string, () => Response> = {}) {
 beforeEach(() => { window.sessionStorage.clear(); window.history.replaceState(null, "", "/graph?repo=tracehound-demo"); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.resetModules(); });
 
-it("maps only configured repos, and recall-seeded stays off", () => {
+it("maps only configured repos, and recall-seeded is on now that it is scored", () => {
   expect(prLaneRepo("tracehound-demo")).toBe("SunnyBagal/tracehound-demo");
-  expect(prLaneRepo("recall")).toBeUndefined();
-  expect(prLaneRepo("recall", { recallSeeded: true })).toBe("SunnyBagal/recall-seeded");
+  expect(prLaneRepo("recall")).toBe("SunnyBagal/recall-seeded");
+  expect(prLaneRepo("recall", { recallSeeded: false })).toBeUndefined();
   expect(prLaneRepo("cex-v2-boilercode")).toBeUndefined();
 });
 

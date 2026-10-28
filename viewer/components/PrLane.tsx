@@ -107,7 +107,7 @@ export function PrLane({ repo, list, selected, onSelect, overlay, model }: { rep
   }
   return (
     <aside aria-label="Pull requests" data-testid="pr-lane" className="flex w-[300px] shrink-0 flex-col pb-1.5 pl-2 pr-2 max-md:hidden">
-      <header className="flex h-10 shrink-0 items-center gap-1.5 px-1">
+      <div className="flex h-10 shrink-0 items-center gap-1.5 px-1">
         <button type="button" onClick={toggle} aria-expanded data-testid="pr-toggle" title="Hide pull requests" className="inline-flex h-7 items-center gap-1.5 border border-transparent px-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-faint hover:border-line hover:text-text">
           <PanelLeftClose className="size-4" aria-hidden /> Pull requests
         </button>
@@ -119,7 +119,7 @@ export function PrLane({ repo, list, selected, onSelect, overlay, model }: { rep
             <X className="size-3" aria-hidden /> Plain graph
           </button>
         )}
-      </header>
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto border border-line bg-panel p-1.5">
         {list.status === "loading" && <p className="inline-flex items-center gap-2 p-2 text-sm text-muted"><LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden />Loading pull requests…</p>}
         {list.status === "error" && <p role="status" className="p-2 text-sm text-muted">{list.message}</p>}

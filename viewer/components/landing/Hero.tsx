@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
-import { GITHUB_URL, GRAPH_HREF } from "@/lib/landing";
+import { GITHUB_URL, GRAPH_HREF, HERO_TRADEMARKS } from "@/lib/landing";
 import { AppWindow } from "./AppWindow";
 
 const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -165,6 +165,9 @@ export function Hero() {
       <div className="hero-window hero-reveal-video">
         <AppWindow />
       </div>
+      <p className="mt-5 px-4 text-center text-[12px] leading-snug text-[#6b6d66]" data-testid="hero-trademarks">
+        {HERO_TRADEMARKS}
+      </p>
     </section>
   );
 }
