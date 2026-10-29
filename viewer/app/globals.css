@@ -1043,13 +1043,16 @@ html:has(.landing) body {
 [data-ref] .bench-mark { opacity: 0.55; }
 .bench-limits { max-width: 75ch; margin-bottom: 72px; }
 /* Limits on the left, under Cost and aligned with its table; the two wolves on the right, standing on
-   the box's bottom line and a little taller than it (owner's layout). Phones: the box alone. */
+   the footer's hairline (owner's layout). Phones: the box alone. */
 .bench-limits-row { position: relative; margin-top: clamp(48px, 6vw, 80px); margin-bottom: 72px; }
 .bench-limits-row .bench-limits { margin-bottom: 0; }
 .bench-limits-wolves { display: none; }
 @media (min-width: 1024px) {
   .bench-limits-row .bench-limits { max-width: min(75ch, 62%); }
-  .bench-limits-wolves { display: block; position: absolute; right: 0; bottom: 0; height: calc(100% + 56px); width: auto; max-width: 36%; object-fit: contain; object-position: bottom right; pointer-events: none; user-select: none; }
+  /* --to-foot: the row's margin-bottom (72px) + .rv-frame's padding-bottom (72px), so the wolves stand on
+     the footer's hairline; they reach a little above the Limits box. Shifted in from the right edge. */
+  .bench-limits-row { --to-foot: 144px; }
+  .bench-limits-wolves { display: block; position: absolute; right: 56px; bottom: calc(-1 * var(--to-foot)); height: calc(100% + var(--to-foot) + 56px); width: auto; max-width: 36%; object-fit: contain; object-position: bottom right; pointer-events: none; user-select: none; }
 }
 [data-page="benchmark"] .rv-foot { text-align: center; }
 /* square corners everywhere on the page (the scatter's dots stay round) */
