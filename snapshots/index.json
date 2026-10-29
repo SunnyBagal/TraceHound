@@ -2,12 +2,19 @@
   "schemaVersion": 1,
   "latest": {
     "repo": "SunnyBagal/Recall",
-    "sha": "20ac149ea593ccc032426674ec36927da3f30f16",
+    "sha": "256513a68b5d05d686da46e0e96dfb5f914a052c",
     "analyzerVersion": "0.10.0",
-    "path": "20ac149ea593ccc032426674ec36927da3f30f16/0.10.0.json",
-    "createdAt": "2026-10-17T22:06:34.893Z"
+    "path": "256513a68b5d05d686da46e0e96dfb5f914a052c/0.10.0.json",
+    "createdAt": "2026-10-29T18:12:37.116Z"
   },
   "snapshots": [
+    {
+      "repo": "SunnyBagal/Recall",
+      "sha": "256513a68b5d05d686da46e0e96dfb5f914a052c",
+      "analyzerVersion": "0.10.0",
+      "path": "256513a68b5d05d686da46e0e96dfb5f914a052c/0.10.0.json",
+      "createdAt": "2026-10-29T18:12:37.116Z"
+    },
     {
       "repo": "SunnyBagal/tracehound-demo",
       "sha": "efc58448e828167d909bedca5b3f7a697449c7fd",
@@ -176,16 +183,23 @@
     {
       "id": "recall",
       "name": "SunnyBagal/Recall",
-      "repoUrl": "https://github.com/SunnyBagal/Recall.git",
-      "defaultRef": "20ac149ea593ccc032426674ec36927da3f30f16",
+      "repoUrl": "https://github.com/SunnyBagal/Recall",
+      "defaultRef": "256513a68b5d05d686da46e0e96dfb5f914a052c",
       "latest": {
         "repo": "SunnyBagal/Recall",
-        "sha": "20ac149ea593ccc032426674ec36927da3f30f16",
+        "sha": "256513a68b5d05d686da46e0e96dfb5f914a052c",
         "analyzerVersion": "0.10.0",
-        "path": "20ac149ea593ccc032426674ec36927da3f30f16/0.10.0.json",
-        "createdAt": "2026-10-17T22:06:34.893Z"
+        "path": "256513a68b5d05d686da46e0e96dfb5f914a052c/0.10.0.json",
+        "createdAt": "2026-10-29T18:12:37.116Z"
       },
       "versions": [
+        {
+          "repo": "SunnyBagal/Recall",
+          "sha": "256513a68b5d05d686da46e0e96dfb5f914a052c",
+          "analyzerVersion": "0.10.0",
+          "path": "256513a68b5d05d686da46e0e96dfb5f914a052c/0.10.0.json",
+          "createdAt": "2026-10-29T18:12:37.116Z"
+        },
         {
           "repo": "SunnyBagal/Recall",
           "sha": "20ac149ea593ccc032426674ec36927da3f30f16",
@@ -218,7 +232,6 @@
     },
     {
       "id": "tracehound-demo",
-      "displayName": "tracehound-demo (Recall copy)",
       "name": "SunnyBagal/tracehound-demo",
       "repoUrl": "https://github.com/SunnyBagal/tracehound-demo.git",
       "defaultRef": "efc58448e828167d909bedca5b3f7a697449c7fd",
