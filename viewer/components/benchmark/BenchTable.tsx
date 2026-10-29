@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BENCHMARK_TABLES } from "@/lib/benchmark";
+import { BENCHMARK_TABLES } from "@/lib/benchmark-display";
 import { bestRows, byReviewer, columnHead, isSecondary, metricLabel, orderedRows, productMark, splitCell } from "@/lib/benchmark-view";
 import { ReviewerMark } from "./ReviewerMark";
 

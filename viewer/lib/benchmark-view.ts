@@ -1,4 +1,4 @@
-import { BENCHMARK_TABLES } from "./benchmark";
+import { aliasOf, BENCHMARK_TABLES } from "./benchmark-display";
 
 /*
  * Every number here is lib/benchmark.ts's (itself docs/bench/results.md's, checked by
@@ -35,6 +35,8 @@ export type Reviewer = "augment" | "cursor" | "greptile" | "copilot" | "coderabb
 export function reviewerOf(name: string): Reviewer | null {
   const n = name.toLowerCase();
   if (/^(tracehound|3 super pool-verify|review-diff-v1|pool-raw)/.test(n)) return "tracehound";
+  const alias = aliasOf(n);
+  if (alias) return alias;
   return (["augment", "cursor", "greptile", "copilot", "coderabbit"] as const).find((t) => n === t) ?? null;
 }
 

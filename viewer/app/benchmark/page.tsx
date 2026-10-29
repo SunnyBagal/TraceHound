@@ -6,6 +6,7 @@ import { FullFigure } from "@/components/benchmark/FullFigure";
 import { ScatterFigure } from "@/components/benchmark/ScatterFigure";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BENCHMARK_REVISION, BENCHMARK_SOURCE } from "@/lib/benchmark";
+import { HIDE_REVIEWER_NAMES } from "@/lib/benchmark-display";
 
 import { aheadTools, ALL50, BLIND, blindRows, DEV, fullN, GAPS, gapSentence, preRegistered, RANK, rankOf, spread, table, tiedTools, tools, V1, v1Runs, v2, word } from "@/lib/benchmark-view";
 
@@ -28,7 +29,7 @@ export default function BenchmarkPage() {
       </div>}
     >
       <p className="rv-lede">Aggregate results for TraceHound v2 (pool-verify-v1 on Nemotron 3.5 Super), copied from the committed benchmark report. Medium+ findings; low-severity findings are ignored, and duplicates count as neither true nor false positives.</p>
-      <p className="text-sm leading-relaxed text-muted">Source: <a href={BENCHMARK_SOURCE} className="rv-inline-link">docs/bench/results.md</a> · decisions 067–071 · <span className="font-mono">{BENCHMARK_REVISION.slice(0, 7)}</span></p>
+      <p className="text-sm leading-relaxed text-muted">Source: <a href={BENCHMARK_SOURCE} className="rv-inline-link">docs/bench/results.md</a> · decisions 067–071 · <span className="font-mono">{BENCHMARK_REVISION.slice(0, 7)}</span>{HIDE_REVIEWER_NAMES && <> · the five recorded reviewers are shown as Reviewer A–E here; their names are in results.md</>}</p>
     </ShellHero>
 
     <section aria-label="Headline numbers" className="bench-tiles mb-12" data-glow="green">
