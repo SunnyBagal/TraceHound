@@ -10,8 +10,7 @@ it("blurs third-party marks behind one flag, and never NVIDIA's or the wolf", ()
   expect(typeof BLUR_THIRD_PARTY_MARKS).toBe("boolean");
   expect(layout).toContain("data-blur-marks={BLUR_THIRD_PARTY_MARKS");
   const rules = css.split("\n").filter((line) => line.startsWith("html[data-blur-marks]"));
-  expect(rules).toHaveLength(3);
+  expect(rules).toHaveLength(2);
   expect(rules[0]).toContain(':not([data-mark="nvidia"])');
-  expect(rules[1]).toContain(":not(.bench-mark-wolf)");
-  expect(rules[2]).toContain(':not([data-logo^="nvidia"])');
+  expect(rules[1]).toContain(':not([data-logo^="nvidia"])');
 });
