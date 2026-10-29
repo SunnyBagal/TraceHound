@@ -16,6 +16,10 @@ const v1 = blindRows.find((r) => r.kind === "history")!;
 const up = (now: string, before: string) => (Number.parseFloat(now) > Number.parseFloat(before) ? "up" : "down");
 const COST_MEDIAN = COST.rows.find((r) => r[0].startsWith("3.5 Super"))![(COST.headers as readonly string[]).indexOf("cost median")]!;
 
+const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+/** the two wolves beside Limits, a background-free cut-out in public/; null until the file is added */
+const LIMITS_WOLVES: string | null = null;
+
 export default function BenchmarkPage() {
   return <ReviewShell active="Benchmark">
     <ShellHero
@@ -98,7 +102,8 @@ export default function BenchmarkPage() {
       <BenchTable t={COST} id="table-cost" />
     </section>
 
-    <aside className="bench-part bench-limits" data-glow="amber" aria-labelledby="limits">
+    <div className="bench-limits-row">
+    <aside className="bench-limits" data-glow="amber" aria-labelledby="limits">
       <h2 id="limits" className="bench-h2">Limits</h2>
       <ul>
         <li>The test set is 10 pull requests and 23 golden findings. Differences of a few points are within noise.</li>
@@ -108,5 +113,10 @@ export default function BenchmarkPage() {
         <li>3.5 returns no findings for a chunk with invalid JSON: about 7 of 40 dev pull requests per run.</li>
       </ul>
     </aside>
+    {LIMITS_WOLVES && <>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a static cut-out, decorative */}
+      <img src={`${base}/${LIMITS_WOLVES}`} alt="" aria-hidden className="bench-limits-wolves" draggable={false} />
+    </>}
+    </div>
   </ReviewShell>;
 }
