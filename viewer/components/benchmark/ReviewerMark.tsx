@@ -16,6 +16,7 @@ export function ReviewerMark({ name, className = "" }: { name: string; className
   const who = reviewerOf(name);
   if (!who) return null;
   if (who === "tracehound") return <span className={`bench-mark bench-mark-wolf ${className}`} data-reviewer={who} aria-hidden><Logo className="size-full" /></span>;
-  return <span className={`bench-mark ${className}`} data-reviewer={who} aria-hidden style={{ "--logo-url": `url(${base}/icons/brands/${FILES[who]})` } as React.CSSProperties} />;
+  // the wrapper carries the blur (lib/marks.ts): a filter on the masked span itself can't soften the mask's edges
+  return <span className={`bench-mark-wrap ${className}`} aria-hidden><span className="bench-mark" data-reviewer={who} style={{ "--logo-url": `url(${base}/icons/brands/${FILES[who]})` } as React.CSSProperties} /></span>;
 }
 

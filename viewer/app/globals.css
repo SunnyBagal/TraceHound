@@ -1034,6 +1034,7 @@ html:has(.landing) body {
 .bench-note { max-width: 92ch; margin: 16px auto 0; text-align: center; font-size: 13.5px; line-height: 1.6; color: var(--faint); }
 .bench-who { display: inline-flex; align-items: center; gap: 10px; }
 .bench-mark { display: inline-block; flex: none; width: 18px; height: 18px; background: var(--text); -webkit-mask: var(--logo-url) center / contain no-repeat; mask: var(--logo-url) center / contain no-repeat; }
+.bench-mark-wrap { display: inline-flex; flex: none; }
 .bench-mark-wolf { background: none; -webkit-mask: none; mask: none; }
 /* the wolf in its own colours, never the accent: white on the black bands, black on the white ones */
 .bench-mark-wolf svg { color: var(--logo); }
@@ -1777,7 +1778,8 @@ ul.trust-guards li { display: flex; align-items: center; gap: 10px; padding: 0; 
 
 /* Third-party marks blurred while lib/marks.ts BLUR_THIRD_PARTY_MARKS is true (set it to false to
    unblur): the hero's agent marks and the graph's technology logos. NVIDIA and the wolf stay sharp.
-   The benchmark's reviewer logos are not blurred (owner's call): keep them out of the video instead. */
+   Also the benchmark's reviewer logos, through .bench-mark-wrap (the host asked for logos blurred). */
 :root { --marks-blur: 10px; }
 html[data-blur-marks] .hero-mark:not([data-mark="nvidia"]) .hero-mark-tile { filter: blur(var(--marks-blur)); }
+html[data-blur-marks] .bench-mark-wrap { filter: blur(calc(var(--marks-blur) / 2)); }
 html[data-blur-marks] [data-logo]:not([data-logo^="nvidia"]) { filter: blur(calc(var(--marks-blur) / 2)); }
