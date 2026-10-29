@@ -4,7 +4,10 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import BenchmarkPage from "@/app/benchmark/page";
 import { BENCHMARK_SOURCE, BENCHMARK_TABLES } from "@/lib/benchmark";
+import { anonymize, HIDE_REVIEWER_NAMES } from "@/lib/benchmark-display";
 import { bandFor, blindRanked, blindRows, reviewerOf, tiedNames } from "@/lib/benchmark-view";
+/** a source name as the page shows it (Reviewer A–E while lib/marks.ts hides the names) */
+const shown = (name: string) => (HIDE_REVIEWER_NAMES ? anonymize(name) : name);
 afterEach(cleanup);
 it("copies every aggregate table exactly from the report", () => {
   const source = readFileSync(path.resolve(import.meta.dirname, "../../docs/bench/results.md"), "utf8");
@@ -34,7 +37,7 @@ it("v2's headline reads its tables by title: no undefined, NaN or 'th of 6', and
   const gaps = BENCHMARK_TABLES.find((t) => t.title.startsWith("Cal.com: v2 minus each reviewer"))!;
   const sentence = (gaps.headers as readonly string[]).indexOf("sentence the rule allows");
   const rows = screen.getAllByTestId("bench-row");
-  const band = (name: string) => rows.find((r) => r.querySelector(".bench-name")!.getAttribute("title")!.toLowerCase() === name.toLowerCase())?.dataset.band;
+  const band = (name: string) => rows.find((r) => r.querySelector(".bench-name")!.getAttribute("title")!.toLowerCase() === shown(name).toLowerCase())?.dataset.band;
   for (const g of gaps.rows) {
     if (g[0].startsWith("3 Super")) continue; // v1, drawn as history
     expect(band(g[0]), g[0]).toBe(g[sentence]!.startsWith("statistically tied with") ? "tied" : "outside");
@@ -60,7 +63,7 @@ it("ranks figure 1 and table 1 by F, so v2 sits where its F puts it, and the x1 
   render(<BenchmarkPage />);
   const blind = BENCHMARK_TABLES.find((t) => t.title.startsWith("Blind test: Cal.com, v2"))!;
   const f = (blind.headers as readonly string[]).indexOf("F (v1)");
-  const ranked = blind.rows.filter((r) => !r[0].includes("secondary")).sort((a, b) => Number.parseFloat(b[f]!) - Number.parseFloat(a[f]!)).map((r) => r[0]);
+  const ranked = blind.rows.filter((r) => !r[0].includes("secondary")).sort((a, b) => Number.parseFloat(b[f]!) - Number.parseFloat(a[f]!)).map((r) => shown(r[0]));
   expect(screen.getAllByTestId("bench-row").map((r) => r.querySelector(".bench-name")!.getAttribute("title"))).toEqual(ranked);
   // table 1 is turned: one column per reviewer, in the same order, the pipeline's stages after them
   const table = screen.getAllByRole("table").find((t) => t.querySelector("caption")?.textContent === blind.title)!;
@@ -71,7 +74,7 @@ it("ranks figure 1 and table 1 by F, so v2 sits where its F puts it, and the x1 
   expect(ranked[0]).not.toMatch(/^TraceHound v2/);
   // under x1 the order and the band are recomputed from the x1 column
   const x1 = (blind.headers as readonly string[]).indexOf("F (x1)");
-  expect(bandFor("x1").max).toBe(Math.max(...blindRows.filter((r) => r.kind === "ours" || tiedNames.has(r.name)).map((r) => Number.parseFloat(blind.rows.find((b) => b[0] === r.name)![x1]!))));
+  expect(bandFor("x1").max).toBe(Math.max(...blindRows.filter((r) => r.kind === "ours" || tiedNames.has(r.name)).map((r) => Number.parseFloat(blind.rows.find((b) => shown(b[0]) === r.name)![x1]!))));
   expect(blindRanked("x1").map((r) => r.by.x1.f)).toEqual([...blindRows.map((r) => r.by.x1.f)].sort((a, b) => b - a));
 });
 it("every reviewer row in the figures and tables carries its logo", () => {

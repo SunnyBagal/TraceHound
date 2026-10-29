@@ -6,6 +6,7 @@ import { FullFigure } from "@/components/benchmark/FullFigure";
 import { ScatterFigure } from "@/components/benchmark/ScatterFigure";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BENCHMARK_REVISION, BENCHMARK_SOURCE } from "@/lib/benchmark";
+import { HIDE_REVIEWER_NAMES } from "@/lib/benchmark-display";
 
 import { aheadTools, ALL50, BLIND, blindRows, DEV, fullN, GAPS, gapSentence, preRegistered, RANK, rankOf, spread, table, tiedTools, tools, V1, v1Runs, v2, word } from "@/lib/benchmark-view";
 
@@ -14,6 +15,10 @@ const COST = table("Dev cost per pull request");
 const v1 = blindRows.find((r) => r.kind === "history")!;
 const up = (now: string, before: string) => (Number.parseFloat(now) > Number.parseFloat(before) ? "up" : "down");
 const COST_MEDIAN = COST.rows.find((r) => r[0].startsWith("3.5 Super"))![(COST.headers as readonly string[]).indexOf("cost median")]!;
+
+const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+/** the two wolves beside Limits, a background-free cut-out in public/; null until the file is added */
+const LIMITS_WOLVES: string | null = "wolves-cutout.webp";
 
 export default function BenchmarkPage() {
   return <ReviewShell active="Benchmark">
@@ -28,7 +33,7 @@ export default function BenchmarkPage() {
       </div>}
     >
       <p className="rv-lede">Aggregate results for TraceHound v2 (pool-verify-v1 on Nemotron 3.5 Super), copied from the committed benchmark report. Medium+ findings; low-severity findings are ignored, and duplicates count as neither true nor false positives.</p>
-      <p className="text-sm leading-relaxed text-muted">Source: <a href={BENCHMARK_SOURCE} className="rv-inline-link">docs/bench/results.md</a> · decisions 067–071 · <span className="font-mono">{BENCHMARK_REVISION.slice(0, 7)}</span></p>
+      <p className="text-sm leading-relaxed text-muted">Source: <a href={BENCHMARK_SOURCE} className="rv-inline-link">docs/bench/results.md</a> · decisions 067–071 · <span className="font-mono">{BENCHMARK_REVISION.slice(0, 7)}</span>{HIDE_REVIEWER_NAMES && <> · the five recorded reviewers are shown as Reviewer A–E here; their names are in results.md</>}</p>
     </ShellHero>
 
     <section aria-label="Headline numbers" className="bench-tiles mb-12" data-glow="green">
@@ -97,7 +102,8 @@ export default function BenchmarkPage() {
       <BenchTable t={COST} id="table-cost" />
     </section>
 
-    <aside className="bench-part bench-limits" data-glow="amber" aria-labelledby="limits">
+    <div className="bench-limits-row">
+    <aside className="bench-limits" data-glow="amber" aria-labelledby="limits">
       <h2 id="limits" className="bench-h2">Limits</h2>
       <ul>
         <li>The test set is 10 pull requests and 23 golden findings. Differences of a few points are within noise.</li>
@@ -107,5 +113,10 @@ export default function BenchmarkPage() {
         <li>3.5 returns no findings for a chunk with invalid JSON: about 7 of 40 dev pull requests per run.</li>
       </ul>
     </aside>
+    {LIMITS_WOLVES && <>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a static cut-out, decorative */}
+      <img src={`${base}/${LIMITS_WOLVES}`} alt="" aria-hidden className="bench-limits-wolves" draggable={false} />
+    </>}
+    </div>
   </ReviewShell>;
 }

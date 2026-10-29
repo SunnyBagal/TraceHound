@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { WOLF_PATH, WOLF_VIEWBOX } from "@/lib/wolf";
 import { inter, jetbrains, serif } from "@/components/landing/fonts";
+import { BLUR_THIRD_PARTY_MARKS } from "@/lib/marks";
 
 export const metadata: Metadata = {
   title: "TraceHound",
@@ -20,7 +21,7 @@ export const viewport: Viewport = { themeColor: "#0e0e13", width: "device-width"
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`dark ${inter.variable} ${jetbrains.variable} ${serif.variable}`}>
+    <html lang="en" className={`dark ${inter.variable} ${jetbrains.variable} ${serif.variable}`} data-blur-marks={BLUR_THIRD_PARTY_MARKS ? "" : undefined}>
       <body>{children}</body>
     </html>
   );

@@ -1034,13 +1034,26 @@ html:has(.landing) body {
 .bench-note { max-width: 92ch; margin: 16px auto 0; text-align: center; font-size: 13.5px; line-height: 1.6; color: var(--faint); }
 .bench-who { display: inline-flex; align-items: center; gap: 10px; }
 .bench-mark { display: inline-block; flex: none; width: 18px; height: 18px; background: var(--text); -webkit-mask: var(--logo-url) center / contain no-repeat; mask: var(--logo-url) center / contain no-repeat; }
+.bench-mark-wrap { display: inline-flex; flex: none; }
 .bench-mark-wolf { background: none; -webkit-mask: none; mask: none; }
 /* the wolf in its own colours, never the accent: white on the black bands, black on the white ones */
 .bench-mark-wolf svg { color: var(--logo); }
 /* the wolf's box has room for the howl, so it draws smaller than the brand marks at the same size */
 .bench-table .bench-mark-wolf { width: 20px; height: 20px; margin: -1px; }
 [data-ref] .bench-mark { opacity: 0.55; }
-.bench-limits { max-width: 75ch; margin-inline: auto; margin-bottom: 72px; }
+.bench-limits { max-width: 75ch; margin-bottom: 72px; }
+/* Limits on the left, under Cost and aligned with its table; the two wolves on the right, standing on
+   the footer's hairline (owner's layout). Phones: the box alone. */
+.bench-limits-row { position: relative; margin-top: clamp(48px, 6vw, 80px); margin-bottom: 72px; }
+.bench-limits-row .bench-limits { margin-bottom: 0; }
+.bench-limits-wolves { display: none; }
+@media (min-width: 1024px) {
+  .bench-limits-row .bench-limits { max-width: min(75ch, 62%); }
+  /* --to-foot: the row's margin-bottom (72px) + .rv-frame's padding-bottom (72px), so the wolves stand on
+     the footer's hairline; they reach a little above the Limits box. Shifted in from the right edge. */
+  .bench-limits-row { --to-foot: 144px; }
+  .bench-limits-wolves { display: block; position: absolute; right: 56px; bottom: calc(-1 * var(--to-foot)); height: calc(100% + var(--to-foot) + 56px); width: auto; max-width: 36%; object-fit: contain; object-position: bottom right; pointer-events: none; user-select: none; }
+}
 [data-page="benchmark"] .rv-foot { text-align: center; }
 /* square corners everywhere on the page (the scatter's dots stay round) */
 [data-page="benchmark"] *:not(.sx-dot), [data-page="benchmark"] *::before, [data-page="benchmark"] *::after { border-radius: 0 !important; }
@@ -1774,3 +1787,11 @@ ul.trust-guards li { display: flex; align-items: center; gap: 10px; padding: 0; 
 .mc-scale { font-family: var(--font-code); font-size: 11px; fill: #6b6f7b; }
 .ag-eye { opacity: 0.35; transition: opacity var(--dur-slow); }
 .ag-eye[data-on] { opacity: 1; }
+
+/* Third-party marks blurred while lib/marks.ts BLUR_THIRD_PARTY_MARKS is true (set it to false to
+   unblur): the hero's agent marks and the graph's technology logos. NVIDIA and the wolf stay sharp.
+   Also the benchmark's reviewer logos, through .bench-mark-wrap (the host asked for logos blurred). */
+:root { --marks-blur: 10px; }
+html[data-blur-marks] .hero-mark:not([data-mark="nvidia"]) .hero-mark-tile { filter: blur(var(--marks-blur)); }
+html[data-blur-marks] .bench-mark-wrap { filter: blur(calc(var(--marks-blur) / 2)); }
+html[data-blur-marks] [data-logo]:not([data-logo^="nvidia"]) { filter: blur(calc(var(--marks-blur) / 2)); }

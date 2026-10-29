@@ -26,3 +26,6 @@ The same line sits under the hero (`viewer/components/landing/Hero.tsx`). Marks 
 - Google Antigravity
 - OpenCode
 - Cursor
+
+## Images
+- `viewer/public/wolves-cutout.webp` (beside Limits on /benchmark): an image supplied by the owner, background removed with rembg (isnet-general-use).
