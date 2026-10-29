@@ -1777,7 +1777,7 @@ ul.trust-guards li { display: flex; align-items: center; gap: 10px; padding: 0; 
 
 /* Third-party marks blurred while lib/marks.ts BLUR_THIRD_PARTY_MARKS is true (set it to false to
    unblur). Light enough to tell them apart by colour and shape; NVIDIA and the wolf stay sharp. */
-:root { --marks-blur: 4px; }
+:root { --marks-blur: 10px; }
 html[data-blur-marks] .hero-mark:not([data-mark="nvidia"]) .hero-mark-tile { filter: blur(var(--marks-blur)); }
 html[data-blur-marks] .bench-mark:not(.bench-mark-wolf) { filter: blur(calc(var(--marks-blur) / 2)); }
 html[data-blur-marks] [data-logo]:not([data-logo^="nvidia"]) { filter: blur(calc(var(--marks-blur) / 2)); }
