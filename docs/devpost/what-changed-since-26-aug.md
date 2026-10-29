@@ -2,7 +2,7 @@
 
 Devpost asks an existing project to show it was significantly updated after 26 August 2026, and to
 explain how. This page uses only the git history of `SunnyBagal/TraceHound` and
-`docs/decisions.md`. What the repository can't show is marked `[[SUNNY: …]]`.
+`docs/decisions.md`.
 
 ## What the repository shows
 
@@ -15,18 +15,14 @@ explain how. This page uses only the git history of `SunnyBagal/TraceHound` and
 - **Up to 23 October:** 386 commits on `main` and 57 pull requests (#1 on 30 Sep to #57 on 23 Oct;
   #42 closed, #54 open).
 - `docs/reviewer-plan.md` (14 Oct) says a "what changed" summary is needed "because the repo
-  predates the hackathon". The git history starts after 26 August, so whatever came before is not
-  in this repository.
+  predates the hackathon". The git history starts after 26 August; before that there was only the
+  idea and a written spec, with no code (below).
 
 ## Before 26 August
 
-[[SUNNY: what existed before 26 August, and where. For example: was there an earlier project
-(FixFlow?), what did it do, was any of its code or design carried into the 30 September commits,
-and is it public? The repository can't answer this: its history starts on 30 September.]]
+Before 26 August there was no code. TraceHound started as an idea called FixFlow: a Devin-style agent that takes a GitHub issue and writes the patch, which I picked from a coding-agent project in the 100xDevs AI course. In August I rewrote it as a spec, "FixFlow V2": instead of another issue-to-patch agent, an evidence-backed component graph of a TypeScript repo, with a repair agent working on top of it. That spec was a document, not code, and it isn't public. Nothing from FixFlow was carried over as code.
 
-[[SUNNY: the 30 September commits hold 31 decisions and a working analyzer and viewer in one day.
-Say whether that work was written that day or brought in from earlier work, so judges don't have
-to guess.]]
+The 30 September commits were written that day, not brought in from somewhere else. I created the empty repository on 29 September and built from the V2 spec with Claude Code agents, several sessions in parallel, which is how one day ended up with 76 commits. Decisions 001–031 are the spec's design choices, logged one by one as each was built.
 
 ## After 26 August, from git and the decisions log
 
@@ -47,7 +43,7 @@ first committed. Decision numbers point to `docs/decisions.md`; PR numbers to
 
 ## In one paragraph (for the Devpost field)
 
-[[SUNNY: one sentence on what existed before 26 August.]] Everything in the
+Before 26 August, TraceHound was only an idea and, from August, a written spec (FixFlow V2); there was no code. Everything in the
 `SunnyBagal/TraceHound` repository was built after 26 August: its history starts on 30 September
 2026, with 386 commits and 57 pull requests by 23 October. It began as an evidence-backed component
 graph for TypeScript repos with a repair agent on Nemotron. A pre-registered evaluation showed the
