@@ -6,16 +6,17 @@
     "url": "https://github.com/SunnyBagal/Recall",
     "commitSha": "256513a68b5d05d686da46e0e96dfb5f914a052c"
   },
-  "generatedAt": "2026-10-29T18:12:37.116Z",
+  "generatedAt": "2026-10-29T18:14:48.612Z",
   "components": [
     {
       "id": "recall-backend:worker",
-      "name": "Recall Backend Worker",
+      "name": "AI Processing Service",
       "kind": "worker",
       "subtitle": "Consumes content-processing",
       "naming": {
-        "source": "heuristic",
+        "source": "llm",
         "heuristicName": "Recall Backend Worker",
+        "model": "nvidia/nemotron-3-super-120b-a12b",
         "summaryDropped": true
       },
       "package": "recall-backend",
@@ -84,12 +85,13 @@
     },
     {
       "id": "bullmq:content-processing",
-      "name": "content-processing queue",
+      "name": "Content Processing Queue",
       "kind": "queue",
       "subtitle": "BullMQ queue · content-processing · jobs: process-content",
       "naming": {
-        "source": "heuristic",
+        "source": "llm",
         "heuristicName": "content-processing queue",
+        "model": "nvidia/nemotron-3-super-120b-a12b",
         "summaryDropped": true
       },
       "files": [],
@@ -142,12 +144,13 @@
     },
     {
       "id": "recall-backend:brainly-server",
-      "name": "Brainly Server",
+      "name": "Recall API Service",
       "kind": "api",
       "subtitle": "HTTP server entry · POST /api/v1/signup, POST /api/v1/signin",
       "naming": {
-        "source": "heuristic",
+        "source": "llm",
         "heuristicName": "Brainly Server",
+        "model": "nvidia/nemotron-3-super-120b-a12b",
         "summaryDropped": true
       },
       "package": "recall-backend",
@@ -305,12 +308,14 @@
     },
     {
       "id": "recall-backend:shared",
-      "name": "Brainly Shared",
+      "name": "Shared Utilities",
       "kind": "library",
       "subtitle": "Shared modules · db, schema, drizzle.config…",
+      "summary": "Provides shared types, database configuration, and utility services used across backend components.",
       "naming": {
-        "source": "heuristic",
-        "heuristicName": "Brainly Shared"
+        "source": "llm",
+        "heuristicName": "Brainly Shared",
+        "model": "nvidia/nemotron-3-super-120b-a12b"
       },
       "package": "recall-backend",
       "files": [
@@ -10292,7 +10297,60 @@
       ]
     }
   ],
-  "llmCalls": [],
+  "llmCalls": [
+    {
+      "purpose": "component-naming",
+      "componentId": "recall-backend:worker",
+      "model": "nvidia/nemotron-3-super-120b-a12b",
+      "latencyMs": 634,
+      "promptTokens": 327,
+      "completionTokens": 34,
+      "totalTokens": 361,
+      "cached": false,
+      "accepted": true,
+      "estCostUSD": 0.00012869999999999998,
+      "ok": true
+    },
+    {
+      "purpose": "component-naming",
+      "componentId": "bullmq:content-processing",
+      "model": "nvidia/nemotron-3-super-120b-a12b",
+      "latencyMs": 1011,
+      "promptTokens": 229,
+      "completionTokens": 34,
+      "totalTokens": 263,
+      "cached": false,
+      "accepted": true,
+      "estCostUSD": 0.00009930000000000001,
+      "ok": true
+    },
+    {
+      "purpose": "component-naming",
+      "componentId": "recall-backend:brainly-server",
+      "model": "nvidia/nemotron-3-super-120b-a12b",
+      "latencyMs": 1288,
+      "promptTokens": 434,
+      "completionTokens": 34,
+      "totalTokens": 468,
+      "cached": false,
+      "accepted": true,
+      "estCostUSD": 0.00016079999999999998,
+      "ok": true
+    },
+    {
+      "purpose": "component-naming",
+      "componentId": "recall-backend:shared",
+      "model": "nvidia/nemotron-3-super-120b-a12b",
+      "latencyMs": 1231,
+      "promptTokens": 315,
+      "completionTokens": 32,
+      "totalTokens": 347,
+      "cached": false,
+      "accepted": true,
+      "estCostUSD": 0.0001233,
+      "ok": true
+    }
+  ],
   "ignored": [
     {
       "file": "recall-backend/bench/bench-search.ts",

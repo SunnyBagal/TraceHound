@@ -5,7 +5,7 @@
     "sha": "256513a68b5d05d686da46e0e96dfb5f914a052c",
     "analyzerVersion": "0.10.0",
     "path": "256513a68b5d05d686da46e0e96dfb5f914a052c/0.10.0.json",
-    "createdAt": "2026-10-29T18:12:37.116Z"
+    "createdAt": "2026-10-29T18:14:48.612Z"
   },
   "snapshots": [
     {
@@ -13,7 +13,7 @@
       "sha": "256513a68b5d05d686da46e0e96dfb5f914a052c",
       "analyzerVersion": "0.10.0",
       "path": "256513a68b5d05d686da46e0e96dfb5f914a052c/0.10.0.json",
-      "createdAt": "2026-10-29T18:12:37.116Z"
+      "createdAt": "2026-10-29T18:14:48.612Z"
     },
     {
       "repo": "SunnyBagal/tracehound-demo",
@@ -190,7 +190,7 @@
         "sha": "256513a68b5d05d686da46e0e96dfb5f914a052c",
         "analyzerVersion": "0.10.0",
         "path": "256513a68b5d05d686da46e0e96dfb5f914a052c/0.10.0.json",
-        "createdAt": "2026-10-29T18:12:37.116Z"
+        "createdAt": "2026-10-29T18:14:48.612Z"
       },
       "versions": [
         {
@@ -198,7 +198,7 @@
           "sha": "256513a68b5d05d686da46e0e96dfb5f914a052c",
           "analyzerVersion": "0.10.0",
           "path": "256513a68b5d05d686da46e0e96dfb5f914a052c/0.10.0.json",
-          "createdAt": "2026-10-29T18:12:37.116Z"
+          "createdAt": "2026-10-29T18:14:48.612Z"
         },
         {
           "repo": "SunnyBagal/Recall",
