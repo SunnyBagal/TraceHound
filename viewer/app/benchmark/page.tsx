@@ -18,7 +18,7 @@ const COST_MEDIAN = COST.rows.find((r) => r[0].startsWith("3.5 Super"))![(COST.h
 
 const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 /** the two wolves beside Limits, a background-free cut-out in public/; null until the file is added */
-const LIMITS_WOLVES: string | null = null;
+const LIMITS_WOLVES: string | null = "wolves-cutout.webp";
 
 export default function BenchmarkPage() {
   return <ReviewShell active="Benchmark">
