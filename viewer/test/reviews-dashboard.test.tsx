@@ -7,13 +7,14 @@ const pull: PullRequest = { number: 3, title: "Handle expired sessions", state: 
 const review: TraceReview = { id: 10, footer: { version: 1, pipeline: "pool-verify-v1", headSha: pull.head.sha, pool: 2, kept: 1, posted: 1, fixes: { attempted: 1, valid: 1, rejected: 0 } } };
 beforeEach(() => { vi.clearAllMocks(); window.history.replaceState(null, "", "/reviews"); });
 afterEach(cleanup);
-it("defaults to the demo repo and shows footer counts, state and a detail link", async () => {
+it("defaults to the seeded Recall repo and shows footer counts, state and a detail link", async () => {
   vi.mocked(loadReviewList).mockResolvedValue({ pulls: [{ pull, review }, { pull: { ...pull, number: 4, title: "Merged work", merged_at: "2026-10-18" } }], rateLimited: false });
   render(<ReviewsDashboard />);
   await screen.findByRole("link", { name: /Handle expired sessions/ });
-  expect(loadReviewList).toHaveBeenCalledWith("SunnyBagal/tracehound-demo");
+  expect(loadReviewList).toHaveBeenCalledWith("SunnyBagal/recall-seeded");
   const row = screen.getByRole("link", { name: /Handle expired sessions/ });
-  expect(row.getAttribute("href")).toBe("/reviews/pr?repo=SunnyBagal%2Ftracehound-demo&n=3");
+  expect(row.getAttribute("href")).toBe("/reviews/pr?repo=SunnyBagal%2Frecall-seeded&n=3");
+  expect(screen.getByRole("link", { name: /See them on the graph/ }).getAttribute("href")).toBe("/graph?repo=recall");
   expect(row.textContent).toContain("1 finding"); expect(row.textContent).toContain("1 suggestion");
   expect(row.textContent).not.toContain("1 findings"); expect(row.textContent).not.toContain("1 suggestions");
   expect(screen.getByRole("link", { name: /Merged work/ }).textContent).toContain("Merged");
@@ -57,7 +58,7 @@ it("distinguishes no review from a zero-finding review", async () => {
   await waitFor(() => expect(screen.getByText(/TraceHound posted no findings/)).toBeTruthy());
 });
 it("on a rate limit reads the saved copy and says so", async () => {
-  window.history.replaceState(null, "", "/reviews/pr?n=3");
+  window.history.replaceState(null, "", "/reviews/pr?repo=SunnyBagal%2Ftracehound-demo&n=3");
   vi.mocked(loadPullReview).mockRejectedValue(new ReviewsError("GitHub rate limit, try later", true));
   vi.stubGlobal("fetch", vi.fn(async (url: string) => url.endsWith("/reviews/SunnyBagal__tracehound-demo.json")
     ? new Response(JSON.stringify({ version: 1, repo: "SunnyBagal/tracehound-demo", generatedAt: "2026-10-27T10:00:00Z", pulls: [{ pull, files: [], review, comments: [{ id: 42, pull_request_review_id: 10, user: { login: "github-actions[bot]" }, path: "src/auth.ts", body: "Expired sessions stay valid.", line: 8, original_line: 8, start_line: null, original_start_line: null, diff_hunk: "@@ -8,1 +8,1 @@\n+x", commit_id: "a".repeat(40) }] }] }), { status: 200 })

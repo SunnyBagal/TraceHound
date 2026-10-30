@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowUpRight, Clock, GitPullRequest, MessageSquare, SearchCheck, Waypoints, Wrench } from "lucide-react";
 import { DEFAULT_REVIEW_REPO, MODEL_DISCLOSURE, loadPullReview, loadReviewList, pullHref, reviewFindings, reviewNumber, reviewRepo, ReviewsError, reviewsHref, type PullRequest, type PullReview, type ReviewList } from "@/lib/reviews";
 import { savedReviews } from "@/lib/pulls";
+import { graphRepoFor } from "@/lib/repos";
 import { WolfLoader } from "@/components/WolfLoader";
 import { ReviewFinding } from "./ReviewFinding";
 import { RepositoryForm, ReviewShell, ShellHero } from "./ReviewShell";
@@ -97,7 +98,7 @@ function Totals({ pulls }: { pulls: ReviewList["pulls"] }) {
 
 export function ReviewsDashboard() {
   const { repo, state } = useReviewData(list);
-  const graph = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/graph?repo=tracehound-demo`;
+  const graph = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/graph?repo=${graphRepoFor(repo) ?? "tracehound-demo"}`;
   return <ReviewShell>
     <ShellHero kicker="TraceHound / Reviews" title="Bugs, with a way to fix them." tone="violet" aside={<div className="rv-hero-card"><RepositoryForm key={repo} repo={repo} /></div>}>
       <p className="rv-lede">Findings and suggested fixes from TraceHound&apos;s GitHub reviews: the effect first, then the file and line. <a className="rv-inline-link" href={graph}><Waypoints className="size-3.5" aria-hidden />See them on the graph</a></p>
@@ -156,7 +157,7 @@ function PullFindings({ repo, data: { pull, review, findings } }: { repo: string
       </div>
       <div className="rv-pr-links">
         <a href={pullHref(repo, pull.number)} target="_blank" rel="noreferrer" className="rv-inline-link">Pull request on GitHub<ArrowUpRight className="size-4" aria-hidden /></a>
-        {repo.toLowerCase() === "sunnybagal/tracehound-demo" && <a href={`${base}/graph?repo=tracehound-demo&pr=${pull.number}`} className="rv-inline-link"><Waypoints className="size-4" aria-hidden />On the graph</a>}
+        {graphRepoFor(repo) && <a href={`${base}/graph?repo=${graphRepoFor(repo)}&pr=${pull.number}`} className="rv-inline-link"><Waypoints className="size-4" aria-hidden />On the graph</a>}
       </div>
       {review && review.footer.headSha !== pull.head.sha && <p className="mt-4 text-sm leading-relaxed text-muted">This review is for an earlier commit ({review.footer.headSha.slice(0, 7)}). Check the current code on GitHub before applying a fix.</p>}
     </header>
