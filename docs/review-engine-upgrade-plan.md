@@ -331,6 +331,8 @@ All gains are **guesses**. Order is expected gain per effort.
 - **What:** keep the 40 dev PRs for language-agnostic changes (5.1, 5.2, 5.5). Add a TypeScript dev
   set from TS repos that are not in the benchmark, for example seeded-bug PRs on Recall and CEX (the
   repair harness already seeds bugs) or real public PRs with known fixes, scored with the same judge.
+  Seeds must be new: the existing `recall-seeded`, `linea-seeded` and `tracehound-seeds` sets are
+  held out and are not to be tuned on.
 - **A/B rules:**
   - at least 3 runs per arm;
   - a paired bootstrap over PRs, with intervals reported;
