@@ -38,6 +38,13 @@ most 4 FP (P 77.8%, R 60.9%, F 68.3%). With 7 FP, 15 TP only ties Cursor at 66.7
 roughly +2 to +3 true positives *and* fewer false positives than it has today. Recall alone is not
 enough, and neither is precision alone.
 
+**Claims rule.** At n = 23 one or two judged comments move F by several points, so a single run
+that passes another tool on the point estimate is not a result. A ranking claim on Cal.com ("top 2",
+"beats Greptile", "beats Cursor") needs the paired bootstrap interval of the F difference against
+that tool to exclude zero, as `results.md` already reports. Today v2 is above Greptile on the point
+estimate (57.1% vs 50.0%) and tied with it on the interval, so "beats Greptile" cannot be claimed
+yet. Otherwise one lucky run is the whole claim.
+
 Other measured facts that shape this plan:
 
 - **The verifier costs recall.** Dev means (40 PRs, n = 74, 3.5 Super, 2 runs): pool-raw
@@ -295,7 +302,7 @@ a guess that it is hybrid.
 |---|---|---|---|---|
 | Symbol-level callers/callees/types context | Augment, Greptile (pub.); CodeRabbit file-level (pub.) | partial (regex + word grep; graph unused in review) | R up (guess), P up from cleaner context (guess) | M |
 | Agentic tool loop (dig deeper on demand) | Cursor, Greptile, CodeRabbit (pub.) | no | R up (guess), P risk; cost up | L |
-| Multiple passes + agreement / voting | Cursor (pub., launch) | partial (2 reviewers pooled; agreement unused; vote across runs lost in 064) | P up if agreement is used as a signal (guess) | S |
+| Multiple passes + agreement / voting | Cursor (pub., launch) | partial (2 reviewers pooled; agreement unused; vote across runs lost in 064) | modest P/R gain if agreement is used as a signal (guess); both reviewers are Nemotron, so their errors are correlated | S |
 | Validator / verifier model | Cursor (pub.) | yes (verify-ctx-v1) but recall-costly | tune to recover R at a small P cost (guess) | S |
 | Static analyzers merged with LLM findings | CodeRabbit (pub.) | partial (contracts/tsc in Action only, no deps) | small R up on type breaks; high P (guess) | M |
 | Running code / tests to confirm | Greptile, CodeRabbit (pub.); Cursor (future) | no in review (sandbox exists for repair/repro) | P up on confirmed findings; R neutral (guess) | L |
@@ -338,7 +345,10 @@ All gains are **guesses**. Order is expected gain per effort.
   - a paired bootstrap over PRs, with intervals reported;
   - offline replay from cached candidates wherever a change touches only later stages (as
     `levers-v2.md` did);
-  - a pre-registered single Cal.com run only at the end, as in decisions 061 and 069.
+  - a pre-registered single Cal.com run only at the end, as in decisions 061 and 069;
+  - a change counts as adopted only if the dev interval of ΔF excludes zero, and any Cal.com
+    ranking claim follows the claims rule in section 0 (intervals per compared tool, never a
+    point estimate from one run).
 - **Effort and cost:** M; judge cost only.
 
 ### 5.1 Stop losing whole chunks (S)
@@ -373,8 +383,18 @@ All gains are **guesses**. Order is expected gain per effort.
   Jaccard, as in `learn.ts`, so no embeddings are needed.
 - **Measure:** offline replay on cached dev candidates (cheap and paired), then 3 fresh runs. The
   metrics are dev R, P and F, plus TPs dropped by the verifier (058-style counts).
-- **Risks:** `both` findings can be shared false positives. That is why the counter-quote path
-  exists.
+- **Risks:**
+  - Both reviewers are Nemotron, with the same frozen base prompt and temperature 0. Their errors
+    are correlated, so "both found it" is much weaker evidence than agreement between two model
+    families would be. A shared false positive passes as easily as a shared true positive.
+  - That is why the counter-quote path stays: a `both` finding is still dropped when the verifier
+    quotes code that contradicts it.
+  - **Expect a modest gain.** Most of the benefit is recovering a few true positives the verifier
+    drops today, not a large precision change. Measure the false-positive rate among `both`
+    findings in the dev replay before trusting the signal.
+  - A cross-family second reviewer (GPT or Opus) would make agreement more informative, but it is
+    product code calling a provider other than Nebius. That is ruled out unless the owner lifts
+    the rule, and even then it should be an evaluation arm only.
 - **Cost:** below today's, because fewer verifier calls are made.
 
 ### 5.3 Symbol-graph k-hop context for reviewer and verifier (M)
