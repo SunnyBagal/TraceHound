@@ -5,4 +5,4 @@
  * To unblur them later, set this to false (or delete it and the `data-blur-marks` rules in
  * app/globals.css). The blur radius is `--marks-blur` in globals.css.
  */
-export const BLUR_THIRD_PARTY_MARKS = true;
+export const BLUR_THIRD_PARTY_MARKS = false;
