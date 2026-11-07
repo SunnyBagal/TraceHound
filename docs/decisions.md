@@ -3565,10 +3565,29 @@ entries, last 2026-10-29), so the total cap would be $44.43804 (< the $45 defaul
   which can stop at the cap: then the result is inconclusive, as pre-registered.
 - A $0 dry run (`recovery-ab.ts dry`, arm A from the cache only) reports the hit counts before the paid run.
 **Commands:** `node scripts/bench/recovery-ab.ts dry`; `TRACEHOUND_BUDGET_RUN_USD=4 node scripts/bench/recovery-ab.ts
-run`; `node scripts/bench/recovery-ab.ts report`. The run refuses unless `packages/analyzer/src`, `config` and
+run` (073a: `run --restart`); `node scripts/bench/recovery-ab.ts report`. The run refuses unless `packages/analyzer/src`, `config` and
 `scripts/bench` equal `53b6045` except for added files, with nothing uncommitted (`freezeCheck073`).
 **Adoption:** if B2 (or B1) passes, propose default-on for the Action in a later change; ΔF is reported as within
 noise, and no ranking claim follows. The result is recorded here as 073's result, on this branch, not merged.
+**073a (2026-11-08, before the restart's first call): the first run is void; one restart.**
+- *What happened:* the run started 2026-11-07T19:0x (ledger start $40.43804) and was stopped by hand at arm A
+  pull request 14 of 40. Its live 3.5 calls failed with `fetch failed` at exactly 300 s after sending (ledger
+  timestamps 19:34:41 → 19:39:42 → 19:44:43 → 19:49:43; `componentId` 073:75, 073:77, 073:78). That is Node's
+  built-in fetch (undici) `headersTimeout` of 300 s, below the client's own 600 s timeout (`run-test-set.ts:140`,
+  same value here), and today's 32k-token reasoning replies take longer than 300 s. A failed request is never
+  stored, so it would go out live again in later arms: every such pull would be unpaired, and the run
+  inconclusive by the rules above, at ≈ $0.035 per timeout (the client charges the upper bound).
+- *Spend of the void run:* 11 job calls, 4 failed, **$0.34415** by the ledger (failed $0.13538). It counts
+  toward the job's $4: the restart's run cap is $4 − the job's spend so far, and its total cap stays ledger at
+  the job's start + $4 (`budgetFor`).
+- *The fix (transport only, the same in every arm):* requests go through `longFetch` (node:http/https, no limit
+  of its own), so only the client's 600 s `AbortSignal.timeout` ends a request, as the protocol already stated.
+  Request bytes, keys, prompts, models and every option are unchanged.
+- *The restart:* `run --restart`, once, only after a run that did not complete and with the same manifest; it
+  writes `recovery-073r/` and leaves `recovery-073/` untouched. The void run's corpus holds only 200 replies to
+  identical requests, so it is read by exact key (source `carried`) before the shared cache: the same bytes the
+  void run received, used in every arm of the restart. Ledger call ids are `073r:<n>`. The restart stands for
+  the run; its verdict is decided by the rules above, unchanged.
 **Rejected:**
 - The research run's E3 (ΔTP ≥ 0 ∧ ΔFP ≤ 0 on changed PRs): it rejects any recovery made at the pipeline's own
   precision (≈ 0.83 FP per TP, `levers-v2.md:45-46`). The owner chose devin's gate; with R_B ≥ R_A ∧ P_B ≥ P_A on

@@ -349,3 +349,69 @@ test("an unpaired pull request makes an otherwise passing result INCONCLUSIVE; E
   assert.equal(r.verdict.overall, "INCONCLUSIVE");
   assert.equal(r.verdict.B2!.pass, false);
 });
+
+// ---- 073a: the transport and the restart ----
+
+test("longFetch: same status, body and headers as the server sent; the caller's signal ends it", async () => {
+  const { longFetch } = await import("./recovery-ab.ts");
+  const { createServer } = await import("node:http");
+  const seen: { method?: string; body: string; auth?: string } = { body: "" };
+  const server = createServer((req, res) => {
+    let b = "";
+    req.on("data", (c) => (b += c));
+    req.on("end", () => {
+      Object.assign(seen, { method: req.method, body: b, auth: req.headers.authorization });
+      if (b === "slow") return; // never answers
+      setTimeout(() => res.writeHead(201, { "content-type": "application/json", "x-test": "1" }).end('{"ok":true}'), 30);
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/chat`;
+  try {
+    const res = await longFetch(url, { method: "POST", headers: { Authorization: "Bearer t", "Content-Type": "application/json" }, body: '{"a":1}' });
+    assert.equal(res.status, 201);
+    assert.equal(res.headers.get("x-test"), "1");
+    assert.deepEqual(await res.json(), { ok: true });
+    assert.deepEqual(seen, { method: "POST", body: '{"a":1}', auth: "Bearer t" });
+    await assert.rejects(longFetch(url, { method: "POST", body: "slow", signal: AbortSignal.timeout(50) }));
+  } finally {
+    server.closeAllConnections();
+    server.close();
+  }
+});
+
+test("the job budget across a restart: only the rest of the $4 is left, total cap from the job's start", () => {
+  const b = budgetFor({ TRACEHOUND_BUDGET_RUN_USD: "4" }, 40.78219, 40.43804);
+  assert.ok(b.ok);
+  if (b.ok) {
+    assert.ok(Math.abs(b.budget.caps.runUSD - (4 - (40.78219 - 40.43804))) < 1e-9);
+    assert.equal(b.budget.caps.totalUSD, 44.43804);
+    assert.equal(b.budget.spentBeforeRun, 40.78219);
+  }
+  assert.equal(budgetFor({ TRACEHOUND_BUDGET_RUN_USD: "4" }, 44.5, 40.43804).ok, false);
+});
+
+test("restart: once, after a run that did not complete; the void run is untouched and its replies are carried by key", async () => {
+  const { runJob, analyze, outDir } = await import("./recovery-ab.ts");
+  const { readFileSync, writeFileSync } = await import("node:fs");
+  const { bench, deps, live } = await syntheticBench();
+  assert.equal(await runJob("run", deps, { restart: true }), 1); // nothing to restart
+  assert.equal(await runJob("run", deps), 0);
+  assert.equal(await runJob("run", deps, { restart: true }), 1); // a complete run is not restarted
+  const vf = join(outDir(bench), "run.json");
+  const v = JSON.parse(readFileSync(vf, "utf8"));
+  writeFileSync(vf, JSON.stringify({ ...v, status: "running" })); // as if the process had died
+  const before = readFileSync(vf, "utf8");
+  const callsBefore = live.calls;
+  assert.equal(await runJob("run", deps, { restart: true }), 0);
+  assert.equal(live.calls, callsBefore); // every request came from the void run's corpus
+  assert.equal(readFileSync(vf, "utf8"), before);
+  const r = JSON.parse(readFileSync(join(outDir(bench, false, true), "run.json"), "utf8"));
+  assert.equal(r.restartOf.status, "running");
+  assert.equal(r.ledgerStartUSD, v.ledgerStartUSD);
+  const spend = new SpendLedger(join(deps.stateDir, "spend.jsonl")).totalUSD();
+  const a = analyze(outDir(bench, false, true), spend - r.ledgerRunStartUSD, spend - r.ledgerStartUSD);
+  assert.equal(a.verdict.overall, "PASS");
+  assert.equal(a.firstAttempts.carried, a.firstAttempts.total);
+  assert.equal(await runJob("run", deps, { restart: true }), 1); // one restart only
+});

@@ -20,10 +20,13 @@
 //   node scripts/bench/recovery-ab.ts dry    [--bench <dir>]   arm A from the cache only: hit/miss counts, $0, no key needed
 //   TRACEHOUND_BUDGET_RUN_USD=4 node scripts/bench/recovery-ab.ts run [--bench <dir>]   the A/B; job cap $4 (see budgetFor)
 //   node scripts/bench/recovery-ab.ts report [--bench <dir>]  counts and the verdict from a finished run, no model
+//   TRACEHOUND_BUDGET_RUN_USD=4 node scripts/bench/recovery-ab.ts run --restart   073a: once, after a run that did not complete
 // stdout gets counts only, never titles, comment text or golden text; records stay in the bench folder.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import type { ChatClient } from "../../packages/analyzer/src/agent/decider.ts";
@@ -70,7 +73,9 @@ export const ARM_IDS = Object.keys(ARMS) as ArmId[];
 /** verify-ctx's CLI default and bench score's, as in run-test-set.ts. */
 const VERIFY_CONCURRENCY = 4;
 const JUDGE_CONCURRENCY = 4;
-export const outDir = (bench: string, dry = false) => join(bench, dry ? "recovery-073-dry" : "recovery-073");
+export const outDir = (bench: string, dry = false, restart = false) => join(bench, dry ? "recovery-073-dry" : restart ? "recovery-073r" : "recovery-073");
+/** 073a: the restart's ledger call-id prefix (the void run used "073"). */
+export const RESTART_ID_PREFIX = "073r";
 
 /** The bench folder (and so the corpus and every record) must resolve outside this repository; symlinks are resolved. */
 export function checkBench(bench: string, repoRoot = REPO_ROOT): { ok: true; bench: string } | { ok: false; why: string } {
@@ -109,8 +114,8 @@ export interface Provenance {
   kind: string;
   /** reviewer stages: the chunk index (reviewers send their chunks one after another) */
   chunk?: number;
-  /** corpus/shared: served from bytes on disk; fresh: sent; joined: shared an identical in-flight call; miss: dry run, not in any cache */
-  source: "corpus" | "shared" | "fresh" | "joined" | "miss";
+  /** corpus/shared/carried: served from bytes on disk (carried = the void run's corpus, 073a); fresh: sent; joined: shared an identical in-flight call; miss: dry run, not in any cache */
+  source: "corpus" | "shared" | "carried" | "fresh" | "joined" | "miss";
   /** a reply was received (false: the request failed or was refused) */
   ok: boolean;
   finishReason?: string;
@@ -138,6 +143,34 @@ export function storingFetch(corpus: ResponseCache, inner: typeof fetch = global
   }) as typeof fetch;
 }
 
+/**
+ * 073a: Node's built-in fetch (undici) fails any response whose headers take more than 300 s ("fetch failed",
+ * headersTimeout), below the client's own 600 s timeout, and 3.5 replies of 32k reasoning tokens take longer.
+ * This fetch sends the same request over node:http(s) with no limit of its own: only the caller's signal (the
+ * client's AbortSignal.timeout) ends it.
+ */
+export function longFetch(url: string | URL | Request, init?: RequestInit): Promise<Response> {
+  return new Promise((resolvePromise, reject) => {
+    const u = new URL(url instanceof Request ? url.url : String(url));
+    const send = u.protocol === "https:" ? httpsRequest : httpRequest;
+    const headers: Record<string, string> = {};
+    new Headers(init?.headers).forEach((v, k) => (headers[k] = v));
+    const req = send(u, { method: init?.method ?? "GET", headers, ...(init?.signal && { signal: init.signal }) }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("error", reject);
+      res.on("end", () => {
+        const h = new Headers();
+        for (const [k, v] of Object.entries(res.headers)) if (v !== undefined) h.set(k, Array.isArray(v) ? v.join(", ") : v);
+        resolvePromise(new Response(Buffer.concat(chunks), { status: res.statusCode ?? 502, headers: h }));
+      });
+    });
+    req.on("error", reject);
+    if (typeof init?.body === "string") req.write(init.body);
+    req.end();
+  });
+}
+
 /** The ledger, plus the charge of each call by its componentId (the CorpusClient's call id). */
 export class TapLedger extends SpendLedger {
   readonly charged = new Map<string, number>();
@@ -159,6 +192,8 @@ export class CorpusClient implements ChatClient {
   readonly log: Provenance[] = [];
   readonly #corpus: ResponseCache;
   readonly #shared: ReadOnlyCache;
+  readonly #carried: ReadOnlyCache | null;
+  readonly #idPrefix: string;
   readonly #client: TokenFactoryClient;
   readonly #tap: TapLedger | null;
   readonly #inflight = new Map<string, Promise<ChatResult>>();
@@ -168,9 +203,11 @@ export class CorpusClient implements ChatClient {
   #closed = false;
 
   /** `client` must have cache = corpus and readCache on (offline for `dry`); `tap` is its ledger. */
-  constructor(o: { corpus: ResponseCache; shared: ReadOnlyCache; client: TokenFactoryClient; tap?: TapLedger }) {
+  constructor(o: { corpus: ResponseCache; shared: ReadOnlyCache; client: TokenFactoryClient; tap?: TapLedger; carried?: ReadOnlyCache; idPrefix?: string }) {
     this.#corpus = o.corpus;
     this.#shared = o.shared;
+    this.#carried = o.carried ?? null;
+    this.#idPrefix = o.idPrefix ?? DECISION;
     this.#client = o.client;
     this.#tap = o.tap ?? null;
   }
@@ -214,13 +251,14 @@ export class CorpusClient implements ChatClient {
     }
     let source: Provenance["source"] = "corpus";
     if (this.#corpus.get(key) === undefined) {
-      const hit = this.#shared.get<unknown>(key);
+      const carried = this.#carried?.get<unknown>(key);
+      const hit = carried ?? this.#shared.get<unknown>(key);
       if (hit !== undefined) {
         this.#corpus.put(key, hit);
-        source = "shared";
+        source = carried !== undefined ? "carried" : "shared";
       } else source = "fresh";
     }
-    const id = `${DECISION}:${callId}`;
+    const id = `${this.#idPrefix}:${callId}`;
     const p = this.#client.chat(request, { purpose: meta.purpose, componentId: id });
     this.#inflight.set(key, p);
     this.#all.add(p);
@@ -337,11 +375,16 @@ export function freezeCheck073(root = REPO_ROOT): { ok: boolean; why?: string; h
   return { ok: true, head };
 }
 
-/** One Budget for the whole job: run cap JOB_CAP_USD, total cap = ledger total at start + JOB_CAP_USD (both no higher than the env caps). */
-export function budgetFor(env: NodeJS.ProcessEnv, ledgerStartUSD: number): { ok: true; budget: Budget } | { ok: false; why: string } {
+/**
+ * One Budget for the whole job: total cap = the ledger total when the job started + JOB_CAP_USD, run cap = what is
+ * left of JOB_CAP_USD (a restart, 073a, gets only the remainder), both no higher than the env caps.
+ */
+export function budgetFor(env: NodeJS.ProcessEnv, ledgerNowUSD: number, jobStartUSD = ledgerNowUSD): { ok: true; budget: Budget } | { ok: false; why: string } {
   const caps = capsFromEnv(env);
   if (caps.runUSD < JOB_CAP_USD) return { ok: false, why: `TRACEHOUND_BUDGET_RUN_USD=${caps.runUSD} is below the job cap $${JOB_CAP_USD}: set it to ${JOB_CAP_USD} so the job is not cut short` };
-  return { ok: true, budget: new Budget({ runUSD: JOB_CAP_USD, totalUSD: Math.min(caps.totalUSD, ledgerStartUSD + JOB_CAP_USD) }, ledgerStartUSD) };
+  const left = JOB_CAP_USD - (ledgerNowUSD - jobStartUSD);
+  if (left <= 0) return { ok: false, why: `the job has spent its $${JOB_CAP_USD}` };
+  return { ok: true, budget: new Budget({ runUSD: left, totalUSD: Math.min(caps.totalUSD, jobStartUSD + JOB_CAP_USD) }, ledgerNowUSD) };
 }
 
 // ---- the job ----
@@ -363,19 +406,16 @@ export interface Deps {
 }
 
 /** Exit codes: 0 complete, 1 refused (nothing written), 2 stopped at the cap, 3 failed. */
-export async function runJob(mode: "dry" | "run", deps: Deps): Promise<number> {
+export async function runJob(mode: "dry" | "run", deps: Deps, opts: { restart?: boolean } = {}): Promise<number> {
   const dry = mode === "dry";
+  const restart = !dry && !!opts.restart;
   const where = checkBench(deps.bench, deps.repoRoot);
   if (!where.ok) return (deps.err(`[recovery-ab] refusing: ${where.why}`), 1);
   const bench = where.bench;
   const freeze = (deps.freezeCheck ?? freezeCheck073)();
   if (!dry && !freeze.ok) return (deps.err(`[recovery-ab] refusing: ${freeze.why}`), 1);
   const ledger = new TapLedger(join(deps.stateDir, "spend.jsonl"));
-  const ledgerStartUSD = ledger.totalUSD();
-  const b = dry ? { ok: true as const, budget: new Budget({ runUSD: 0, totalUSD: 0 }, ledgerStartUSD) } : budgetFor(deps.env, ledgerStartUSD);
-  if (!b.ok) return (deps.err(`[recovery-ab] refusing: ${b.why}`), 1);
-  const apiKey = dry ? "dry-run" : deps.env.NEBIUS_API_KEY;
-  if (!apiKey) return (deps.err("[recovery-ab] NEBIUS_API_KEY is not set"), 1);
+  const ledgerRunStartUSD = ledger.totalUSD();
   let jobs: ReturnType<typeof devJobs>["jobs"];
   let manifest: Manifest;
   try {
@@ -383,9 +423,26 @@ export async function runJob(mode: "dry" | "run", deps: Deps): Promise<number> {
   } catch (e) {
     return (deps.err(`[recovery-ab] refusing: dev inputs not ready (${(e as Error).message.replace(bench, "<bench>")})`), 1);
   }
+  // 073a: one restart of a run that did not complete; the job cap stays job-wide and the void run is left untouched
+  let ledgerStartUSD = ledgerRunStartUSD;
+  let restartOf: { dir: string; status: string; startedAt: string; jobCalls: number; failedCalls: number; spendUSD: number; error: string | null } | null = null;
+  if (restart) {
+    const vf = join(outDir(bench), "run.json");
+    if (!existsSync(vf)) return (deps.err("[recovery-ab] refusing --restart: there is no run to restart"), 1);
+    const v = readJson<{ status: string; ledgerStartUSD: number; startedAt: string; manifest?: Manifest; error?: string | null }>(vf);
+    if (v.status === "complete") return (deps.err("[recovery-ab] refusing --restart: the run completed"), 1);
+    if (v.manifest?.digest !== manifest.digest) return (deps.err("[recovery-ab] refusing --restart: the inputs differ from the void run's manifest"), 1);
+    const calls = ledger.entries().filter((e) => e.componentId?.startsWith(`${DECISION}:`));
+    restartOf = { dir: outDir(bench), status: v.status, startedAt: v.startedAt, jobCalls: calls.length, failedCalls: calls.filter((e) => !e.ok).length, spendUSD: calls.reduce((s, e) => s + e.estCostUSD, 0), error: v.error ?? null };
+    ledgerStartUSD = v.ledgerStartUSD;
+  }
+  const b = dry ? { ok: true as const, budget: new Budget({ runUSD: 0, totalUSD: 0 }, ledgerRunStartUSD) } : budgetFor(deps.env, ledgerRunStartUSD, ledgerStartUSD);
+  if (!b.ok) return (deps.err(`[recovery-ab] refusing: ${b.why}`), 1);
+  const apiKey = dry ? "dry-run" : deps.env.NEBIUS_API_KEY;
+  if (!apiKey) return (deps.err("[recovery-ab] NEBIUS_API_KEY is not set"), 1);
   const dryRun = join(outDir(bench, true), "run.json");
   if (!dry && existsSync(dryRun) && readJson<{ manifest?: Manifest }>(dryRun).manifest?.digest !== manifest.digest) return (deps.err("[recovery-ab] refusing: the inputs differ from the dry run's manifest"), 1);
-  const dir = outDir(bench, dry);
+  const dir = outDir(bench, dry, restart);
   try {
     mkdirSync(dir); // fails if it exists: never over an earlier run
   } catch {
@@ -402,9 +459,15 @@ export async function runJob(mode: "dry" | "run", deps: Deps): Promise<number> {
     readCache: true,
     offline: dry,
     timeoutMs: 600_000,
-    fetch: storingFetch(corpus, deps.fetch ?? globalThis.fetch),
+    fetch: storingFetch(corpus, deps.fetch ?? longFetch),
   });
-  const cc = new CorpusClient({ corpus, shared: deps.shared ?? new ResponseCache(join(deps.stateDir, "cache")), client, tap: ledger });
+  const cc = new CorpusClient({
+    corpus,
+    shared: deps.shared ?? new ResponseCache(join(deps.stateDir, "cache")),
+    client,
+    tap: ledger,
+    ...(restart && { carried: new ResponseCache(join(outDir(bench), "corpus")), idPrefix: RESTART_ID_PREFIX }),
+  });
   const source = deps.source ?? gitSource;
   const arms: ArmId[] = dry ? ["A"] : ARM_IDS;
   const state = {
@@ -419,7 +482,10 @@ export async function runJob(mode: "dry" | "run", deps: Deps): Promise<number> {
     judges: JUDGES,
     manifest,
     jobCapUSD: JOB_CAP_USD,
+    /** the ledger total when the job started (the void run's, on a restart) and when this run started */
     ledgerStartUSD,
+    ledgerRunStartUSD,
+    restartOf,
     caps: b.budget.caps,
     startedAt: new Date().toISOString(),
     finishedAt: null as string | null,
@@ -503,7 +569,7 @@ export async function runJob(mode: "dry" | "run", deps: Deps): Promise<number> {
   state.status = "complete";
   state.finishedAt = new Date().toISOString();
   save();
-  for (const l of dry ? dryReport(dir) : markdown(analyze(dir, ledger.totalUSD() - ledgerStartUSD))) deps.log(l);
+  for (const l of dry ? dryReport(dir) : markdown(analyze(dir, ledger.totalUSD() - ledgerRunStartUSD, ledger.totalUSD() - ledgerStartUSD))) deps.log(l);
   return 0;
 }
 
@@ -547,13 +613,14 @@ export interface JudgeCompare {
 export interface Analysis {
   status: string;
   spendUSD: number;
+  jobSpendUSD: number;
   provenanceUSD: number;
   costByArm: Record<string, { generation: number; verify: number; judge: number; failedCalls: number }>;
   arms: Partial<Record<ArmId, ArmCounts>>;
   changedPulls: Partial<Record<ArmId, number>>;
   unpairedPulls: string[];
   pairedFailedChunks: Partial<Record<ArmId, number>>;
-  firstAttempts: { total: number; shared: number; fresh: number; failedChunks: number; failedChunksShared: number; failedChunksFresh: number };
+  firstAttempts: { total: number; shared: number; carried: number; fresh: number; failedChunks: number; failedChunksShared: number; failedChunksFresh: number };
   finishReasonsA: Record<string, number>;
   e4: { replies: number; strictOk: number; lenientDiffers: number; missingBodies: number };
   requestErrors: number;
@@ -653,7 +720,8 @@ export function compareJudge(a: Map<string, PullDetail>, x: Map<string, PullDeta
   };
 }
 
-export function analyze(dir: string, spendUSD: number): Analysis {
+/** `spendUSD`: the ledger's spend since this run started (reconciled per call); `jobSpendUSD`: since the job started (073a). */
+export function analyze(dir: string, spendUSD: number, jobSpendUSD = spendUSD): Analysis {
   const run = readJson<{ status: string; arms: Record<string, unknown> }>(join(dir, "run.json"));
   const prov = readJson<Provenance[]>(join(dir, "provenance.json"));
   const present = ARM_IDS.filter((a) => a in run.arms);
@@ -695,6 +763,7 @@ export function analyze(dir: string, spendUSD: number): Analysis {
   const firstAttempts = {
     total: firstA.length,
     shared: firstA.filter((p) => p.source === "shared").length,
+    carried: firstA.filter((p) => p.source === "carried").length,
     fresh: firstA.filter((p) => p.source === "fresh").length,
     failedChunks: failedA.length,
     failedChunksShared: firstOfFailed.filter((p) => p?.source === "shared").length,
@@ -782,16 +851,16 @@ export function analyze(dir: string, spendUSD: number): Analysis {
     verdict.adopted = verdict.B2.pass ? "B2" : verdict.B1.pass ? "B1" : null;
     verdict.overall = verdict.adopted ? "PASS" : "FAIL";
   }
-  return { status: run.status, spendUSD, provenanceUSD, costByArm, arms, changedPulls, unpairedPulls, pairedFailedChunks, firstAttempts, finishReasonsA, e4, requestErrors, coverage, judges, misses, verdict };
+  return { status: run.status, spendUSD, jobSpendUSD, provenanceUSD, costByArm, arms, changedPulls, unpairedPulls, pairedFailedChunks, firstAttempts, finishReasonsA, e4, requestErrors, coverage, judges, misses, verdict };
 }
 
 const pct = (x: number | null | undefined) => (x === null || x === undefined ? "n/a" : `${(100 * x).toFixed(1)}%`);
 export function markdown(r: Analysis): string[] {
   const L: string[] = [];
-  L.push(`status ${r.status} · spend (ledger) $${r.spendUSD.toFixed(4)} · per-call charges $${r.provenanceUSD.toFixed(4)} · cache misses ${r.misses} · request errors ${r.requestErrors} · unpaired pulls ${r.unpairedPulls.length}`);
+  L.push(`status ${r.status} · job spend (ledger, incl. a void run) $${r.jobSpendUSD.toFixed(4)} · this run $${r.spendUSD.toFixed(4)} · per-call charges $${r.provenanceUSD.toFixed(4)} · cache misses ${r.misses} · request errors ${r.requestErrors} · unpaired pulls ${r.unpairedPulls.length}`);
   L.push(`coverage: ${r.coverage.ok ? "complete" : r.coverage.problems.join("; ")}`);
   const fa = r.firstAttempts;
-  L.push(`arm A first reviewer attempts ${fa.total}: from the shared cache ${fa.shared}, sent fresh ${fa.fresh}; of the ${fa.failedChunks} chunks that failed in A, first attempt from the shared cache ${fa.failedChunksShared}, fresh ${fa.failedChunksFresh}`);
+  L.push(`arm A first reviewer attempts ${fa.total}: from the shared cache ${fa.shared}, carried from the void run ${fa.carried}, sent fresh ${fa.fresh}; of the ${fa.failedChunks} chunks that failed in A, first attempt from the shared cache ${fa.failedChunksShared}, fresh ${fa.failedChunksFresh}`);
   L.push(`arm A reviewer replies by finish: ${Object.entries(r.finishReasonsA).map(([k, v]) => `${k} ${v}`).join(" · ")}`);
   L.push(`E4: reviewer replies ${r.e4.replies}, strict-valid ${r.e4.strictOk}, lenient differs ${r.e4.lenientDiffers}, missing bodies ${r.e4.missingBodies}`);
   L.push(`cost by arm (generation / verify / judge / failed calls): ${Object.entries(r.costByArm).map(([a, c]) => `${a} $${c.generation.toFixed(4)} / $${c.verify.toFixed(4)} / $${c.judge.toFixed(4)} / $${c.failedCalls.toFixed(4)}`).join(" · ")}`);
@@ -839,16 +908,19 @@ if (import.meta.main) {
     console.error(`[recovery-ab] refusing: ${where.why}`);
     process.exitCode = 1;
   } else if (mode === "report") {
-    const dir = outDir(where.bench);
-    const run = readJson<{ ledgerStartUSD: number }>(join(dir, "run.json"));
-    for (const l of markdown(analyze(dir, new SpendLedger(join(stateDir, "spend.jsonl")).totalUSD() - run.ledgerStartUSD))) console.log(l);
+    const restarted = existsSync(join(outDir(where.bench, false, true), "run.json"));
+    const dir = outDir(where.bench, false, restarted);
+    const run = readJson<{ ledgerStartUSD: number; ledgerRunStartUSD?: number }>(join(dir, "run.json"));
+    const now = new SpendLedger(join(stateDir, "spend.jsonl")).totalUSD();
+    console.log(`report of ${restarted ? "recovery-073r (the restart, 073a)" : "recovery-073"}`);
+    for (const l of markdown(analyze(dir, now - (run.ledgerRunStartUSD ?? run.ledgerStartUSD), now - run.ledgerStartUSD))) console.log(l);
   } else if (mode === "dry" || mode === "run") {
     try {
       if (mode === "run" && !process.env.NEBIUS_API_KEY) process.loadEnvFile(join(REPO_ROOT, ".env"));
     } catch {
       // runJob reports the missing key
     }
-    process.exitCode = await runJob(mode, { bench: where.bench, stateDir, pricesFile: join(REPO_ROOT, "config/prices.json"), env: process.env, log: (l) => console.log(l), err: (l) => console.error(l) });
+    process.exitCode = await runJob(mode, { bench: where.bench, stateDir, pricesFile: join(REPO_ROOT, "config/prices.json"), env: process.env, log: (l) => console.log(l), err: (l) => console.error(l) }, { restart: process.argv.includes("--restart") });
   } else {
     console.error("usage: recovery-ab.ts dry|run|report [--bench <dir>]");
     process.exitCode = 1;
