@@ -3514,38 +3514,52 @@ runs 7r and 8) and 3 of 40 ended with no findings (`docs/bench/dev-3.5.md` §"Fa
   (`docs/post-freeze-fixes.md`; `packages/action/test/pool-verify-identity.test.ts`).
 - B1 = `parser: "lenient"` on both reviewers (one-switch attribution).
 - B2 = `parser: "lenient"` + `retryOnLength: "fresh"` on both reviewers.
-- Shared by every arm: the 40 dev PRs (sentry, grafana, keycloak, discourse; `DEV_REPOS`), pool-verify-v1,
-  `nvidia/Nemotron-3.5-Super-VL` for both reviewers and the verifier, frozen prompts, temperature 0, reasoning on,
-  `max_tokens` 32,000, the verifier's parser strict, the runner's rerun-once rule, judges bench-judge-v1 (scorer
-  of record) and bench-judge-x1 (`JUDGES` from `run-test-set.ts`). A test pins arm A to the runner's `pipeline`
-  (same requests, same records).
+- Shared by every arm: exactly the 40 dev PRs `EXPECTED_PULLS` (sentry, grafana, keycloak, discourse, files
+  `0`–`9` each; any other set refuses before a call), pool-verify-v1, `nvidia/Nemotron-3.5-Super-VL` for both
+  reviewers and the verifier, frozen prompts, temperature 0, reasoning on, `max_tokens` 32,000 for the reviewers
+  and 16,000 for the verifier (`verify-ctx.ts:129`), the verifier's parser strict, the runner's rerun-once rule,
+  judges bench-judge-v1 (scorer of record) and bench-judge-x1 (`JUDGES` from `run-test-set.ts`). The one
+  per-request difference is B2's: after a reviewer reply ends `finish_reason: "length"` and fails to parse, its
+  retry resends the original messages with reasoning off (`review.ts:236-238`) instead of appending a correction.
+  A test pins arm A to the runner's `pipeline` (same requests, same records).
+- A manifest (ids, heads, sha256 of each input file and of each golden file) is written to `run.json`; `run`
+  refuses if a dry run exists with a different manifest digest.
 **Corpus and pairing:** all arms run in one process through one `CorpusClient` over a private corpus
-(`<bench>/recovery-073/corpus`, outside the repo). A request in the corpus is served from it; else its exact key
-(`ResponseCache.key`) is read from `.tracehound/cache` with `get` only, never by listing that folder, and copied in;
-else the request goes out and its 200 body is stored, empty content included. So arm A is a *latest-response
-replay corpus* (runs 7r/8/9 overwrote each other; it is not run 7r's or run 8's identity), a request goes out at
-most once across arms, and unchanged chunks get the same bytes in every arm. A pull with a request that went out
-live in more than one arm is *unpaired*: listed, left out of E3 and of the paired E2 count. Cal.com: the job takes
-no set name; it reads only `inputPaths(bench, "dev", repo)` for the four dev repos, and the only cache reads are
-keys built from those inputs.
+(`<bench>/recovery-073/corpus`; the bench folder must resolve, symlinks included, outside the repo, or every mode
+refuses). A request in the corpus is served from it; else its exact key (`ResponseCache.key`) is read from
+`.tracehound/cache` with `get` only, never by listing that folder, and copied in; else the request goes out and its
+200 body is stored, empty content included. Identical requests in flight at the same time share one call (single
+flight). So arm A is a *latest-response replay corpus* (runs 7r/8/9 overwrote each other; it is not run 7r's or
+run 8's identity), a request goes out at most once across arms, and unchanged chunks get the same bytes in every
+arm. A pull with a request that went out live in more than one arm is *unpaired*: listed, left out of E3 and of
+the paired E2 count. Cal.com: the job takes no set name; it reads only `inputPaths(bench, "dev", repo)` for the
+four dev repos, and the only cache reads are keys built from those inputs.
+**Cost attribution:** every call gets a job call id as its ledger `componentId`, so each call's charge, failed
+calls included (the client charges the upper bound when no usage comes back), is read from the ledger and reported
+by arm and stage; the per-call sum must equal the ledger's job total. At the cap or on a crash, no new request is
+sent and the calls already in flight are awaited before the final records are written.
 **Exit criteria** (all must hold for an arm; B2 is the candidate, B1 is adopted only if B2 fails and B1 passes):
 - **E2:** terminal `CHUNK_FAILED` (diff + ctx) in the arm ≤ 2 **and** strictly below A, counted over all chunks
   and again over paired chunks; and 0 PRs empty by a failure (pool-raw empty with ≥ 1 failed chunk).
-- **E3 (devin's gate):** over all PRs scored in both arms, under v1 **and** x1: TP_arm ≥ TP_A **and**
-  P_arm ≥ P_A. Unchanged PRs (identical pool-verify-v1 list) must score identically. The recovered findings' own
-  TP/FP (in the arm's list, not in A's, on changed PRs) are reported.
+- **E3 (devin's gate):** over the 40 PRs, under v1 **and** x1: TP_arm ≥ TP_A **and** P_arm ≥ P_A. Unchanged PRs
+  (identical pool-verify-v1 list) must score identically. The recovered findings' own TP/FP (in the arm's list,
+  not in A's, on changed PRs) are reported.
 - **E4:** every reviewer reply that strict parsing accepts gives identical findings under lenient. Any difference
   rejects the parser. Reported: arm A's reviewer replies by finish (length / stop / other / empty) and cost.
-- **Inconclusive** (no adoption, no FAIL): run not complete (cap or crash), any cache miss, a changed PR
-  `JUDGE_FAILED` in either arm, an unchanged PR scored differently, or a missing score file.
+- **Inconclusive** (no adoption, no FAIL): the run is not complete (cap or crash); any arm without exactly the 40
+  PRs; any PR not `SCORED` in any arm under either judge (`JUDGE_FAILED` anywhere, or a missing score file); an
+  unchanged PR scored differently; a received reviewer reply whose bytes are missing from the corpus (a request
+  that failed with no reply is counted as a request error, not as missing); per-call charges that do not add up to
+  the ledger's job total; any cache miss.
 **Budget:** hard cap $4 for the whole job (generation, verification and judging, all arms), one `Budget`
 instance: run cap $4, total cap = ledger total at start + $4, never above the env caps (`budgetFor`; it refuses
 unless `TRACEHOUND_BUDGET_RUN_USD` ≥ 4). Ledger at plan time: $40.43804 (`.tracehound/spend.jsonl`, 16,018
 entries, last 2026-10-29), so the total cap would be $44.43804 (< the $45 default). Estimates, not promises:
 - Replay path: A ≈ $0 if every request is in the cache. B1 pays verifier calls on new findings only. B2 pays
-  for its fresh retries: at most ≈ $0.034 each at 32k output (prices `config/prices.json:7`), and about 30
-  first replies per run end at the cap (79 of 624 calls hit 32,000 over runs 7r, 8 and part of 9,
-  `dev-3.5.md`), so ≤ ≈ $1.0. Judges ≈ $0.10 for 3 arms × 40 PRs × 2 judges (067: v1 130 calls $0.094, x1 130
+  for its fresh retries: ≈ $0.034 each if one writes the full 32k output with ≈ 15k input tokens (prices
+  `config/prices.json:7`; an estimate that depends on input size, not an upper bound). How many first replies end
+  at the cap is not measured: 79 of the 624 calls of runs 7r, 8 and part of 9 returned exactly 32,000 tokens
+  (`dev-3.5.md`), which extrapolates to about 30 per run, so ≈ $1.0. Judges ≈ $0.10 for 3 arms × 40 PRs × 2 judges (067: v1 130 calls $0.094, x1 130
   calls $0.020), most of it cached for unchanged PRs.
 - If arm A has to be drawn fresh: ≈ $2.97 (40 × the $0.0743 mean per PR, `dev-3.5.md`) + the above ≈ $4.07,
   which can stop at the cap: then the result is inconclusive, as pre-registered.

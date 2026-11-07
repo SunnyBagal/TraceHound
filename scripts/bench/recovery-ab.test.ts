@@ -186,3 +186,146 @@ test("E3 (devin's gate): no fewer TPs and no lower precision; recovered findings
   assert.equal(f.unchangedDiffer, 1);
   assert.equal(f.changedJudgeFailed, 1);
 });
+
+// ---- the A2 review's points: single flight, coverage, the bench folder, the cap, an end-to-end run ----
+
+test("single flight: identical requests in flight together are sent once and get the same bytes", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rab-"));
+  let calls = 0;
+  const f = (async () => {
+    calls++;
+    await new Promise((r) => setTimeout(r, 20));
+    return new Response(JSON.stringify(body(`reply-${calls}`)), { status: 200 });
+  }) as unknown as typeof fetch;
+  const { corpus, tf } = client(dir, { offline: false, fetch: f });
+  const cc = new CorpusClient({ corpus, shared: { get: () => undefined }, client: tf });
+  cc.arm = "A";
+  const [x, y] = await Promise.all([cc.chat(REQ, { purpose: "review" }), cc.chat(REQ, { purpose: "review" })]);
+  assert.equal(calls, 1);
+  assert.equal(x.content, y.content);
+  assert.deepEqual(cc.log.map((p) => p.source).sort(), ["fresh", "joined"]);
+  cc.arm = "B1";
+  assert.equal((await cc.chat(REQ, { purpose: "review" })).content, x.content);
+});
+
+test("the bench folder must resolve outside the repository, symlinks included", async () => {
+  const { checkBench } = await import("./recovery-ab.ts");
+  const t = mkdtempSync(join(tmpdir(), "rab-"));
+  const { mkdirSync, symlinkSync } = await import("node:fs");
+  mkdirSync(join(t, "repo/sub"), { recursive: true });
+  mkdirSync(join(t, "bench"));
+  symlinkSync(join(t, "repo/sub"), join(t, "alias"));
+  assert.equal(checkBench(join(t, "repo/sub"), join(t, "repo")).ok, false);
+  assert.equal(checkBench(join(t, "repo"), join(t, "repo")).ok, false);
+  assert.equal(checkBench(join(t, "alias"), join(t, "repo")).ok, false);
+  assert.equal(checkBench(join(t, "bench"), join(t, "repo")).ok, true);
+  assert.equal(checkBench(ROOT).ok, false); // this repository itself
+});
+
+// A synthetic bench: 40 dev pull requests, one golden comment each. sentry/0's diff chunk is the
+// case the switches target: the first reply has prose around valid JSON and the correction retry is
+// invalid, so A loses the chunk and B1/B2 keep it.
+async function syntheticBench(opts: { pulls?: number; judgeFails?: string } = {}) {
+  const { mkdirSync, writeFileSync } = await import("node:fs");
+  const t = mkdtempSync(join(tmpdir(), "rab-"));
+  const bench = join(t, "bench");
+  for (const repo of REPOS) {
+    const n = repo === "discourse" && opts.pulls ? opts.pulls - 30 : 10;
+    mkdirSync(join(bench, "prs", repo), { recursive: true });
+    mkdirSync(join(bench, "repos"), { recursive: true });
+    const heads: Record<string, { head: string }> = {};
+    for (let i = 0; i < n; i++) {
+      writeFileSync(join(bench, "prs", repo, `${i}.json`), JSON.stringify({ title: `${repo} pull ${i}`, description: "synthetic", diff: DIFF, number: i }));
+      heads[String(i)] = { head: "0".repeat(40) };
+    }
+    writeFileSync(join(bench, "repos", `${repo}.heads.json`), JSON.stringify(heads));
+    mkdirSync(join(bench, "golden/code_review_benchmarks"), { recursive: true });
+    writeFileSync(join(bench, "golden/code_review_benchmarks", `${repo}.json`), JSON.stringify(Array.from({ length: 10 }, (_, i) => ({ pr_title: `${repo} pull ${i}`, comments: [{ comment: "a.c is undefined", severity: "High" }] }))));
+  }
+  const live = { active: 0, calls: 0 };
+  const f = (async (_url: string, init: RequestInit) => {
+    live.active++;
+    live.calls++;
+    await new Promise((r) => setTimeout(r, 2));
+    const req = JSON.parse(init.body as string) as ChatRequest;
+    const s = stageOf(req);
+    const user = req.messages[1]!.content ?? "";
+    let content: string;
+    if (s === "judge") {
+      const tools = [...user.matchAll(/^(T\d+) \(/gm)].map((m) => m[1]!);
+      content = opts.judgeFails && user.includes(`Pull request: ${opts.judgeFails}\n`) ? "no json" : JSON.stringify({ matches: tools.map((t, i) => ({ tool: t, golden: i === 0 ? "G1" : null })) });
+    } else if (s === "verify") content = VERDICT;
+    else if (s === "diff" && user.includes("sentry pull 0")) content = attemptKind(req) === "first" ? `Review:\n\`\`\`json\n${FINDINGS}\n\`\`\`\nend` : "still not json";
+    else if (s === "ctx" && user.includes("sentry pull 0")) content = '{"findings":[]}';
+    else content = FINDINGS;
+    live.active--;
+    return new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content } }], usage: { prompt_tokens: 10, completion_tokens: 10 } }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const lines: string[] = [];
+  const deps = {
+    bench, stateDir: join(t, "state"), pricesFile: join(ROOT, "config/prices.json"), env: { TRACEHOUND_BUDGET_RUN_USD: "4", NEBIUS_API_KEY: "test" } as NodeJS.ProcessEnv,
+    log: (l: string) => lines.push(l), err: () => {}, fetch: f, freezeCheck: () => ({ ok: true, head: "test" }), shared: { get: () => undefined }, source: () => SOURCE,
+  };
+  return { bench, deps, live, lines };
+}
+
+test("end to end: A loses one chunk, B1 and B2 recover it, coverage complete, verdict PASS (B2)", async () => {
+  const { runJob, analyze, outDir } = await import("./recovery-ab.ts");
+  const { bench, deps, live } = await syntheticBench();
+  assert.equal(await runJob("run", deps), 0);
+  assert.equal(live.active, 0);
+  const r = analyze(outDir(bench), new SpendLedger(join(deps.stateDir, "spend.jsonl")).totalUSD());
+  assert.deepEqual(r.coverage, { ok: true, problems: [] });
+  assert.equal(r.arms.A!.chunkFailed.total, 1);
+  assert.equal(r.arms.B1!.chunkFailed.total, 0);
+  assert.equal(r.arms.A!.emptyByFailure, 1); // sentry/0: the ctx reply had no findings
+  assert.equal(r.changedPulls.B1, 1);
+  assert.equal(r.firstAttempts.failedChunks, 1);
+  assert.equal(r.e4.lenientDiffers, 0);
+  assert.deepEqual(r.unpairedPulls, []);
+  for (const j of ["judge-v1", "judge-x1"]) assert.equal(r.judges[j]!.B2!.x.tp, r.judges[j]!.B2!.a.tp + 1);
+  assert.equal(r.verdict.overall, "PASS");
+  assert.equal(r.verdict.adopted, "B2");
+});
+
+test("a pull request that fails judging in every arm makes the result INCONCLUSIVE, not a silent drop", async () => {
+  const { runJob, analyze, outDir } = await import("./recovery-ab.ts");
+  const { bench, deps, live } = await syntheticBench({ judgeFails: "grafana pull 3" });
+  assert.equal(await runJob("run", deps), 0);
+  const r = analyze(outDir(bench), new SpendLedger(join(deps.stateDir, "spend.jsonl")).totalUSD());
+  assert.equal(r.coverage.ok, false);
+  assert.equal(r.verdict.overall, "INCONCLUSIVE");
+});
+
+test("not the expected 40 pull requests: refused before any call", async () => {
+  const { runJob } = await import("./recovery-ab.ts");
+  const { deps, live } = await syntheticBench({ pulls: 39 });
+  assert.equal(await runJob("run", deps), 1);
+  assert.equal(live.calls, 0);
+});
+
+test("at the cap: nothing new is sent, in-flight calls finish before the final snapshot, every charge is attributed", async () => {
+  const { runJob, outDir } = await import("./recovery-ab.ts");
+  const { readFileSync } = await import("node:fs");
+  const { bench, deps, live } = await syntheticBench();
+  // reviewer reservations are ≈ $0.029, verifier ones ≈ $0.014: the fourth concurrent verifier reservation crosses $0.05
+  const FOUR = '{"findings":[' + [1, 2, 3, 4].map((i) => `{"path":"src/x.ts","line":2,"body":"finding ${i}"}`).join(",") + "]}";
+  const inner = deps.fetch;
+  deps.fetch = (async (url: string, init: RequestInit) => {
+    const req = JSON.parse(init.body as string) as ChatRequest;
+    if (stageOf(req) === "diff" || stageOf(req) === "ctx") {
+      live.calls++;
+      return new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: FOUR } }], usage: { prompt_tokens: 10, completion_tokens: 10 } }), { status: 200 });
+    }
+    return inner(url, init);
+  }) as unknown as typeof fetch;
+  deps.env = { ...deps.env, TRACEHOUND_BUDGET_TOTAL_USD: "0.05" };
+  assert.equal(await runJob("run", deps), 2);
+  assert.equal(live.active, 0);
+  const prov = JSON.parse(readFileSync(join(outDir(bench), "provenance.json"), "utf8")) as { source: string; ok: boolean; costUSD: number }[];
+  const ledger = readFileSync(join(deps.stateDir, "spend.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { estCostUSD: number });
+  assert.equal(prov.filter((p) => p.source === "fresh" && p.ok).length, ledger.length);
+  assert.ok(Math.abs(prov.reduce((s, p) => s + p.costUSD, 0) - ledger.reduce((s, e) => s + e.estCostUSD, 0)) < 1e-12);
+  const run = JSON.parse(readFileSync(join(outDir(bench), "run.json"), "utf8")) as { status: string };
+  assert.equal(run.status, "stopped-at-cap");
+});
