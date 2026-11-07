@@ -3570,7 +3570,7 @@ run` (073a: `run --restart`); `node scripts/bench/recovery-ab.ts report`. The ru
 **Adoption:** if B2 (or B1) passes, propose default-on for the Action in a later change; ΔF is reported as within
 noise, and no ranking claim follows. The result is recorded here as 073's result, on this branch, not merged.
 **073a (2026-11-08, before the restart's first call): the first run is void; one restart.**
-- *What happened:* the run started 2026-11-07T19:0x (ledger start $40.43804) and was stopped by hand at arm A
+- *What happened:* the run started 2026-11-07T19:09:03.986Z (ledger start $40.43804) and was stopped by hand at arm A
   pull request 14 of 40. Its live 3.5 calls failed with `fetch failed` at exactly 300 s after sending (ledger
   timestamps 19:34:41 → 19:39:42 → 19:44:43 → 19:49:43; `componentId` 073:75, 073:77, 073:78). That is Node's
   built-in fetch (undici) `headersTimeout` of 300 s, below the client's own 600 s timeout (`run-test-set.ts:140`,
