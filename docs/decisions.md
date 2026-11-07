@@ -3499,3 +3499,65 @@ Proof: `.github/workflows/action-install-matrix.yml` runs the install steps unde
 for pnpm@9 on the old `action.yml` and passes all six after the fix (#68). The Action pin moves to the 2.1 commit.
 **Rejected:** keeping `pnpm/action-setup` with `package_json_file`, because its default path is resolved in the
 workspace and I could not show that it would point at the action's own `package.json`.
+
+## 073 — Pre-registered dev A/B of the two generation-recovery switches (2026-11-08)
+
+**Status: pre-registered, not yet run.** Written on branch `bench/recovery-ab` before any model call of this job.
+Source of the task: `docs/research/2026-11-07/REPORT.md` §3 and `DRAFT-CONCLUSION.md` §1 (T1), with devin's
+dissent gate (REPORT.md §8) in place of E3, as the owner instructed.
+**Why:** on 3.5 dev, 7 of 40 PRs per completed run lost a reviewer chunk (8 terminal `CHUNK_FAILED` in each of
+runs 7r and 8) and 3 of 40 ended with no findings (`docs/bench/dev-3.5.md` §"Failed reviewer chunks"; 068).
+#67 built two default-off switches that target this and were never measured (`docs/post-freeze-fixes.md`).
+**Arms** (`scripts/bench/recovery-ab.ts`, `ARMS`; the only difference is the two `ReviewOptions` fields passed to
+`reviewPull` and `reviewPullWithContext`):
+- A = both off: the product today. With no option set the requests are byte-identical to `review-freeze-2`
+  (`docs/post-freeze-fixes.md`; `packages/action/test/pool-verify-identity.test.ts`).
+- B1 = `parser: "lenient"` on both reviewers (one-switch attribution).
+- B2 = `parser: "lenient"` + `retryOnLength: "fresh"` on both reviewers.
+- Shared by every arm: the 40 dev PRs (sentry, grafana, keycloak, discourse; `DEV_REPOS`), pool-verify-v1,
+  `nvidia/Nemotron-3.5-Super-VL` for both reviewers and the verifier, frozen prompts, temperature 0, reasoning on,
+  `max_tokens` 32,000, the verifier's parser strict, the runner's rerun-once rule, judges bench-judge-v1 (scorer
+  of record) and bench-judge-x1 (`JUDGES` from `run-test-set.ts`). A test pins arm A to the runner's `pipeline`
+  (same requests, same records).
+**Corpus and pairing:** all arms run in one process through one `CorpusClient` over a private corpus
+(`<bench>/recovery-073/corpus`, outside the repo). A request in the corpus is served from it; else its exact key
+(`ResponseCache.key`) is read from `.tracehound/cache` with `get` only, never by listing that folder, and copied in;
+else the request goes out and its 200 body is stored, empty content included. So arm A is a *latest-response
+replay corpus* (runs 7r/8/9 overwrote each other; it is not run 7r's or run 8's identity), a request goes out at
+most once across arms, and unchanged chunks get the same bytes in every arm. A pull with a request that went out
+live in more than one arm is *unpaired*: listed, left out of E3 and of the paired E2 count. Cal.com: the job takes
+no set name; it reads only `inputPaths(bench, "dev", repo)` for the four dev repos, and the only cache reads are
+keys built from those inputs.
+**Exit criteria** (all must hold for an arm; B2 is the candidate, B1 is adopted only if B2 fails and B1 passes):
+- **E2:** terminal `CHUNK_FAILED` (diff + ctx) in the arm ≤ 2 **and** strictly below A, counted over all chunks
+  and again over paired chunks; and 0 PRs empty by a failure (pool-raw empty with ≥ 1 failed chunk).
+- **E3 (devin's gate):** over all PRs scored in both arms, under v1 **and** x1: TP_arm ≥ TP_A **and**
+  P_arm ≥ P_A. Unchanged PRs (identical pool-verify-v1 list) must score identically. The recovered findings' own
+  TP/FP (in the arm's list, not in A's, on changed PRs) are reported.
+- **E4:** every reviewer reply that strict parsing accepts gives identical findings under lenient. Any difference
+  rejects the parser. Reported: arm A's reviewer replies by finish (length / stop / other / empty) and cost.
+- **Inconclusive** (no adoption, no FAIL): run not complete (cap or crash), any cache miss, a changed PR
+  `JUDGE_FAILED` in either arm, an unchanged PR scored differently, or a missing score file.
+**Budget:** hard cap $4 for the whole job (generation, verification and judging, all arms), one `Budget`
+instance: run cap $4, total cap = ledger total at start + $4, never above the env caps (`budgetFor`; it refuses
+unless `TRACEHOUND_BUDGET_RUN_USD` ≥ 4). Ledger at plan time: $40.43804 (`.tracehound/spend.jsonl`, 16,018
+entries, last 2026-10-29), so the total cap would be $44.43804 (< the $45 default). Estimates, not promises:
+- Replay path: A ≈ $0 if every request is in the cache. B1 pays verifier calls on new findings only. B2 pays
+  for its fresh retries: at most ≈ $0.034 each at 32k output (prices `config/prices.json:7`), and about 30
+  first replies per run end at the cap (79 of 624 calls hit 32,000 over runs 7r, 8 and part of 9,
+  `dev-3.5.md`), so ≤ ≈ $1.0. Judges ≈ $0.10 for 3 arms × 40 PRs × 2 judges (067: v1 130 calls $0.094, x1 130
+  calls $0.020), most of it cached for unchanged PRs.
+- If arm A has to be drawn fresh: ≈ $2.97 (40 × the $0.0743 mean per PR, `dev-3.5.md`) + the above ≈ $4.07,
+  which can stop at the cap: then the result is inconclusive, as pre-registered.
+- A $0 dry run (`recovery-ab.ts dry`, arm A from the cache only) reports the hit counts before the paid run.
+**Commands:** `node scripts/bench/recovery-ab.ts dry`; `TRACEHOUND_BUDGET_RUN_USD=4 node scripts/bench/recovery-ab.ts
+run`; `node scripts/bench/recovery-ab.ts report`. The run refuses unless `packages/analyzer/src`, `config` and
+`scripts/bench` equal `53b6045` except for added files, with nothing uncommitted (`freezeCheck073`).
+**Adoption:** if B2 (or B1) passes, propose default-on for the Action in a later change; ΔF is reported as within
+noise, and no ranking claim follows. The result is recorded here as 073's result, on this branch, not merged.
+**Rejected:**
+- The research run's E3 (ΔTP ≥ 0 ∧ ΔFP ≤ 0 on changed PRs): it rejects any recovery made at the pipeline's own
+  precision (≈ 0.83 FP per TP, `levers-v2.md:45-46`). The owner chose devin's gate; with R_B ≥ R_A ∧ P_B ≥ P_A on
+  a paired replay, F_B ≥ F_A.
+- Three independent fresh captures: ≈ 3 × $3, over the cap, and unpaired by construction.
+- A lenient verifier: it is not one of the two generation switches; it stays strict in every arm.
