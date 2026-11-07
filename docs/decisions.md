@@ -3584,9 +3584,12 @@ noise, and no ranking claim follows. The result is recorded here as 073's result
   of its own), so only the client's 600 s `AbortSignal.timeout` ends a request, as the protocol already stated.
   Request bytes, keys, prompts, models and every option are unchanged.
 - *The restart:* `run --restart`, once, only after a run that did not complete and with the same manifest; it
-  writes `recovery-073r/` and leaves `recovery-073/` untouched. The void run's corpus holds only 200 replies to
-  identical requests, so it is read by exact key (source `carried`) before the shared cache: the same bytes the
-  void run received, used in every arm of the restart. Ledger call ids are `073r:<n>`. The restart stands for
+  writes `recovery-073r/` and leaves `recovery-073/` untouched. The void run's corpus holds only bodies of
+  successful (2xx; the stored body keeps no status, so exactly 200 is not provable for it) replies to identical
+  requests, copied from the shared cache or received by the void run, so it is read by exact key (source
+  `carried`) before the shared cache: the same bytes the void run had, used in every arm of the restart. From the
+  restart on, `storingFetch` stores HTTP 200 bodies only, and `longFetch` gives 204/205/304 a null body and turns
+  any response-construction error into a rejected request. Ledger call ids are `073r:<n>`. The restart stands for
   the run; its verdict is decided by the rules above, unchanged.
 **Rejected:**
 - The research run's E3 (ΔTP ≥ 0 ∧ ΔFP ≤ 0 on changed PRs): it rejects any recovery made at the pipeline's own

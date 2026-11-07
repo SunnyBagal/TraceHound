@@ -415,3 +415,34 @@ test("restart: once, after a run that did not complete; the void run is untouche
   assert.equal(a.firstAttempts.carried, a.firstAttempts.total);
   assert.equal(await runJob("run", deps, { restart: true }), 1); // one restart only
 });
+
+test("longFetch: a bodyless status gets a null body; a response that cannot be built rejects the promise", async () => {
+  const { longFetch } = await import("./recovery-ab.ts");
+  const { createServer } = await import("node:http");
+  const server = createServer((req, res) => {
+    if (req.url === "/204") res.writeHead(204).end();
+    else res.writeHead(999).end("x"); // a status Response() refuses (RangeError)
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  try {
+    const r = await longFetch(`${base}/204`, { method: "POST", body: "{}" });
+    assert.equal(r.status, 204);
+    assert.equal(r.body, null);
+    await assert.rejects(longFetch(`${base}/999`, { method: "POST", body: "{}" }), RangeError);
+  } finally {
+    server.closeAllConnections();
+    server.close();
+  }
+});
+
+test("storingFetch stores HTTP 200 bodies only", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "rab-"));
+  const corpus = new ResponseCache(join(dir, "corpus"));
+  for (const status of [200, 201]) {
+    const req = { ...REQ, max_tokens: status };
+    const f = storingFetch(corpus, (async () => new Response(JSON.stringify(body("x")), { status })) as unknown as typeof fetch);
+    await f("http://unused", { method: "POST", body: JSON.stringify(req) });
+    assert.equal(corpus.get(ResponseCache.key(req.model, req)) !== undefined, status === 200, String(status));
+  }
+});

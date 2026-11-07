@@ -130,11 +130,11 @@ export interface ReadOnlyCache {
   get<T>(key: string): T | undefined;
 }
 
-/** A fetch that stores every 200 body in the corpus under the request's cache key (empty content included). */
+/** A fetch that stores every HTTP 200 body in the corpus under the request's cache key (empty content included). */
 export function storingFetch(corpus: ResponseCache, inner: typeof fetch = globalThis.fetch): typeof fetch {
   return (async (url: string | URL | Request, init?: RequestInit) => {
     const res = await inner(url, init);
-    if (res.ok && typeof init?.body === "string") {
+    if (res.status === 200 && typeof init?.body === "string") {
       const body = await res.clone().json().catch(() => undefined);
       const request = JSON.parse(init.body) as ChatRequest;
       if (body !== undefined) corpus.put(ResponseCache.key(request.model, request), body);
@@ -160,9 +160,15 @@ export function longFetch(url: string | URL | Request, init?: RequestInit): Prom
       res.on("data", (c: Buffer) => chunks.push(c));
       res.on("error", reject);
       res.on("end", () => {
-        const h = new Headers();
-        for (const [k, v] of Object.entries(res.headers)) if (v !== undefined) h.set(k, Array.isArray(v) ? v.join(", ") : v);
-        resolvePromise(new Response(Buffer.concat(chunks), { status: res.statusCode ?? 502, headers: h }));
+        try {
+          const h = new Headers();
+          for (const [k, v] of Object.entries(res.headers)) if (v !== undefined) h.set(k, Array.isArray(v) ? v.join(", ") : v);
+          const status = res.statusCode ?? 502;
+          // 204, 205 and 304 must have a null body; any construction error rejects, so the client accounts for it
+          resolvePromise(new Response([204, 205, 304].includes(status) ? null : Buffer.concat(chunks), { status, headers: h }));
+        } catch (e) {
+          reject(e);
+        }
       });
     });
     req.on("error", reject);
