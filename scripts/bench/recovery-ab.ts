@@ -743,7 +743,7 @@ export function analyze(dir: string, spendUSD: number): Analysis {
     const sa = byArm.get("A");
     for (const x of ["B1", "B2"] as const) {
       const sx = byArm.get(x);
-      if (sa && sx && changedSets[x]) judges[j.id]![x] = compareJudge(sa, sx, changedSets[x]!, unpaired);
+      if (sa && sx && changedSets[x]) judges[j.id]![x] = compareJudge(sa, sx, changedSets[x]!, new Set()); // the mandatory E3 guard: all 40, nothing excluded
     }
   }
 
@@ -761,6 +761,7 @@ export function analyze(dir: string, spendUSD: number): Analysis {
 
   const misses = prov.filter((p) => p.source === "miss").length;
   if (misses) problems.push(`${misses} cache misses`);
+  if (unpairedPulls.length) problems.push(`${unpairedPulls.length} unpaired pull requests (a request went out live in more than one arm)`);
   if (run.status !== "complete") problems.push(`run status ${run.status}`);
   const coverage = { ok: problems.length === 0, problems };
 
@@ -771,7 +772,7 @@ export function analyze(dir: string, spendUSD: number): Analysis {
     const ax = arms[x];
     const aa = arms.A;
     const jc = JUDGES.map((j) => judges[j.id]?.[x]);
-    const cx = coverage.ok && !!ax && !!aa && jc.every((c) => c && c.changedJudgeFailed === 0 && c.unchangedDiffer === 0);
+    const cx = coverage.ok && !!ax && !!aa && jc.every((c) => c && c.scoredBoth === EXPECTED_PULLS.length && c.changedJudgeFailed === 0 && c.unchangedDiffer === 0);
     if (coverage.ok && !cx) why.push(`${x}: a changed pull request failed judging or an unchanged one scored differently`);
     const e2 = !!ax && !!aa && ax.chunkFailed.total <= 2 && ax.chunkFailed.total < aa.chunkFailed.total && ax.emptyByFailure === 0 && (pairedFailedChunks[x] ?? Infinity) < (pairedFailedChunks.A ?? 0);
     const e3 = jc.every((c) => !!c && c.tpOk && c.precisionOk);

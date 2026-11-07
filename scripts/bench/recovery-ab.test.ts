@@ -329,3 +329,23 @@ test("at the cap: nothing new is sent, in-flight calls finish before the final s
   const run = JSON.parse(readFileSync(join(outDir(bench), "run.json"), "utf8")) as { status: string };
   assert.equal(run.status, "stopped-at-cap");
 });
+
+test("an unpaired pull request makes an otherwise passing result INCONCLUSIVE; E3 always covers all 40", async () => {
+  const { runJob, analyze, outDir } = await import("./recovery-ab.ts");
+  const { readFileSync, writeFileSync } = await import("node:fs");
+  const { bench, deps } = await syntheticBench();
+  assert.equal(await runJob("run", deps), 0);
+  const spend = new SpendLedger(join(deps.stateDir, "spend.jsonl")).totalUSD();
+  assert.equal(analyze(outDir(bench), spend).verdict.overall, "PASS");
+  for (const j of ["judge-v1", "judge-x1"]) assert.equal(analyze(outDir(bench), spend).judges[j]!.B2!.scoredBoth, 40);
+  // the same request recorded as sent live in a second arm (as a transient failure and resend would): unpaired
+  const f = join(outDir(bench), "provenance.json");
+  const prov = JSON.parse(readFileSync(f, "utf8")) as { arm: string; pull: string; source: string; costUSD: number }[];
+  const sent = prov.find((p) => p.arm === "A" && p.pull === "grafana/1" && p.source === "fresh")!;
+  writeFileSync(f, JSON.stringify([...prov, { ...sent, arm: "B1", callId: 1e9, costUSD: 0 }]));
+  const r = analyze(outDir(bench), spend);
+  assert.deepEqual(r.unpairedPulls, ["grafana/1"]);
+  assert.equal(r.coverage.ok, false);
+  assert.equal(r.verdict.overall, "INCONCLUSIVE");
+  assert.equal(r.verdict.B2!.pass, false);
+});

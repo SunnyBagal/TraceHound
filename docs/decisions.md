@@ -3531,8 +3531,8 @@ refuses). A request in the corpus is served from it; else its exact key (`Respon
 200 body is stored, empty content included. Identical requests in flight at the same time share one call (single
 flight). So arm A is a *latest-response replay corpus* (runs 7r/8/9 overwrote each other; it is not run 7r's or
 run 8's identity), a request goes out at most once across arms, and unchanged chunks get the same bytes in every
-arm. A pull with a request that went out live in more than one arm is *unpaired*: listed, left out of E3 and of
-the paired E2 count. Cal.com: the job takes no set name; it reads only `inputPaths(bench, "dev", repo)` for the
+arm. A pull with a request that went out live in more than one arm is *unpaired*: any unpaired pull makes the
+result inconclusive (it is listed, and the paired E2 count leaves it out for diagnosis); E3 always covers all 40. Cal.com: the job takes no set name; it reads only `inputPaths(bench, "dev", repo)` for the
 four dev repos, and the only cache reads are keys built from those inputs.
 **Cost attribution:** every call gets a job call id as its ledger `componentId`, so each call's charge, failed
 calls included (the client charges the upper bound when no usage comes back), is read from the ledger and reported
@@ -3550,7 +3550,7 @@ sent and the calls already in flight are awaited before the final records are wr
   PRs; any PR not `SCORED` in any arm under either judge (`JUDGE_FAILED` anywhere, or a missing score file); an
   unchanged PR scored differently; a received reviewer reply whose bytes are missing from the corpus (a request
   that failed with no reply is counted as a request error, not as missing); per-call charges that do not add up to
-  the ledger's job total; any cache miss.
+  the ledger's job total; any unpaired pull; any cache miss.
 **Budget:** hard cap $4 for the whole job (generation, verification and judging, all arms), one `Budget`
 instance: run cap $4, total cap = ledger total at start + $4, never above the env caps (`budgetFor`; it refuses
 unless `TRACEHOUND_BUDGET_RUN_USD` ≥ 4). Ledger at plan time: $40.43804 (`.tracehound/spend.jsonl`, 16,018
