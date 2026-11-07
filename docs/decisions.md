@@ -3597,3 +3597,17 @@ noise, and no ranking claim follows. The result is recorded here as 073's result
   a paired replay, F_B ≥ F_A.
 - Three independent fresh captures: ≈ 3 × $3, over the cap, and unpaired by construction.
 - A lenient verifier: it is not one of the two generation switches; it stays strict in every arm.
+
+**073 result (2026-11-08): PASS for B1 (lenient parser); B2 not met.** `docs/bench/recovery-ab.md`; runner at `78537cd`;
+records `<bench>/recovery-073r/` (the 073a restart; `recovery-073/` is void). Coverage complete (40 PRs per arm, all
+SCORED under both judges, 0 misses, 0 request errors, 0 unpaired PRs, per-call charges = ledger).
+- E2: terminal CHUNK_FAILED A 1, B1 0, B2 7; empty by failure A 1, B1 0, B2 3. B1 passes; B2 fails (7 > 2).
+  B2's 7 failures are all an empty first reply ending `length` whose reasoning-off fresh retry was not valid JSON
+  (7 of B2's 10 fresh retries); A's append retry recovered those chunks.
+- E3 (devin's gate): v1 TP 32 → 33 (B1) / 32 (B2), P 54.2% → 55.0% / 54.2%; x1 TP 34 → 35 / 34, P 55.7% → 56.5% / 55.7%.
+  Pass for both. E4: 96 strict-valid reviewer replies, 0 differ under lenient. Pass.
+- Spend: **$0.73195** for the whole job (void run $0.34415 + restart $0.38780), under the $4 cap.
+- Reading: by the pre-registered rule B1 is adopted; propose `parser: "lenient"` default-on for the Action in a
+  later change (not here). The effect is one chunk and one TP under each judge on a corpus whose arm A lost 1
+  chunk (runs 7r and 8 lost 8 each), so ΔF is noise and no ranking claim follows. `retryOnLength: "fresh"` stays
+  off: on this corpus it turned 7 recoverable chunks into failures.
