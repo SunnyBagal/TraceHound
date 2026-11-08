@@ -216,6 +216,8 @@ export interface Unit {
   halves?: Step[] | "unsplittable";
   schema?: Step | "dropped";
   arms?: Record<"A" | "D" | "E", ArmOutcome>;
+  /** the unit met the job cap: what it received is kept above; it is incomplete */
+  capStop?: string;
   complete: boolean;
 }
 
@@ -244,19 +246,23 @@ export interface SchemaState {
   probe?: Promise<void> | undefined;
 }
 
-/** Runs every dispatched call to completion (allSettled), then rethrows the first budget refusal, so no paid call outlives its unit. */
-async function settleAll<T>(ps: Promise<T>[]): Promise<T[]> {
-  const r = await Promise.allSettled(ps);
-  const bad = r.find((x): x is PromiseRejectedResult => x.status === "rejected");
-  if (bad) throw bad.reason;
-  return r.map((x) => (x as PromiseFulfilledResult<T>).value);
-}
 const findingKey = (f: unknown) => JSON.stringify(f);
 
+/** A unit never throws: a cap refusal is recorded on the unit (`capStop`) with everything it already received. */
 export async function runUnit(client: ChatClient, plan: Plan, draw: number, state: SchemaState, save: (name: string, body: unknown) => void): Promise<Unit> {
   const u: Unit = { chunk: plan.chunk.id, draw, complete: false };
   const index = new DiffIndex(parseDiff(plan.input.diff));
-  const s1 = await step(client, plan.first, index, (b) => save("first", b));
+  const capped = (e: unknown) => {
+    if (!(e instanceof BudgetExceededError)) throw e;
+    u.capStop = `${e.name}: ${e.message}`;
+    return u;
+  };
+  let s1: Step & { content: string };
+  try {
+    s1 = await step(client, plan.first, index, (b) => save("first", b));
+  } catch (e) {
+    return capped(e);
+  }
   u.first = strip(s1);
   if (!s1.ok) return (u.path = "error"), u;
   const success = (s: Step) => s.ok && s.valid && s.kept > 0;
@@ -269,46 +275,69 @@ export async function runUnit(client: ChatClient, plan: Plan, draw: number, stat
   const appendReq = appendRetry(plan.first, s1.content, (parseReviewReply(s1.content, "lenient") as { why: string }).why);
   if (!s1.contentEmpty) {
     u.path = "invalid";
-    const s2 = await step(client, appendReq, index, (b) => save("append", b));
+    let s2: Step & { content: string };
+    try {
+      s2 = await step(client, appendReq, index, (b) => save("append", b));
+    } catch (e) {
+      return capped(e);
+    }
     u.shared = strip(s2);
     const o = { success: success(s2), valid: s2.valid, kept: s2.kept, costUSD: s1.costUSD + s2.costUSD, wallMs: s1.latencyMs + s2.latencyMs, complete: s2.ok };
     u.arms = { A: o, D: o, E: o };
     return (u.complete = s2.ok), u;
   }
   u.path = "empty";
-  // E: the first E request of the job is the probe; others wait for it; none is sent once the feature is refused
+  // E: every E reply updates the shared decision at once; while a probe is out, others wait (re-checked in a loop)
+  const sendSchema = () =>
+    step(client, schemaRetry(plan.first), index, (b) => save("schema", b)).then((e) => {
+      if (schemaRefused(e)) state.schemaDropped = true;
+      else if (e.ok) state.probeDone = true;
+      return e;
+    });
   const schemaStep = async (): Promise<(Step & { content: string }) | null> => {
-    if (state.probe) await state.probe;
+    while (state.probe) await state.probe;
     if (state.schemaDropped) return null;
-    let mine: Promise<Step & { content: string }> | undefined;
-    if (!state.probeDone) {
-      mine = step(client, schemaRetry(plan.first), index, (b) => save("schema", b));
-      state.probe = mine.then((e) => {
-        if (schemaRefused(e)) state.schemaDropped = true; // applied the moment the probe returns
-        state.probeDone = e.ok || schemaRefused(e);
-        state.probe = undefined;
-      }, () => {
-        state.probe = undefined;
-      });
-      return mine;
-    }
-    return step(client, schemaRetry(plan.first), index, (b) => save("schema", b));
+    if (state.probeDone) return sendSchema();
+    const mine = sendSchema();
+    const probe: Promise<void> = mine.then(
+      () => undefined,
+      () => undefined,
+    ).finally(() => {
+      if (state.probe === probe) state.probe = undefined;
+    });
+    state.probe = probe;
+    return mine;
   };
-  const [a, d, e] = await settleAll<unknown>([
+  const [ra, rd, re] = await Promise.allSettled([
     step(client, appendReq, index, (b) => save("append", b)),
-    plan.halves ? settleAll(plan.halves.map((h, i) => step(client, h, index, (b) => save(`half-${i + 1}`, b)))) : Promise.resolve(null),
+    plan.halves ? Promise.allSettled(plan.halves.map((h, i) => step(client, h, index, (b) => save(`half-${i + 1}`, b)))) : Promise.resolve(null),
     schemaStep(),
-  ]) as [Step & { content: string }, (Step & { content: string })[] | null, (Step & { content: string }) | null];
-  u.shared = strip(a);
-  u.halves = d ? d.map(strip) : "unsplittable";
-  u.schema = e ? strip(e) : "dropped";
-  const A: ArmOutcome = { success: success(a), valid: a.valid, kept: a.kept, costUSD: s1.costUSD + a.costUSD, wallMs: s1.latencyMs + a.latencyMs, complete: a.ok };
+  ]);
+  // record everything that came back, then stop if any call met the cap
+  const a = ra.status === "fulfilled" ? ra.value : null;
+  const halves = rd.status === "fulfilled" ? rd.value : null;
+  const d = halves && halves.every((h) => h.status === "fulfilled") ? halves.map((h) => (h as PromiseFulfilledResult<Step & { content: string }>).value) : null;
+  const e = re.status === "fulfilled" ? re.value : null;
+  if (a) u.shared = strip(a);
+  if (halves) u.halves = halves.flatMap((h) => (h.status === "fulfilled" ? [strip(h.value)] : []));
+  else if (!plan.halves) u.halves = "unsplittable";
+  if (re.status === "fulfilled") u.schema = e ? strip(e) : "dropped";
+  const rejected = [ra, rd, re, ...(halves ?? [])].find((x): x is PromiseRejectedResult => x.status === "rejected");
+  if (rejected) return capped(rejected.reason);
+  const A: ArmOutcome = { success: success(a!), valid: a!.valid, kept: a!.kept, costUSD: s1.costUSD + a!.costUSD, wallMs: s1.latencyMs + a!.latencyMs, complete: a!.ok };
   // D: success = at least one half valid with >= 1 kept finding ("any half"); valid = both halves valid; kept = distinct findings
   let D: ArmOutcome;
   if (d) {
     const kept = new Set<string>();
-    for (const h of d) if (h.valid) for (const f of parseReviewReply(h.content, "lenient").ok ? (parseReviewReply(h.content, "lenient") as { findings: unknown[] }).findings : []) if (index.check(f as never).ok) kept.add(findingKey(index.check(f as never)));
-    D = { success: d.some((h) => success(h)), valid: d.every((h) => h.valid), kept: kept.size, costUSD: s1.costUSD + d.reduce((t, h) => t + h.costUSD, 0), wallMs: s1.latencyMs + Math.max(...d.map((h) => h.latencyMs)), complete: d.every((h) => h.ok), ...(d.some((h) => success(h)) && !d.every((h) => h.valid) && { note: "one half" }) };
+    for (const h of d) {
+      const p = parseReviewReply(h.content, "lenient");
+      if (p.ok) for (const f of p.findings) {
+        const c = index.check(f);
+        if (c.ok) kept.add(findingKey(c));
+      }
+    }
+    const any = d.some((h) => success(h));
+    D = { success: any, valid: d.every((h) => h.valid), kept: kept.size, costUSD: s1.costUSD + d.reduce((t, h) => t + h.costUSD, 0), wallMs: s1.latencyMs + Math.max(...d.map((h) => h.latencyMs)), complete: d.every((h) => h.ok), ...(any && !d.every((h) => h.valid) && { note: "one half" }) };
   } else D = { success: false, valid: false, kept: 0, costUSD: s1.costUSD, wallMs: s1.latencyMs, complete: true, note: "unsplittable" };
   const E: ArmOutcome = e
     ? schemaRefused(e)
@@ -420,8 +449,9 @@ export async function runJob(mode: "check" | "run", deps: Deps): Promise<number>
           writeFileSync(join(dir, "bodies", `${plan.chunk.id.replace(/[/#]/g, "_")}-d${draw}-${name}.json`), JSON.stringify(body));
         });
         units.push(u);
+        if (u.capStop) stop.err ??= new BudgetExceededError(u.capStop); // the cap: no new unit starts
       } catch (e) {
-        stop.err ??= e as Error; // the cap: no new unit starts; units in flight finish or stop
+        stop.err ??= e as Error; // not a cap refusal (a bug): stop, keep what is recorded
         units.push({ chunk: plan.chunk.id, draw, complete: false });
       }
       save();

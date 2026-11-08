@@ -155,7 +155,7 @@ test("the set must be the registered 20 failures / 14 distinct requests", () => 
 });
 
 const EMPTY = { content: "", finishReason: "length" };
-function slowModel(o: { halfThrows?: boolean; schemaError?: string; schemaDelay?: number; halfContent?: string[] } = {}) {
+function slowModel(o: { halfThrows?: boolean; schemaError?: string; schemaDelay?: number; halfContent?: string[]; log?: { start: number; end: number }[] } = {}) {
   const p = plan();
   const live = { active: 0, max: 0, schemaCalls: 0 };
   let half = 0;
@@ -166,7 +166,9 @@ function slowModel(o: { halfThrows?: boolean; schemaError?: string; schemaDelay?
       live.active++;
       live.max = Math.max(live.max, live.active);
       if (kind === "schema") live.schemaCalls++;
+      const start = performance.now();
       await new Promise((res) => setTimeout(res, kind === "append" ? 40 : kind === "schema" ? (o.schemaDelay ?? 5) : 5));
+      if (kind === "schema") o.log?.push({ start, end: performance.now() });
       live.active--;
       if (kind === "schema" && o.schemaError) throw new Error(o.schemaError);
       const content = kind === "first" ? EMPTY.content : kind === "half" && o.halfContent ? o.halfContent[half++]! : FINDINGS;
@@ -176,10 +178,14 @@ function slowModel(o: { halfThrows?: boolean; schemaError?: string; schemaDelay?
   return { client, plan: p, live };
 }
 
-test("at a cap refusal inside a unit, every sibling call already sent finishes before the unit rejects", async () => {
+test("at a cap refusal inside a unit, every sibling call already sent finishes, and the unit keeps its partial record", async () => {
   const m = slowModel({ halfThrows: true });
-  await assert.rejects(runUnit(m.client, m.plan, 1, { schemaDropped: false }, () => {}), BudgetExceededError);
+  const u = await runUnit(m.client, m.plan, 1, { schemaDropped: false }, () => {});
   assert.equal(m.live.active, 0); // the slow append retry was awaited
+  assert.match(u.capStop!, /BudgetExceededError/);
+  assert.equal(u.complete, false);
+  assert.ok(u.first && u.shared && u.schema && u.shared.ok); // the partial unit keeps what it received
+  assert.equal(u.arms, undefined);
 });
 
 test("E's probe: a fast feature refusal stops E in a concurrent unit, even while the first unit's siblings are still running", async () => {
@@ -214,4 +220,34 @@ test("D: any valid half with a kept finding is a success (noted 'one half'); the
   const both = slowModel({ halfContent: [FINDINGS, FINDINGS] });
   const u2 = await runUnit(both.client, both.plan, 1, { schemaDropped: false }, () => {});
   assert.equal(u2.arms!.D.kept, 1);
+});
+
+test("E: a refusal after a successful probe still drops E at once for every later unit", async () => {
+  const state: SchemaState = { schemaDropped: false };
+  const ok = slowModel();
+  await runUnit(ok.client, ok.plan, 1, state, () => {});
+  assert.equal(state.probeDone, true);
+  const refuse = slowModel({ schemaError: "HTTP 400: response_format is not supported" });
+  const u = await runUnit(refuse.client, refuse.plan, 2, state, () => {});
+  assert.equal(state.schemaDropped, true);
+  assert.equal(u.arms!.E.note, "E unsupported");
+  const later = slowModel();
+  await runUnit(later.client, later.plan, 3, state, () => {});
+  assert.equal(later.live.schemaCalls, 0);
+});
+
+test("E: after a transient probe error, the waiting units send exactly one new probe, not one each", async () => {
+  const state: SchemaState = { schemaDropped: false };
+  const first = slowModel({ schemaError: "HTTP 503: overloaded", schemaDelay: 30 });
+  const log: { start: number; end: number }[] = [];
+  const waiters = [slowModel({ log, schemaDelay: 15 }), slowModel({ log, schemaDelay: 15 }), slowModel({ log, schemaDelay: 15 })];
+  const p1 = runUnit(first.client, first.plan, 1, state, () => {});
+  await new Promise((r) => setTimeout(r, 5)); // the probe is out; three more units arrive
+  const ws = waiters.map((w, i) => runUnit(w.client, w.plan, i + 2, state, () => {}));
+  await Promise.all([p1, ...ws]);
+  // one replacement probe went out alone; only after it returned did the other two go
+  assert.equal(log.length, 3);
+  const [p, ...rest] = [...log].sort((x, y) => x.start - y.start);
+  for (const r of rest) assert.ok(r.start >= p!.end, "a waiter sent E while the replacement probe was out");
+  assert.equal(state.probeDone, true);
 });

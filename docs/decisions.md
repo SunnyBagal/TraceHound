@@ -3739,7 +3739,7 @@ set first.
 **Budget:** $4 for the whole job: one Budget, run cap $4, total cap = min(env total, ledger at start + $4). Ledger at
 plan time $41.16999 and the env total is the default $45, so the effective ceiling is **$3.83001**. At a cap refusal no
 new unit starts, and every call a unit has already sent is awaited before the unit ends (no paid call outlives the
-final records). Up to 4 units at once; a unit after an empty reply has up to 4 calls in flight. Estimate (not a promise): 42 first draws × ≈ $0.03 ≈ $1.3; in 073 7 of these 14 requests came back empty,
+final records); a unit stopped at the cap keeps what it received and is incomplete. Up to 4 units at once; a unit after an empty reply has up to 4 calls in flight. Estimate (not a promise): 42 first draws × ≈ $0.03 ≈ $1.3; in 073 7 of these 14 requests came back empty,
 so ≈ 21 empty units × (A ≈ $0.035 + D ≈ 2 × $0.03 + E ≈ $0.01) ≈ $2.2; total ≈ $3.5. At the cap no new unit starts.
 **Rejected:** arm C via `reasoning_effort` (a level, not the budget the arm asks for); drawing each of the 20 failures
 (6 duplicate requests would be drawn twice or three times); separate first draws per arm (≈ 3 × the cost, unpaired).
