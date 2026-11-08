@@ -3608,6 +3608,29 @@ noise, and no ranking claim follows. The result is recorded here as 073's result
     those + 3 HTTP 500.
   So the chunk losses that motivated 073 were invalid JSON, not the transport; the 300 s cutoff became frequent only
   in this job (4 of 11 calls in the void run).
+- *Lenient replay of those 20 invalid-JSON chunks (2026-11-08, $0, no model call).* The 7r/8/9 records keep no reply
+  text, so the only stored bytes are the shared cache's latest reply per exact request key (read by key, as the 073
+  dry run copied them). 20 failed chunks are 14 distinct chunks.
+  - **Recovered: 1** (run 9 keycloak/0 ctx#0): JSON wrapped in prose, `finish_reason: stop`, 1 finding, which passes
+    the diff check: complete as far as the bytes show.
+  - **Empty first reply: 14 of 20** (9 distinct chunks): the first reply was never cached, and the client caches every
+    non-empty 200 reply, so it had empty content. No parser can recover an empty reply (in 073's draws all 10 empty
+    first replies ended `length`, i.e. reasoning used the whole 32,000 tokens; for October that is an inference).
+    Their retries: 3 (sentry/5 ctx#0 in all three runs) also empty, still fail; 9 have a strict-valid stored retry
+    that is not the failing draw's (overwritten by a later draw, or the failing retry was empty and never stored);
+    2 unrecoverable (no identical retry request to look up).
+  - **Failing draw not stored: 5 of 20** (the stored first reply is strict-valid, written by a later draw).
+  - Truncated-with-content and malformed JSON: 0 seen; prose around JSON: 1. So the lenient parser addresses at most a
+    small share of those losses; the main cause is empty replies.
+- *Why 073's baseline lost 1 chunk, not 8:* on our side the requests did not change. Model `nvidia/Nemotron-3.5-Super-VL`,
+  endpoint us-north1 (`client.ts:15` at both `164ead6` and `78537cd`), prompts sha256 `f77c2031…` / `0c4dcdcf…`
+  (every run record), `max_tokens` 32,000 (`review.ts`, `review-ctx.ts` at both commits), reasoning on, temperature 0,
+  and the request-building files are identical between the two commits; 83 of 96 first-attempt request keys (sha256
+  of model + the full request) were already in the cache. **What differs on our side is the baseline itself:** a
+  replay corpus, not a fresh run. Empty replies are never cached, so the 54 stored first replies exclude them, and of
+  073's 10 empty first replies, 5 got their append retry from a stored October reply that had succeeded (the 5 others
+  were drawn on 7 Nov, all valid). Survivorship in the cache explains most of the gap; a provider change is not shown
+  (too few 7 Nov draws to compare rates).
 - *The product had the same cutoff; fixed 2026-11-08.* The Action runs the analyzer CLIs (`review`, `review-ctx`,
   `verify-ctx`), which give `TokenFactoryClient` `timeoutMs: 600_000` (`review/cli.ts:67`, `ctx-cli.ts:115`,
   `verify-ctx-cli.ts:153`) but used `globalThis.fetch`, so a reply slower than 300 s failed at 300 s. `longFetch`
