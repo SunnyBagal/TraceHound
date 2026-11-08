@@ -3816,3 +3816,18 @@ one Budget, run cap $1.50, total cap min(env $66.92462, ledger at start + $1.50)
 - INCONCLUSIVE: "075 result: INCONCLUSIVE (<rule>); no A-vs-E comparison is reported; partial counts are diagnostics only."
 - Neither may claim anything about Cal.com, the full dev set or the product, recall, verified quality, or that the effect
   comes from the schema rather than reasoning off.
+
+**075 result (2026-11-08): INCONCLUSIVE (one JUDGE_FAILED review).** Records `<bench>/verify-074/`; runner at `34c74e2`
+(codex GO, devin OK); complete, **$0.49090** (166 calls: 7 cache hits, 1 failed; per-call charges = ledger = budget,
+reconciled). The rule that fired: arm A, draw 3, keycloak/6 ctx#0 (an empty-first unit, so A-only), 1 kept comment,
+`request failed: HTTP 529: worker overloaded` on the judge. Wording (devin): "075 result: INCONCLUSIVE (one JUDGE_FAILED
+review: HTTP 529 on the judge); no A-vs-E comparison is reported; partial counts are diagnostics only."
+- Diagnostics only (all successful units, sums over 3 draws; keep-only gives the same numbers, 0 VERIFY_FAILED):
+  A found 30, kept 12, TP 5 (3 distinct goldens), FP 3, P 0.625 (TP + FP = 8); E found 135, kept 20, TP 6 (4 distinct),
+  FP 8, P 0.429 (TP + FP = 14). On the 26 empty-first units: A found 9, kept 2, TP 0, FP 0; E found 114, kept 10, TP 1,
+  FP 5, P 0.167.
+- Bound (arithmetic, not a verdict): the failed review holds one A comment. Whatever it would score (TP, FP, Low or
+  duplicate), A's precision is 0.556–0.667 and TP(E) − TP(A) ≤ 1, so the gate (P_E ≥ P_A and ΔTP ≥ 3) fails in every
+  completion. No rerun of the failed request was pre-registered, so none is made; E is not taken forward on this evidence.
+- Reading: the verifier dropped 115 of E's 135 findings (85%) and 18 of A's 30 (60%); E's extra volume did not turn into
+  kept true positives.

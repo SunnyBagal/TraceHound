@@ -812,3 +812,13 @@ was re-run.
   mean wall time per unit 194–328 s.
 - **What would have helped (opinion):** a documented reasoning-token budget (a cap that leaves room for the answer),
   and a JSON-mode tag or a statement of whether `json_schema` is enforced for this model.
+
+## 2026-11-08 — job 075 (verifier + one judge on 074's findings; no reviewer calls)
+- **Called:** Token Factory `/chat/completions`: `nvidia/Nemotron-3.5-Super-VL` (verifier, us-north1) and
+  `nvidia/nemotron-3-super-120b-a12b` (bench-judge-v1, configured URL). Non-streaming.
+- **Counts:** 166 client calls, 7 served from our cache, 159 sent; **1 failed**: the judge on 3 Super returned
+  `HTTP 529: worker overloaded` (the only failure; it made the experiment's result inconclusive by our pre-registered
+  rule). Ledger cost $0.49090.
+- **Docs:** HTTP 529 is not among the status codes the chat-completions API page lists (it lists 401, 402, 403 and others),
+  so whether a 529 is safe to retry, and after how long, is not documented.
+- **What would have helped (opinion):** documenting 529 (or returning 429/503 with `Retry-After`).
