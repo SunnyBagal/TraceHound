@@ -2,6 +2,12 @@
 
 One entry per non-obvious choice, with the alternative we rejected.
 
+**Standing rules** (each with the decision that set it):
+- *Reliability tests bypass the cache for the requests under test* (073a, 2026-11-08). A test of failure rates,
+  retries or parsing draws every request under test fresh: the response cache is neither read nor written for them.
+  Reason: 073's arms replayed the cache (83 of 96 first-attempt keys), and empty replies are never cached, so a
+  replayed baseline under-counts the failures being tested.
+
 ## 001 · Run TypeScript with Node's native type stripping
 **Choice:** Node 24 runs `.ts` directly (`node src/cli.ts`). The code uses `.ts` import extensions
 and `erasableSyntaxOnly`.
@@ -3631,6 +3637,11 @@ noise, and no ranking claim follows. The result is recorded here as 073's result
   073's 10 empty first replies, 5 got their append retry from a stored October reply that had succeeded (the 5 others
   were drawn on 7 Nov, all valid). Survivorship in the cache explains most of the gap; a provider change is not shown
   (too few 7 Nov draws to compare rates).
+- *Relabel (2026-11-08):* **B1's result is "harmless, benefit unproven"**: the arms replayed the cache (83 of 96
+  first-attempt keys), and empty replies are never cached, so the corpus under-represents the failure the switch was
+  meant to fix (14 of runs 7r/8/9's 20 lost chunks began with an empty reply). The lenient default stays (E4: it never
+  changes a strict-valid reply), but no reliability gain is claimed. Standing rule added at the top of this file:
+  reliability tests bypass the cache for the requests under test.
 - *The product had the same cutoff; fixed 2026-11-08.* The Action runs the analyzer CLIs (`review`, `review-ctx`,
   `verify-ctx`), which give `TokenFactoryClient` `timeoutMs: 600_000` (`review/cli.ts:67`, `ctx-cli.ts:115`,
   `verify-ctx-cli.ts:153`) but used `globalThis.fetch`, so a reply slower than 300 s failed at 300 s. `longFetch`
@@ -3656,7 +3667,7 @@ noise, and no ranking claim follows. The result is recorded here as 073's result
 - Three independent fresh captures: ≈ 3 × $3, over the cap, and unpaired by construction.
 - A lenient verifier: it is not one of the two generation switches; it stays strict in every arm.
 
-**073 result (2026-11-08): PASS for B1 (lenient parser); B2 not met.** `docs/bench/recovery-ab.md`; runner at `78537cd`;
+**073 result (2026-11-08): B1 (lenient parser) passed the gate but is relabelled harmless, benefit unproven (073a); B2 not met.** `docs/bench/recovery-ab.md`; runner at `78537cd`;
 records `<bench>/recovery-073r/` (the 073a restart; `recovery-073/` is void). Coverage complete (40 PRs per arm, all
 SCORED under both judges, 0 misses, 0 request errors, 0 unpaired PRs, per-call charges = ledger).
 - E2: terminal CHUNK_FAILED A 1, B1 0, B2 7; empty by failure A 1, B1 0, B2 3. B1 passes; B2 fails (7 > 2).
