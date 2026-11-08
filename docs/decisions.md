@@ -3690,7 +3690,10 @@ SCORED under both judges, 0 misses, 0 request errors, 0 unpaired PRs, per-call c
   `minimal` · `low` · `medium` · `high` · `xhigh`, plus `max` as a separate constant in the OpenAPI spec; the HTML page
   lists up to `xhigh`), a level, not a token count
   (https://docs.tokenfactory.nebius.com/api-reference/inference/create-chat-completion.md). The Nemotron 3.5 Super VL
-  model card documents only `chat_template_kwargs.enable_thinking` true/false
+  model card's prose documents `chat_template_kwargs.enable_thinking` true/false; its hosted-API schema also has
+  `reasoning_effort` `none` · `low` · `high`, which snippets turn into `chat_template_kwargs` (`low_effort: true` for
+  `low`) — a lower-effort mode, not a token cap (correction from grok's audit, verified in the page source: 8 ×
+  `low_effort`, 0 × `reasoning_budget` / `thinking_budget` / `budget_tokens`)
   (https://build.nvidia.com/nvidia/nemotron-3.5-super-vl-120b-a12b/modelcard;
   https://catalog.ngc.nvidia.com/orgs/nim/teams/nvidia/models/nemotron-3.5-super-vl-120b-a12b). 070 found
   `reasoning_budget` ignored by Token Factory. So **arm C (budget capped to leave ~8k answer tokens) is dropped:
@@ -3743,3 +3746,30 @@ final records); a unit stopped at the cap keeps what it received and is incomple
 so ≈ 21 empty units × (A ≈ $0.035 + D ≈ 2 × $0.03 + E ≈ $0.01) ≈ $2.2; total ≈ $3.5. At the cap no new unit starts.
 **Rejected:** arm C via `reasoning_effort` (a level, not the budget the arm asks for); drawing each of the 20 failures
 (6 duplicate requests would be drawn twice or three times); separate first draws per arm (≈ 3 × the cost, unpaired).
+
+**074 result (2026-11-08): E meets the gate; D does not.** `docs/bench/hard-chunks.md`; records
+`<bench>/hard-chunks-074/`; run at `0063b0c` (codex GO, three reviews), 42 of 42 units complete, 0 request errors,
+**$3.36463** (147 calls, all 3.5 Super VL, 0 failed; 59 at 32,000 output tokens).
+- First replies: valid 15, invalid non-empty 1, **empty 26** (all `finish_reason: length`, reasoning = all 32,000 output
+  tokens). Unsplittable for D: 0.
+- All 42 units: successes (valid reply, ≥ 1 diff-anchored finding) A 22, D 30, **E 41**; cost per unit A $0.0472,
+  D $0.0594, E $0.0329; wall per unit A 303 s, D 328 s, E 194 s; kept findings per success A 1.4, D 1.3, E 3.3.
+  Gate: E 41 ≥ max(33, 23) at $0.0329 ≤ $0.0708 → **WIN**; D 30 < 33 → NO WIN.
+- On the 26 empty-first units (devin's reading; the arms differ only here): successes A 7, D 15 (8 of them from one half
+  only), E 26; valid replies A 15, D 8 (both halves), E 26. A's append retry ended empty at `length` again on 11 of 26.
+  E's 26 replies all ended `stop` with 0 reasoning tokens. The endpoint accepted `response_format: json_schema` (0
+  refusals), but the model carries no "JSON mode" tag (`models_info` `tags: []`, grok, verified), so whether the schema
+  was enforced or the model simply complied without reasoning is not known.
+- **The claim (devin's wording):** on 14 reviewer chunk requests selected because they failed in 3.5 dev runs 7r/8/9,
+  drawn fresh 3 times each with the cache bypassed (42 of 42 units complete; 26 began with an empty reply), arm E ended 41
+  units with a valid reply and ≥ 1 diff-anchored finding against A's 22 (on the empty-first units: 26 vs 7), at $0.0329
+  vs $0.0472 per unit, which meets 074's gate. It shows only that, on these requests, E returns anchored findings after
+  an empty reply more often than the append retry; it does not show that the findings are correct (E writes 3.3 per
+  success against A's 1.4, with no reasoning), that fewer chunks fail on the dev set, that the effect comes from the
+  schema rather than from reasoning off on a fresh draw, or that E should be on by default. The 42 units are 14
+  requests × 3 draws, not 42 independent cases. Nothing is adopted.
+- **Next, before any adoption (devin's follow-ups):** a plain-redraw arm and a reasoning-off-without-schema arm on the
+  same set, to separate the schema from reasoning off; then finding quality on the full dev set with both judges.
+  Budget note: the ledger is at $44.53462, $0.47 under the env's $45 total cap, so the next paid job needs the owner to
+  raise `TRACEHOUND_BUDGET_TOTAL_USD` or wait.
+
