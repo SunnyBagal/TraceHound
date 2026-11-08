@@ -40,7 +40,7 @@ Estimates use the costs above on 40-PR sets, plus 25% for larger TypeScript diff
 
 | line | what | cap | basis | status |
 |---|---|---|---|---|
-| 075 | verify + one judge on 074's A/E findings, no reviewer calls | **$1.50** | ≈ 120 verifier calls × $0.0032 + ≈ 66 judge calls × $0.0009 ≈ $0.45 (estimate) | pre-registered |
+| 075 | verify + one judge on 074's A/E findings, no reviewer calls | **$1.50** | 140 verifier + 63 judge reviews, expected $0.50 | **done: $0.49090, INCONCLUSIVE** (unspent $1.01 goes to unallocated) |
 | TS-dev run 1 | pool-verify-v1, fresh, 40 PRs, judge v1 | **$3.80** | 40 × ($0.0747 + $0.0012) = $3.04, + 25% | not started (needs the TS dev set) |
 | TS-dev run 2 | same, second draw | **$3.80** | same | not started |
 | held-out run | pool-verify-v1, fresh, 40 PRs, judges v1 + x1 | **$3.80** | 40 × ($0.0747 + $0.0014) = $3.04, + 25% | not started (needs the held-out set) |
@@ -71,3 +71,4 @@ reviews exist, but getting their reviews of new PRs is outside this budget.
 | date | job | cap | spent | left (real) |
 |---|---|---|---|---|
 | 2026-11-08 | budget set | — | — | $23.39 |
+| 2026-11-08 | 075 (branch `bench/hard-chunks-074`) | $1.50 | $0.49090 (ledger) | ≈ $22.90 (ledger estimate; confirm in the console) |
