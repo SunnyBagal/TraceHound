@@ -155,7 +155,7 @@ test("the set must be the registered 20 failures / 14 distinct requests", () => 
 });
 
 const EMPTY = { content: "", finishReason: "length" };
-function slowModel(o: { halfThrows?: boolean; schemaError?: string; schemaDelay?: number; halfContent?: string[]; log?: { start: number; end: number }[] } = {}) {
+function slowModel(o: { halfThrows?: boolean; throwHalf?: 1 | 2; schemaError?: string; schemaDelay?: number; halfContent?: string[]; log?: { start: number; end: number }[] } = {}) {
   const p = plan();
   const live = { active: 0, max: 0, schemaCalls: 0 };
   let half = 0;
@@ -163,6 +163,7 @@ function slowModel(o: { halfThrows?: boolean; schemaError?: string; schemaDelay?
     chat: async (r: ChatRequest): Promise<ChatResult> => {
       const kind = (r as { response_format?: unknown }).response_format ? "schema" : r.messages.length > 2 ? "append" : JSON.stringify(r) === JSON.stringify(p.first) ? "first" : "half";
       if (kind === "half" && o.halfThrows) throw new BudgetExceededError("cap");
+      if (kind === "half" && o.throwHalf && JSON.stringify(r) === JSON.stringify(p.halves![o.throwHalf - 1])) throw new BudgetExceededError("cap");
       live.active++;
       live.max = Math.max(live.max, live.active);
       if (kind === "schema") live.schemaCalls++;
@@ -186,6 +187,20 @@ test("at a cap refusal inside a unit, every sibling call already sent finishes, 
   assert.equal(u.complete, false);
   assert.ok(u.first && u.shared && u.schema && u.shared.ok); // the partial unit keeps what it received
   assert.equal(u.arms, undefined);
+});
+
+test("a partial unit keeps one numbered slot per half: half 1 meets the cap, half 2 returns and stays in slot 2", async () => {
+  const m = slowModel({ throwHalf: 1 });
+  const u = await runUnit(m.client, m.plan, 1, { schemaDropped: false }, () => {});
+  assert.equal(m.live.active, 0);
+  assert.match(u.capStop!, /BudgetExceededError/);
+  assert.equal(u.complete, false);
+  assert.ok(Array.isArray(u.halves) && u.halves.length === 2);
+  const h1 = u.halves[0]!, h2 = u.halves[1]!;
+  assert.equal(h1.half, 1);
+  assert.ok("capStop" in h1 && /BudgetExceededError: cap/.test(h1.capStop));
+  assert.equal(h2.half, 2);
+  assert.ok(!("capStop" in h2) && h2.ok && h2.valid);
 });
 
 test("E's probe: a fast feature refusal stops E in a concurrent unit, even while the first unit's siblings are still running", async () => {

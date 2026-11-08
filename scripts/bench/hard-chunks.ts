@@ -206,6 +206,8 @@ export interface Step {
   findings: number;
   kept: number;
 }
+/** One slot per half, numbered: the half's reply, or the cap refusal it met (a partial unit keeps half 2 at index 1). */
+export type HalfSlot = ({ half: 1 | 2 } & Step) | { half: 1 | 2; capStop: string };
 export type ArmOutcome = { success: boolean; valid: boolean; kept: number; costUSD: number; wallMs: number; complete: boolean; note?: string };
 export interface Unit {
   chunk: string;
@@ -213,7 +215,7 @@ export interface Unit {
   path?: "valid" | "invalid" | "empty" | "error";
   first?: Step;
   shared?: Step; // A's append retry: used by every arm after a non-empty invalid reply, by A alone after an empty one
-  halves?: Step[] | "unsplittable";
+  halves?: HalfSlot[] | "unsplittable";
   schema?: Step | "dropped";
   arms?: Record<"A" | "D" | "E", ArmOutcome>;
   /** the unit met the job cap: what it received is kept above; it is incomplete */
@@ -319,7 +321,11 @@ export async function runUnit(client: ChatClient, plan: Plan, draw: number, stat
   const d = halves && halves.every((h) => h.status === "fulfilled") ? halves.map((h) => (h as PromiseFulfilledResult<Step & { content: string }>).value) : null;
   const e = re.status === "fulfilled" ? re.value : null;
   if (a) u.shared = strip(a);
-  if (halves) u.halves = halves.flatMap((h) => (h.status === "fulfilled" ? [strip(h.value)] : []));
+  if (halves)
+    u.halves = halves.map((h, i): HalfSlot => {
+      const half = (i + 1) as 1 | 2;
+      return h.status === "fulfilled" ? { half, ...strip(h.value) } : { half, capStop: `${(h.reason as Error).name}: ${(h.reason as Error).message}` };
+    });
   else if (!plan.halves) u.halves = "unsplittable";
   if (re.status === "fulfilled") u.schema = e ? strip(e) : "dropped";
   const rejected = [ra, rd, re, ...(halves ?? [])].find((x): x is PromiseRejectedResult => x.status === "rejected");
