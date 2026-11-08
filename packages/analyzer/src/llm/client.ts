@@ -1,6 +1,7 @@
 // The only path to a paid model call: cache → budget reservation → request → ledger.
 import { BudgetExceededError, type Budget } from "./budget.ts";
 import { ResponseCache } from "./cache.ts";
+import { defaultFetch } from "./transport.ts";
 import type { SpendLedger } from "./ledger.ts";
 import { costUSD, estimateInputTokens, priceFor, type ModelPrice, type PriceTable } from "./prices.ts";
 
@@ -200,7 +201,7 @@ export class TokenFactoryClient {
       offline: opts.offline ?? false,
       cacheTruncated: opts.cacheTruncated ?? true,
       timeoutMs: opts.timeoutMs ?? 60_000,
-      fetch: opts.fetch ?? globalThis.fetch,
+      fetch: opts.fetch ?? defaultFetch, // 073a: no hidden 300 s limit below timeoutMs
       now: opts.now ?? (() => new Date()),
     };
   }

@@ -39,7 +39,7 @@ export async function main(argv: string[]): Promise<number> {
       concurrency: { type: "string", default: "2" },
       summary: { type: "string" },
       "retry-on-length": { type: "string", default: "append" },
-      parser: { type: "string", default: "strict" },
+      parser: { type: "string", default: "lenient" }, // decision 073
     },
   });
   if (!values.out || !!values.pr === !!values.prs || !["on", "off"].includes(values.reasoning!)) {
@@ -70,7 +70,7 @@ export async function main(argv: string[]): Promise<number> {
     model: values.model!,
     reasoning: values.reasoning as "on" | "off",
     ...(values["retry-on-length"] === "fresh" && { retryOnLength: "fresh" as const }),
-    ...(values.parser === "lenient" && { parser: "lenient" as const }),
+    parser: values.parser as "strict" | "lenient",
   };
 
   const jobs: { input: PullInput; out: string; name: string }[] = values.pr

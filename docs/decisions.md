@@ -3499,3 +3499,150 @@ Proof: `.github/workflows/action-install-matrix.yml` runs the install steps unde
 for pnpm@9 on the old `action.yml` and passes all six after the fix (#68). The Action pin moves to the 2.1 commit.
 **Rejected:** keeping `pnpm/action-setup` with `package_json_file`, because its default path is resolved in the
 workspace and I could not show that it would point at the action's own `package.json`.
+
+## 073 — Pre-registered dev A/B of the two generation-recovery switches (2026-11-08)
+
+**Status: pre-registered, not yet run.** Written on branch `bench/recovery-ab` before any model call of this job.
+Source of the task: `docs/research/2026-11-07/REPORT.md` §3 and `DRAFT-CONCLUSION.md` §1 (T1), with devin's
+dissent gate (REPORT.md §8) in place of E3, as the owner instructed.
+**Why:** on 3.5 dev, 7 of 40 PRs per completed run lost a reviewer chunk (8 terminal `CHUNK_FAILED` in each of
+runs 7r and 8) and 3 of 40 ended with no findings (`docs/bench/dev-3.5.md` §"Failed reviewer chunks"; 068).
+#67 built two default-off switches that target this and were never measured (`docs/post-freeze-fixes.md`).
+**Arms** (`scripts/bench/recovery-ab.ts`, `ARMS`; the only difference is the two `ReviewOptions` fields passed to
+`reviewPull` and `reviewPullWithContext`):
+- A = both off: the product today. With no option set the requests are byte-identical to `review-freeze-2`
+  (`docs/post-freeze-fixes.md`; `packages/action/test/pool-verify-identity.test.ts`).
+- B1 = `parser: "lenient"` on both reviewers (one-switch attribution).
+- B2 = `parser: "lenient"` + `retryOnLength: "fresh"` on both reviewers.
+- Shared by every arm: exactly the 40 dev PRs `EXPECTED_PULLS` (sentry, grafana, keycloak, discourse, files
+  `0`–`9` each; any other set refuses before a call), pool-verify-v1, `nvidia/Nemotron-3.5-Super-VL` for both
+  reviewers and the verifier, frozen prompts, temperature 0, reasoning on, `max_tokens` 32,000 for the reviewers
+  and 16,000 for the verifier (`verify-ctx.ts:129`), the verifier's parser strict, the runner's rerun-once rule,
+  judges bench-judge-v1 (scorer of record) and bench-judge-x1 (`JUDGES` from `run-test-set.ts`). The one
+  per-request difference is B2's: after a reviewer reply ends `finish_reason: "length"` and fails to parse, its
+  retry resends the original messages with reasoning off (`review.ts:236-238`) instead of appending a correction.
+  A test pins arm A to the runner's `pipeline` (same requests, same records).
+- A manifest (ids, heads, sha256 of each input file and of each golden file) is written to `run.json`; `run`
+  refuses if a dry run exists with a different manifest digest.
+**Corpus and pairing:** all arms run in one process through one `CorpusClient` over a private corpus
+(`<bench>/recovery-073/corpus`; the bench folder must resolve, symlinks included, outside the repo, or every mode
+refuses). A request in the corpus is served from it; else its exact key (`ResponseCache.key`) is read from
+`.tracehound/cache` with `get` only, never by listing that folder, and copied in; else the request goes out and its
+200 body is stored, empty content included. Identical requests in flight at the same time share one call (single
+flight). So arm A is a *latest-response replay corpus* (runs 7r/8/9 overwrote each other; it is not run 7r's or
+run 8's identity), a request goes out at most once across arms, and unchanged chunks get the same bytes in every
+arm. A pull with a request that went out live in more than one arm is *unpaired*: any unpaired pull makes the
+result inconclusive (it is listed, and the paired E2 count leaves it out for diagnosis); E3 always covers all 40. Cal.com: the job takes no set name; it reads only `inputPaths(bench, "dev", repo)` for the
+four dev repos, and the only cache reads are keys built from those inputs.
+**Cost attribution:** every call gets a job call id as its ledger `componentId`, so each call's charge, failed
+calls included (the client charges the upper bound when no usage comes back), is read from the ledger and reported
+by arm and stage; the per-call sum must equal the ledger's job total. At the cap or on a crash, no new request is
+sent and the calls already in flight are awaited before the final records are written.
+**Exit criteria** (all must hold for an arm; B2 is the candidate, B1 is adopted only if B2 fails and B1 passes):
+- **E2:** terminal `CHUNK_FAILED` (diff + ctx) in the arm ≤ 2 **and** strictly below A, counted over all chunks
+  and again over paired chunks; and 0 PRs empty by a failure (pool-raw empty with ≥ 1 failed chunk).
+- **E3 (devin's gate):** over the 40 PRs, under v1 **and** x1: TP_arm ≥ TP_A **and** P_arm ≥ P_A. Unchanged PRs
+  (identical pool-verify-v1 list) must score identically. The recovered findings' own TP/FP (in the arm's list,
+  not in A's, on changed PRs) are reported.
+- **E4:** every reviewer reply that strict parsing accepts gives identical findings under lenient. Any difference
+  rejects the parser. Reported: arm A's reviewer replies by finish (length / stop / other / empty) and cost.
+- **Inconclusive** (no adoption, no FAIL): the run is not complete (cap or crash); any arm without exactly the 40
+  PRs; any PR not `SCORED` in any arm under either judge (`JUDGE_FAILED` anywhere, or a missing score file); an
+  unchanged PR scored differently; a received reviewer reply whose bytes are missing from the corpus (a request
+  that failed with no reply is counted as a request error, not as missing); per-call charges that do not add up to
+  the ledger's job total; any unpaired pull; any cache miss.
+**Budget:** hard cap $4 for the whole job (generation, verification and judging, all arms), one `Budget`
+instance: run cap $4, total cap = ledger total at start + $4, never above the env caps (`budgetFor`; it refuses
+unless `TRACEHOUND_BUDGET_RUN_USD` ≥ 4). Ledger at plan time: $40.43804 (`.tracehound/spend.jsonl`, 16,018
+entries, last 2026-10-29), so the total cap would be $44.43804 (< the $45 default). Estimates, not promises:
+- Replay path: A ≈ $0 if every request is in the cache. B1 pays verifier calls on new findings only. B2 pays
+  for its fresh retries: ≈ $0.034 each if one writes the full 32k output with ≈ 15k input tokens (prices
+  `config/prices.json:7`; an estimate that depends on input size, not an upper bound). How many first replies end
+  at the cap is not measured: 79 of the 624 calls of runs 7r, 8 and part of 9 returned exactly 32,000 tokens
+  (`dev-3.5.md`), which extrapolates to about 30 per run, so ≈ $1.0. Judges ≈ $0.10 for 3 arms × 40 PRs × 2 judges (067: v1 130 calls $0.094, x1 130
+  calls $0.020), most of it cached for unchanged PRs.
+- If arm A has to be drawn fresh: ≈ $2.97 (40 × the $0.0743 mean per PR, `dev-3.5.md`) + the above ≈ $4.07,
+  which can stop at the cap: then the result is inconclusive, as pre-registered.
+- A $0 dry run (`recovery-ab.ts dry`, arm A from the cache only) reports the hit counts before the paid run.
+**Commands:** `node scripts/bench/recovery-ab.ts dry`; `TRACEHOUND_BUDGET_RUN_USD=4 node scripts/bench/recovery-ab.ts
+run` (073a: `run --restart`); `node scripts/bench/recovery-ab.ts report`. The run refuses unless `packages/analyzer/src`, `config` and
+`scripts/bench` equal `53b6045` except for added files, with nothing uncommitted (`freezeCheck073`).
+**Adoption:** if B2 (or B1) passes, propose default-on for the Action in a later change; ΔF is reported as within
+noise, and no ranking claim follows. The result is recorded here as 073's result, on this branch, not merged.
+**073a (2026-11-08, before the restart's first call): the first run is void; one restart.**
+- *What happened:* the run started 2026-11-07T19:09:03.986Z (ledger start $40.43804) and was stopped by hand at arm A
+  pull request 14 of 40. Its live 3.5 calls failed with `fetch failed` at exactly 300 s after sending (ledger
+  timestamps 19:34:41 → 19:39:42 → 19:44:43 → 19:49:43; `componentId` 073:75, 073:77, 073:78). That is Node's
+  built-in fetch (undici) `headersTimeout` of 300 s, below the client's own 600 s timeout (`run-test-set.ts:140`,
+  same value here), and today's 32k-token reasoning replies take longer than 300 s. A failed request is never
+  stored, so it would go out live again in later arms: every such pull would be unpaired, and the run
+  inconclusive by the rules above, at ≈ $0.035 per timeout (the client charges the upper bound).
+- *Spend of the void run:* 11 job calls, 4 failed, **$0.34415** by the ledger (failed $0.13538). It counts
+  toward the job's $4: the restart's run cap is $4 − the job's spend so far, and its total cap stays ledger at
+  the job's start + $4 (`budgetFor`).
+- *The fix (transport only, the same in every arm):* requests go through `longFetch` (node:http/https, no limit
+  of its own), so only the client's 600 s `AbortSignal.timeout` ends a request, as the protocol already stated.
+  Request bytes, keys, prompts, models and every option are unchanged.
+- *The restart:* `run --restart`, once, only after a run that did not complete and with the same manifest; it
+  writes `recovery-073r/` and leaves `recovery-073/` untouched. The void run's corpus holds only bodies of
+  successful (2xx; the stored body keeps no status, so exactly 200 is not provable for it) replies to identical
+  requests, copied from the shared cache or received by the void run, so it is read by exact key (source
+  `carried`) before the shared cache: the same bytes the void run had, used in every arm of the restart. From the
+  restart on, `storingFetch` stores HTTP 200 bodies only, and `longFetch` gives 204/205/304 a null body and turns
+  any response-construction error into a rejected request. Ledger call ids are `073r:<n>`. The restart stands for
+  the run; its verdict is decided by the rules above, unchanged.
+- *Failure audit of the earlier dev runs ($0, existing attempt records in `<bench>/reviews/dev-repeat/` only; each
+  `CHUNK_FAILED` reviewer chunk classified by its failure string: fetch/timeout error = `fetch failed` or `aborted
+  due to timeout` (the record keeps only the error message, so `fetch failed` alone does not prove a timeout);
+  invalid JSON = `not valid JSON` / no `findings` array; other = anything else).* Terminal chunks (the
+  attempt each run used) / all attempts, including those the rerun rule replaced:
+  - 3.5 Super VL runs 7r, 8, 9 (the "≈ 8 per run"): **8 / 8 / 4 terminal, all invalid JSON** (`the reply is not
+    valid JSON; after one retry: the reply is not valid JSON`); **0 fetch/timeout errors, 0 other**. One replaced attempt in 7r
+    (grafana/3 diff #0) was invalid JSON whose retry failed with `fetch failed`; that it was the 300 s cutoff is an
+    inference (same message as this job's four 300 s failures; no timing was recorded for that call); the rerun
+    recovered it. VERIFY_FAILED 1 / 0 / 2, all invalid JSON.
+  - Void run 7 (067's routing failure): 18 terminal / 26 all, all `other` (`HTTP 404: The model … does not exist`).
+  - 3 Super runs 2 (void) and 2r: 1 terminal invalid JSON each; runs 3–6: 0.
+  - Nemotron 3 Ultra runs 10 / 11 (NVIDIA API, its own 300 s timeout): terminal 0 / 1 (`other`, HTTP 500); all
+    attempts: run 10 1 fetch/timeout error (`The operation was aborted due to timeout`) + 1 HTTP 503, run 11 2 of
+    those + 3 HTTP 500.
+  So the chunk losses that motivated 073 were invalid JSON, not the transport; the 300 s cutoff became frequent only
+  in this job (4 of 11 calls in the void run).
+- *The product had the same cutoff; fixed 2026-11-08.* The Action runs the analyzer CLIs (`review`, `review-ctx`,
+  `verify-ctx`), which give `TokenFactoryClient` `timeoutMs: 600_000` (`review/cli.ts:67`, `ctx-cli.ts:115`,
+  `verify-ctx-cli.ts:153`) but used `globalThis.fetch`, so a reply slower than 300 s failed at 300 s. `longFetch`
+  moved to `packages/analyzer/src/llm/transport.ts`; the client's default fetch is now `defaultFetch` (longFetch,
+  read at call time), and the three test setups point it at their no-network guard (`setDefaultFetch`). Request
+  bytes, cache keys and ledger entries are unchanged. Test: `packages/analyzer/test/llm-transport.test.ts`. Scope:
+  this removes the hidden transport limit only. The opt-in NVIDIA API route (071; only with
+  `TRACEHOUND_NVIDIA_API=1`, never used by the Action) keeps its deliberate 300 s timeout
+  (`NVIDIA_API_TIMEOUT_MS`, `client.ts:46`, applied at `:333`), which 071 chose and declined to raise; it is now
+  enforced by that signal alone.
+- *Defaults after 073 (2026-11-08):* the two reviewers' parser defaults to **lenient** (`DEFAULT_PARSER` in
+  `review.ts`; the `review` and `review-ctx` CLIs' `--parser` default; the Action inherits it). The verifier keeps
+  strict (not measured). **`retryOnLength: "fresh"` is rejected** and stays off (default `append`): on 073's corpus
+  7 of its 10 fresh retries were invalid JSON and turned recoverable chunks into failures. The F change from the
+  lenient parser (v1 48.1 → 49.3, x1 50.4 → 51.5: one chunk, one TP) is **noise, not a gain**; no F or ranking claim
+  is made from it. 073's runner now names arm A's settings explicitly (`strict`, `append`), which is what its arm A
+  ran with. The Action's identity snapshot changed only in its fixture's prose-wrapped chunk, now parsed on the
+  first reply (2 fewer failed chunks, 1 more finding).
+**Rejected:**
+- The research run's E3 (ΔTP ≥ 0 ∧ ΔFP ≤ 0 on changed PRs): it rejects any recovery made at the pipeline's own
+  precision (≈ 0.83 FP per TP, `levers-v2.md:45-46`). The owner chose devin's gate; with R_B ≥ R_A ∧ P_B ≥ P_A on
+  a paired replay, F_B ≥ F_A.
+- Three independent fresh captures: ≈ 3 × $3, over the cap, and unpaired by construction.
+- A lenient verifier: it is not one of the two generation switches; it stays strict in every arm.
+
+**073 result (2026-11-08): PASS for B1 (lenient parser); B2 not met.** `docs/bench/recovery-ab.md`; runner at `78537cd`;
+records `<bench>/recovery-073r/` (the 073a restart; `recovery-073/` is void). Coverage complete (40 PRs per arm, all
+SCORED under both judges, 0 misses, 0 request errors, 0 unpaired PRs, per-call charges = ledger).
+- E2: terminal CHUNK_FAILED A 1, B1 0, B2 7; empty by failure A 1, B1 0, B2 3. B1 passes; B2 fails (7 > 2).
+  B2's 7 failures are all an empty first reply ending `length` whose reasoning-off fresh retry was not valid JSON
+  (7 of B2's 10 fresh retries); A's append retry recovered those chunks.
+- E3 (devin's gate): v1 TP 32 → 33 (B1) / 32 (B2), P 54.2% → 55.0% / 54.2%; x1 TP 34 → 35 / 34, P 55.7% → 56.5% / 55.7%.
+  Pass for both. E4: 96 strict-valid reviewer replies, 0 differ under lenient. Pass.
+- Spend: **$0.73195** for the whole job (void run $0.34415 + restart $0.38780), under the $4 cap.
+- Reading: by the pre-registered rule B1 is adopted; propose `parser: "lenient"` default-on for the Action in a
+  later change (not here). The effect is one chunk and one TP under each judge on a corpus whose arm A lost 1
+  chunk (runs 7r and 8 lost 8 each), so ΔF is noise and no ranking claim follows. `retryOnLength: "fresh"` stays
+  off: on this corpus it turned 7 recoverable chunks into failures.

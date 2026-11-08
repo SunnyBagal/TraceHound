@@ -52,7 +52,7 @@ export async function main(argv: string[]): Promise<number> {
       concurrency: { type: "string", default: "2" },
       summary: { type: "string" },
       "retry-on-length": { type: "string", default: "append" },
-      parser: { type: "string", default: "strict" },
+      parser: { type: "string", default: "lenient" }, // decision 073
       "context-only": { type: "boolean", default: false },
     },
   });
@@ -118,7 +118,7 @@ export async function main(argv: string[]): Promise<number> {
     model: values.model!,
     reasoning: values.reasoning as "on" | "off",
     ...(values["retry-on-length"] === "fresh" && { retryOnLength: "fresh" as const }),
-    ...(values.parser === "lenient" && { parser: "lenient" as const }),
+    parser: values.parser as "strict" | "lenient",
   };
 
   const results: { name: string; r: ReviewCtxOutput }[] = [];

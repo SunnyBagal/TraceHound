@@ -1,6 +1,6 @@
 # Post-freeze fixes (devin-02)
 
-The product and every published number are review-freeze-2 (0aeef06); these options are off by default and unmeasured.
+Every published number is review-freeze-2 (0aeef06). These options were off by default and unmeasured until decision 073 (`docs/bench/recovery-ab.md`): since then the reviewers' `parser` defaults to `"lenient"` (the verifier's stays `"strict"`), `retryOnLength: "fresh"` is rejected (the default stays `"append"`), and the client's default transport is `longFetch` (073a). The byte-identity statement below describes the options as #67 built them.
 
 Each row is a finding from the devin-01 audit (file:line on main at 5ba60a0), the option that addresses it, and the test that pins it. With no option set, review output, posted comments, existing chunk record fields, cache keys and ledger entries are byte-identical to main; `packages/action/test/pool-verify-identity.test.ts` ("pool-verify-v1 end to end: payload, footer, log and every stage record match the identity snapshot") holds that, and its snapshot changed only for the additive `attemptsDetail` field. Options are plain function/CLI options; there are no new Action inputs.
 

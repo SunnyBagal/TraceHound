@@ -773,3 +773,26 @@ was re-run.
   rerun with `HTTP 500: Internal error while making inference request`. No reply ran to `max_tokens`.
 - **What would have helped (opinion):** Nemotron 3 Ultra on Token Factory at a price this credit could pay for, so the
   comparison could run on the hackathon's own runtime.
+
+## 2026-11-08 — job 073 (generation-recovery A/B on dev; Nemotron 3.5 Super VL, us-north1)
+- **Called:** Token Factory `/chat/completions`. `nvidia/Nemotron-3.5-Super-VL` (reviewers and verifier, routed to
+  us-north1), `nvidia/nemotron-3-super-120b-a12b` (bench-judge-v1) and `Qwen/Qwen3-235B-A22B-Instruct-2507`
+  (bench-judge-x1) on the configured URL. Non-streaming, temperature 0, 3.5 with reasoning on, `max_tokens` 32,000
+  (reviewers) / 16,000 (verifier, judges). Most requests were served from our own response cache; counts below are
+  requests actually sent.
+- **First run (2026-11-07 19:14Z–19:49Z), void:** 11 requests to 3.5: 7 succeeded, 4 failed. All 4 failures are
+  `fetch failed` with no HTTP status, raised by our client after exactly 300 s (Node's built-in fetch headers
+  timeout, below our own 600 s timeout). This is a client-side limit, not a Nebius error; 6 of the 7 successes and
+  all 4 failures were at the full 32,000 output tokens (the failures are ledgered at that upper bound).
+- **Restart (20:12Z–20:38Z), with a transport that waits up to 600 s:** 79 requests, 79 succeeded, 0 failed
+  (3.5: 43, of which 5 returned exactly 32,000 output tokens; 3 Super: 18; Qwen: 18). Ledger cost $0.38780; job
+  total $0.73195.
+- **Replies:** among 111 3.5 reviewer replies used in the baseline arm (cached from earlier runs plus new ones),
+  10 had empty content with `finish_reason: "length"`, i.e. the whole 32,000-token budget went to reasoning. When
+  such a request was resent with `chat_template_kwargs.enable_thinking=false`, 7 of 10 replies ended `stop` but were
+  not valid JSON for the requested shape; resending with reasoning on plus a correction message recovered them.
+- **Latency:** not measured per call. Non-streaming 3.5 replies near 32,000 output tokens took longer than 300 s to
+  return response headers (four requests, each failing at 300 s by ledger timestamps).
+- **Docs/console:** nothing found wrong this session.
+- **What would have helped (opinion):** a server-side reasoning-token budget that is honoured (still not, see 070),
+  or documented typical latency for long reasoning replies, so client timeouts can be set before the first long call.
