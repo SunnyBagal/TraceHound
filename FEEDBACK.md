@@ -819,6 +819,7 @@ was re-run.
 - **Counts:** 166 client calls, 7 served from our cache, 159 sent; **1 failed**: the judge on 3 Super returned
   `HTTP 529: worker overloaded` (the only failure; it made the experiment's result inconclusive by our pre-registered
   rule). Ledger cost $0.49090.
-- **Docs:** HTTP 529 is not among the status codes the chat-completions API page lists (it lists 401, 402, 403 and others),
-  so whether a 529 is safe to retry, and after how long, is not documented.
-- **What would have helped (opinion):** documenting 529 (or returning 429/503 with `Retry-After`).
+- **Docs:** 529 is documented (openapi.json: "Inference service overloaded (projects with overload mapping enabled
+  receive 429 with the same message)"); our reply's text was "worker overloaded", not the documented "System is
+  overloaded". The docs give no retry advice for 529 (the 429 example says "Retry the request after 30 sec").
+- **What would have helped (opinion):** a `Retry-After` header or a stated backoff for 529.
