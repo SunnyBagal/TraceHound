@@ -294,6 +294,16 @@ it (decision 050).
    and checked case-sensitively (decision 021 update). Prose is still unchecked, so the viewer
    labels model-written names/summaries "prose not verified". Naming work is closed.
 
+## Herdr team (default lanes)
+When running inside Herdr, artu1 orchestrates and splits work across every open agent. It does not build everything itself plus Codex. At session start, run `hc agent list` to get the current addresses for `hc send`.
+- artu1 (main Claude): plans, pre-registers decisions, assigns lanes, merges, writes final reports. Builds itself only when no builder is free.
+- bunny (Claude, claudeb account): main builder. Implementation on branches.
+- codex: code review, GO/NO-GO before any paid run or merge. Second builder when bunny is busy.
+- devin: methodology review: pre-registrations, gates, cache/blindness rules, and whether a result means what we claim. Also independent labelling.
+- grok: web and docs research with source URLs; leak and consistency audits. artu1 spot-checks its claims before using them.
+Rules: each worker writes to its own output file and a .done marker; artu1 reads files, not panes; only artu1 approves spend; work runs in parallel wherever steps don't depend on each other.
+Note (2026-11-08): the `hc` installed here (herdr-core) has no `agent` subcommand. `hc ls` lists terminals and their t-addresses (`hc ls --json` gives the agent kind), `hc send <t-address> "<text>"` prompts one, and `hc wait <t-address>` waits on it; a `name=` label is not addressable.
+
 ## Product rule (non-negotiable)
 Every edge in the graph must be backed by evidence: file, symbol, line range, extractor name,
 confidence. Extraction, grouping and edges are deterministic — no model is involved. Never draw
