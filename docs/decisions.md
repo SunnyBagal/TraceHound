@@ -3773,3 +3773,41 @@ so ≈ 21 empty units × (A ≈ $0.035 + D ≈ 2 × $0.03 + E ≈ $0.01) ≈ $2.
   Budget note: the ledger is at $44.53462, $0.47 under the env's $45 total cap, so the next paid job needs the owner to
   raise `TRACEHOUND_BUDGET_TOTAL_USD` or wait.
 
+
+## 075 — Pre-registered: verified quality of 074's A vs E findings (2026-11-08)
+
+**Status: pre-registered, not yet run.** Budget line: `docs/budget.md` (075, cap **$1.50**). Spec:
+`run/briefs/075-spec.md` (testset folder) with Amendment 1 from devin's review; runner `scripts/bench/verify-074.ts`
+(bunny, `3e561af`). No reviewer call is made (`guardClient` lets only verifier and judge requests through).
+**Input:** 074's records. Per arm, the findings (lenient parse + diff check) of its **successful** 074 units: path
+`valid` → first reply (A = E); `invalid` → the shared append retry (A = E); `empty` → A's append retry, E's schema retry.
+`check` ($0): 42 units; successful A 22, E 41; findings A 30, E 135 (empty-first A 9, E 114); 11 PRs; 140 distinct
+verifier requests; 63 judge reviews.
+**Verifier:** verify-ctx-v1 unchanged (`verifyReviewWithContext`; 3.5 Super VL, reasoning on, concurrency 4, strict
+parser), each distinct finding once per PR; kept = `isKept` (keep or VERIFY_FAILED). The response cache is read and
+written (budget.md rule 2: reliability is not under test).
+**Judge:** ONE, bench-judge-v1, against the **dev** golden of the PR's repo (Cal.com unreachable: no set name). One review
+per (arm, draw, hard chunk), so shared-path units give A and E identical judge requests; scorer rules within a review
+(Low and duplicates are neither TP nor FP); across reviews every TP counts; FN unused.
+**Table per arm:** found, kept, VERIFY_FAILED, TP, distinct (PR, golden) TP pairs, FP, duplicates, low, precision
+TP/(TP+FP); again with `keep` only; again on the 26 empty-first units (reported, not gated); cost.
+**Gate (adopt E):** P(E) ≥ P(A) **and** TP(E) − TP(A) ≥ 3, computed with isKept **and** with keep only. PASS needs both;
+FAIL if either fails outright; INCONCLUSIVE if it passes only with VERIFY_FAILED kept, if either precision is undefined
+(TP + FP = 0), on any JUDGE_FAILED review with comments, any verifier request error, findings left unverified or
+unjudged, or a stop at the cap. "Adopt" here means: E goes forward to the full-dev-set quality check; it is not made a
+default by 075.
+**Cost:** expected $0.50 (140 × $0.0032 + 63 × $0.0009, codex.budget.md means); the run refuses above $1.20 expected;
+one Budget, run cap $1.50, total cap min(env $66.92462, ledger at start + $1.50).
+**Claim wording, fixed now (devin, `run/out/devin.075.md`):**
+- PASS: "075 result: PASS by the pre-registered gate. Over 074's 3 fresh draws of 14 dev reviewer chunk requests selected
+  because they failed in runs 7r/8/9, the verifier-kept findings from E's successful units scored TP_E (D_E distinct
+  goldens), P_E, against A's TP_A (D_A), P_A, under one judge (bench-judge-v1, not hand-checked); on the 26 empty-first
+  units TP e_E vs e_A. On these chunks the schema retry's findings were judged at least as precise as the append retry's,
+  with ≥ 3 more TP. This is not a quality, recall or F gain on the dev set: the goldens cover whole PRs while only hard
+  chunks were reviewed (FN unused), TP repeats across draws of the same request, and the difference is within noise; it
+  does not by itself make E a default."
+- FAIL: "075 result: FAIL by the pre-registered gate (TP_E − TP_A = Δ, needed ≥ 3; P_E vs P_A). On these 14 selected
+  requests × 3 draws under one judge, 075 gives no support for adopting E; it does not show that E's findings are worse."
+- INCONCLUSIVE: "075 result: INCONCLUSIVE (<rule>); no A-vs-E comparison is reported; partial counts are diagnostics only."
+- Neither may claim anything about Cal.com, the full dev set or the product, recall, verified quality, or that the effect
+  comes from the schema rather than reasoning off.
