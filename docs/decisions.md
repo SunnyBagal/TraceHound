@@ -3592,18 +3592,20 @@ noise, and no ranking claim follows. The result is recorded here as 073's result
   any response-construction error into a rejected request. Ledger call ids are `073r:<n>`. The restart stands for
   the run; its verdict is decided by the rules above, unchanged.
 - *Failure audit of the earlier dev runs ($0, existing attempt records in `<bench>/reviews/dev-repeat/` only; each
-  `CHUNK_FAILED` reviewer chunk classified by its failure string: timeout = `fetch failed` / `aborted due to
-  timeout`; invalid JSON = `not valid JSON` / no `findings` array; other = anything else).* Terminal chunks (the
+  `CHUNK_FAILED` reviewer chunk classified by its failure string: fetch/timeout error = `fetch failed` or `aborted
+  due to timeout` (the record keeps only the error message, so `fetch failed` alone does not prove a timeout);
+  invalid JSON = `not valid JSON` / no `findings` array; other = anything else).* Terminal chunks (the
   attempt each run used) / all attempts, including those the rerun rule replaced:
   - 3.5 Super VL runs 7r, 8, 9 (the "≈ 8 per run"): **8 / 8 / 4 terminal, all invalid JSON** (`the reply is not
-    valid JSON; after one retry: the reply is not valid JSON`); **0 timeouts, 0 other**. One replaced attempt in 7r
-    (grafana/3 diff #0) was invalid JSON whose retry failed with `fetch failed`, the 300 s cutoff's signature, once;
-    the rerun recovered it. VERIFY_FAILED 1 / 0 / 2, all invalid JSON.
+    valid JSON; after one retry: the reply is not valid JSON`); **0 fetch/timeout errors, 0 other**. One replaced attempt in 7r
+    (grafana/3 diff #0) was invalid JSON whose retry failed with `fetch failed`; that it was the 300 s cutoff is an
+    inference (same message as this job's four 300 s failures; no timing was recorded for that call); the rerun
+    recovered it. VERIFY_FAILED 1 / 0 / 2, all invalid JSON.
   - Void run 7 (067's routing failure): 18 terminal / 26 all, all `other` (`HTTP 404: The model … does not exist`).
   - 3 Super runs 2 (void) and 2r: 1 terminal invalid JSON each; runs 3–6: 0.
   - Nemotron 3 Ultra runs 10 / 11 (NVIDIA API, its own 300 s timeout): terminal 0 / 1 (`other`, HTTP 500); all
-    attempts: run 10 1 timeout (`The operation was aborted due to timeout`) + 1 HTTP 503, run 11 2 timeouts + 3
-    HTTP 500.
+    attempts: run 10 1 fetch/timeout error (`The operation was aborted due to timeout`) + 1 HTTP 503, run 11 2 of
+    those + 3 HTTP 500.
   So the chunk losses that motivated 073 were invalid JSON, not the transport; the 300 s cutoff became frequent only
   in this job (4 of 11 calls in the void run).
 - *The product had the same cutoff; fixed 2026-11-08.* The Action runs the analyzer CLIs (`review`, `review-ctx`,
@@ -3611,7 +3613,11 @@ noise, and no ranking claim follows. The result is recorded here as 073's result
   `verify-ctx-cli.ts:153`) but used `globalThis.fetch`, so a reply slower than 300 s failed at 300 s. `longFetch`
   moved to `packages/analyzer/src/llm/transport.ts`; the client's default fetch is now `defaultFetch` (longFetch,
   read at call time), and the three test setups point it at their no-network guard (`setDefaultFetch`). Request
-  bytes, cache keys and ledger entries are unchanged. Test: `packages/analyzer/test/llm-transport.test.ts`.
+  bytes, cache keys and ledger entries are unchanged. Test: `packages/analyzer/test/llm-transport.test.ts`. Scope:
+  this removes the hidden transport limit only. The opt-in NVIDIA API route (071; only with
+  `TRACEHOUND_NVIDIA_API=1`, never used by the Action) keeps its deliberate 300 s timeout
+  (`NVIDIA_API_TIMEOUT_MS`, `client.ts:46`, applied at `:333`), which 071 chose and declined to raise; it is now
+  enforced by that signal alone.
 - *Defaults after 073 (2026-11-08):* the two reviewers' parser defaults to **lenient** (`DEFAULT_PARSER` in
   `review.ts`; the `review` and `review-ctx` CLIs' `--parser` default; the Action inherits it). The verifier keeps
   strict (not measured). **`retryOnLength: "fresh"` is rejected** and stays off (default `append`): on 073's corpus
