@@ -11,6 +11,7 @@ import { chunkDiff, CHUNK_LIMIT_CHARS, parseDiff, renderChunk } from "./diff.ts"
 import { REVIEW_CTX_SYSTEM_PROMPT, REVIEW_CTX_VERSION, reviewCtxUserMessage } from "./prompt-ctx.ts";
 import {
   attemptDetail,
+  DEFAULT_PARSER,
   DiffIndex,
   DROP_REASONS,
   parseReviewReply,
@@ -96,7 +97,7 @@ export async function reviewPullWithContext(
       rec.failure = a1.error;
       continue;
     }
-    let parsed = parseReviewReply(a1.reply.content, opts.parser);
+    let parsed = parseReviewReply(a1.reply.content, opts.parser ?? DEFAULT_PARSER);
     if (!parsed.ok) {
       const firstWhy = parsed.why;
       const messages: ChatMessage[] = [
@@ -112,7 +113,7 @@ export async function reviewPullWithContext(
         rec.failure = `${firstWhy}; retry ${a2.error}`;
         continue;
       }
-      parsed = parseReviewReply(a2.reply.content, opts.parser);
+      parsed = parseReviewReply(a2.reply.content, opts.parser ?? DEFAULT_PARSER);
       if (!parsed.ok) {
         rec.status = "CHUNK_FAILED";
         rec.failure = `${firstWhy}; after one retry: ${parsed.why}`;

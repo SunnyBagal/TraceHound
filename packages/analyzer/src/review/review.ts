@@ -167,11 +167,14 @@ export interface ReviewOptions {
   reasoning?: "on" | "off";
   maxTokens?: number;
   chunkLimit?: number;
-  /** retry after finish_reason "length": "append" (default, today) or "fresh" */
+  /** retry after finish_reason "length": "append" (default) or "fresh" (rejected in 073: 7 of 10 fresh retries were invalid JSON) */
   retryOnLength?: "append" | "fresh";
-  /** reply parsing: "strict" (default, today) or "lenient" (extractJson) */
+  /** reply parsing: "lenient" (extractJson; the default since decision 073) or "strict" (before 073) */
   parser?: "strict" | "lenient";
 }
+
+/** Decision 073: the lenient parser passed the dev A/B (B1); the verifier keeps its own default, strict. */
+export const DEFAULT_PARSER = "lenient" as const;
 
 export async function reviewPull(client: ChatClient, input: PullInput, opts: ReviewOptions): Promise<ReviewOutput> {
   const started = performance.now();
@@ -225,7 +228,7 @@ export async function reviewPull(client: ChatClient, input: PullInput, opts: Rev
       rec.failure = a1.error;
       continue;
     }
-    let parsed = parseReviewReply(a1.reply.content, opts.parser);
+    let parsed = parseReviewReply(a1.reply.content, opts.parser ?? DEFAULT_PARSER);
     if (!parsed.ok) {
       const firstWhy = parsed.why;
       const messages: ChatMessage[] = [
@@ -241,7 +244,7 @@ export async function reviewPull(client: ChatClient, input: PullInput, opts: Rev
         rec.failure = `${firstWhy}; retry ${a2.error}`;
         continue;
       }
-      parsed = parseReviewReply(a2.reply.content, opts.parser);
+      parsed = parseReviewReply(a2.reply.content, opts.parser ?? DEFAULT_PARSER);
       if (!parsed.ok) {
         rec.status = "CHUNK_FAILED";
         rec.failure = `${firstWhy}; after one retry: ${parsed.why}`;

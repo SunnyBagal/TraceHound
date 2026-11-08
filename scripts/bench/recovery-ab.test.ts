@@ -41,7 +41,7 @@ const noWall = (x: unknown) => JSON.parse(JSON.stringify(x, (k, v) => (k === "wa
 
 test("the arms differ only in the two reviewer switches", () => {
   assert.deepEqual(ARM_IDS, ["A", "B1", "B2"]);
-  assert.deepEqual(ARMS.A, {});
+  assert.deepEqual(ARMS.A, { parser: "strict", retryOnLength: "append" }); // explicit: the reviewers' default parser is lenient since 073
   assert.deepEqual(ARMS.B1, { parser: "lenient" });
   assert.deepEqual(ARMS.B2, { parser: "lenient", retryOnLength: "fresh" });
   assert.equal(MODEL, "nvidia/Nemotron-3.5-Super-VL");
@@ -52,7 +52,7 @@ test("dev repos only: Cal.com is not reachable", () => {
   assert.ok(!REPOS.some((r) => /cal/i.test(r)));
 });
 
-test("arm A is run-test-set's pipeline: same requests, same records", async () => {
+test("arm A (explicit strict + append) and run-test-set's pipeline send the same requests and keep the same records on strict-valid replies", async () => {
   const x = fake();
   const y = fake();
   const a = await pipeline(x.client, INPUT, REPO, ARMS.A);

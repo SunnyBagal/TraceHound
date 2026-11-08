@@ -160,9 +160,13 @@ describe("parser: lenient picks the last candidate that passes the strict shape 
 });
 
 describe.each(reviewers)("%s parser option", (_name, run) => {
-  it("default strict: a fenced reply with prose fails twice", async () => {
-    const out = await run(scripted([{ content: FENCED }, { content: FENCED }]).client, {});
+  it("strict: a fenced reply with prose fails twice", async () => {
+    const out = await run(scripted([{ content: FENCED }, { content: FENCED }]).client, { parser: "strict" });
     expect(out.review.chunks[0]).toMatchObject({ status: "CHUNK_FAILED", attempts: 2 });
+  });
+  it("default (lenient since decision 073): the same reply is accepted on the first attempt", async () => {
+    const out = await run(scripted([{ content: FENCED }]).client, {});
+    expect(out.review.chunks[0]).toMatchObject({ status: "OK", attempts: 1, kept: 1 });
   });
   it("lenient: the same reply is accepted on the first attempt", async () => {
     const out = await run(scripted([{ content: FENCED }]).client, { parser: "lenient" });

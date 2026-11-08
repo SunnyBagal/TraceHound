@@ -25,8 +25,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import type { ChatClient } from "../../packages/analyzer/src/agent/decider.ts";
@@ -39,6 +37,7 @@ import { ResponseCache } from "../../packages/analyzer/src/llm/cache.ts";
 import { CacheMissError, TokenFactoryClient, type ChatRequest, type ChatResult } from "../../packages/analyzer/src/llm/client.ts";
 import { SpendLedger, type SpendEntry } from "../../packages/analyzer/src/llm/ledger.ts";
 import { loadPriceTable } from "../../packages/analyzer/src/llm/prices.ts";
+import { longFetch } from "../../packages/analyzer/src/llm/transport.ts";
 import { gitSource, type GitSource } from "../../packages/analyzer/src/review/context.ts";
 import { REVIEW_CTX_SYSTEM_PROMPT } from "../../packages/analyzer/src/review/prompt-ctx.ts";
 import { REVIEW_SYSTEM_PROMPT } from "../../packages/analyzer/src/review/prompt.ts";
@@ -63,8 +62,10 @@ export const REPOS: readonly string[] = DEV_REPOS;
 /** The fixed population: 10 pull requests per dev repo, files 0.json … 9.json. Any other set refuses. */
 export const EXPECTED_PULLS: readonly string[] = Object.freeze(REPOS.flatMap((r) => Array.from({ length: 10 }, (_, i) => `${r}/${i}`)));
 /** The two switches; nothing else differs between arms. */
+// After 073 the reviewers' default parser is "lenient", so arm A names both settings explicitly (073's arm A
+// ran with them unset, which then meant exactly these values).
 export const ARMS = Object.freeze({
-  A: Object.freeze({}),
+  A: Object.freeze({ parser: "strict", retryOnLength: "append" }),
   B1: Object.freeze({ parser: "lenient" }),
   B2: Object.freeze({ parser: "lenient", retryOnLength: "fresh" }),
 } as const satisfies Record<string, Pick<ReviewOptions, "parser" | "retryOnLength">>);
@@ -141,40 +142,6 @@ export function storingFetch(corpus: ResponseCache, inner: typeof fetch = global
     }
     return res;
   }) as typeof fetch;
-}
-
-/**
- * 073a: Node's built-in fetch (undici) fails any response whose headers take more than 300 s ("fetch failed",
- * headersTimeout), below the client's own 600 s timeout, and 3.5 replies of 32k reasoning tokens take longer.
- * This fetch sends the same request over node:http(s) with no limit of its own: only the caller's signal (the
- * client's AbortSignal.timeout) ends it.
- */
-export function longFetch(url: string | URL | Request, init?: RequestInit): Promise<Response> {
-  return new Promise((resolvePromise, reject) => {
-    const u = new URL(url instanceof Request ? url.url : String(url));
-    const send = u.protocol === "https:" ? httpsRequest : httpRequest;
-    const headers: Record<string, string> = {};
-    new Headers(init?.headers).forEach((v, k) => (headers[k] = v));
-    const req = send(u, { method: init?.method ?? "GET", headers, ...(init?.signal && { signal: init.signal }) }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on("data", (c: Buffer) => chunks.push(c));
-      res.on("error", reject);
-      res.on("end", () => {
-        try {
-          const h = new Headers();
-          for (const [k, v] of Object.entries(res.headers)) if (v !== undefined) h.set(k, Array.isArray(v) ? v.join(", ") : v);
-          const status = res.statusCode ?? 502;
-          // 204, 205 and 304 must have a null body; any construction error rejects, so the client accounts for it
-          resolvePromise(new Response([204, 205, 304].includes(status) ? null : Buffer.concat(chunks), { status, headers: h }));
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-    req.on("error", reject);
-    if (typeof init?.body === "string") req.write(init.body);
-    req.end();
-  });
 }
 
 /** The ledger, plus the charge of each call by its componentId (the CorpusClient's call id). */
@@ -932,3 +899,6 @@ if (import.meta.main) {
     process.exitCode = 1;
   }
 }
+
+/** 073a's transport, moved to the analyzer's llm/transport.ts (the product's default since 073). */
+export { longFetch };
