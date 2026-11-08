@@ -14,6 +14,10 @@
 // Gate: P(E kept) >= P(A kept) and TP(E) - TP(A) >= 3, computed twice: with isKept, and with only verdict "keep"
 // (the judge's matches re-scored on that subset, no new call). PASS needs both; holding only with VERIFY_FAILED kept
 // is INCONCLUSIVE; so is a JUDGE_FAILED review, a verifier request failure, or a stop.
+// Population (075b): exactly 074's registered 42 units, all complete (15 valid-first, 1 invalid, 26 empty-first).
+// Stopping (075b): after the first cap refusal nothing new is dispatched (JobStoppedError), every dispatched call is
+// drained before the final save, and partial verdicts are kept. Costs (075b): each call's ledger charge (failed calls
+// included) is attributed by a per-run unique componentId (TapLedger, as recovery-ab.ts) and reconciled with the ledger.
 //   node scripts/bench/verify-074.ts check [--bench <dir>]    $0: rebuild every arm's findings, print counts and pricing
 //   TRACEHOUND_BUDGET_RUN_USD=1.5 node scripts/bench/verify-074.ts run [--bench <dir>]
 //   node scripts/bench/verify-074.ts report [--bench <dir>]
@@ -38,7 +42,7 @@ import { parseDiff } from "../../packages/analyzer/src/review/diff.ts";
 import { DiffIndex, parseReviewReply, type PullInput } from "../../packages/analyzer/src/review/review.ts";
 import { isKept, verifyReviewWithContext, type CtxVerifiedComment, type CtxVerifiedReview } from "../../packages/analyzer/src/review/verify-ctx.ts";
 import { DRAWS, MODEL, outDir as outDir074, type Unit } from "./hard-chunks.ts";
-import { checkBench, stageOf } from "./recovery-ab.ts";
+import { checkBench, JobStoppedError, stageOf, TapLedger } from "./recovery-ab.ts";
 import { JUDGES } from "./run-test-set.ts";
 import { DEV_REPOS, inputPaths, isRequestFailure } from "./test-set.ts";
 
@@ -59,6 +63,16 @@ export const JUDGE = JUDGES[0]!;
 export const ARMS = ["A", "E"] as const;
 export type Arm = (typeof ARMS)[number];
 export const outDir = (bench: string) => join(bench, "verify-074");
+/** 074's registered population (docs/bench/hard-chunks.md): 14 requests × 3 draws, all complete. */
+export const POPULATION = Object.freeze({ units: 42, valid: 15, invalid: 1, empty: 26 });
+export type Population = { units: number; valid: number; invalid: number; empty: number };
+/** null when the units are exactly the registered population, else why not. */
+export function populationCheck(x: { units: number; complete: number; paths: Record<UnitPath, number> }, want: Population = POPULATION): string | null {
+  const got = { units: x.units, valid: x.paths.valid, invalid: x.paths.invalid, empty: x.paths.empty };
+  if (x.complete !== x.units) return `${x.units - x.complete} incomplete units`;
+  if (JSON.stringify(got) !== JSON.stringify({ units: want.units, valid: want.valid, invalid: want.invalid, empty: want.empty })) return `074 has ${JSON.stringify(got)}, registered ${JSON.stringify(want)}`;
+  return null;
+}
 
 const readJson = <T>(f: string) => JSON.parse(readFileSync(f, "utf8")) as T;
 
@@ -104,7 +118,7 @@ export interface Sources {
 export interface Extracted {
   occ: Occ[];
   units: number;
-  /** complete units with arms (074's gate units); the others are left out */
+  /** complete units with arms; an incomplete unit refuses */
   complete: number;
   paths: Record<UnitPath, number>;
   successes: Record<Arm, number>;
@@ -132,7 +146,8 @@ export function extractFindings(units: Unit[], src: Sources): Extracted {
     if (!Number.isInteger(u.draw) || u.draw < 1 || u.draw > DRAWS) throw new Error(`${where}: draw out of range`);
     if (seen.has(`${u.chunk}@${u.draw}`)) throw new Error(`${where}: duplicate unit`);
     seen.add(`${u.chunk}@${u.draw}`);
-    if (!u.complete || !u.arms) continue;
+    // no silent exclusion: the registered population has no incomplete unit
+    if (!u.complete || !u.arms) throw new Error(`${where}: incomplete unit (the registered population has none)`);
     complete++;
     const path = u.path;
     if (path !== "valid" && path !== "invalid" && path !== "empty") throw new Error(`${where}: complete unit with path ${JSON.stringify(path)}`);
@@ -224,7 +239,14 @@ export function gateBoth(withFailed: { verdict: GateVerdict; why: string }, keep
   return { verdict: "FAIL", why };
 }
 
-export function analyze075(occ: Occ[], reviews: ReviewRec[], verdicts: Map<string, CtxVerifiedComment[]>, scores: ScoreRec[], status: string) {
+/** One dispatched call: the finding or review it served (tag), and its ledger charge (failed calls included; cache hits $0). */
+export interface CallRec { id: string; tag: string; stage: string; ok: boolean; cached: boolean; chargedUSD: number; error?: string }
+/** The calls, and the run's spend from its own ledger entries and from the budget, for reconciliation. */
+export interface Accounting { calls: CallRec[]; ledgerUSD: number; budgetUSD: number }
+export const verifyTag = (pull: string, key: string) => `verify|${pull}|${key}`;
+export const judgeTag = (r: { arm: string; draw: number; chunk: string }) => `judge|${reviewId(r)}`;
+
+export function analyze075(occ: Occ[], reviews: ReviewRec[], verdicts: Map<string, CtxVerifiedComment[]>, scores: ScoreRec[], status: string, acct: Accounting) {
   const byPull = new Map<string, Map<string, CtxVerifiedComment>>();
   for (const [pull, cs] of verdicts) byPull.set(pull, new Map(cs.map((c) => [findingKey(c), c])));
   const verdictOf = (o: Occ) => byPull.get(o.pull)?.get(o.key);
@@ -279,16 +301,28 @@ export function analyze075(occ: Occ[], reviews: ReviewRec[], verdicts: Map<strin
     unverified: occ.filter((o) => !verdictOf(o)).length,
     unjudged: reviews.filter((r) => r.comments.length > 0 && !scoreOf.has(reviewId(r))).length,
   };
-  // verifier cost per arm: each distinct finding the arm used, at its one verification's cost (shared findings count for both arms)
-  const verifyCost = (arm: Arm) => {
-    let t = 0;
-    for (const k of new Set(occ.filter((o) => o.arm === arm).map((o) => `${o.pull}\n${o.key}`))) {
-      const [pull, key] = k.split("\n") as [string, string];
-      t += byPull.get(pull)?.get(key)?.usage.costUSD ?? 0;
-    }
-    return t;
+  // costs: each call's ledger charge (failed calls included), by the tag of the finding or review it served;
+  // verifier cost per arm = its distinct findings' charges (a finding both arms share counts for both)
+  const charge = new Map<string, number>();
+  for (const c of acct.calls) charge.set(c.tag, (charge.get(c.tag) ?? 0) + c.chargedUSD);
+  const verifyTags = (arm?: Arm) => new Set(occ.filter((o) => !arm || o.arm === arm).map((o) => verifyTag(o.pull, o.key)));
+  const sumTags = (tags: Iterable<string>) => [...tags].reduce((t, k) => t + (charge.get(k) ?? 0), 0);
+  const judgeTags = (arm?: Arm) => new Set(reviews.filter((r) => !arm || r.arm === arm).map(judgeTag));
+  const known = new Set([...verifyTags(), ...judgeTags()]);
+  const sum = (cs: CallRec[]) => cs.reduce((t, c) => t + c.chargedUSD, 0);
+  const callSum = sum(acct.calls);
+  const failed = acct.calls.filter((c) => !c.ok);
+  const accounting = {
+    calls: acct.calls.length,
+    cached: acct.calls.filter((c) => c.cached).length,
+    failed: failed.length,
+    failedUSD: sum(failed),
+    unattributedUSD: sum(acct.calls.filter((c) => !known.has(c.tag))),
+    callSumUSD: callSum,
+    ledgerUSD: acct.ledgerUSD,
+    budgetUSD: acct.budgetUSD,
+    reconciled: Math.abs(callSum - acct.ledgerUSD) < 1e-9 && Math.abs(acct.ledgerUSD - acct.budgetUSD) < 1e-9,
   };
-  const judgeCost = (arm: Arm) => scores.filter((s) => s.arm === arm).reduce((t, s) => t + s.costUSD, 0);
   const g1 = gate075(rows.A, rows.E, flags);
   const g2 = gate075(rowsKeepOnly.A, rowsKeepOnly.E, flags);
   return {
@@ -298,13 +332,16 @@ export function analyze075(occ: Occ[], reviews: ReviewRec[], verdicts: Map<strin
     reviews: { A: reviews.filter((r) => r.arm === "A").length, E: reviews.filter((r) => r.arm === "E").length, withKept: reviews.filter((r) => r.comments.length > 0).length },
     distinct: allVerdicts.length,
     flags,
-    cost: { verify: { A: verifyCost("A"), E: verifyCost("E"), total: allVerdicts.reduce((t, c) => t + c.usage.costUSD, 0) }, judge: { A: judgeCost("A"), E: judgeCost("E") } },
+    cost: { verify: { A: sumTags(verifyTags("A")), E: sumTags(verifyTags("E")), total: sum(acct.calls.filter((c) => c.stage === "verify")) }, judge: { A: sumTags(judgeTags("A")), E: sumTags(judgeTags("E")), total: sum(acct.calls.filter((c) => c.stage === "judge")) } },
+    accounting,
     gates: { isKept: g1, keepOnly: g2 },
     gate: gateBoth(g1, g2),
   };
 }
 
-export function formatReport(r: ReturnType<typeof analyze075>, spendUSD: number, emptyFirstUnits: number): string[] {
+export function formatReport(r: ReturnType<typeof analyze075>, emptyFirstUnits: number): string[] {
+  const usd = (x: number) => `$${x.toFixed(4)}`;
+  const a = r.accounting;
   const p = (x: number | null) => (x === null ? "n/a" : x.toFixed(3));
   const table = (rows: Record<Arm, Row>, keptLabel = "kept by the verifier") => [
     `| arm | found | ${keptLabel} | VERIFY_FAILED | TP | distinct goldens (TP) | FP | duplicates | low | precision TP/(TP+FP) |`,
@@ -315,7 +352,7 @@ export function formatReport(r: ReturnType<typeof analyze075>, spendUSD: number,
     }),
   ];
   return [
-    `status ${r.flags.status} · spend $${spendUSD.toFixed(4)} · reviews (arm, draw, chunk): A ${r.reviews.A}, E ${r.reviews.E}, with kept findings ${r.reviews.withKept} · JUDGE_FAILED ${r.flags.judgeFailed} · distinct verifier findings ${r.distinct} (request failures ${r.flags.verifyRequestFailures}) · unverified ${r.flags.unverified} · unjudged ${r.flags.unjudged}`,
+    `status ${r.flags.status} · spend ${usd(a.budgetUSD)} · reviews (arm, draw, chunk): A ${r.reviews.A}, E ${r.reviews.E}, with kept findings ${r.reviews.withKept} · JUDGE_FAILED ${r.flags.judgeFailed} · distinct verifier findings ${r.distinct} (request failures ${r.flags.verifyRequestFailures}) · unverified ${r.flags.unverified} · unjudged ${r.flags.unjudged}`,
     "Duplicates: scorer rules apply within one review (one arm, draw and chunk); across draws and chunks, separate reviews each count.",
     "",
     "All successful units (sums over 3 draws), kept = isKept (keep or VERIFY_FAILED):",
@@ -327,7 +364,8 @@ export function formatReport(r: ReturnType<typeof analyze075>, spendUSD: number,
     `The ${emptyFirstUnits} empty-first units (where A and E differ; reported, not gated):`,
     ...table(r.rowsEmpty),
     "",
-    `cost: verifier A $${r.cost.verify.A.toFixed(4)}, E $${r.cost.verify.E.toFixed(4)} (shared findings count for both; distinct total $${r.cost.verify.total.toFixed(4)}) · judge A $${r.cost.judge.A.toFixed(4)}, E $${r.cost.judge.E.toFixed(4)}`,
+    `cost (ledger charge of every call, failed calls included): verifier A ${usd(r.cost.verify.A)}, E ${usd(r.cost.verify.E)} (a shared finding counts for both; all verifier calls ${usd(r.cost.verify.total)}) · judge A ${usd(r.cost.judge.A)}, E ${usd(r.cost.judge.E)} (all ${usd(r.cost.judge.total)}) · failed calls ${a.failed}, charged ${usd(a.failedUSD)} · unattributed ${usd(a.unattributedUSD)}`,
+    `accounting: calls ${a.calls} (cache hits ${a.cached}, failed ${a.failed}) · per-call sum ${usd(a.callSumUSD)} · ledger (this run's calls) ${usd(a.ledgerUSD)} · budget run spend ${usd(a.budgetUSD)} · ${a.reconciled ? "reconciled" : "MISMATCH"}`,
     `gate with isKept: ${r.gates.isKept.verdict} (${r.gates.isKept.why})`,
     `gate with "keep" only: ${r.gates.keepOnly.verdict} (${r.gates.keepOnly.why})`,
     `gate (P(E kept) >= P(A kept) and TP(E) - TP(A) >= 3, both readings): ${r.gate.verdict}`,
@@ -348,7 +386,7 @@ export function pullInfo(bench: string, pull: string): PullInfo {
 }
 
 /** 074's units and bodies, read and checked; every PR with findings maps to exactly one dev golden entry by title. */
-export function load074(bench: string) {
+export function load074(bench: string, population: Population = POPULATION) {
   const d = outDir074(bench);
   const run = readJson<{ status?: string }>(join(d, "run.json"));
   if (run.status !== "complete") throw new Error(`074's run.json status is ${JSON.stringify(run.status)}, not "complete"`);
@@ -366,6 +404,8 @@ export function load074(bench: string) {
     },
     diff: (pull) => pulls.get(pull)!.input.diff,
   });
+  const off = populationCheck(ex, population);
+  if (off) throw new Error(`not the registered population: ${off}`);
   const goldenOf = new Map<string, GoldenEntry>();
   const withFindings = [...new Set(ex.occ.map((o) => o.pull))];
   for (const repo of DEV_REPOS) {
@@ -429,22 +469,72 @@ export function freezeCheck075(root = REPO_ROOT) {
   return { ok: true, head };
 }
 
-/** Only verifier and judge requests pass; anything else (a reviewer request) is refused and recorded. */
-export function guardClient(inner: ChatClient, onRefused: (e: Error) => void): ChatClient {
-  return {
-    chat: async (request: ChatRequest, meta) => {
-      const s = stageOf(request);
-      if (s !== "verify" && s !== "judge") {
-        const e = new Error(`refused a ${s} request: 075 sends verifier and judge requests only`);
-        onRefused(e);
-        throw e;
-      }
-      return inner.chat(request, meta);
-    },
-  };
+/**
+ * Every request of the job goes through here. Only verifier and judge requests are sent (anything else is refused and
+ * halts the job). Each call gets a per-run unique componentId, so its ledger charge (a failed call's included) is
+ * attributed to the finding or review it served. After the first cap refusal the job is halted: every later call gets
+ * JobStoppedError (a BudgetExceededError) without being sent; drain() waits for every call already sent.
+ */
+export class JobClient {
+  readonly calls: CallRec[] = [];
+  halted: Error | null = null;
+  refusedAfterHalt = 0;
+  readonly #inner: ChatClient;
+  readonly #tap: TapLedger | null;
+  readonly #prefix: string;
+  readonly #all = new Set<Promise<unknown>>();
+  #next = 1;
+  constructor(inner: ChatClient, tap: TapLedger | null, prefix: string) {
+    this.#inner = inner;
+    this.#tap = tap;
+    this.#prefix = prefix;
+  }
+  halt(e: Error) {
+    this.halted ??= e;
+  }
+  get active() {
+    return this.#all.size;
+  }
+  async drain() {
+    while (this.#all.size) await Promise.allSettled([...this.#all]);
+  }
+  tagged(tag: string): ChatClient {
+    return { chat: (request, meta) => this.#chat(tag, request, meta) };
+  }
+  async #chat(tag: string, request: ChatRequest, meta: { purpose: string; componentId?: string }): Promise<ChatResult> {
+    if (this.halted) {
+      this.refusedAfterHalt++;
+      throw new JobStoppedError("the job has stopped; no new request is sent");
+    }
+    const stage = stageOf(request);
+    if (stage !== "verify" && stage !== "judge") {
+      const e = new Error(`refused a ${stage} request: 075 sends verifier and judge requests only`);
+      this.halt(e);
+      throw e;
+    }
+    const id = `${this.#prefix}:${this.#next++}`;
+    const rec: CallRec = { id, tag, stage, ok: false, cached: false, chargedUSD: 0 };
+    this.calls.push(rec);
+    const p = this.#inner.chat(request, { purpose: meta.purpose, componentId: id });
+    this.#all.add(p);
+    try {
+      const r = await p;
+      rec.ok = true;
+      rec.cached = r.cached;
+      rec.chargedUSD = this.#tap ? (this.#tap.charged.get(id) ?? 0) : r.costUSD;
+      return r;
+    } catch (e) {
+      rec.error = `${(e as Error).name}: ${(e as Error).message}`.slice(0, 300);
+      rec.chargedUSD = this.#tap?.charged.get(id) ?? 0;
+      if (e instanceof BudgetExceededError) this.halt(e);
+      throw e;
+    } finally {
+      this.#all.delete(p);
+    }
+  }
 }
 
-export interface Deps { bench: string; stateDir: string; pricesFile: string; env: NodeJS.ProcessEnv; log: (l: string) => void; err: (l: string) => void; fetch?: typeof fetch; client?: ChatClient; freezeCheck?: () => { ok: boolean; why?: string; head: string }; source?: (gitDir: string, head: string) => GitSource; repoRoot?: string }
+export interface Deps { bench: string; stateDir: string; pricesFile: string; env: NodeJS.ProcessEnv; log: (l: string) => void; err: (l: string) => void; fetch?: typeof fetch; freezeCheck?: () => { ok: boolean; why?: string; head: string }; source?: (gitDir: string, head: string) => GitSource; repoRoot?: string; /** tests only */ population?: Population }
 
 export async function runJob(mode: "check" | "run", deps: Deps): Promise<number> {
   const where = checkBench(deps.bench, deps.repoRoot ?? REPO_ROOT);
@@ -454,7 +544,7 @@ export async function runJob(mode: "check" | "run", deps: Deps): Promise<number>
   let L: ReturnType<typeof load074>;
   let wc: Awaited<ReturnType<typeof worstCase>>;
   try {
-    L = load074(bench);
+    L = load074(bench, deps.population ?? POPULATION);
     wc = await worstCase(L, loadPriceTable(deps.pricesFile), sourceFor);
   } catch (e) {
     return (deps.err(`[verify-074] refusing: ${(e as Error).message}`), 1);
@@ -462,7 +552,7 @@ export async function runJob(mode: "check" | "run", deps: Deps): Promise<number>
   const per = (arm: Arm, only?: UnitPath) => L.occ.filter((o) => o.arm === arm && (!only || o.unitPath === only)).length;
   const reviewsAll = chunkReviews(L.occ, () => true);
   const expected = expectedUSD(wc.verifyCalls, wc.judgeReviews);
-  deps.log(`074 units ${L.units} (complete ${L.complete}; paths valid ${L.paths.valid}, invalid ${L.paths.invalid}, empty ${L.paths.empty}) · successful units A ${L.successes.A}, E ${L.successes.E} (empty-first A ${L.successesEmpty.A}, E ${L.successesEmpty.E})`);
+  deps.log(`074 units ${L.units} (all complete; paths valid ${L.paths.valid}, invalid ${L.paths.invalid}, empty ${L.paths.empty}) · successful units A ${L.successes.A}, E ${L.successes.E} (empty-first A ${L.successesEmpty.A}, E ${L.successesEmpty.E})`);
   deps.log(`findings: A ${per("A")}, E ${per("E")} (empty-first A ${per("A", "empty")}, E ${per("E", "empty")}) · PRs with findings ${new Set(L.occ.map((o) => o.pull)).size} · distinct verifier requests ${wc.verifyCalls} · judge reviews (arm, draw, chunk): A ${reviewsAll.filter((r) => r.arm === "A").length}, E ${reviewsAll.filter((r) => r.arm === "E").length}`);
   deps.log(`pricing: worst-case reservation (first requests, max_tokens in full) verifier $${wc.verifyUSD.toFixed(4)} + judge $${wc.judgeUSD.toFixed(4)} (if every finding is kept) · expected $${expected.toFixed(4)} (${wc.verifyCalls} × $${MEAN_VERIFY_USD} + ${wc.judgeReviews} × $${MEAN_JUDGE_USD}; limit $${EXPECTED_CAP_USD.toFixed(2)})`);
   if (mode === "check") return 0;
@@ -472,36 +562,27 @@ export async function runJob(mode: "check" | "run", deps: Deps): Promise<number>
   if (!freeze.ok) return (deps.err(`[verify-074] refusing: ${freeze.why}`), 1);
   const caps = capsFromEnv(deps.env);
   if (caps.runUSD < JOB_CAP_USD) return (deps.err(`[verify-074] refusing: set TRACEHOUND_BUDGET_RUN_USD=${JOB_CAP_USD}`), 1);
-  if (!deps.client && !deps.env.NEBIUS_API_KEY) return (deps.err("[verify-074] NEBIUS_API_KEY is not set"), 1);
+  if (!deps.env.NEBIUS_API_KEY) return (deps.err("[verify-074] NEBIUS_API_KEY is not set"), 1);
   const dir = outDir(bench);
   try {
     mkdirSync(dir);
   } catch {
     return (deps.err(`[verify-074] refusing: ${dir} exists`), 1);
   }
-  const ledger = new SpendLedger(join(deps.stateDir, "spend.jsonl"));
+  const ledger = new TapLedger(join(deps.stateDir, "spend.jsonl"));
   const ledgerStartUSD = ledger.totalUSD();
   const budget = new Budget({ runUSD: JOB_CAP_USD, totalUSD: Math.min(caps.totalUSD, ledgerStartUSD + JOB_CAP_USD) }, ledgerStartUSD);
-  const inner =
-    deps.client ??
-    new TokenFactoryClient({ apiKey: deps.env.NEBIUS_API_KEY!, baseUrl: deps.env.NEBIUS_BASE_URL, prices: loadPriceTable(deps.pricesFile), budget, ledger, cache: new ResponseCache(join(deps.stateDir, "cache")), readCache: true, timeoutMs: 600_000, ...(deps.fetch && { fetch: deps.fetch }) });
-  // LlmJudge turns every error into JUDGE_FAILED: a cap refusal or a refused request is recorded here and stops the job
-  const halt: { err: Error | null } = { err: null };
-  const guarded = guardClient(inner, (e) => (halt.err ??= e));
-  const client: ChatClient = {
-    chat: async (request, meta) => {
-      try {
-        return await guarded.chat(request, meta);
-      } catch (e) {
-        if (e instanceof BudgetExceededError) halt.err ??= e;
-        throw e;
-      }
-    },
-  };
-  const run = { decision: DECISION, head: freeze.head, source074: outDir074(bench), verifier: { ...VERIFY_OPTS, version: "verify-ctx-v1" }, judge: JUDGE, ledgerStartUSD, caps: budget.caps, pricing: { ...wc, expectedUSD: expected }, startedAt: new Date().toISOString(), finishedAt: null as string | null, status: "running", stage: "verify", error: null as string | null, spendUSD: 0, emptyFirstUnits: L.paths.empty };
+  const startedAt = new Date().toISOString();
+  const prefix = `${DECISION}:${startedAt}`; // unique per run: this run's ledger entries are exactly componentId prefix:<n>
+  const inner = new TokenFactoryClient({ apiKey: deps.env.NEBIUS_API_KEY, baseUrl: deps.env.NEBIUS_BASE_URL, prices: loadPriceTable(deps.pricesFile), budget, ledger, cache: new ResponseCache(join(deps.stateDir, "cache")), readCache: true, timeoutMs: 600_000, ...(deps.fetch && { fetch: deps.fetch }) });
+  const jc = new JobClient(inner, ledger, prefix);
+  const ledgerJobUSD = () => ledger.entries().filter((e) => e.componentId?.startsWith(`${prefix}:`)).reduce((t, e) => t + e.estCostUSD, 0);
+  const run = { decision: DECISION, head: freeze.head, source074: outDir074(bench), population: deps.population ?? POPULATION, verifier: { ...VERIFY_OPTS, version: "verify-ctx-v1" }, judge: JUDGE, ledgerStartUSD, caps: budget.caps, pricing: { ...wc, expectedUSD: expected }, componentIdPrefix: prefix, startedAt, finishedAt: null as string | null, status: "running", stage: "verify", error: null as string | null, spendUSD: 0, ledgerJobUSD: null as number | null, refusedAfterHalt: 0, emptyFirstUnits: L.paths.empty };
   const save = () => {
     run.spendUSD = budget.runSpent;
+    run.refusedAfterHalt = jc.refusedAfterHalt;
     writeFileSync(join(dir, "run.json"), JSON.stringify(run, null, 1) + "\n");
+    writeFileSync(join(dir, "calls.json"), JSON.stringify(jc.calls, null, 1) + "\n");
   };
   save();
   writeFileSync(join(dir, "occurrences.json"), JSON.stringify(L.occ, null, 1) + "\n");
@@ -511,18 +592,37 @@ export async function runJob(mode: "check" | "run", deps: Deps): Promise<number>
   const scores: ScoreRec[] = [];
   let reviews: ReviewRec[] = [];
   try {
-    // 1. the verifier: each distinct finding once per PR
+    // 1. the verifier: each distinct finding once per PR, 4 at a time (verify-ctx's concurrency), one finding per
+    //    verifyReviewWithContext call (the same request bytes as one call per PR; contexts are per finding). The
+    //    workers never fail fast: after a halt they take no new finding, and every one is awaited.
     const distinct = [...distinctFindings(L.occ).entries()].sort((a, b) => a[0].localeCompare(b[0], "en", { numeric: true }));
     for (const [k, [pull, findings]] of distinct.entries()) {
+      if (jc.halted) break;
       const p = L.pulls.get(pull)!;
       const header = { pr_title: p.input.title, ...(p.input.number !== undefined && { pr_number: p.input.number }) };
-      const v: CtxVerifiedReview = await verifyReviewWithContext(client, p.input, { ...header, comments: findings }, { source: sourceFor(p.gitDir, p.head), head: p.head }, VERIFY_OPTS);
-      if (halt.err) throw halt.err;
-      verdicts.set(pull, v.comments);
-      writeFileSync(join(dir, "verdicts", `${p.repo}_${p.name}.json`), JSON.stringify({ pull, ...v }, null, 1) + "\n");
+      const repo = { source: sourceFor(p.gitDir, p.head), head: p.head };
+      const got: (CtxVerifiedComment | undefined)[] = new Array(findings.length);
+      let next = 0;
+      const worker = async () => {
+        while (!jc.halted && next < findings.length) {
+          const i = next++;
+          const f = findings[i]!;
+          try {
+            const v = await verifyReviewWithContext(jc.tagged(verifyTag(pull, findingKey(f))), p.input, { ...header, comments: [f] }, repo, { ...VERIFY_OPTS, concurrency: 1 });
+            got[i] = v.comments[0];
+          } catch (e) {
+            if (!(e instanceof BudgetExceededError)) jc.halt(e as Error); // a cap refusal has halted the job already
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: VERIFY_OPTS.concurrency }, worker));
+      const comments = got.filter((c): c is CtxVerifiedComment => c !== undefined);
+      verdicts.set(pull, comments);
+      writeFileSync(join(dir, "verdicts", `${p.repo}_${p.name}.json`), JSON.stringify({ pull, findings: findings.length, partial: comments.length < findings.length, comments }, null, 1) + "\n");
       save();
       deps.err(`[verify-074] verified PR ${k + 1}/${distinct.length} · spend $${budget.runSpent.toFixed(4)}`);
     }
+    if (jc.halted) throw jc.halted;
     // 2. one judge per (arm, draw, chunk) review of the verifier-kept findings, one scoreRepo call each
     const keptOf = (o: Occ) => {
       const c = verdicts.get(o.pull)?.find((x) => findingKey(x) === o.key);
@@ -533,12 +633,13 @@ export async function runJob(mode: "check" | "run", deps: Deps): Promise<number>
     run.stage = "judge";
     save();
     for (const [k, r] of reviews.entries()) {
+      if (jc.halted) break;
       const p = L.pulls.get(r.pull)!;
       const golden = GoldenFile.parse(readJson(inputPaths(bench, "dev", r.repo).golden));
-      const lj = new LlmJudge(client, { model: JUDGE.model, reasoning: JUDGE.reasoning });
+      const lj = new LlmJudge(jc.tagged(judgeTag(r)), { model: JUDGE.model, reasoning: JUDGE.reasoning });
       const review: PullReview = { pr_title: p.input.title, comments: r.comments, ...(p.input.number !== undefined && { pr_number: p.input.number }) };
       const result = await scoreRepo({ golden, reviews: [{ file: r.file, review }], judges: [lj], concurrency: 1 });
-      if (halt.err) throw halt.err;
+      if (jc.halted) break; // LlmJudge turned the refusal into JUDGE_FAILED: not recorded as a score
       const d = result.detail[0];
       if (result.detail.length !== 1 || !d) throw new Error(`${reviewId(r)}: the review maps to no golden entry`);
       const rec: ScoreRec = { arm: r.arm, draw: r.draw, chunk: r.chunk, costUSD: result.usage.costUSD, status: d.status, severities: d.golden.map((g) => g.severity), matched: d.comments.map((c) => c.matched) };
@@ -547,22 +648,27 @@ export async function runJob(mode: "check" | "run", deps: Deps): Promise<number>
       save();
       deps.err(`[verify-074] judged review ${k + 1}/${reviews.length} · spend $${budget.runSpent.toFixed(4)}`);
     }
+    if (jc.halted) throw jc.halted;
     run.status = "complete";
   } catch (e) {
+    jc.halt(e as Error);
     run.status = e instanceof BudgetExceededError ? "stopped-at-cap" : "failed";
     run.error = `${(e as Error).name}: ${(e as Error).message}`;
   }
+  await jc.drain(); // every dispatched call has settled before the final records
   run.finishedAt = new Date().toISOString();
+  run.ledgerJobUSD = ledgerJobUSD();
   save();
-  const r = analyze075(L.occ, reviews, verdicts, scores, run.status);
-  for (const l of formatReport(r, budget.runSpent, L.paths.empty)) deps.log(l);
+  const r = analyze075(L.occ, reviews, verdicts, scores, run.status, { calls: jc.calls, ledgerUSD: run.ledgerJobUSD, budgetUSD: budget.runSpent });
+  for (const l of formatReport(r, L.paths.empty)) deps.log(l);
   return run.status === "complete" ? 0 : run.status === "stopped-at-cap" ? 2 : 3;
 }
 
-/** The tables and the gate from the records alone. */
+/** The tables, the accounting and the gate from the records alone. */
 export function reportFromRecords(dir: string): string[] {
-  const run = readJson<{ status: string; spendUSD: number; emptyFirstUnits: number }>(join(dir, "run.json"));
+  const run = readJson<{ status: string; spendUSD: number; ledgerJobUSD: number | null; emptyFirstUnits: number }>(join(dir, "run.json"));
   const occ = readJson<Occ[]>(join(dir, "occurrences.json"));
+  const calls = readJson<CallRec[]>(join(dir, "calls.json"));
   const reviews = existsSync(join(dir, "reviews.json")) ? readJson<ReviewRec[]>(join(dir, "reviews.json")) : [];
   const verdicts = new Map<string, CtxVerifiedComment[]>();
   for (const f of readdirSync(join(dir, "verdicts")).filter((x) => x.endsWith(".json")).sort()) {
@@ -576,7 +682,8 @@ export function reportFromRecords(dir: string): string[] {
       const s = readJson<ScoreRec>(join(dir, "scores", f));
       return { arm: s.arm, draw: s.draw, chunk: s.chunk, costUSD: s.costUSD, status: s.status, severities: s.severities, matched: s.matched };
     });
-  return formatReport(analyze075(occ, reviews, verdicts, scores, run.status), run.spendUSD, run.emptyFirstUnits);
+  // a run that never finished has no ledger figure: NaN reports as a mismatch
+  return formatReport(analyze075(occ, reviews, verdicts, scores, run.status, { calls, ledgerUSD: run.ledgerJobUSD ?? Number.NaN, budgetUSD: run.spendUSD }), run.emptyFirstUnits);
 }
 
 if (import.meta.main) {

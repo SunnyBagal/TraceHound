@@ -8,10 +8,10 @@ import type { ChatClient } from "../../packages/analyzer/src/agent/decider.ts";
 import { BudgetExceededError } from "../../packages/analyzer/src/llm/budget.ts";
 import type { ChatRequest, ChatResult } from "../../packages/analyzer/src/llm/client.ts";
 import type { GitSource } from "../../packages/analyzer/src/review/context.ts";
-import type { CtxVerifiedComment } from "../../packages/analyzer/src/review/verify-ctx.ts";
+import { verifyReviewWithContext, type CtxVerifiedComment } from "../../packages/analyzer/src/review/verify-ctx.ts";
 import type { ArmOutcome, Unit } from "./hard-chunks.ts";
 import { firstRequest } from "./hard-chunks.ts";
-import { stageOf } from "./recovery-ab.ts";
+import { JobStoppedError, stageOf } from "./recovery-ab.ts";
 import {
   analyze075,
   bodyFile,
@@ -22,11 +22,18 @@ import {
   findingKey,
   gate075,
   gateBoth,
-  guardClient,
+  JobClient,
+  judgeTag,
   outDir,
+  POPULATION,
+  populationCheck,
   reportFromRecords,
   runJob,
   VERIFY_MODEL,
+  VERIFY_OPTS,
+  verifyTag,
+  type Accounting,
+  type CallRec,
   type Deps,
   type Flags,
   type Occ,
@@ -57,7 +64,6 @@ function fixture() {
     unit("grafana/0#ctx0", 1, "invalid", arm(true, 1)),
     unit("sentry/5#ctx0", 1, "empty", arm(true, 1), arm(true, 3)),
     unit("sentry/5#ctx0", 2, "empty", arm(false, 0), arm(true, 1)),
-    { chunk: "sentry/5#ctx0", draw: 3, complete: false, path: "empty", capStop: "x" }, // incomplete: left out
   ];
   const bodies: Record<string, string> = {
     "grafana/0#diff0|1|first": reply(F1, OFF_DIFF),
@@ -78,7 +84,7 @@ const strip = (o: Occ) => ({ chunk: o.chunk, draw: o.draw, finding: o.finding })
 test("findings per arm: valid → the first reply for both; invalid → the shared append retry for both; empty → A append, E schema", () => {
   const { units, src } = fixture();
   const x = extractFindings(units, src);
-  assert.equal(x.units, 5);
+  assert.equal(x.units, 4);
   assert.equal(x.complete, 4);
   assert.deepEqual(x.paths, { valid: 1, invalid: 1, empty: 2 });
   assert.deepEqual(x.successes, { A: 3, E: 4 });
@@ -111,9 +117,12 @@ test("A and E are identical on the shared paths; any inconsistency with units.js
   bad([unit("../x/1#diff0", 1, "valid", arm(true, 1))], /unexpected chunk id/);
   bad([units[0]!, units[0]!], /duplicate unit/);
   bad([unit("grafana/0#diff0", 4, "valid", arm(true, 1))], /draw out of range/);
+  bad([...units, { chunk: "sentry/5#ctx0", draw: 3, complete: false, path: "empty", capStop: "x" }], /incomplete unit/); // no silent exclusion
+  bad([{ ...units[0]!, arms: undefined }], /incomplete unit/);
 });
 
 const row = (a: "A" | "E", tp: number, fp: number): Row => ({ arm: a, found: 0, kept: 0, verifyFailed: 0, tp, fp, duplicates: 0, low: 0, precision: tp + fp ? tp / (tp + fp) : null, distinctGoldens: 0 });
+const NO_CALLS: Accounting = { calls: [], ledgerUSD: 0, budgetUSD: 0 };
 const OK: Flags = { status: "complete", judgeFailed: 0, verifyRequestFailures: 0, unverified: 0, unjudged: 0 };
 const verdict = (f: { path: string; line: number; body: string }, keep: boolean | "failed", failure?: string): CtxVerifiedComment =>
   ({ ...f, verdict: keep === "failed" ? null : keep ? "keep" : "drop", reason: "r", status: keep === "failed" ? "VERIFY_FAILED" : "VERIFIED", attempts: 1, ...(failure && { failure }), context: {} as CtxVerifiedComment["context"], usage: { calls: 1, cached: 0, inputTokens: 0, outputTokens: 0, costUSD: 0.01, latencyMs: 0 } }) as CtxVerifiedComment;
@@ -150,6 +159,26 @@ test("pricing (Amendment 1.5): expected = verifier calls × $0.0032 + judge call
 });
 
 
+test("population (075b): exactly the registered 42 units, all complete, 15 valid-first / 1 invalid / 26 empty-first", () => {
+  const paths = { valid: 15, invalid: 1, empty: 26 };
+  assert.deepEqual(POPULATION, { units: 42, ...paths });
+  assert.equal(populationCheck({ units: 42, complete: 42, paths }), null);
+  assert.match(populationCheck({ units: 42, complete: 41, paths })!, /1 incomplete units/);
+  assert.match(populationCheck({ units: 41, complete: 41, paths: { ...paths, empty: 25 } })!, /registered/);
+  assert.match(populationCheck({ units: 42, complete: 42, paths: { valid: 16, invalid: 0, empty: 26 } })!, /registered/);
+});
+
+test("verifying one finding per call sends the same request bytes as one call per PR (contexts are per finding)", async () => {
+  const seen: Record<"pr" | "one", string[]> = { pr: [], one: [] };
+  const cap = (k: "pr" | "one"): ChatClient => ({ chat: async (r: ChatRequest): Promise<ChatResult> => (seen[k].push(JSON.stringify(r)), { content: '{"verdict":"keep","reason":"r"}', cached: false, latencyMs: 0, costUSD: 0 }) });
+  const input = { title: "t", description: "d", diff: DIFF };
+  const repo = { source: SOURCE, head: "0".repeat(40) };
+  await verifyReviewWithContext(cap("pr"), input, { pr_title: "t", comments: [F1, F2, F3] }, repo, VERIFY_OPTS);
+  for (const f of [F1, F2, F3]) await verifyReviewWithContext(cap("one"), input, { pr_title: "t", comments: [f] }, repo, { ...VERIFY_OPTS, concurrency: 1 });
+  assert.equal(seen.pr.length, 3);
+  assert.deepEqual([...seen.one].sort(), [...seen.pr].sort());
+});
+
 test("one review per (arm, draw, hard chunk) of verifier-kept findings; each distinct finding verified once per PR", () => {
   const { units, src } = fixture();
   const { occ } = extractFindings(units, src);
@@ -181,7 +210,13 @@ test("the tables: outcomes go back to their findings; distinct goldens; duplicat
   const rs = chunkReviews(occ, (o) => o.finding.body !== F3.body);
   // the judge: every comment matches G1 (High); within one review the second is a duplicate, across reviews each counts
   const scores: ScoreRec[] = rs.map((r) => ({ arm: r.arm, draw: r.draw, chunk: r.chunk, costUSD: 0.1, status: "SCORED", severities: ["High"], matched: r.comments.map(() => "G1") }));
-  const a = analyze075(occ, rs, verdicts, scores, "complete");
+  // calls: one per distinct finding ($0.01), plus a failed (charged) retry of grafana F1; one judge call per review with comments
+  const calls: CallRec[] = [...distinctFindings(occ)].flatMap(([pull, fs]) => fs.map((f, i) => ({ id: `${pull}${i}`, tag: verifyTag(pull, findingKey(f)), stage: "verify", ok: true, cached: false, chargedUSD: 0.01 })));
+  calls.push({ id: "x1", tag: verifyTag("grafana/0", findingKey(F1)), stage: "verify", ok: false, cached: false, chargedUSD: 0.02, error: "TypeError: fetch failed" });
+  for (const r of rs.filter((r) => r.comments.length)) calls.push({ id: `j${judgeTag(r)}`, tag: judgeTag(r), stage: "judge", ok: true, cached: false, chargedUSD: 0.1 });
+  calls.push({ id: "u", tag: "something else", stage: "verify", ok: true, cached: false, chargedUSD: 0.005 });
+  const total = calls.reduce((t, c) => t + c.chargedUSD, 0);
+  const a = analyze075(occ, rs, verdicts, scores, "complete", { calls, ledgerUSD: total, budgetUSD: total });
   assert.deepEqual(a.rows.A, { arm: "A", found: 3, kept: 3, verifyFailed: 1, tp: 3, fp: 0, duplicates: 0, low: 0, precision: 1, distinctGoldens: 2 });
   assert.deepEqual(a.rows.E, { arm: "E", found: 6, kept: 4, verifyFailed: 1, tp: 3, fp: 0, duplicates: 1, low: 0, precision: 1, distinctGoldens: 2 });
   assert.deepEqual(a.rowsKeepOnly.A, { arm: "A", found: 3, kept: 2, verifyFailed: 1, tp: 2, fp: 0, duplicates: 0, low: 0, precision: 1, distinctGoldens: 2 });
@@ -189,8 +224,15 @@ test("the tables: outcomes go back to their findings; distinct goldens; duplicat
   assert.equal(a.flags.verifyRequestFailures, 1);
   assert.equal(a.gate.verdict, "INCONCLUSIVE");
   assert.equal(a.distinct, 5);
-  assert.ok(Math.abs(a.cost.judge.E - 0.4) < 1e-12);
-  assert.ok(Math.abs(a.cost.verify.A - 0.03) < 1e-12 && Math.abs(a.cost.verify.total - 0.05) < 1e-12);
+  const near = (x: number, y: number) => assert.ok(Math.abs(x - y) < 1e-12, `${x} != ${y}`);
+  near(a.cost.judge.E, 0.3); // 3 E reviews with kept findings (E d2's review is empty: no call)
+  near(a.cost.verify.A, 0.05); // F2 + F1 (with its failed, charged call) + sentry F1
+  near(a.cost.verify.total, 0.075);
+  assert.equal(a.accounting.failed, 1);
+  near(a.accounting.failedUSD, 0.02);
+  near(a.accounting.unattributedUSD, 0.005);
+  assert.equal(a.accounting.reconciled, true);
+  assert.equal(analyze075(occ, rs, verdicts, scores, "complete", { calls, ledgerUSD: total - 0.02, budgetUSD: total }).accounting.reconciled, false);
 });
 
 test("keep-only re-scores the judge's matches without the VERIFY_FAILED findings (no new call)", () => {
@@ -200,22 +242,27 @@ test("keep-only re-scores the judge's matches without the VERIFY_FAILED findings
   const verdicts = new Map([["sentry/5", [verdict(Fa, "failed"), verdict(Fb, true)]]]);
   const rs = chunkReviews(occ, () => true);
   const scores: ScoreRec[] = [{ arm: "E", draw: 1, chunk: "sentry/5#ctx0", costUSD: 0, status: "SCORED", severities: ["High", "Low"], matched: ["G1", "G1"] }];
-  const a = analyze075(occ, rs, verdicts, scores, "complete");
+  const a = analyze075(occ, rs, verdicts, scores, "complete", NO_CALLS);
   assert.equal(a.rows.E.tp, 1);
   assert.equal(a.rows.E.duplicates, 1); // Fb duplicates Fa's credit
   assert.equal(a.rowsKeepOnly.E.tp, 1); // without Fa, Fb takes the credit
   assert.equal(a.rowsKeepOnly.E.duplicates, 0);
   assert.equal(a.rowsKeepOnly.E.kept, 1);
-  const failed = analyze075(occ, rs, verdicts, [{ ...scores[0]!, status: "JUDGE_FAILED" }], "complete");
+  const failed = analyze075(occ, rs, verdicts, [{ ...scores[0]!, status: "JUDGE_FAILED" }], "complete", NO_CALLS);
   assert.equal(failed.flags.judgeFailed, 1);
   assert.equal(failed.gate.verdict, "INCONCLUSIVE");
 });
 
-// ---- the job on a synthetic bench, with a fake client ----
+// ---- the job on a synthetic bench: the real TokenFactoryClient, budget, ledger and cache, with a fake fetch ----
 
-function benchDir() {
+const PRICES = join(import.meta.dirname, "../../config/prices.json");
+const PULLS = [
+  { repo: "grafana", name: "0", title: "Grafana zero" },
+  { repo: "sentry", name: "5", title: "Sentry five" },
+];
+const SMALL = { units: 4, valid: 1, invalid: 1, empty: 2 };
+function benchDir(units: Unit[], bodies: Record<string, string>, pulls = PULLS) {
   const bench = mkdtempSync(join(tmpdir(), "v074-"));
-  const { units, bodies } = fixture();
   const hc = join(bench, "hard-chunks-074");
   mkdirSync(join(hc, "bodies"), { recursive: true });
   writeFileSync(join(hc, "run.json"), JSON.stringify({ status: "complete" }));
@@ -224,10 +271,10 @@ function benchDir() {
     const [c, d, n] = k.split("|") as [string, string, string];
     writeFileSync(join(hc, "bodies", bodyFile(c, Number(d), n)), JSON.stringify({ content }));
   }
-  for (const [repo, name, title] of [["grafana", "0", "Grafana zero"], ["sentry", "5", "Sentry five"]] as const) {
+  mkdirSync(join(bench, "repos"), { recursive: true });
+  mkdirSync(join(bench, "golden/code_review_benchmarks"), { recursive: true });
+  for (const { repo, name, title } of pulls) {
     mkdirSync(join(bench, "prs", repo), { recursive: true });
-    mkdirSync(join(bench, "repos"), { recursive: true });
-    mkdirSync(join(bench, "golden/code_review_benchmarks"), { recursive: true });
     writeFileSync(join(bench, "prs", repo, `${name}.json`), JSON.stringify({ title, description: "synthetic", diff: DIFF, number: 1 }));
     writeFileSync(join(bench, "repos", `${repo}.heads.json`), JSON.stringify({ [name]: { head: "0".repeat(40) } }));
     writeFileSync(join(bench, "golden/code_review_benchmarks", `${repo}.json`), JSON.stringify([{ pr_title: title, comments: [{ comment: "the real bug", severity: "High" }] }]));
@@ -235,93 +282,190 @@ function benchDir() {
   mkdirSync(join(bench, "state"));
   return bench;
 }
-/** Verifier: keep, except F3; judge: T1 matches G1, the rest nothing. Every request's stage is recorded. */
-function fakeModel(o: { capOnJudge?: boolean } = {}) {
-  const stages: string[] = [];
-  const models: string[] = [];
-  const judgeBodies: string[] = [];
-  const client: ChatClient = {
-    chat: async (r: ChatRequest): Promise<ChatResult> => {
-      const s = stageOf(r);
-      stages.push(s);
-      models.push(r.model);
+/** The API: verifier keeps all but F3; judge matches T1 to G1. Every request that reaches it is recorded. */
+function fakeApi(o: { delay?: (r: ChatRequest) => number; usage?: (r: ChatRequest) => { prompt_tokens: number; completion_tokens: number } | undefined; fail?: (r: ChatRequest) => boolean } = {}) {
+  const live = { active: 0, stages: [] as string[], models: [] as string[], judgeBodies: [] as string[] };
+  const f = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const r = JSON.parse(String(init!.body)) as ChatRequest;
+    const s = stageOf(r);
+    live.stages.push(s);
+    live.models.push(r.model);
+    if (s === "judge") live.judgeBodies.push(JSON.stringify(r));
+    live.active++;
+    try {
+      await new Promise((res) => setTimeout(res, o.delay?.(r) ?? 1));
+      if (o.fail?.(r)) throw new TypeError("fetch failed (synthetic network error)");
+      const user = r.messages[1]?.content ?? "";
       let content = "";
-      if (s === "verify") content = JSON.stringify({ verdict: (r.messages[1]!.content ?? "").includes("x.z is never set") ? "drop" : "keep", reason: "synthetic" });
+      if (s === "verify") content = JSON.stringify({ verdict: user.includes("x.z is never set") ? "drop" : "keep", reason: "synthetic" });
       if (s === "judge") {
-        judgeBodies.push(JSON.stringify(r));
-        if (o.capOnJudge) throw new BudgetExceededError("cap");
-        const ids = [...(r.messages[1]!.content ?? "").matchAll(/^(T\d+) \(/gm)].map((m) => m[1]!);
+        const ids = [...user.matchAll(/^(T\d+) \(/gm)].map((m) => m[1]!);
         content = JSON.stringify({ matches: ids.map((t) => ({ tool: t, golden: t === "T1" ? "G1" : null })) });
       }
-      return { content, cached: false, latencyMs: 1, costUSD: 0.001, finishReason: "stop" };
-    },
-  };
-  return { client, stages, models, judgeBodies };
+      const usage = o.usage?.(r) ?? { prompt_tokens: 100, completion_tokens: 50 };
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content }, finish_reason: "stop" }], usage }), { status: 200, headers: { "content-type": "application/json" } });
+    } finally {
+      live.active--;
+    }
+  }) as typeof fetch;
+  return { fetch: f, live };
 }
-const deps = (bench: string, client: ChatClient, log: string[]): Deps => ({
+const userOf = (r: ChatRequest) => r.messages[1]?.content ?? "";
+const deps = (bench: string, f: typeof fetch, log: string[], errs: string[] = [], population = SMALL): Deps => ({
   bench,
   stateDir: join(bench, "state"),
-  pricesFile: join(import.meta.dirname, "../../config/prices.json"),
-  env: { TRACEHOUND_BUDGET_RUN_USD: "1.5" },
+  pricesFile: PRICES,
+  env: { TRACEHOUND_BUDGET_RUN_USD: "1.5", NEBIUS_API_KEY: "synthetic" },
   log: (l) => log.push(l),
-  err: () => {},
-  client,
+  err: (l) => errs.push(l),
+  fetch: f,
   freezeCheck: () => ({ ok: true, head: "h" }),
   source: () => SOURCE,
+  population,
+});
+const records = (bench: string, f: string) => JSON.parse(readFileSync(join(outDir(bench), f), "utf8"));
+const withBench = async (units: Unit[], bodies: Record<string, string>, fn: (bench: string) => Promise<void>, pulls = PULLS) => {
+  const bench = benchDir(units, bodies, pulls);
+  try {
+    await fn(bench);
+  } finally {
+    rmSync(bench, { recursive: true, force: true });
+  }
+};
+
+test("the registered population is enforced: a bench that is not 42/15/1/26 refuses before any call", async () => {
+  const { units, bodies } = fixture();
+  await withBench(units, bodies, async (bench) => {
+    const api = fakeApi();
+    const errs: string[] = [];
+    assert.equal(await runJob("check", deps(bench, api.fetch, [], errs, POPULATION)), 1);
+    assert.match(errs.join("\n"), /not the registered population: 074 has \{"units":4,"valid":1,"invalid":1,"empty":2\}/);
+    assert.equal(await runJob("run", deps(bench, api.fetch, [], errs, POPULATION)), 1);
+    assert.equal(api.live.stages.length, 0);
+  });
 });
 
-test("check prints counts only and calls nothing; run sends verifier and judge requests only, never a reviewer request", async () => {
-  const bench = benchDir();
-  try {
-    const m = fakeModel();
+test("check calls nothing; run sends verifier and judge requests only, never a reviewer request; costs reconcile with the ledger", async () => {
+  const { units, bodies } = fixture();
+  await withBench(units, bodies, async (bench) => {
+    const api = fakeApi();
     const log: string[] = [];
-    assert.equal(await runJob("check", deps(bench, m.client, log)), 0);
-    assert.equal(m.stages.length, 0);
+    assert.equal(await runJob("check", deps(bench, api.fetch, log)), 0);
+    assert.equal(api.live.stages.length, 0);
     assert.match(log.join("\n"), /findings: A 3, E 6 .* distinct verifier requests 5 · judge reviews \(arm, draw, chunk\): A 3, E 4/);
     const wc = /worst-case reservation .* verifier \$([\d.]+) \+ judge \$([\d.]+) .* expected \$([\d.]+)/.exec(log.join("\n"))!;
     assert.ok(Number(wc[1]) > 5 * 0.0144 && Number(wc[2]) > 7 * 0.0144); // max_tokens 16,000 at $0.90/M output, plus input
     assert.equal(Number(wc[3]), Number(expectedUSD(5, 7).toFixed(4)));
 
     const out: string[] = [];
-    assert.equal(await runJob("run", deps(bench, m.client, out)), 0);
-    assert.ok(m.stages.length > 0 && m.stages.every((s) => s === "verify" || s === "judge"), `stages: ${m.stages.join(",")}`);
-    assert.equal(m.stages.filter((s) => s === "verify").length, 5); // each distinct finding once per PR
-    assert.equal(m.stages.filter((s) => s === "judge").length, 6); // one per (arm, draw, chunk) review with kept findings
-    assert.equal(new Set(m.judgeBodies).size, 4); // A and E's shared-path reviews send byte-identical judge requests
-    assert.ok(m.models.filter((_, i) => m.stages[i] === "verify").every((x) => x === VERIFY_MODEL));
+    assert.equal(await runJob("run", deps(bench, api.fetch, out)), 0);
+    assert.ok(api.live.stages.every((s) => s === "verify" || s === "judge"), `stages: ${api.live.stages.join(",")}`);
+    assert.equal(api.live.stages.filter((s) => s === "verify").length, 5); // each distinct finding once per PR
+    assert.ok(api.live.models.filter((_, i) => api.live.stages[i] === "verify").every((x) => x === VERIFY_MODEL));
+    // 6 judge reviews with kept findings; A and E's shared-path reviews are byte-identical: 2 served from the cache
+    assert.equal(api.live.judgeBodies.length, 4);
+    assert.equal(new Set(api.live.judgeBodies).size, 4);
+    const calls = records(bench, "calls.json") as CallRec[];
+    assert.equal(calls.filter((c) => c.stage === "judge").length, 6);
+    assert.equal(calls.filter((c) => c.cached).length, 2);
     const report = reportFromRecords(outDir(bench));
     assert.deepEqual(report, out.slice(out.length - report.length)); // the report equals the run's own output
-    assert.match(report.join("\n"), /\| A \| 3 \| 3 \| 0 \| 3 \| 2 \| 0 \|/); // found, kept, VERIFY_FAILED, TP, distinct goldens, FP
-    assert.match(report.join("\n"), /\| E \| 6 \| 4 \| 0 \| 3 \| 2 \| 1 \|/);
-    assert.match(report.join("\n"), /gate with isKept: FAIL \(P\(E\) 0\.750 < P\(A\) 1\.000; TP\(E\) - TP\(A\) = 0 < 3\)/);
+    const text = report.join("\n");
+    assert.match(text, /\| A \| 3 \| 3 \| 0 \| 3 \| 2 \| 0 \|/); // found, kept, VERIFY_FAILED, TP, distinct goldens, FP
+    assert.match(text, /\| E \| 6 \| 4 \| 0 \| 3 \| 2 \| 1 \|/);
+    assert.match(text, /accounting: calls 11 \(cache hits 2, failed 0\) .* · reconciled$/m);
+    assert.match(text, /gate with isKept: FAIL \(P\(E\) 0\.750 < P\(A\) 1\.000; TP\(E\) - TP\(A\) = 0 < 3\)/);
     assert.match(report.at(-1)!, /both readings\): FAIL$/);
-    assert.equal(JSON.parse(readFileSync(join(outDir(bench), "run.json"), "utf8")).status, "complete");
-    assert.equal(await runJob("run", deps(bench, m.client, [])), 1); // the records exist: refuse
-  } finally {
-    rmSync(bench, { recursive: true, force: true });
-  }
+    assert.equal(records(bench, "run.json").status, "complete");
+    assert.equal(await runJob("run", deps(bench, api.fetch, [])), 1); // the records exist: refuse
+  });
 });
 
-test("a cap refusal during judging stops the job: status stopped-at-cap, gate INCONCLUSIVE", async () => {
-  const bench = benchDir();
-  try {
-    const m = fakeModel({ capOnJudge: true });
+test("a failed verifier call's ledger charge is attributed to its finding and arm, and reconciles", async () => {
+  const { units, bodies } = fixture();
+  await withBench(units, bodies, async (bench) => {
+    const api = fakeApi({ fail: (r) => stageOf(r) === "verify" && userOf(r).includes(F2.body) && userOf(r).includes("Grafana zero") }) // F2 is in sentry/5 too;
     const out: string[] = [];
-    assert.equal(await runJob("run", deps(bench, m.client, out)), 2);
-    assert.equal(m.stages.filter((s) => s === "judge").length, 1);
+    assert.equal(await runJob("run", deps(bench, api.fetch, out)), 0);
+    const calls = records(bench, "calls.json") as CallRec[];
+    const failed = calls.filter((c) => !c.ok);
+    assert.equal(failed.length, 1);
+    assert.equal(failed[0]!.tag, verifyTag("grafana/0", findingKey(F2)));
+    assert.ok(failed[0]!.chargedUSD > 0.0144); // a network error is ledgered at the upper bound (input + 16,000 output)
+    const entry = readFileSync(join(bench, "state/spend.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).find((e) => e.componentId === failed[0]!.id);
+    assert.equal(entry.ok, false);
+    assert.equal(entry.estCostUSD, failed[0]!.chargedUSD);
+    const text = out.join("\n");
+    assert.ok(Number(/verifier A \$([\d.]+)/.exec(text)![1]) > 0.0144); // in A's cost (F2 is A's finding in grafana/0#ctx0)
+    assert.match(text, /failed calls 1, charged \$0\.01\d\d/);
+    assert.match(text, /reconciled$/m);
+    assert.match(out.at(-1)!, /INCONCLUSIVE$/); // a verifier request failure
+  });
+});
+
+test("a cap during verification: no new dispatch, slow siblings drained, partial verdicts kept, stable spend, INCONCLUSIVE", async () => {
+  const many = "abcdefgh".split("").map((c) => ({ path: "src/x.ts", line: 2, body: `finding-${c}` }));
+  const units = [unit("sentry/5#ctx0", 1, "empty", arm(false, 0), arm(true, 8))];
+  const bodies = { "sentry/5#ctx0|1|first": "", "sentry/5#ctx0|1|append": "not json", "sentry/5#ctx0|1|schema": reply(...many) };
+  await withBench(
+    units,
+    bodies,
+    async (bench) => {
+      // finding-a returns at once and costs ~$1.48; its three siblings are slow; the next reservation crosses $1.50
+      const fast = (r: ChatRequest) => stageOf(r) === "verify" && userOf(r).includes("finding-a");
+      const api = fakeApi({ delay: (r) => (fast(r) ? 5 : 80), usage: (r) => (fast(r) ? { prompt_tokens: 100, completion_tokens: 1_640_000 } : undefined) });
+      const out: string[] = [];
+      assert.equal(await runJob("run", deps(bench, api.fetch, out, [], { units: 1, valid: 0, invalid: 0, empty: 1 })), 2);
+      assert.equal(api.live.active, 0); // every dispatched call settled before runJob returned
+      assert.equal(api.live.stages.length, 4); // a-d sent; e refused at reservation; f-h never dispatched
+      const run = records(bench, "run.json");
+      assert.equal(run.status, "stopped-at-cap");
+      const calls = records(bench, "calls.json") as CallRec[];
+      assert.equal(calls.length, 5);
+      assert.match(calls.find((c) => !c.ok)!.error!, /BudgetExceededError/);
+      const v = records(bench, "verdicts/sentry_5.json");
+      assert.equal(v.partial, true);
+      assert.equal(v.comments.length, 4); // the four answered verdicts are kept
+      const ledger = () => readFileSync(join(bench, "state/spend.jsonl"), "utf8");
+      const before = ledger();
+      await new Promise((res) => setTimeout(res, 150));
+      assert.equal(ledger(), before); // nothing still running
+      assert.equal(api.live.stages.length, 4);
+      assert.ok(Math.abs(run.spendUSD - run.ledgerJobUSD) < 1e-9);
+      assert.match(out.join("\n"), /reconciled$/m);
+      assert.match(out.join("\n"), /gate with isKept: INCONCLUSIVE \(the job did not complete \(stopped-at-cap\)/);
+      assert.match(out.at(-1)!, /both readings\): INCONCLUSIVE$/);
+    },
+    [PULLS[1]!],
+  );
+});
+
+test("a cap during judging stops the job: status stopped-at-cap, gate INCONCLUSIVE", async () => {
+  const { units, bodies } = fixture();
+  await withBench(units, bodies, async (bench) => {
+    const api = fakeApi({ usage: (r) => (stageOf(r) === "judge" ? { prompt_tokens: 100, completion_tokens: 1_660_000 } : undefined) });
+    const out: string[] = [];
+    assert.equal(await runJob("run", deps(bench, api.fetch, out)), 2);
+    assert.equal(api.live.stages.filter((s) => s === "judge").length, 1);
+    assert.equal(api.live.active, 0);
     assert.match(out.join("\n"), /gate with isKept: INCONCLUSIVE \(the job did not complete \(stopped-at-cap\)/);
     assert.match(out.at(-1)!, /both readings\): INCONCLUSIVE$/);
-  } finally {
-    rmSync(bench, { recursive: true, force: true });
-  }
+  });
 });
 
-test("the client guard refuses a reviewer request before it reaches the model", async () => {
-  const m = fakeModel();
-  const refused: Error[] = [];
-  const g = guardClient(m.client, (e) => refused.push(e));
+test("the job client: a reviewer request is refused before the model and halts; once halted, every call gets JobStoppedError unsent", async () => {
+  const sent: string[] = [];
+  const inner: ChatClient = { chat: async (r: ChatRequest): Promise<ChatResult> => (sent.push(stageOf(r)), { content: "{}", cached: false, latencyMs: 0, costUSD: 0 }) };
+  const jc = new JobClient(inner, null, "t");
   const review = firstRequest("diff", { title: "t", description: "d", diff: DIFF }, DIFF, 1, 1, SOURCE);
-  await assert.rejects(g.chat(review, { purpose: "review" }), /refused a diff request/);
-  assert.equal(m.stages.length, 0);
-  assert.equal(refused.length, 1);
+  await assert.rejects(jc.tagged("x").chat(review, { purpose: "review" }), /refused a diff request/);
+  assert.deepEqual(sent, []);
+  assert.ok(jc.halted);
+  const jc2 = new JobClient(inner, null, "t");
+  jc2.halt(new BudgetExceededError("cap"));
+  const verifyReq = { model: VERIFY_MODEL, messages: [{ role: "system" as const, content: (await import("../../packages/analyzer/src/review/verify-ctx-prompt.ts")).VERIFY_CTX_SYSTEM_PROMPT }, { role: "user" as const, content: "u" }] } as ChatRequest;
+  await assert.rejects(jc2.tagged("x").chat(verifyReq, { purpose: "review" }), (e: unknown) => e instanceof JobStoppedError && e instanceof BudgetExceededError);
+  assert.deepEqual(sent, []);
+  assert.equal(jc2.refusedAfterHalt, 1);
+  assert.equal(jc2.active, 0);
 });
