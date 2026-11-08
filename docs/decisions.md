@@ -3781,7 +3781,8 @@ so ≈ 21 empty units × (A ≈ $0.035 + D ≈ 2 × $0.03 + E ≈ $0.01) ≈ $2.
 (bunny, `3e561af`). No reviewer call is made (`guardClient` lets only verifier and judge requests through).
 **Input:** 074's records. Per arm, the findings (lenient parse + diff check) of its **successful** 074 units: path
 `valid` → first reply (A = E); `invalid` → the shared append retry (A = E); `empty` → A's append retry, E's schema retry.
-`check` ($0): 42 units; successful A 22, E 41; findings A 30, E 135 (empty-first A 9, E 114); 11 PRs; 140 distinct
+The runner refuses unless 074's population is exactly as recorded: 42 units, all complete; 15 valid-first, 1 invalid,
+26 empty-first (no unit is silently left out). `check` ($0): 42 units; successful A 22, E 41; findings A 30, E 135 (empty-first A 9, E 114); 11 PRs; 140 distinct
 verifier requests; 63 judge reviews.
 **Verifier:** verify-ctx-v1 unchanged (`verifyReviewWithContext`; 3.5 Super VL, reasoning on, concurrency 4, strict
 parser), each distinct finding once per PR; kept = `isKept` (keep or VERIFY_FAILED). The response cache is read and
@@ -3792,10 +3793,14 @@ per (arm, draw, hard chunk), so shared-path units give A and E identical judge r
 **Table per arm:** found, kept, VERIFY_FAILED, TP, distinct (PR, golden) TP pairs, FP, duplicates, low, precision
 TP/(TP+FP); again with `keep` only; again on the 26 empty-first units (reported, not gated); cost.
 **Gate (adopt E):** P(E) ≥ P(A) **and** TP(E) − TP(A) ≥ 3, computed with isKept **and** with keep only. PASS needs both;
-FAIL if either fails outright; INCONCLUSIVE if it passes only with VERIFY_FAILED kept, if either precision is undefined
+FAIL otherwise, including a pass with keep only and a fail with isKept; INCONCLUSIVE if it passes only with
+VERIFY_FAILED kept, if either precision is undefined
 (TP + FP = 0), on any JUDGE_FAILED review with comments, any verifier request error, findings left unverified or
 unjudged, or a stop at the cap. "Adopt" here means: E goes forward to the full-dev-set quality check; it is not made a
 default by 075.
+**Records:** every call's ledger charge (failed calls included) is attributed by a per-call id and must reconcile with
+the run's ledger spend; at a cap no new call is sent and every call already sent is drained before the final records.
+A PASS is written with the keep-only numbers and TP + FP per arm next to each precision (devin's notes).
 **Cost:** expected $0.50 (140 × $0.0032 + 63 × $0.0009, codex.budget.md means); the run refuses above $1.20 expected;
 one Budget, run cap $1.50, total cap min(env $66.92462, ledger at start + $1.50).
 **Claim wording, fixed now (devin, `run/out/devin.075.md`):**
