@@ -127,3 +127,91 @@ test("gate: at least max(1.5 × A, A + 1) successes at no more than 1.5 × A's c
   assert.equal(r.D.keptPerSuccess, 2);
   assert.ok(Math.abs(r.D.costPerUnit - 0.03) < 1e-12);
 });
+
+// ---- codex 074 review: points 1–6 ----
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { BudgetExceededError } from "../../packages/analyzer/src/llm/budget.ts";
+import { hardChunks, SOURCE_RUNS, type SchemaState } from "./hard-chunks.ts";
+
+function benchWith(pulls: Record<string, { repo: string; file: string; attempts: number }[]>) {
+  const b = mkdtempSync(join(tmpdir(), "hc-"));
+  for (const dir of Object.values(SOURCE_RUNS)) {
+    mkdirSync(join(b, "reviews/dev-repeat", dir), { recursive: true });
+    writeFileSync(join(b, "reviews/dev-repeat", dir, "run.json"), JSON.stringify({ pulls: pulls[dir] ?? [] }));
+  }
+  return b;
+}
+
+test("pull records are checked before any path is built from them: other repos, odd file names, odd attempts refuse", () => {
+  const d = SOURCE_RUNS["8"];
+  for (const bad of [{ repo: "cal_dot_com", file: "0.json", attempts: 1 }, { repo: "sentry", file: "../../x.json", attempts: 1 }, { repo: "sentry", file: "0.json", attempts: 3 }])
+    assert.throws(() => hardChunks(benchWith({ [d]: [bad] })), /unexpected pull record/);
+});
+
+test("the set must be the registered 20 failures / 14 distinct requests", () => {
+  assert.throws(() => hardChunks(benchWith({})), /0 failures \/ 0 distinct, expected 20 \/ 14/);
+});
+
+const EMPTY = { content: "", finishReason: "length" };
+function slowModel(o: { halfThrows?: boolean; schemaError?: string; schemaDelay?: number; halfContent?: string[] } = {}) {
+  const p = plan();
+  const live = { active: 0, max: 0, schemaCalls: 0 };
+  let half = 0;
+  const client: ChatClient = {
+    chat: async (r: ChatRequest): Promise<ChatResult> => {
+      const kind = (r as { response_format?: unknown }).response_format ? "schema" : r.messages.length > 2 ? "append" : JSON.stringify(r) === JSON.stringify(p.first) ? "first" : "half";
+      if (kind === "half" && o.halfThrows) throw new BudgetExceededError("cap");
+      live.active++;
+      live.max = Math.max(live.max, live.active);
+      if (kind === "schema") live.schemaCalls++;
+      await new Promise((res) => setTimeout(res, kind === "append" ? 40 : kind === "schema" ? (o.schemaDelay ?? 5) : 5));
+      live.active--;
+      if (kind === "schema" && o.schemaError) throw new Error(o.schemaError);
+      const content = kind === "first" ? EMPTY.content : kind === "half" && o.halfContent ? o.halfContent[half++]! : FINDINGS;
+      return { content, cached: false, latencyMs: 10, costUSD: 0.01, finishReason: kind === "first" ? "length" : "stop" };
+    },
+  };
+  return { client, plan: p, live };
+}
+
+test("at a cap refusal inside a unit, every sibling call already sent finishes before the unit rejects", async () => {
+  const m = slowModel({ halfThrows: true });
+  await assert.rejects(runUnit(m.client, m.plan, 1, { schemaDropped: false }, () => {}), BudgetExceededError);
+  assert.equal(m.live.active, 0); // the slow append retry was awaited
+});
+
+test("E's probe: a fast feature refusal stops E in a concurrent unit, even while the first unit's siblings are still running", async () => {
+  const state: SchemaState = { schemaDropped: false };
+  const a = slowModel({ schemaError: "HTTP 400: response_format json_schema is not supported for this model" });
+  const b = slowModel();
+  const [ua, ub] = await Promise.all([runUnit(a.client, a.plan, 1, state, () => {}), runUnit(b.client, b.plan, 1, state, () => {})]);
+  assert.equal(state.schemaDropped, true);
+  assert.equal(a.live.schemaCalls + b.live.schemaCalls, 1);
+  assert.equal(ua.arms!.E.note, "E unsupported");
+  assert.equal(ub.schema, "dropped");
+});
+
+test("a 4xx that is not about the schema (e.g. 429) does not drop E: that unit is incomplete, the next one probes again", async () => {
+  const state: SchemaState = { schemaDropped: false };
+  const a = slowModel({ schemaError: "HTTP 429: rate limit exceeded" });
+  const ua = await runUnit(a.client, a.plan, 1, state, () => {});
+  assert.equal(state.schemaDropped, false);
+  assert.equal(ua.complete, false);
+  const b = slowModel();
+  const ub = await runUnit(b.client, b.plan, 2, state, () => {});
+  assert.equal(b.live.schemaCalls, 1);
+  assert.ok(ub.arms!.E.success && ub.complete);
+});
+
+test("D: any valid half with a kept finding is a success (noted 'one half'); the same finding from both halves counts once", async () => {
+  const one = slowModel({ halfContent: [FINDINGS, "not json"] });
+  const u1 = await runUnit(one.client, one.plan, 1, { schemaDropped: false }, () => {});
+  assert.equal(u1.arms!.D.success, true);
+  assert.equal(u1.arms!.D.valid, false);
+  assert.equal(u1.arms!.D.note, "one half");
+  const both = slowModel({ halfContent: [FINDINGS, FINDINGS] });
+  const u2 = await runUnit(both.client, both.plan, 1, { schemaDropped: false }, () => {});
+  assert.equal(u2.arms!.D.kept, 1);
+});

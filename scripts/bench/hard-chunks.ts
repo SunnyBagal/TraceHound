@@ -75,6 +75,8 @@ export function hardChunks(bench: string): HardChunk[] {
   for (const [run, dir] of Object.entries(SOURCE_RUNS)) {
     const r = readJson<{ pulls: { repo: string; file: string; attempts: number }[] }>(join(bench, "reviews/dev-repeat", dir, "run.json"));
     for (const p of r.pulls) {
+      // checked before any path is built from the record: a dev repo, files 0.json … 9.json, attempt 1 or 2
+      if (!DEV_REPOS.includes(p.repo) || !/^\d\.json$/.test(p.file) || (p.attempts !== 1 && p.attempts !== 2)) throw new Error(`run ${run}: unexpected pull record ${JSON.stringify({ repo: p.repo, file: p.file, attempts: p.attempts })}`);
       const name = p.file.replace(/\.json$/, "");
       const a = readJson<Record<Stage, { review: { chunks: { index: number; status: string }[] } }>>(join(bench, "reviews/dev-repeat", dir, "attempts", p.repo, `${name}.attempt-${p.attempts}.json`));
       for (const stage of ["diff", "ctx"] as const)
@@ -87,8 +89,13 @@ export function hardChunks(bench: string): HardChunk[] {
           }
     }
   }
-  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+  const out = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+  const failures = out.reduce((t, h) => t + h.runs.length, 0);
+  if (failures !== EXPECTED.failures || out.length !== EXPECTED.distinct) throw new Error(`hard-chunk set: ${failures} failures / ${out.length} distinct, expected ${EXPECTED.failures} / ${EXPECTED.distinct}`);
+  return out;
 }
+/** Registered in 074 (from the 073a audit): 20 failed chunks in runs 7r/8/9, 14 distinct chunk requests. */
+export const EXPECTED = Object.freeze({ failures: 20, distinct: 14 });
 
 // ---- requests ----
 
@@ -166,8 +173,9 @@ export async function plans(bench: string, sourceFor: (gitDir: string, head: str
     const pipelineFirst = (await capturedFirsts(pin, { source, head }))[c.stage][c.index];
     const key = ResponseCache.key(MODEL, first);
     if (!pipelineFirst || ResponseCache.key(MODEL, pipelineFirst) !== key) throw new Error(`${c.id}: the rebuilt request differs from the pipeline's`);
-    if (keys073 && keys073.get(c.id) !== undefined && keys073.get(c.id) !== key) throw new Error(`${c.id}: the request differs from 073's`);
+    if (keys073 && keys073.get(c.id) !== key) throw new Error(`${c.id}: ${keys073.has(c.id) ? "the request differs from 073's" : "no 073r key for this chunk"}`);
     const h = splitHalves(text);
+    if (out.some((o) => o.key === key)) throw new Error(`${c.id}: duplicate request key`);
     out.push({ chunk: c, input: pin, first, halves: h && [firstRequest(c.stage, pin, h[0], c.index + 1, chunks.length, source), firstRequest(c.stage, pin, h[1], c.index + 1, chunks.length, source)], key });
   }
   return out;
@@ -177,7 +185,7 @@ export async function plans(bench: string, sourceFor: (gitDir: string, head: str
 export function keysFrom073(bench: string): Map<string, string> {
   const f = join(bench, "recovery-073r/provenance.json");
   const m = new Map<string, string>();
-  if (!existsSync(f)) return m;
+  if (!existsSync(f)) throw new Error("recovery-073r/provenance.json is missing: 073's keys are required");
   for (const p of readJson<{ arm: string; pull: string; stage: string; kind: string; chunk?: number; attempt: number; key: string }[]>(f))
     if (p.arm === "A" && p.kind === "first" && p.attempt === 1 && (p.stage === "diff" || p.stage === "ctx")) m.set(`${p.pull}#${p.stage}${p.chunk}`, p.key);
   return m;
@@ -225,10 +233,27 @@ export async function step(client: ChatClient, request: ChatRequest, index: Diff
 }
 const strip = ({ content: _c, ...s }: Step & { content: string }): Step => s;
 
-/** Is a failed schema request the endpoint refusing the feature (HTTP 4xx on response_format)? */
-export const schemaRefused = (s: Step) => !s.ok && /HTTP 4\d\d/.test(s.error ?? "");
+/** The endpoint refusing the feature itself: an HTTP 4xx whose message names response_format / json_schema / schema / guided decoding. */
+export const schemaRefused = (s: Step) => !s.ok && /HTTP 4\d\d/.test(s.error ?? "") && /response_format|json_schema|schema|guided/i.test(s.error ?? "");
 
-export async function runUnit(client: ChatClient, plan: Plan, draw: number, state: { schemaDropped: boolean }, save: (name: string, body: unknown) => void): Promise<Unit> {
+/** Shared across units: the first E request is a capability probe; later E requests wait for it, and none is sent after a refusal. */
+export interface SchemaState {
+  schemaDropped: boolean;
+  /** set once an E request has returned a reply, or the feature was refused: no more probing */
+  probeDone?: boolean;
+  probe?: Promise<void> | undefined;
+}
+
+/** Runs every dispatched call to completion (allSettled), then rethrows the first budget refusal, so no paid call outlives its unit. */
+async function settleAll<T>(ps: Promise<T>[]): Promise<T[]> {
+  const r = await Promise.allSettled(ps);
+  const bad = r.find((x): x is PromiseRejectedResult => x.status === "rejected");
+  if (bad) throw bad.reason;
+  return r.map((x) => (x as PromiseFulfilledResult<T>).value);
+}
+const findingKey = (f: unknown) => JSON.stringify(f);
+
+export async function runUnit(client: ChatClient, plan: Plan, draw: number, state: SchemaState, save: (name: string, body: unknown) => void): Promise<Unit> {
   const u: Unit = { chunk: plan.chunk.id, draw, complete: false };
   const index = new DiffIndex(parseDiff(plan.input.diff));
   const s1 = await step(client, plan.first, index, (b) => save("first", b));
@@ -241,7 +266,7 @@ export async function runUnit(client: ChatClient, plan: Plan, draw: number, stat
     u.arms = { A: o, D: o, E: o };
     return (u.complete = true), u;
   }
-  const appendReq = appendRetry(plan.first, s1.content, parseReviewReply(s1.content, "lenient").ok ? "" : (parseReviewReply(s1.content, "lenient") as { why: string }).why);
+  const appendReq = appendRetry(plan.first, s1.content, (parseReviewReply(s1.content, "lenient") as { why: string }).why);
   if (!s1.contentEmpty) {
     u.path = "invalid";
     const s2 = await step(client, appendReq, index, (b) => save("append", b));
@@ -251,24 +276,47 @@ export async function runUnit(client: ChatClient, plan: Plan, draw: number, stat
     return (u.complete = s2.ok), u;
   }
   u.path = "empty";
-  const [a, d, e] = await Promise.all([
+  // E: the first E request of the job is the probe; others wait for it; none is sent once the feature is refused
+  const schemaStep = async (): Promise<(Step & { content: string }) | null> => {
+    if (state.probe) await state.probe;
+    if (state.schemaDropped) return null;
+    let mine: Promise<Step & { content: string }> | undefined;
+    if (!state.probeDone) {
+      mine = step(client, schemaRetry(plan.first), index, (b) => save("schema", b));
+      state.probe = mine.then((e) => {
+        if (schemaRefused(e)) state.schemaDropped = true; // applied the moment the probe returns
+        state.probeDone = e.ok || schemaRefused(e);
+        state.probe = undefined;
+      }, () => {
+        state.probe = undefined;
+      });
+      return mine;
+    }
+    return step(client, schemaRetry(plan.first), index, (b) => save("schema", b));
+  };
+  const [a, d, e] = await settleAll<unknown>([
     step(client, appendReq, index, (b) => save("append", b)),
-    plan.halves ? Promise.all(plan.halves.map((h, i) => step(client, h, index, (b) => save(`half-${i + 1}`, b)))) : Promise.resolve(null),
-    state.schemaDropped ? Promise.resolve(null) : step(client, schemaRetry(plan.first), index, (b) => save("schema", b)),
-  ]);
+    plan.halves ? settleAll(plan.halves.map((h, i) => step(client, h, index, (b) => save(`half-${i + 1}`, b)))) : Promise.resolve(null),
+    schemaStep(),
+  ]) as [Step & { content: string }, (Step & { content: string })[] | null, (Step & { content: string }) | null];
   u.shared = strip(a);
   u.halves = d ? d.map(strip) : "unsplittable";
-  if (e && schemaRefused(e)) state.schemaDropped = true; // E is unsupported: no further schema calls (074)
   u.schema = e ? strip(e) : "dropped";
   const A: ArmOutcome = { success: success(a), valid: a.valid, kept: a.kept, costUSD: s1.costUSD + a.costUSD, wallMs: s1.latencyMs + a.latencyMs, complete: a.ok };
-  const D: ArmOutcome = d
-    ? { success: d.some((h) => success(h)), valid: d.every((h) => h.valid), kept: d.reduce((s, h) => s + h.kept, 0), costUSD: s1.costUSD + d.reduce((s, h) => s + h.costUSD, 0), wallMs: s1.latencyMs + Math.max(...d.map((h) => h.latencyMs)), complete: d.every((h) => h.ok) }
-    : { success: false, valid: false, kept: 0, costUSD: s1.costUSD, wallMs: s1.latencyMs, complete: true, note: "unsplittable" };
-  const E: ArmOutcome = e && !schemaRefused(e)
-    ? { success: success(e), valid: e.valid, kept: e.kept, costUSD: s1.costUSD + e.costUSD, wallMs: s1.latencyMs + e.latencyMs, complete: e.ok }
-    : { success: false, valid: false, kept: 0, costUSD: s1.costUSD + (e?.costUSD ?? 0), wallMs: s1.latencyMs, complete: false, note: "E unsupported" };
+  // D: success = at least one half valid with >= 1 kept finding ("any half"); valid = both halves valid; kept = distinct findings
+  let D: ArmOutcome;
+  if (d) {
+    const kept = new Set<string>();
+    for (const h of d) if (h.valid) for (const f of parseReviewReply(h.content, "lenient").ok ? (parseReviewReply(h.content, "lenient") as { findings: unknown[] }).findings : []) if (index.check(f as never).ok) kept.add(findingKey(index.check(f as never)));
+    D = { success: d.some((h) => success(h)), valid: d.every((h) => h.valid), kept: kept.size, costUSD: s1.costUSD + d.reduce((t, h) => t + h.costUSD, 0), wallMs: s1.latencyMs + Math.max(...d.map((h) => h.latencyMs)), complete: d.every((h) => h.ok), ...(d.some((h) => success(h)) && !d.every((h) => h.valid) && { note: "one half" }) };
+  } else D = { success: false, valid: false, kept: 0, costUSD: s1.costUSD, wallMs: s1.latencyMs, complete: true, note: "unsplittable" };
+  const E: ArmOutcome = e
+    ? schemaRefused(e)
+      ? { success: false, valid: false, kept: 0, costUSD: s1.costUSD + e.costUSD, wallMs: s1.latencyMs + e.latencyMs, complete: true, note: "E unsupported" }
+      : { success: success(e), valid: e.valid, kept: e.kept, costUSD: s1.costUSD + e.costUSD, wallMs: s1.latencyMs + e.latencyMs, complete: e.ok }
+    : { success: false, valid: false, kept: 0, costUSD: s1.costUSD, wallMs: s1.latencyMs, complete: true, note: "E unsupported" };
   u.arms = { A, D, E };
-  u.complete = A.complete && D.complete && (E.complete || E.note === "E unsupported");
+  u.complete = A.complete && D.complete && E.complete;
   return u;
 }
 
@@ -317,7 +365,7 @@ export function freezeCheck074(root = REPO_ROOT) {
   return { ok: true, head };
 }
 
-export interface Deps { bench: string; stateDir: string; pricesFile: string; env: NodeJS.ProcessEnv; log: (l: string) => void; err: (l: string) => void; fetch?: typeof fetch; freezeCheck?: () => { ok: boolean; why?: string; head: string }; source?: (gitDir: string, head: string) => GitSource; repoRoot?: string }
+export interface Deps { bench: string; stateDir: string; pricesFile: string; env: NodeJS.ProcessEnv; log: (l: string) => void; err: (l: string) => void; fetch?: typeof fetch; freezeCheck?: () => { ok: boolean; why?: string; head: string }; source?: (gitDir: string, head: string) => GitSource; repoRoot?: string; keys073?: Map<string, string> }
 
 export async function runJob(mode: "check" | "run", deps: Deps): Promise<number> {
   const where = checkBench(deps.bench, deps.repoRoot ?? REPO_ROOT);
@@ -325,12 +373,12 @@ export async function runJob(mode: "check" | "run", deps: Deps): Promise<number>
   const bench = where.bench;
   let ps: Plan[];
   try {
-    ps = await plans(bench, deps.source ?? gitSource, keysFrom073(bench));
+    ps = await plans(bench, deps.source ?? gitSource, deps.keys073 ?? keysFrom073(bench));
   } catch (e) {
     return (deps.err(`[hard-chunks] refusing: ${(e as Error).message}`), 1);
   }
   const occurrences = ps.reduce((s, p) => s + p.chunk.runs.length, 0);
-  deps.log(`hard chunks: ${ps.length} distinct requests (${occurrences} failures in runs 7r/8/9); splittable ${ps.filter((p) => p.halves).length}; every request equals the pipeline's${keysFrom073(bench).size ? " and 073's" : ""}`);
+  deps.log(`hard chunks: ${ps.length} distinct requests (${occurrences} failures in runs 7r/8/9); splittable ${ps.filter((p) => p.halves).length}; every request equals the pipeline's and 073r's`);
   if (mode === "check") return 0;
   const freeze = (deps.freezeCheck ?? freezeCheck074)();
   if (!freeze.ok) return (deps.err(`[hard-chunks] refusing: ${freeze.why}`), 1);
@@ -352,8 +400,8 @@ export async function runJob(mode: "check" | "run", deps: Deps): Promise<number>
   const order: { plan: Plan; draw: number }[] = [];
   for (let d = 1; d <= DRAWS; d++) for (const p of mulberry32Shuffle(ps, SEED + d)) order.push({ plan: p, draw: d });
   const units: Unit[] = [];
-  const state = { schemaDropped: false };
-  const run = { decision: DECISION, head: freeze.head, model: MODEL, draws: DRAWS, seed: SEED, concurrency: CONCURRENCY, ledgerStartUSD, caps: budget.caps, startedAt: new Date().toISOString(), finishedAt: null as string | null, status: "running", error: null as string | null, schemaDropped: false, spendUSD: 0 };
+  const state: SchemaState = { schemaDropped: false };
+  const run = { decision: DECISION, head: freeze.head, plan: ps.map((p) => ({ id: p.chunk.id, key: p.key, runs: p.chunk.runs, splittable: !!p.halves })), order: order.map((o) => `${o.plan.chunk.id}@${o.draw}`), model: MODEL, draws: DRAWS, seed: SEED, concurrency: CONCURRENCY, ledgerStartUSD, caps: budget.caps, startedAt: new Date().toISOString(), finishedAt: null as string | null, status: "running", error: null as string | null, schemaDropped: false, spendUSD: 0 };
   const save = () => {
     run.schemaDropped = state.schemaDropped;
     run.spendUSD = budget.runSpent;

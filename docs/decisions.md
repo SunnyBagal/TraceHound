@@ -3639,8 +3639,9 @@ noise, and no ranking claim follows. The result is recorded here as 073's result
   (too few 7 Nov draws to compare rates).
 - *Relabel (2026-11-08):* **B1's result is "harmless, benefit unproven"**: the arms replayed the cache (83 of 96
   first-attempt keys), and empty replies are never cached, so the corpus under-represents the failure the switch was
-  meant to fix (14 of runs 7r/8/9's 20 lost chunks began with an empty reply). The lenient default stays (E4: it never
-  changes a strict-valid reply), but no reliability gain is claimed. Standing rule added at the top of this file:
+  meant to fix (14 of runs 7r/8/9's 20 lost chunks began with an empty reply). "Harmless" means only what was measured:
+  on 073's corpus it never changed a strict-valid reply (E4); where it does recover a reply it adds findings that were
+  not judged here. The lenient default stays, and no reliability gain is claimed. Standing rule added at the top of this file:
   reliability tests bypass the cache for the requests under test.
 - *The product had the same cutoff; fixed 2026-11-08.* The Action runs the analyzer CLIs (`review`, `review-ctx`,
   `verify-ctx`), which give `TokenFactoryClient` `timeoutMs: 600_000` (`review/cli.ts:67`, `ctx-cli.ts:115`,
@@ -3685,29 +3686,36 @@ SCORED under both judges, 0 misses, 0 request errors, 0 unpaired PRs, per-call c
 
 **Status: pre-registered, not yet run.** Branch `bench/hard-chunks-074`; runner `scripts/bench/hard-chunks.ts`.
 **Feasibility (before any call, $0):**
-- (a) *Reasoning token budget: none.* The Token Factory chat API offers `reasoning_effort` (`none` · `minimal` · `low` ·
-  `medium` · `high` · `xhigh` · `max`), a level, not a token count
+- (a) *Reasoning token budget: none documented.* The Token Factory chat API offers `reasoning_effort` (enum `none` ·
+  `minimal` · `low` · `medium` · `high` · `xhigh`, plus `max` as a separate constant in the OpenAPI spec; the HTML page
+  lists up to `xhigh`), a level, not a token count
   (https://docs.tokenfactory.nebius.com/api-reference/inference/create-chat-completion.md). The Nemotron 3.5 Super VL
   model card documents only `chat_template_kwargs.enable_thinking` true/false
   (https://build.nvidia.com/nvidia/nemotron-3.5-super-vl-120b-a12b/modelcard;
   https://catalog.ngc.nvidia.com/orgs/nim/teams/nvidia/models/nemotron-3.5-super-vl-120b-a12b). 070 found
   `reasoning_budget` ignored by Token Factory. So **arm C (budget capped to leave ~8k answer tokens) is dropped:
-  unsupported.** `reasoning_effort: "low"` is not a cap and is not tested here.
+  unsupported** (no documented quantitative budget; not a measured proof that none exists). `reasoning_effort: "low"` is
+  not a cap and is not tested here.
 - (b) *JSON-schema output: documented, model support unverified.* `response_format` accepts `text` · `json_object` ·
   `json_schema`, with `json_schema: {name, schema, strict}` (`JsonSchemaResponseFormat`, required `name`, `schema`;
   same page); the guide says schema output is set with `{"type": "json_schema"}` and that a model card's "JSON mode"
   tag marks support (https://docs.tokenfactory.nebius.com/ai-models-inference/json.md). The same API page's field text
   also says "Only {'type': 'json_object'} or {'type': 'text'} is supported", so support is contradictory in the
-  docs. Rule: E runs; if the endpoint answers the first E request with HTTP 4xx, E is dropped as unsupported and no
-  further E request is sent.
+  docs. Rule: E runs. The job's first E request is a probe that later E requests wait for. If an E request gets an HTTP
+  4xx whose message names `response_format`, `json_schema`, schema or guided decoding, E is dropped as unsupported and no
+  further E request is sent. Any other error (e.g. HTTP 429, rate limiting) is a request error: that unit is incomplete
+  and the next E request probes again.
 - (c) *finish_reason and reasoning tokens: yes.* `finish_reason` is `stop` · `length` · `tool_calls` ·
   `content_filter`, and `usage.completion_tokens_details.reasoning_tokens` is reported (same API page); our client
   reads both (`client.ts` `reasoningStats`). On 073's records (366 replies with metadata): all 35 empty-content replies
   ended `length` with `reasoning_tokens` = `completion_tokens` = 32,000 — the reasoning used the whole budget
   (confirmed for every empty reply with metadata; replies replayed in several arms count once per arm).
 **Set:** the reviewer chunks that failed in 3.5 dev runs 7r, 8, 9: 20 failures = **14 distinct chunk requests**
-(`hardChunks`). Each is rebuilt by `firstRequest` and refused unless it equals the pipeline's own request
-(`capturedFirsts`) and 073r's key for that chunk (`hard-chunks.ts check`: 14 of 14 equal, all 14 splittable).
+(`hardChunks`; the job refuses unless it finds exactly 20 / 14, and pull records are checked — dev repo, `0.json`–`9.json`,
+attempt 1 or 2 — before any path is built from them). Each is rebuilt by `firstRequest` and refused unless it equals the
+pipeline's own request (`capturedFirsts`) and 073r's key for that chunk (required; a missing key refuses), with no two
+keys equal (`hard-chunks.ts check`: 14 of 14 equal, all 14 splittable). The ids, keys, source runs and the seeded order
+are written to `run.json` before the first call.
 **Draws:** 3 fresh draws per request = 42 units; **cache bypassed** (no response cache: neither read nor written;
 standing rule, 073a). Units go round by round (draw 1 of all 14 in seeded order, seed 74 + draw, then 2, then 3),
 4 units at a time.
@@ -3715,6 +3723,8 @@ standing rule, 073a). Units go round by round (draw 1 of all 14 in seeded order,
 - A: an invalid first reply (empty or not) gets the append retry (`appendRetry`, equal to the pipeline's retry; test).
 - D: as A, but after an **empty** first reply the chunk is split in half (`splitHalves`: by files balanced by size,
   else by hunks of its one file, header repeated) and each half is reviewed once (same request shape, lenient, no retry).
+  D succeeds when **any** half is valid with ≥ 1 kept finding (counted, and reported as "one half" when the other half
+  is invalid); D's "valid" means both halves valid; its kept findings are the distinct findings of both halves.
 - E: as A, but after an **empty** first reply one retry of the original messages with reasoning off and
   `response_format` = the findings JSON schema (`schemaRetry`).
 - A non-empty invalid first reply gets A's append retry in every arm (one shared call). A valid first reply ends the unit.
@@ -3726,8 +3736,10 @@ unit (first draw + the arm's follow-up; D's halves run side by side, so their ma
 30 complete paired units (a unit with a request error or a cap stop is incomplete and left out). Otherwise NO WIN, or
 INCONCLUSIVE under 30 units. Nothing is adopted from this: the quality of the findings is checked later on the full dev
 set first.
-**Budget:** $4 for the whole job: one Budget, run cap $4, total cap = ledger at start + $4 (ledger at plan time
-$41.16999). Estimate (not a promise): 42 first draws × ≈ $0.03 ≈ $1.3; in 073 7 of these 14 requests came back empty,
+**Budget:** $4 for the whole job: one Budget, run cap $4, total cap = min(env total, ledger at start + $4). Ledger at
+plan time $41.16999 and the env total is the default $45, so the effective ceiling is **$3.83001**. At a cap refusal no
+new unit starts, and every call a unit has already sent is awaited before the unit ends (no paid call outlives the
+final records). Up to 4 units at once; a unit after an empty reply has up to 4 calls in flight. Estimate (not a promise): 42 first draws × ≈ $0.03 ≈ $1.3; in 073 7 of these 14 requests came back empty,
 so ≈ 21 empty units × (A ≈ $0.035 + D ≈ 2 × $0.03 + E ≈ $0.01) ≈ $2.2; total ≈ $3.5. At the cap no new unit starts.
 **Rejected:** arm C via `reasoning_effort` (a level, not the budget the arm asks for); drawing each of the 20 failures
 (6 duplicate requests would be drawn twice or three times); separate first draws per arm (≈ 3 × the cost, unpaired).
