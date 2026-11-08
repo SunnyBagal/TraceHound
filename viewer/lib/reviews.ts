@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { sessionCachedFetch } from "./ghcache.ts";
 
-export const DEFAULT_REVIEW_REPO = "SunnyBagal/tracehound-demo";
+export const DEFAULT_REVIEW_REPO = "SunnyBagal/recall-seeded";
 export const MODEL_DISCLOSURE = "model-generated, not tested";
 const count = z.number().int().nonnegative();
 const location = z.object({ path: z.string(), line: count.nullable(), startLine: count.optional(), source: z.enum(["diff", "ctx", "both"]), hasSuggestion: z.boolean() });

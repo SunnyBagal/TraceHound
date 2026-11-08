@@ -7,7 +7,7 @@ import { RepoSwitcher } from "@/components/RepoSwitcher";
 import { Viewer } from "@/components/Viewer";
 import { ChangeSetIndex, visibleChangeSets } from "@/lib/changes";
 import { entryFromSearch, searchFor } from "@/lib/navigation";
-import { repoHref, repoList, resolveRepo } from "@/lib/repos";
+import { graphRepoFor, repoHref, repoList, resolveRepo } from "@/lib/repos";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const manifest = SnapshotManifest.parse(JSON.parse(readFileSync(path.join(ROOT, "snapshots/index.json"), "utf8")));
@@ -16,14 +16,15 @@ const repos = repoList(manifest);
 const snap = (id: string) => Snapshot.parse(JSON.parse(readFileSync(path.join(ROOT, "snapshots", repos.find((r) => r.id === id)!.latest.path), "utf8")));
 
 describe("repo resolution (?repo=, defaultRepo)", () => {
-  it("the site opens on the public demo without changing the published manifest", () => {
+  it("the site opens on the manifest's defaultRepo, Recall", () => {
     expect(manifest.defaultRepo).toBe("recall");
-    expect(resolveRepo("", manifest)?.name).toBe("SunnyBagal/tracehound-demo");
+    expect(resolveRepo("", manifest)?.name).toBe("SunnyBagal/Recall");
   });
 
   it("?repo=<id> picks that repo; an unknown id falls back to the default", () => {
     expect(resolveRepo("?repo=cex-v2-boilercode", manifest)?.latest.path).toMatch(/^da0e3d640a9c02f815fcca48f8328c94558cc058\/\d+\.\d+\.\d+\.json$/);
-    expect(resolveRepo("?repo=nope", manifest)?.id).toBe("tracehound-demo");
+    expect(resolveRepo("?repo=tracehound-demo", manifest)?.name).toBe("SunnyBagal/tracehound-demo");
+    expect(resolveRepo("?repo=nope", manifest)?.id).toBe("recall");
   });
 
   it("an index without repos (pre-0.9.0) still yields its latest", () => {
@@ -31,6 +32,13 @@ describe("repo resolution (?repo=, defaultRepo)", () => {
     const old = { ...manifest, latest: manifest.repos!.find((r) => r.id === "cex-v2-boilercode")!.latest, repos: undefined, defaultRepo: undefined };
     expect(repoList(old).map((r) => r.id)).toEqual(["cex-v2-boilercode"]);
     expect(resolveRepo("?repo=recall", old)?.id).toBe("cex-v2-boilercode");
+  });
+
+  it("a reviews repo maps back to the snapshot whose PR lane shows it", () => {
+    expect(graphRepoFor("SunnyBagal/recall-seeded")).toBe("recall");
+    expect(graphRepoFor("sunnybagal/tracehound-demo")).toBe("tracehound-demo");
+    expect(graphRepoFor("acme/shop")).toBeUndefined();
+    expect(graphRepoFor("SunnyBagal/recall-seeded", { recallSeeded: false })).toBeUndefined();
   });
 
   it("switching repo drops ids of the other repo and keeps the rest", () => {

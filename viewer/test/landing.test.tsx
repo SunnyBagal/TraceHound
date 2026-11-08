@@ -85,7 +85,7 @@ describe('the landing page at "/"', () => {
     const hero = screen.getByTestId("hero");
     expect(within(hero).getByRole("link", { name: "Connect GitHub" }).getAttribute("href")).toBe("/graph");
     expect(within(hero).getByRole("link", { name: "View on GitHub" }).getAttribute("href")).toBe("https://github.com/SunnyBagal/TraceHound");
-    expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Reviews" }).getAttribute("href")).toBe("/reviews?repo=SunnyBagal%2Ftracehound-demo");
+    expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Reviews" }).getAttribute("href")).toBe("/reviews?repo=SunnyBagal%2Frecall-seeded");
     // the owner's layout: NVIDIA on the black wolf, the coding agents on the pack
     expect(within(hero).getAllByTestId("hero-mark").map((m) => m.dataset.mark)).toEqual(["nvidia", "claude", "chatgpt", "antigravity", "opencode", "cursor"]);
     expect(within(hero).getByTestId("hero-trademarks").textContent).toBe(HERO_TRADEMARKS);

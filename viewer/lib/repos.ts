@@ -17,11 +17,11 @@ export function repoList(manifest: SnapshotManifest): RepoInfo[] {
   return [{ id: name.split("/").pop()!.toLowerCase(), name, latest: manifest.latest }];
 }
 
-/** Explicit selection wins; the public demo is the default when available. */
+/** Explicit selection wins; otherwise the manifest's defaultRepo (Recall), then the first repo. */
 export function resolveRepo(search: string, manifest: SnapshotManifest): RepoInfo | undefined {
   const repos = repoList(manifest);
   const wanted = new URLSearchParams(search).get("repo");
-  return repos.find((r) => r.id === wanted) ?? repos.find((r) => r.name.toLowerCase() === "sunnybagal/tracehound-demo") ?? repos.find((r) => r.id === manifest.defaultRepo) ?? repos[0];
+  return repos.find((r) => r.id === wanted) ?? repos.find((r) => r.id === manifest.defaultRepo) ?? repos[0];
 }
 
 /**
@@ -48,6 +48,11 @@ export const PR_LANE_REPOS: Record<string, { github: string; flag?: keyof typeof
   "tracehound-demo": { github: "SunnyBagal/tracehound-demo" },
   recall: { github: "SunnyBagal/recall-seeded", flag: "recallSeeded" },
 };
+
+/** The reverse of prLaneRepo: the snapshot id whose PR lane shows this GitHub repo, if any. */
+export function graphRepoFor(github: string, flags: Record<string, boolean> = PR_LANE_FLAGS): string | undefined {
+  return Object.keys(PR_LANE_REPOS).find((id) => prLaneRepo(id, flags)?.toLowerCase() === github.toLowerCase());
+}
 
 /** owner/name of the repo whose pull requests the lane shows for this snapshot, if any. */
 export function prLaneRepo(repoId: string | undefined, flags: Record<string, boolean> = PR_LANE_FLAGS): string | undefined {

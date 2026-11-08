@@ -17,7 +17,7 @@ describe("review footer and repository boundaries", () => {
   });
   it("validates the repo and PR number, refusing the benchmark repo before fetching", async () => {
     const fetcher = vi.fn();
-    expect(reviewRepo(undefined)).toBe("SunnyBagal/tracehound-demo");
+    expect(reviewRepo(undefined)).toBe("SunnyBagal/recall-seeded");
     for (const repo of ["calcom/cal.com", "CALCOM/Cal.Com", "owner/../other", "https://github.com/a/b", "owner/repo?x=1"]) await expect(createReviewsClient(fetcher).list(repo)).rejects.toThrow();
     expect(fetcher).not.toHaveBeenCalled();
     for (const n of [null, "0", "-1", "1.5", "1e2"]) expect(() => reviewNumber(n)).toThrow();
