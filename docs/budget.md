@@ -3,9 +3,16 @@
 **Money left: $19.31** (the owner's console reading, 2026-11-09; it was $23.39 on 2026-11-08). That is all the money the
 project has. Every model call from here on has a line below, or it does not happen.
 
-**FREEZE: no paid job runs until codex's leak report (`run/out/codex.leak.md`, section "48 h") says where the money went.**
-About $3.59 left the account in ~22 h with no local call (the local ledger's last call is 2026-11-08T10:48:16Z, job 075);
-Sunny revoked the old API key on 2026-11-09 and the new key is only in local `.env`.
+**FREEZE: no paid job runs until Sunny confirms in the Nebius console** (hourly usage, 2026-11-08 → 09): about $3.36
+at 09:00–10:00 UTC on 8 Nov, nothing overnight, no running sandboxes. Sunny revoked the old API key on 2026-11-09; the
+new key is only in local `.env`.
+
+**Likely explanation: billing lag, not a leak.** Job 074 ran 2026-11-08T08:43:04Z–09:39:08Z and cost **$3.36463**
+(ledger, 147 calls; `docs/bench/hard-chunks.md:52`). Sunny's $23.39 reading came about 1 minute after 074 finished
+(owner), so it did not yet include 074. Then 23.39 − 3.36463 (074) − 0.49090 (075) = **$19.53** expected vs **$19.31**
+real: $0.22 unexplained (≈ 6% of the two jobs' $3.86, within a price-estimate error; not proven). codex found no
+Nebius-key-capable CI run in the 48 h (`run/out/codex.leak.md` § 48 h) and grok no committed key in 53 public repos
+(`run/out/grok.secrets.md`). The "≈ $3.59 off-ledger overnight" in the log below is superseded by this.
 
 ## Rules
 1. **No experiment without a line in this file** (job, cap, status). A job's cap is enforced in its own runner as well.
@@ -17,6 +24,8 @@ Sunny revoked the old API key on 2026-11-09 and the new key is only in local `.e
    `NEBIUS_API_KEY` is not already in the environment: if you export the key yourself, export this variable too.
 4. **The local ledger does not see every charge** (next section). Calls from the GitHub Action, CI, other machines or the
    Nebius console are not in it, so they need their own line here and a console check.
+5. **Compare ledger and console at least 2 h after a paid job ends.** The console lags: a reading taken minutes after a
+   job does not include it (074, 2026-11-08). Record the reading's time (UTC) with the balance.
 
 ## Ledger vs real balance (codex, `run/out/codex.budget.md`)
 - Anchor: `docs/bench/reviewbench.md:284-286` gives a balance of **$43.52** (committed 2026-10-27; the reading's own time
@@ -24,6 +33,9 @@ Sunny revoked the old API key on 2026-11-09 and the new key is only in local `.e
 - Since then the real balance fell **$20.13** ($43.52 → $23.39) while the local ledger recorded **$4.09709** (241 entries).
 - So **$16.03 of spend is not in the local ledger** (if both balances are the same credit pool). Likely sources, not
   verified: the GitHub Action's runs (their ledger lives in the CI runner's temp dir), and any use outside this machine.
+- **Billing-lag correction (2026-11-09):** if the $23.39 reading did not yet include 074 ($3.36463), the ledger spend
+  it reflects is $0.73246 (94 entries, without 074), so the off-ledger gap is $20.13 − $0.73246 = **$19.40**, not $16.03,
+  and after the CI estimate below **$12.7–$14.2 is unexplained**. Same caveats (one credit pool, the anchor's timing).
 - Check for Sunny: the Nebius console's charge for job 073r, 2026-11-07 20:08:39Z–20:38:31Z (three models), against the
   ledger's **$0.38780** (3.5 Super VL $0.37421, 3 Super $0.01112, Qwen $0.00247). Equal: the ledger's prices are right
   and the gap is calls made elsewhere. Higher: the prices are low by that ratio, so scale every estimate below by it.
@@ -97,3 +109,4 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 | 2026-11-08 | 075 (branch `bench/hard-chunks-074`) | $1.50 | $0.49090 (ledger) | ≈ $22.90 (ledger estimate; confirm in the console) |
 | 2026-11-09 | console reading: **$19.31** (expected ≈ $22.90): ≈ $3.59 off-ledger in ~22 h; old key revoked; freeze until the leak report | — | — | **$19.31** |
 | 2026-11-09 | CI audit (no spend) | — | $0 since the $23.39 reading (0 Action runs after 2026-11-01) | **$22.90** = $23.39 (Sunny's console reading) − $0.49090 (075, ledger) − $0 CI |
+| 2026-11-09 | billing-lag finding: the $23.39 reading predates 074's charge ($3.36463); expected 23.39 − 3.36463 − 0.49090 = $19.53 vs real $19.31 ($0.22 unexplained). Freeze until the console confirms | — | — | **$19.31** |

@@ -1,5 +1,7 @@
 # TraceHound
 
+**Read .agents/STATE.md first; rewrite it at the end of every session.** Herdr commands: docs/herdr.md.
+
 Analyzes a TypeScript repo and renders it as an interactive, evidence-backed component graph
 on a canvas. A repair agent runs against it; in the held-out evaluation the graph did not help
 it (decision 050).
@@ -295,7 +297,7 @@ it (decision 050).
    labels model-written names/summaries "prose not verified". Naming work is closed.
 
 ## Herdr team (default lanes)
-When running inside Herdr, artu1 orchestrates and splits work across every open agent. It does not build everything itself plus Codex. At session start, run `hc agent list` to get the current addresses for `hc send`.
+When running inside Herdr, artu1 orchestrates and splits work across every open agent. It does not build everything itself plus Codex. At session start, run `hc ls` to get the current addresses for `hc send` (commands: docs/herdr.md).
 - artu1 (main Claude): plans, pre-registers decisions, assigns lanes, merges, writes final reports. Builds itself only when no builder is free.
 - bunny (Claude, claudeb account): main builder. Implementation on branches.
 - codex: code review, GO/NO-GO before any paid run or merge. Second builder when bunny is busy.

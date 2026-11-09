@@ -2,6 +2,10 @@
 
 This file is for agents that are not Claude Code (Codex, Grok Build, others). Claude Code reads CLAUDE.md; the rules below repeat the ones that matter for everyone. Where they disagree, CLAUDE.md wins.
 
+**Read .agents/STATE.md first; rewrite it at the end of every session.**
+
+Herdr commands: docs/herdr.md
+
 ## Who works where
 
 - Benchmark lane (relay, Claude Code): `~/Projects/TraceHound`, branches `build/*` and `docs/*`. Owns `packages/analyzer/`, `docs/decisions.md`, `docs/bench/`, `scripts/bench/`.
