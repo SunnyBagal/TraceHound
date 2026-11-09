@@ -1,31 +1,44 @@
 name: TraceHound review
 
+# Spends Nebius credit, so it never starts by itself: run it from the Actions tab with a PR number,
+# or add the `tracehound-review` label to a pull request. Pushes, new PRs and other labels start nothing.
 on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to review
+        required: true
+        type: number
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [labeled]
 
 permissions:
   pull-requests: write
   contents: read
 
 concurrency:
-  group: tracehound-${{ github.event.pull_request.number }}
+  group: tracehound-${{ github.event.pull_request.number || inputs.pr }}
   cancel-in-progress: true
 
 jobs:
   review:
-    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.label.name == 'tracehound-review' &&
+       github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pr) || github.event.pull_request.head.sha }}
           persist-credentials: false
-      # Update this main-commit pin by hand after action changes.
+      # Update this main-commit pin by hand after action changes. workflow_dispatch reviews need an action
+      # with the pr-number input; an older pin skips the review step on dispatch (no model call).
       - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@86fd5d796c901cb20177cda28c4925e8c72d0901 # review-freeze-2.1
         with:
           nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
           model: 'nvidia/Nemotron-3.5-Super-VL'
           max-comments: '10'
           dry-run: 'false'
+          pr-number: ${{ inputs.pr }}

@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { agrees, norm } from "../../../scripts/bench/agree-rule.ts";
 import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
 import type { Finding, ReviewerInput } from "./action.ts";
+import type { Stage } from "./usage.ts";
 
 const execute = promisify(execFile);
 const root = path.resolve(import.meta.dirname, "../../..");
@@ -78,6 +79,8 @@ function findings(value: unknown): Finding[] {
 export interface PipelineOptions {
   /** pool step only: "separate" (default, today) or "merge", where the same normalised path with both lines null agrees */
   poolNullLines?: "separate" | "merge";
+  /** Job-summary sidecar: each stage's usage record as soon as its output is read, before validation. */
+  onUsage?: (stage: Stage, usage: unknown) => void;
 }
 
 const poolAgrees = (nullLines: PipelineOptions["poolNullLines"]) => nullLines === "merge"
@@ -130,6 +133,7 @@ export async function runPipeline(
       await run(command, ["--pr", inputPath, "--out", file, ...args]);
       const output = object(await json(file));
       const review = object(output.review);
+      options.onUsage?.(name === "review-diff-v1" ? "diff reviewer" : "ctx reviewer", review.usage);
       const comments = findings(output.comments);
       const chunkFailed = count(review.chunkFailed);
       if (!Array.isArray(review.chunks) || chunkFailed > review.chunks.length) throw new Error("Invalid chunks");
@@ -163,6 +167,7 @@ export async function runPipeline(
       await run("verify-ctx", ["--review", poolPath, "--pr", inputPath, "--head", head,
         "--repo", repo, "--out", verdictsPath, "--kept", keptPath]);
       const verdicts = object(await json(verdictsPath));
+      options.onUsage?.("verifier", (verdicts.verify as { usage?: unknown } | undefined)?.usage);
       const kept = object(await json(keptPath));
       const verified = findings(verdicts.comments);
       const comments = findings(kept.comments);

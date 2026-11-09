@@ -1,29 +1,40 @@
 name: TraceHound review
 
+# The review job spends Nebius credit, so it runs only from the Actions tab (with a PR number) or when a
+# pull request gets the `tracehound-review` label. The data job makes no model call (max-comments '0').
 on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to review
+        required: true
+        type: number
   push:
     branches: [main] # Use your repository's default branch.
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, closed]
+    types: [opened, synchronize, reopened, ready_for_review, closed, labeled]
 
 permissions: {} # Each job asks for what it needs.
 
 jobs:
   review:
-    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'tracehound-review' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
       pull-requests: write
-    # A newer push to the PR cancels the superseded review.
+    # A newer labelled or manual run for the same PR cancels the superseded review.
     concurrency:
-      group: tracehound-review-${{ github.event.pull_request.number }}
+      group: tracehound-review-${{ github.event.pull_request.number || inputs.pr }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pr) || github.event.pull_request.head.sha }}
           persist-credentials: false
       # Pin to a reviewed commit SHA before enabling this in your repository.
       - uses: SunnyBagal/TraceHound/.github/actions/tracehound-review@main
@@ -32,10 +43,11 @@ jobs:
           max-comments: '15'
           dry-run: 'false'
           data-branch: 'off'
+          pr-number: ${{ inputs.pr }}
 
   # Graph history. Delete this job and the push trigger for review only.
   data:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

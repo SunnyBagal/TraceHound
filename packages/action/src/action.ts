@@ -96,6 +96,19 @@ async function github(
   return response;
 }
 
+/** workflow_dispatch: the pull request named by the pr-number input, read from the API as a pull_request event's payload. */
+export async function fetchPullEvent(repository: string, number: number, options: Options, deps: Dependencies): Promise<PullEvent> {
+  const repo = repository.split("/").map(encodeURIComponent).join("/");
+  const pr = await (await github(`/repos/${repo}/pulls/${number}`, options, deps, { accept: "application/vnd.github+json" })).json() as {
+    title?: unknown; body?: unknown; number?: unknown; base?: { sha?: unknown }; head?: { sha?: unknown; repo?: { full_name?: unknown } | null };
+  };
+  if (typeof pr.title !== "string" || !(typeof pr.body === "string" || pr.body === null) || pr.number !== number
+    || typeof pr.head?.sha !== "string" || typeof pr.base?.sha !== "string"
+    || !(pr.head.repo === null || typeof pr.head.repo?.full_name === "string")) throw new Error("Invalid pull request");
+  return { repository: { full_name: repository }, pull_request: { title: pr.title, body: pr.body, number,
+    base: { sha: pr.base.sha }, head: { sha: pr.head.sha, repo: pr.head.repo && { full_name: pr.head.repo.full_name as string } } } };
+}
+
 export function buildInput(event: PullEvent, diff: string): ReviewerInput {
   const pr = event.pull_request;
   return { title: pr.title, body: pr.body ?? "", number: pr.number, diff };

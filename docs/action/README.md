@@ -26,6 +26,10 @@ the comments as model-generated and unverified.
    `persist-credentials: false`. The default pipeline needs the target repository at that head
    in `${{ github.workspace }}`; it checks that the head commit exists before any model call.
    Keep each job's 20-minute timeout.
+5. Model calls are manual. The example's `review` job runs only from the Actions tab (Run workflow,
+   with the PR number) or when someone adds the `tracehound-review` label to a pull request; pushes,
+   new PRs, updates and other labels start no model call. Create that label in the repository.
+   To review a PR again after a push, remove and re-add the label, or run the workflow.
 
 The composite action sets up Node 24 and pnpm, installs the reviewer's existing dependencies
 from the action's own repository, and runs its CLI with Node's native TypeScript support.
@@ -41,6 +45,14 @@ this repository's workflows, so adding this action does not enable model calls i
 | `fixes` | `on` | `on` or `off`. Adds fix proposals and dashboard metadata to `pool-verify-v1`. `off` omits proposals; partial reviews still include metadata, as do enabled contracts. |
 | `dry-run` | `false` | `true` prints the proposed review payload as JSON and posts nothing. It still runs the reviewer and incurs its Nebius cost. |
 | `data-branch` | `off` | Set to `on` to write heuristic graph history to `tracehound-data`. Requires `contents: write`. |
+| `pr-number` | empty | On `workflow_dispatch`, the pull request to review (read from the API; check out `refs/pull/<n>/head`). Empty skips the review on that event. Ignored on `pull_request`. |
+
+Each review writes its model usage to the job summary: per stage (diff reviewer, ctx reviewer,
+verifier, fixes) the calls, cached calls, input and output tokens and estimated $ (tokens at the
+`config/prices.json` rates, as the client charges them to the spend ledger), and the total. It is
+written also when nothing is posted or the review fails partway, with whatever usage was recorded.
+The summary also gives this run's spend-ledger total, which includes failed calls; a charge that
+no stage record covers is shown as unattributed.
 
 ## Graph history and permissions
 
@@ -51,9 +63,10 @@ branch in the installing repository. The workflow token needs `contents: write`;
 graph metadata, file paths, declarations, and change information are committed there.
 
 The [example workflow](example-workflow.yml) handles pushes to `main` (replace that with your
-default branch), plus PR opens, updates, reopenings, and closures. Its two jobs have separate
-concurrency groups. Reviews are grouped per PR with `cancel-in-progress: true`, so a newer push
-cancels a superseded review. Data writes are grouped per repository with
+default branch), plus PR opens, updates, reopenings, and closures for the `data` job; the `review`
+job runs only on the `tracehound-review` label or a manual run. Its two jobs have separate
+concurrency groups. Reviews are grouped per PR with `cancel-in-progress: true`, so a newer labelled
+or manual run for the same PR cancels a superseded review. Data writes are grouped per repository with
 `cancel-in-progress: false`, so they run one at a time and a running write is never cancelled.
 GitHub still keeps at most one *pending* job per group: when three or more events arrive while a
 write runs, the older pending ones are cancelled and their history is never written. A later
