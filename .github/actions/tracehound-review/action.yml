@@ -36,6 +36,10 @@ inputs:
     description: Persist heuristic graph history to tracehound-data (on or off; requires contents write)
     required: false
     default: 'off'
+  pr-number:
+    description: Pull request to review on workflow_dispatch (empty skips the review on that event; ignored on pull_request)
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
@@ -52,7 +56,9 @@ runs:
       working-directory: ${{ github.action_path }}/../../..
       run: pnpm install --frozen-lockfile --ignore-scripts --filter @tracehound/analyzer...
     - name: Review and post findings
-      if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+      # pull_request (any type but closed; callers gate model calls behind a label) or workflow_dispatch with a pr-number.
+      # Token use and estimated $ per stage go to the job summary, also when nothing is posted or the review fails.
+      if: ${{ (github.event_name == 'pull_request' && github.event.action != 'closed') || (github.event_name == 'workflow_dispatch' && inputs.pr-number != '') }}
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
       env:
@@ -66,6 +72,7 @@ runs:
         TRACEHOUND_LEARN: ${{ inputs.learn }}
         TRACEHOUND_CONTRACTS: ${{ inputs.contracts }}
         TRACEHOUND_DRY_RUN: ${{ inputs.dry-run }}
+        TRACEHOUND_PR_NUMBER: ${{ inputs.pr-number }}
         TRACEHOUND_REVIEW_FILE: ${{ runner.temp }}/tracehound-review-${{ github.run_id }}-${{ github.run_attempt }}.json
       run: node packages/action/src/cli.ts
     - name: Write graph history
