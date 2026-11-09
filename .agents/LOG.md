@@ -44,3 +44,14 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   hit its daily quota), codex (ledger audit, dev + held-out second labels, review audit, overlap check, held-out fixes),
   grok (leak audit both sides).
 - **Left:** Sunny decides how to fill the 12 held-out bug cases and the two schema choices; the spend freeze stays.
+
+## 2026-11-10 (Tue): BullMQ fill, PR opener
+- **Changed:** Sunny ruled the held-out shortfall: BullMQ only (fixes since 2026-07-01, ≤ 400 lines, same rules, TS only),
+  held-out only, no pre-July fixes, no rule relaxing, ship with what it has. BullMQ added 1 bug case (5 fixes excluded as
+  seen by artu1, most others failed the introducer gates): held-out final **29 (20 bug, 9 clean)**, agreement 29/29.
+  BullMQ is MIT. `scripts/open-prs.ts` in the testset (dry run default, SunnyBagal-fork-only check, batches ≤ 10, resume
+  file): codex NO-GO round 1 (a remote named after the push URL redirected to upstream), fixed, GO round 2; never run for
+  real. codex's read-only commands (git log/show/blame/…, gh pr view/list, rg) allowed in `~/.codex/rules/default.rules`.
+- **Who:** artu1 (briefs, firewall, compare script, state), codex (BullMQ mining + labels, two reviews), grok (licence,
+  second labels, leak audit, agreement), bunny (PR opener + fix); devin out of quota.
+- **Left:** Sunny decides when to run the PR opener and the two schema choices; spend freeze stays.
