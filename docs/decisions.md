@@ -3747,7 +3747,7 @@ so ≈ 21 empty units × (A ≈ $0.035 + D ≈ 2 × $0.03 + E ≈ $0.01) ≈ $2.
 **Rejected:** arm C via `reasoning_effort` (a level, not the budget the arm asks for); drawing each of the 20 failures
 (6 duplicate requests would be drawn twice or three times); separate first draws per arm (≈ 3 × the cost, unpaired).
 
-**074 result (2026-11-08): E meets the gate; D does not.** `docs/bench/hard-chunks.md`; records
+**074 result (2026-11-08): E meets the gate; D does not.** (E later dropped by 075; see "074/075 closed" below.) `docs/bench/hard-chunks.md`; records
 `<bench>/hard-chunks-074/`; run at `0063b0c` (codex GO, three reviews), 42 of 42 units complete, 0 request errors,
 **$3.36463** (147 calls, all 3.5 Super VL, 0 failed; 59 at 32,000 output tokens).
 - First replies: valid 15, invalid non-empty 1, **empty 26** (all `finish_reason: length`, reasoning = all 32,000 output
@@ -3831,3 +3831,11 @@ review: HTTP 529 on the judge); no A-vs-E comparison is reported; partial counts
   completion. No rerun of the failed request was pre-registered, so none is made; E is not taken forward on this evidence.
 - Reading: the verifier dropped 115 of E's 135 findings (85%) and 18 of A's 30 (60%); E's extra volume did not turn into
   kept true positives.
+
+**074/075 closed (owner's ruling, 2026-11-09).** 075 closes as INCONCLUSIVE by its rule (one judge call failed, HTTP
+529), but E fails 075's gate under every possible completion of that review, so **E is dropped**. D did not meet 074's
+gate. The defaults stay as set in 073a: the append retry after an invalid reply plus the lenient parser
+(`DEFAULT_PARSER`), no fresh retry, no schema retry. **Empty replies are a known limitation**: on 074's hard chunks 26 of
+42 first replies spent all 32,000 output tokens on reasoning and came back empty, and the append retry recovered 7 of
+those 26 to a valid reply with a kept finding (15 to any valid reply). No reasoning-token budget exists on Token Factory
+to prevent it (074 (a)). Reopen only with a new mechanism or a provider change, with its own budget line.
