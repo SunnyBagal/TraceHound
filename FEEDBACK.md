@@ -796,3 +796,30 @@ was re-run.
 - **Docs/console:** nothing found wrong this session.
 - **What would have helped (opinion):** a server-side reasoning-token budget that is honoured (still not, see 070),
   or documented typical latency for long reasoning replies, so client timeouts can be set before the first long call.
+
+## 2026-11-08 — job 074 (empty-reply recovery on 14 hard reviewer chunks; Nemotron 3.5 Super VL, us-north1)
+- **Called:** Token Factory `/chat/completions`, `nvidia/Nemotron-3.5-Super-VL` only, non-streaming, temperature 0,
+  `max_tokens` 32,000, cache bypassed. 2026-11-08 08:39Z–09:39Z, up to 4 units (≤ 16 requests) in flight.
+- **Counts:** 147 requests, 147 succeeded, 0 failed (no HTTP errors, no timeouts with the 600 s transport). 59 returned
+  exactly 32,000 output tokens. Ledger cost $3.36463.
+- **Behaviour:** 26 of 42 first replies (reasoning on) were empty with `finish_reason: length` and
+  `completion_tokens_details.reasoning_tokens` = 32,000: all budget spent on reasoning. 26 requests with
+  `chat_template_kwargs.enable_thinking=false` plus `response_format: {"type": "json_schema", ...}` were all accepted
+  (no 4xx), all ended `stop` with 0 reasoning tokens, and all parsed against the schema.
+- **Docs:** the chat API page says of `response_format` "Only {'type': 'json_object'} or {'type': 'text' } is supported"
+  while its `ResponseFormat` enum includes `json_schema`, and `json_schema` requests were accepted; the model's
+  `models_info` entry has `tags: []` (no "JSON mode" tag) although schema requests worked. Latency not measured per call;
+  mean wall time per unit 194–328 s.
+- **What would have helped (opinion):** a documented reasoning-token budget (a cap that leaves room for the answer),
+  and a JSON-mode tag or a statement of whether `json_schema` is enforced for this model.
+
+## 2026-11-08 — job 075 (verifier + one judge on 074's findings; no reviewer calls)
+- **Called:** Token Factory `/chat/completions`: `nvidia/Nemotron-3.5-Super-VL` (verifier, us-north1) and
+  `nvidia/nemotron-3-super-120b-a12b` (bench-judge-v1, configured URL). Non-streaming.
+- **Counts:** 166 client calls, 7 served from our cache, 159 sent; **1 failed**: the judge on 3 Super returned
+  `HTTP 529: worker overloaded` (the only failure; it made the experiment's result inconclusive by our pre-registered
+  rule). Ledger cost $0.49090.
+- **Docs:** 529 is documented (openapi.json: "Inference service overloaded (projects with overload mapping enabled
+  receive 429 with the same message)"); our reply's text was "worker overloaded", not the documented "System is
+  overloaded". The docs give no retry advice for 529 (the 429 example says "Retry the request after 30 sec").
+- **What would have helped (opinion):** a `Retry-After` header or a stated backoff for 529.

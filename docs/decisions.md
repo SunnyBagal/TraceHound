@@ -2,6 +2,12 @@
 
 One entry per non-obvious choice, with the alternative we rejected.
 
+**Standing rules** (each with the decision that set it):
+- *Reliability tests bypass the cache for the requests under test* (073a, 2026-11-08). A test of failure rates,
+  retries or parsing draws every request under test fresh: the response cache is neither read nor written for them.
+  Reason: 073's arms replayed the cache (83 of 96 first-attempt keys), and empty replies are never cached, so a
+  replayed baseline under-counts the failures being tested.
+
 ## 001 · Run TypeScript with Node's native type stripping
 **Choice:** Node 24 runs `.ts` directly (`node src/cli.ts`). The code uses `.ts` import extensions
 and `erasableSyntaxOnly`.
@@ -3631,6 +3637,12 @@ noise, and no ranking claim follows. The result is recorded here as 073's result
   073's 10 empty first replies, 5 got their append retry from a stored October reply that had succeeded (the 5 others
   were drawn on 7 Nov, all valid). Survivorship in the cache explains most of the gap; a provider change is not shown
   (too few 7 Nov draws to compare rates).
+- *Relabel (2026-11-08):* **B1's result is "harmless, benefit unproven"**: the arms replayed the cache (83 of 96
+  first-attempt keys), and empty replies are never cached, so the corpus under-represents the failure the switch was
+  meant to fix (14 of runs 7r/8/9's 20 lost chunks began with an empty reply). "Harmless" means only what was measured:
+  on 073's corpus it never changed a strict-valid reply (E4); where it does recover a reply it adds findings that were
+  not judged here. The lenient default stays, and no reliability gain is claimed. Standing rule added at the top of this file:
+  reliability tests bypass the cache for the requests under test.
 - *The product had the same cutoff; fixed 2026-11-08.* The Action runs the analyzer CLIs (`review`, `review-ctx`,
   `verify-ctx`), which give `TokenFactoryClient` `timeoutMs: 600_000` (`review/cli.ts:67`, `ctx-cli.ts:115`,
   `verify-ctx-cli.ts:153`) but used `globalThis.fetch`, so a reply slower than 300 s failed at 300 s. `longFetch`
@@ -3656,7 +3668,7 @@ noise, and no ranking claim follows. The result is recorded here as 073's result
 - Three independent fresh captures: ≈ 3 × $3, over the cap, and unpaired by construction.
 - A lenient verifier: it is not one of the two generation switches; it stays strict in every arm.
 
-**073 result (2026-11-08): PASS for B1 (lenient parser); B2 not met.** `docs/bench/recovery-ab.md`; runner at `78537cd`;
+**073 result (2026-11-08): B1 (lenient parser) passed the gate but is relabelled harmless, benefit unproven (073a); B2 not met.** `docs/bench/recovery-ab.md`; runner at `78537cd`;
 records `<bench>/recovery-073r/` (the 073a restart; `recovery-073/` is void). Coverage complete (40 PRs per arm, all
 SCORED under both judges, 0 misses, 0 request errors, 0 unpaired PRs, per-call charges = ledger).
 - E2: terminal CHUNK_FAILED A 1, B1 0, B2 7; empty by failure A 1, B1 0, B2 3. B1 passes; B2 fails (7 > 2).
@@ -3669,3 +3681,161 @@ SCORED under both judges, 0 misses, 0 request errors, 0 unpaired PRs, per-call c
   later change (not here). The effect is one chunk and one TP under each judge on a corpus whose arm A lost 1
   chunk (runs 7r and 8 lost 8 each), so ΔF is noise and no ranking claim follows. `retryOnLength: "fresh"` stays
   off: on this corpus it turned 7 recoverable chunks into failures.
+
+## 074 — Pre-registered: recovering empty replies on the hard-chunk set (2026-11-08)
+
+**Status: pre-registered, not yet run.** Branch `bench/hard-chunks-074`; runner `scripts/bench/hard-chunks.ts`.
+**Feasibility (before any call, $0):**
+- (a) *Reasoning token budget: none documented.* The Token Factory chat API offers `reasoning_effort` (enum `none` ·
+  `minimal` · `low` · `medium` · `high` · `xhigh`, plus `max` as a separate constant in the OpenAPI spec; the HTML page
+  lists up to `xhigh`), a level, not a token count
+  (https://docs.tokenfactory.nebius.com/api-reference/inference/create-chat-completion.md). The Nemotron 3.5 Super VL
+  model card's prose documents `chat_template_kwargs.enable_thinking` true/false; its hosted-API schema also has
+  `reasoning_effort` `none` · `low` · `high`, which snippets turn into `chat_template_kwargs` (`low_effort: true` for
+  `low`) — a lower-effort mode, not a token cap (correction from grok's audit, verified in the page source: 8 ×
+  `low_effort`, 0 × `reasoning_budget` / `thinking_budget` / `budget_tokens`)
+  (https://build.nvidia.com/nvidia/nemotron-3.5-super-vl-120b-a12b/modelcard;
+  https://catalog.ngc.nvidia.com/orgs/nim/teams/nvidia/models/nemotron-3.5-super-vl-120b-a12b). 070 found
+  `reasoning_budget` ignored by Token Factory. So **arm C (budget capped to leave ~8k answer tokens) is dropped:
+  unsupported** (no documented quantitative budget; not a measured proof that none exists). `reasoning_effort: "low"` is
+  not a cap and is not tested here.
+- (b) *JSON-schema output: documented, model support unverified.* `response_format` accepts `text` · `json_object` ·
+  `json_schema`, with `json_schema: {name, schema, strict}` (`JsonSchemaResponseFormat`, required `name`, `schema`;
+  same page); the guide says schema output is set with `{"type": "json_schema"}` and that a model card's "JSON mode"
+  tag marks support (https://docs.tokenfactory.nebius.com/ai-models-inference/json.md). The same API page's field text
+  also says "Only {'type': 'json_object'} or {'type': 'text'} is supported", so support is contradictory in the
+  docs. Rule: E runs. The job's first E request is a probe that later E requests wait for. If an E request gets an HTTP
+  4xx whose message names `response_format`, `json_schema`, schema or guided decoding, E is dropped as unsupported and no
+  further E request is sent. Any other error (e.g. HTTP 429, rate limiting) is a request error: that unit is incomplete
+  and the next E request probes again.
+- (c) *finish_reason and reasoning tokens: yes.* `finish_reason` is `stop` · `length` · `tool_calls` ·
+  `content_filter`, and `usage.completion_tokens_details.reasoning_tokens` is reported (same API page); our client
+  reads both (`client.ts` `reasoningStats`). On 073's records (366 replies with metadata): all 35 empty-content replies
+  ended `length` with `reasoning_tokens` = `completion_tokens` = 32,000 — the reasoning used the whole budget
+  (confirmed for every empty reply with metadata; replies replayed in several arms count once per arm).
+**Set:** the reviewer chunks that failed in 3.5 dev runs 7r, 8, 9: 20 failures = **14 distinct chunk requests**
+(`hardChunks`; the job refuses unless it finds exactly 20 / 14, and pull records are checked — dev repo, `0.json`–`9.json`,
+attempt 1 or 2 — before any path is built from them). Each is rebuilt by `firstRequest` and refused unless it equals the
+pipeline's own request (`capturedFirsts`) and 073r's key for that chunk (required; a missing key refuses), with no two
+keys equal (`hard-chunks.ts check`: 14 of 14 equal, all 14 splittable). The ids, keys, source runs and the seeded order
+are written to `run.json` before the first call.
+**Draws:** 3 fresh draws per request = 42 units; **cache bypassed** (no response cache: neither read nor written;
+standing rule, 073a). Units go round by round (draw 1 of all 14 in seeded order, seed 74 + draw, then 2, then 3),
+4 units at a time.
+**Arms** (all share each unit's first draw, so they are paired; current defaults: lenient parser, no fresh retry):
+- A: an invalid first reply (empty or not) gets the append retry (`appendRetry`, equal to the pipeline's retry; test).
+- D: as A, but after an **empty** first reply the chunk is split in half (`splitHalves`: by files balanced by size,
+  else by hunks of its one file, header repeated) and each half is reviewed once (same request shape, lenient, no retry).
+  D succeeds when **any** half is valid with ≥ 1 kept finding (counted, and reported as "one half" when the other half
+  is invalid); D's "valid" means both halves valid; its kept findings are the distinct findings of both halves.
+- E: as A, but after an **empty** first reply one retry of the original messages with reasoning off and
+  `response_format` = the findings JSON schema (`schemaRetry`).
+- A non-empty invalid first reply gets A's append retry in every arm (one shared call). A valid first reply ends the unit.
+**Metrics:** primary, per arm, the share of complete units ending with a valid reply and ≥ 1 finding that passes the
+diff check (`DiffIndex`; for D, the union of both halves). Secondary: valid replies (any findings), kept findings per
+successful unit, cost per unit (ledger charges of the shared first draw plus the arm's own follow-ups), wall time per
+unit (first draw + the arm's follow-up; D's halves run side by side, so their max).
+**Gate:** an arm wins if its successes ≥ max(1.5 × A's, A's + 1) **and** its cost per unit ≤ 1.5 × A's, over at least
+30 complete paired units (a unit with a request error or a cap stop is incomplete and left out). Otherwise NO WIN, or
+INCONCLUSIVE under 30 units. Nothing is adopted from this: the quality of the findings is checked later on the full dev
+set first.
+**Budget:** $4 for the whole job: one Budget, run cap $4, total cap = min(env total, ledger at start + $4). Ledger at
+plan time $41.16999 and the env total is the default $45, so the effective ceiling is **$3.83001**. At a cap refusal no
+new unit starts, and every call a unit has already sent is awaited before the unit ends (no paid call outlives the
+final records); a unit stopped at the cap keeps what it received and is incomplete. Up to 4 units at once; a unit after an empty reply has up to 4 calls in flight. Estimate (not a promise): 42 first draws × ≈ $0.03 ≈ $1.3; in 073 7 of these 14 requests came back empty,
+so ≈ 21 empty units × (A ≈ $0.035 + D ≈ 2 × $0.03 + E ≈ $0.01) ≈ $2.2; total ≈ $3.5. At the cap no new unit starts.
+**Rejected:** arm C via `reasoning_effort` (a level, not the budget the arm asks for); drawing each of the 20 failures
+(6 duplicate requests would be drawn twice or three times); separate first draws per arm (≈ 3 × the cost, unpaired).
+
+**074 result (2026-11-08): E meets the gate; D does not.** (E later dropped by 075; see "074/075 closed" below.) `docs/bench/hard-chunks.md`; records
+`<bench>/hard-chunks-074/`; run at `0063b0c` (codex GO, three reviews), 42 of 42 units complete, 0 request errors,
+**$3.36463** (147 calls, all 3.5 Super VL, 0 failed; 59 at 32,000 output tokens).
+- First replies: valid 15, invalid non-empty 1, **empty 26** (all `finish_reason: length`, reasoning = all 32,000 output
+  tokens). Unsplittable for D: 0.
+- All 42 units: successes (valid reply, ≥ 1 diff-anchored finding) A 22, D 30, **E 41**; cost per unit A $0.0472,
+  D $0.0594, E $0.0329; wall per unit A 303 s, D 328 s, E 194 s; kept findings per success A 1.4, D 1.3, E 3.3.
+  Gate: E 41 ≥ max(33, 23) at $0.0329 ≤ $0.0708 → **WIN**; D 30 < 33 → NO WIN.
+- On the 26 empty-first units (devin's reading; the arms differ only here): successes A 7, D 15 (8 of them from one half
+  only), E 26; valid replies A 15, D 8 (both halves), E 26. A's append retry ended empty at `length` again on 11 of 26.
+  E's 26 replies all ended `stop` with 0 reasoning tokens. The endpoint accepted `response_format: json_schema` (0
+  refusals), but the model carries no "JSON mode" tag (`models_info` `tags: []`, grok, verified), so whether the schema
+  was enforced or the model simply complied without reasoning is not known.
+- **The claim (devin's wording):** on 14 reviewer chunk requests selected because they failed in 3.5 dev runs 7r/8/9,
+  drawn fresh 3 times each with the cache bypassed (42 of 42 units complete; 26 began with an empty reply), arm E ended 41
+  units with a valid reply and ≥ 1 diff-anchored finding against A's 22 (on the empty-first units: 26 vs 7), at $0.0329
+  vs $0.0472 per unit, which meets 074's gate. It shows only that, on these requests, E returns anchored findings after
+  an empty reply more often than the append retry; it does not show that the findings are correct (E writes 3.3 per
+  success against A's 1.4, with no reasoning), that fewer chunks fail on the dev set, that the effect comes from the
+  schema rather than from reasoning off on a fresh draw, or that E should be on by default. The 42 units are 14
+  requests × 3 draws, not 42 independent cases. Nothing is adopted.
+- **Next, before any adoption (devin's follow-ups):** a plain-redraw arm and a reasoning-off-without-schema arm on the
+  same set, to separate the schema from reasoning off; then finding quality on the full dev set with both judges.
+  Budget note: the ledger is at $44.53462, $0.47 under the env's $45 total cap, so the next paid job needs the owner to
+  raise `TRACEHOUND_BUDGET_TOTAL_USD` or wait.
+
+
+## 075 — Pre-registered: verified quality of 074's A vs E findings (2026-11-08)
+
+**Status: pre-registered, not yet run.** Budget line: `docs/budget.md` (075, cap **$1.50**). Spec:
+`run/briefs/075-spec.md` (testset folder) with Amendment 1 from devin's review; runner `scripts/bench/verify-074.ts`
+(bunny, `3e561af`). No reviewer call is made (`guardClient` lets only verifier and judge requests through).
+**Input:** 074's records. Per arm, the findings (lenient parse + diff check) of its **successful** 074 units: path
+`valid` → first reply (A = E); `invalid` → the shared append retry (A = E); `empty` → A's append retry, E's schema retry.
+The runner refuses unless 074's population is exactly as recorded: 42 units, all complete; 15 valid-first, 1 invalid,
+26 empty-first (no unit is silently left out). `check` ($0): 42 units; successful A 22, E 41; findings A 30, E 135 (empty-first A 9, E 114); 11 PRs; 140 distinct
+verifier requests; 63 judge reviews.
+**Verifier:** verify-ctx-v1 unchanged (`verifyReviewWithContext`; 3.5 Super VL, reasoning on, concurrency 4, strict
+parser), each distinct finding once per PR; kept = `isKept` (keep or VERIFY_FAILED). The response cache is read and
+written (budget.md rule 2: reliability is not under test).
+**Judge:** ONE, bench-judge-v1, against the **dev** golden of the PR's repo (Cal.com unreachable: no set name). One review
+per (arm, draw, hard chunk), so shared-path units give A and E identical judge requests; scorer rules within a review
+(Low and duplicates are neither TP nor FP); across reviews every TP counts; FN unused.
+**Table per arm:** found, kept, VERIFY_FAILED, TP, distinct (PR, golden) TP pairs, FP, duplicates, low, precision
+TP/(TP+FP); again with `keep` only; again on the 26 empty-first units (reported, not gated); cost.
+**Gate (adopt E):** P(E) ≥ P(A) **and** TP(E) − TP(A) ≥ 3, computed with isKept **and** with keep only. PASS needs both;
+FAIL otherwise, including a pass with keep only and a fail with isKept; INCONCLUSIVE if it passes only with
+VERIFY_FAILED kept, if either precision is undefined
+(TP + FP = 0), on any JUDGE_FAILED review with comments, any verifier request error, findings left unverified or
+unjudged, or a stop at the cap. "Adopt" here means: E goes forward to the full-dev-set quality check; it is not made a
+default by 075.
+**Records:** every call's ledger charge (failed calls included) is attributed by a per-call id and must reconcile with
+the run's ledger spend; at a cap no new call is sent and every call already sent is drained before the final records.
+A PASS is written with the keep-only numbers and TP + FP per arm next to each precision (devin's notes).
+**Cost:** expected $0.50 (140 × $0.0032 + 63 × $0.0009, codex.budget.md means); the run refuses above $1.20 expected;
+one Budget, run cap $1.50, total cap min(env $66.92462, ledger at start + $1.50).
+**Claim wording, fixed now (devin, `run/out/devin.075.md`):**
+- PASS: "075 result: PASS by the pre-registered gate. Over 074's 3 fresh draws of 14 dev reviewer chunk requests selected
+  because they failed in runs 7r/8/9, the verifier-kept findings from E's successful units scored TP_E (D_E distinct
+  goldens), P_E, against A's TP_A (D_A), P_A, under one judge (bench-judge-v1, not hand-checked); on the 26 empty-first
+  units TP e_E vs e_A. On these chunks the schema retry's findings were judged at least as precise as the append retry's,
+  with ≥ 3 more TP. This is not a quality, recall or F gain on the dev set: the goldens cover whole PRs while only hard
+  chunks were reviewed (FN unused), TP repeats across draws of the same request, and the difference is within noise; it
+  does not by itself make E a default."
+- FAIL: "075 result: FAIL by the pre-registered gate (TP_E − TP_A = Δ, needed ≥ 3; P_E vs P_A). On these 14 selected
+  requests × 3 draws under one judge, 075 gives no support for adopting E; it does not show that E's findings are worse."
+- INCONCLUSIVE: "075 result: INCONCLUSIVE (<rule>); no A-vs-E comparison is reported; partial counts are diagnostics only."
+- Neither may claim anything about Cal.com, the full dev set or the product, recall, verified quality, or that the effect
+  comes from the schema rather than reasoning off.
+
+**075 result (2026-11-08): INCONCLUSIVE (one JUDGE_FAILED review).** Records `<bench>/verify-074/`; runner at `34c74e2`
+(codex GO, devin OK); complete, **$0.49090** (166 calls: 7 cache hits, 1 failed; per-call charges = ledger = budget,
+reconciled). The rule that fired: arm A, draw 3, keycloak/6 ctx#0 (an empty-first unit, so A-only), 1 kept comment,
+`request failed: HTTP 529: worker overloaded` on the judge. Wording (devin): "075 result: INCONCLUSIVE (one JUDGE_FAILED
+review: HTTP 529 on the judge); no A-vs-E comparison is reported; partial counts are diagnostics only."
+- Diagnostics only (all successful units, sums over 3 draws; keep-only gives the same numbers, 0 VERIFY_FAILED):
+  A found 30, kept 12, TP 5 (3 distinct goldens), FP 3, P 0.625 (TP + FP = 8); E found 135, kept 20, TP 6 (4 distinct),
+  FP 8, P 0.429 (TP + FP = 14). On the 26 empty-first units: A found 9, kept 2, TP 0, FP 0; E found 114, kept 10, TP 1,
+  FP 5, P 0.167.
+- Bound (arithmetic, not a verdict): the failed review holds one A comment. Whatever it would score (TP, FP, Low or
+  duplicate), A's precision is 0.556–0.667 and TP(E) − TP(A) ≤ 1, so the gate (P_E ≥ P_A and ΔTP ≥ 3) fails in every
+  completion. No rerun of the failed request was pre-registered, so none is made; E is not taken forward on this evidence.
+- Reading: the verifier dropped 115 of E's 135 findings (85%) and 18 of A's 30 (60%); E's extra volume did not turn into
+  kept true positives.
+
+**074/075 closed (owner's ruling, 2026-11-09).** 075 closes as INCONCLUSIVE by its rule (one judge call failed, HTTP
+529), but E fails 075's gate under every possible completion of that review, so **E is dropped**. D did not meet 074's
+gate. The defaults stay as set in 073a: the append retry after an invalid reply plus the lenient parser
+(`DEFAULT_PARSER`), no fresh retry, no schema retry. **Empty replies are a known limitation**: on 074's hard chunks 26 of
+42 first replies spent all 32,000 output tokens on reasoning and came back empty, and the append retry recovered 7 of
+those 26 to a valid reply with a kept finding (15 to any valid reply). No reasoning-token budget exists on Token Factory
+to prevent it (074 (a)). Reopen only with a new mechanism or a provider change, with its own budget line.
