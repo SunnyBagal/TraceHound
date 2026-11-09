@@ -1,5 +1,5 @@
 # .agents/STATE.md: read first; rewrite (never append) at the end of every session; ≤ 60 lines
-HEAD: `main` @ `5fb4973` + the handoff commit that adds this file (2026-11-09). If HEAD has moved further, trust code and docs/decisions.md over this file.
+HEAD: `main` @ `5c4fdae` (handoff, 2026-11-09; this line was updated in the next commit). If HEAD has moved further, trust code and docs/decisions.md over this file.
 
 ## Goal
 Show, on fresh held-out TypeScript PRs (twenty, medusa), whether TraceHound's reviewer (pool-verify-v1) catches real bugs that later fixes repaired.
