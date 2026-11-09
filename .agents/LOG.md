@@ -31,3 +31,16 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   (key scan, spend-limit research).
 - **Left:** Sunny confirms the hourly console usage (lifts the freeze); Sunny checks the labels in
   `pilot/labels/disagreements.md`; bump the Action pins and create the label in the four repos.
+
+## 2026-11-09 (Mon, evening): Track B scale-up
+- **Changed:** `tracehound-testset` pushed to a new **private** repo (SunnyBagal/tracehound-testset). Split before any new
+  labelling: universe of 32,233 introducing squash PRs (medusa, payload, twenty), pilot-seen commits pinned to dev, seed
+  `0xec6bf5fc` from the hash of the committed list, stratified by repo. Payload added (twenty + medusa could not reach 80).
+  Dev 40 (31 bug, 9 clean); held-out 28 (19 bug, 9 clean), 12 bug cases short after every fix pool was used up. Label
+  agreement: dev 40/40 strict and bug/clean; held-out 28/28 and 28/28 (numbers only). Leak audit closed on both sides.
+  Ledger audit: the other `spend.jsonl` files do not close the $12.7–14.2 gap (`docs/budget.md`). Firewall written into
+  both STATE files; artu1 read devin's pane once and saw two held-out candidates, which devin dropped.
+- **Who:** artu1 (repo, split, spec, dev compare), bunny (dev mining, labels, fixes), devin (held-out mining, labels;
+  hit its daily quota), codex (ledger audit, dev + held-out second labels, review audit, overlap check, held-out fixes),
+  grok (leak audit both sides).
+- **Left:** Sunny decides how to fill the 12 held-out bug cases and the two schema choices; the spend freeze stays.

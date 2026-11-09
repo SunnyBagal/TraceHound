@@ -40,6 +40,17 @@ Nebius-key-capable CI run in the 48 h (`run/out/codex.leak.md` § 48 h) and grok
   ledger's **$0.38780** (3.5 Super VL $0.37421, 3 Super $0.01112, Qwen $0.00247). Equal: the ledger's prices are right
   and the gap is calls made elsewhere. Higher: the prices are low by that ratio, so scale every estimate below by it.
 
+**Local-ledger audit (codex, 2026-11-09):** `run/out/codex.ledger.md` enumerates 72 `spend.jsonl` files under
+`~/Projects` (excluding node_modules and prohibited response caches; directory symlinks not followed). Using
+`timestamp` in UTC, 2026-10-27 through 2026-11-08 inclusive, the main ledger has 400 entries / **$4.58794430**
+(including 074 and 075). The evaluation checkout's 400 entries are all duplicates; the UI ledger has no entries in
+the window. The other 69 ledgers are temporary test artifacts: **$0.97396000** nominal cost, **$0.89319500** after
+exact-row deduplication (fake model names and placeholder purposes; not evidence of billed usage). No request-id
+fields occur, so identity is the full JSON row with sorted keys; no fuzzy matching. **The other ledgers do not close
+the gap:** no additional non-test spend was demonstrated, so the **$19.40 off-ledger / $12.7–$14.2 unexplained after
+CI** estimates above remain. Even counting the unique test cost as billed (unsupported) would explain only 4.6% of
+$19.40. Audit cost: $0; only console usage can reconcile the actual charges.
+
 ## CI spend (codex, `run/out/codex.leak.md`, 2026-11-09)
 - Four repos run the TraceHound Action: SunnyBagal/TraceHound, tracehound-demo, linea-seeded, recall-seeded (all on
   `nvidia/Nemotron-3.5-Super-VL`; fixes on by default, 3 Super). Their spend is recorded only in the CI runner's own
@@ -110,3 +121,4 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 | 2026-11-09 | console reading: **$19.31** (expected ≈ $22.90): ≈ $3.59 off-ledger in ~22 h; old key revoked; freeze until the leak report | — | — | **$19.31** |
 | 2026-11-09 | CI audit (no spend) | — | $0 since the $23.39 reading (0 Action runs after 2026-11-01) | **$22.90** = $23.39 (Sunny's console reading) − $0.49090 (075, ledger) − $0 CI |
 | 2026-11-09 | billing-lag finding: the $23.39 reading predates 074's charge ($3.36463); expected 23.39 − 3.36463 − 0.49090 = $19.53 vs real $19.31 ($0.22 unexplained). Freeze until the console confirms | — | — | **$19.31** |
+| 2026-11-09 | local-ledger audit (codex): 72 files; evaluation copy deduplicated; $0 additional non-test spend demonstrated; $19.40 off-ledger / $12.7–$14.2 after CI remains unexplained | — | $0 (audit; no calls) | **$19.31** |
