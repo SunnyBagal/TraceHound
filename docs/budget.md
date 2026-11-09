@@ -24,6 +24,19 @@ has. Every model call from here on has a line below, or it does not happen.
   ledger's **$0.38780** (3.5 Super VL $0.37421, 3 Super $0.01112, Qwen $0.00247). Equal: the ledger's prices are right
   and the gap is calls made elsewhere. Higher: the prices are low by that ratio, so scale every estimate below by it.
 
+## CI spend (codex, `run/out/codex.leak.md`, 2026-11-09)
+- Four repos run the TraceHound Action: SunnyBagal/TraceHound, tracehound-demo, linea-seeded, recall-seeded (all on
+  `nvidia/Nemotron-3.5-Super-VL`; fixes on by default, 3 Super). Their spend is recorded only in the CI runner's own
+  `.tracehound/spend.jsonl`, which is discarded, so **none of it is in the local ledger**.
+- Since 2026-10-27: 106 runs of `tracehound-review.yml`; **89 reached the model path** (TraceHound 59, linea-seeded 15,
+  recall-seeded 15; 69 completed pipelines, 1 failed, 19 cancelled after starting); none after 2026-11-01.
+- Estimate at $0.075 per PR: **$5.18–$6.68** (69–89 executions), plus the fix stage (not estimable from the logs).
+  That leaves **$9.4–$10.9 of the $16.03 gap unexplained** (larger PRs, retries, fixes, cancelled-but-billed requests, or
+  another spender). Only the Nebius console (usage by day and model, 2026-10-27 onward) can settle it.
+- From 2026-11-09 the review workflows are manual (`workflow_dispatch` + the `tracehound-review` label). **A CI review
+  run is an experiment:** it needs its own line below (≈ $0.075 per PR + fixes), and its estimate is subtracted from the
+  money left by hand, because the local hard stop cannot see it.
+
 ## Unit costs (ledger, 3.5 Super VL era; codex)
 | item | cost | source |
 |---|---|---|
@@ -47,6 +60,7 @@ Estimates use the costs above on 40-PR sets, plus 25% for larger TypeScript diff
 | held-out scoring | every row (ours + any tool reviews Sunny obtains) × 40 PRs × v1 + x1 | **$0.60** | e.g. 8 rows × 40 × $0.0014 = $0.45, + 30% | not started |
 | reserve | reruns after an infrastructure failure, a console-check correction | **$4.00** | the rule: at least $4 | held |
 | unallocated | needs a new line here before use | **$4.89** | $23.39 − $1.00 margin − the lines above | held |
+| CI review runs | manual Action runs (label or dispatch) in any of the four repos | **$0.00** | none planned; each run needs a line first (≈ $0.075/PR + fixes) | none since 2026-11-01 |
 | safety margin | never spent (it is outside the global hard stop) | $1.00 | rule 3 | — |
 | **total** | | **$23.39** | | |
 
@@ -68,7 +82,12 @@ reviews exist, but getting their reviews of new PRs is outside this budget.
   recall of all bugs, clean = bug-free, anything beyond these two repos and dates, comparison with ReviewBench numbers.
 
 ## Log
+Money left is always: the latest console balance Sunny reports − every ledger charge after that reading − every CI run's
+estimate after it. When Sunny reports a new console balance, it replaces this arithmetic; if it is lower than the
+computed value, the difference is unexplained spend and the reserve absorbs it first.
+
 | date | job | cap | spent | left (real) |
 |---|---|---|---|---|
 | 2026-11-08 | budget set | — | — | $23.39 |
 | 2026-11-08 | 075 (branch `bench/hard-chunks-074`) | $1.50 | $0.49090 (ledger) | ≈ $22.90 (ledger estimate; confirm in the console) |
+| 2026-11-09 | CI audit (no spend) | — | $0 since the $23.39 reading (0 Action runs after 2026-11-01) | **$22.90** = $23.39 (Sunny's console reading) − $0.49090 (075, ledger) − $0 CI |
