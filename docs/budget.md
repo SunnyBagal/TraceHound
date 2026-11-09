@@ -1,14 +1,18 @@
-# Budget (2026-11-08)
+# Budget (2026-11-09)
 
-**Money left: $23.39** (the owner's reading of the real Nebius balance, 2026-11-08). That is all the money the project
-has. Every model call from here on has a line below, or it does not happen.
+**Money left: $19.31** (the owner's console reading, 2026-11-09; it was $23.39 on 2026-11-08). That is all the money the
+project has. Every model call from here on has a line below, or it does not happen.
+
+**FREEZE: no paid job runs until codex's leak report (`run/out/codex.leak.md`, section "48 h") says where the money went.**
+About $3.59 left the account in ~22 h with no local call (the local ledger's last call is 2026-11-08T10:48:16Z, job 075);
+Sunny revoked the old API key on 2026-11-09 and the new key is only in local `.env`.
 
 ## Rules
 1. **No experiment without a line in this file** (job, cap, status). A job's cap is enforced in its own runner as well.
 2. **Replay the response cache unless reliability is the thing under test.** Reliability tests (failure rates, retries,
    parsing) bypass the cache for the requests under test (standing rule, decisions.md top, from 073a).
-3. **Global hard stop:** `TRACEHOUND_BUDGET_TOTAL_USD = 66.92462` in `.env` (gitignored) = ledger total when set
-   ($44.53462, `.tracehound/spend.jsonl`, 16,255 entries) + $23.39 − $1.00 safety margin. Every client call is refused
+3. **Global hard stop:** `TRACEHOUND_BUDGET_TOTAL_USD = 63.33547` in `.env` (gitignored) = ledger total when set
+   ($45.02547 on 2026-11-09) + $19.31 − $1.00 safety margin (it was 66.92462 on 2026-11-08). Every client call is refused
    once the local ledger would pass it (`packages/analyzer/src/llm/budget.ts`). Scripts load `.env` only when
    `NEBIUS_API_KEY` is not already in the environment: if you export the key yourself, export this variable too.
 4. **The local ledger does not see every charge** (next section). Calls from the GitHub Action, CI, other machines or the
@@ -48,21 +52,22 @@ has. Every model call from here on has a line below, or it does not happen.
 | judging per PR: v1 only / v1 + x1 | $0.0012 / $0.0014 | same |
 | cache-replay run, per PR (073r arm A) | ≈ $0.0073 incl. both judges (8 of 96 first attempts plus misses went live) | recovery-ab.md |
 
-## The split of $23.39
+## The split of $19.31 (2026-11-09)
 Estimates use the costs above on 40-PR sets, plus 25% for larger TypeScript diffs (an assumption; TS PRs are not measured).
 
 | line | what | cap | basis | status |
 |---|---|---|---|---|
-| 075 | verify + one judge on 074's A/E findings, no reviewer calls | **$1.50** | 140 verifier + 63 judge reviews, expected $0.50 | **done: $0.49090, INCONCLUSIVE** (unspent $1.01 goes to unallocated) |
 | TS-dev run 1 | pool-verify-v1, fresh, 40 PRs, judge v1 | **$3.80** | 40 × ($0.0747 + $0.0012) = $3.04, + 25% | not started (needs the TS dev set) |
 | TS-dev run 2 | same, second draw | **$3.80** | same | not started |
 | held-out run | pool-verify-v1, fresh, 40 PRs, judges v1 + x1 | **$3.80** | 40 × ($0.0747 + $0.0014) = $3.04, + 25% | not started (needs the held-out set) |
 | held-out scoring | every row (ours + any tool reviews Sunny obtains) × 40 PRs × v1 + x1 | **$0.60** | e.g. 8 rows × 40 × $0.0014 = $0.45, + 30% | not started |
-| reserve | reruns after an infrastructure failure, a console-check correction | **$4.00** | the rule: at least $4 | held |
-| unallocated | needs a new line here before use | **$4.89** | $23.39 − $1.00 margin − the lines above | held |
+| reserve | reruns after an infrastructure failure, a console-check correction | **$3.00** | owner, 2026-11-09 (was $4) | held |
+| unallocated | needs a new line here before use | **$3.31** | $19.31 − $1.00 margin − the lines above | held |
 | CI review runs | manual Action runs (label or dispatch) in any of the four repos | **$0.00** | none planned; each run needs a line first (≈ $0.075/PR + fixes) | none since 2026-11-01 |
 | safety margin | never spent (it is outside the global hard stop) | $1.00 | rule 3 | — |
-| **total** | | **$23.39** | | |
+| **total** | | **$19.31** | | |
+
+Done before this split: 075 ($0.49090, ledger; INCONCLUSIVE). The $23.39 split of 2026-11-08 is in git history.
 
 The external review tools (Augment, Cursor, Greptile, CodeRabbit, Copilot) cost no Nebius money to score once their
 reviews exist, but getting their reviews of new PRs is outside this budget.
@@ -90,4 +95,5 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 |---|---|---|---|---|
 | 2026-11-08 | budget set | — | — | $23.39 |
 | 2026-11-08 | 075 (branch `bench/hard-chunks-074`) | $1.50 | $0.49090 (ledger) | ≈ $22.90 (ledger estimate; confirm in the console) |
+| 2026-11-09 | console reading: **$19.31** (expected ≈ $22.90): ≈ $3.59 off-ledger in ~22 h; old key revoked; freeze until the leak report | — | — | **$19.31** |
 | 2026-11-09 | CI audit (no spend) | — | $0 since the $23.39 reading (0 Action runs after 2026-11-01) | **$22.90** = $23.39 (Sunny's console reading) − $0.49090 (075, ledger) − $0 CI |
