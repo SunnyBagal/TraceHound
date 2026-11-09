@@ -179,10 +179,11 @@ describe("recording fix client", () => {
 
 describe("runPipeline usage hook", () => {
   // A fake analyzer CLI: each stage writes the output file runPipeline reads, with its usage record.
-  const exec = (failVerify: boolean): Execute => async (_file, args) => {
+  const exec = (failVerify: boolean, slow?: "review" | "review-ctx"): Execute => async (_file, args) => {
     const command = args[1]!;
     const value = (flag: string) => args[args.indexOf(flag) + 1]!;
     if (command === "review" || command === "review-ctx") {
+      if (command === slow) await new Promise(done => setTimeout(done, 30));
       const u = command === "review" ? usage(2, 0, 100, 50, 0.001) : usage(3, 1, 300, 60, 0.002);
       await writeFile(value("--out"), JSON.stringify({ comments: [{ ...finding, line: command === "review" ? 1 : 40 }],
         review: { model: MODEL, chunkFailed: 0, chunks: [{ status: "OK" }], usage: u } }));
@@ -205,12 +206,14 @@ describe("runPipeline usage hook", () => {
       verifier: usage(2, 0, 400, 80, 0.003) });
   });
 
-  it("keeps the reviewers' usage when the verifier fails and nothing is posted", async () => {
+  it.each([["diff first", "review-ctx"], ["ctx first", "review"]] as const)("keeps the reviewers' usage when the verifier fails and nothing is posted (%s)", async (_order, slow) => {
     const r = new UsageRecorder();
     const log = vi.fn();
-    expect(await runPipeline(input, MODEL, "/fake/repo", "abc", log, exec(true), { onUsage: r.add })).toBeNull();
+    expect(await runPipeline(input, MODEL, "/fake/repo", "abc", log, exec(true, slow), { onUsage: r.add })).toBeNull();
+    expect([...r.stages.keys()][0]).toBe(slow === "review" ? "ctx reviewer" : "diff reviewer");
     expect(log).toHaveBeenCalledWith(expect.stringContaining("verify-ctx-v1 failed"));
-    expect([...r.stages.keys()]).toEqual(["diff reviewer", "ctx reviewer"]);
+    // The reviewers run concurrently and report as each finishes: compare membership and values, not order.
+    expect(Object.fromEntries(r.stages)).toEqual({ "diff reviewer": usage(2, 0, 100, 50, 0.001), "ctx reviewer": usage(3, 1, 300, 60, 0.002) });
   });
 });
 
