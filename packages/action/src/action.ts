@@ -221,8 +221,8 @@ function readOutput(output: unknown): { comments: Finding[]; model?: string; fai
   };
 }
 
-/** All effects are injected: tests never run the real reviewer or GitHub API. */
-export async function runAction(event: PullEvent, options: Options, deps: Dependencies): Promise<void> {
+/** The input checks runAction makes first, in the same order; prepareReview repeats them. */
+function settings(options: Options): { learn: "on" | "off"; contractsMode: "on" | "off"; reviewer: Reviewer } {
   // The composite passes this env input directly; cli.ts and the frozen pipeline stay unchanged.
   const learn = options.learn ?? process.env.TRACEHOUND_LEARN ?? "off";
   if (learn !== "on" && learn !== "off") throw new Error("Invalid learn input");
@@ -234,6 +234,121 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
   }
   if (options.fixes !== undefined && options.fixes !== "on" && options.fixes !== "off") throw new Error("Invalid fixes input");
   if (options.capOrder !== undefined && options.capOrder !== "pool" && options.capOrder !== "agreement-first") throw new Error("Invalid capOrder option");
+  return { learn, contractsMode, reviewer };
+}
+
+export interface PreparedReview {
+  /** The review runAction posts (or prints on dry-run). */
+  payload: ReviewPayload;
+  /** The body-only review runAction posts after GitHub rejects the inline comments (HTTP 422). */
+  bodyOnly: () => ReviewPayload;
+  /** Model findings after contract dedupe, learn and cap order; the first maxComments are the posted ones. */
+  findings: Finding[];
+  sources: FindingSource[];
+  model: string;
+  reviewer: Reviewer;
+  pipeline?: PipelineCounts;
+  stages?: PipelineOutput["stages"];
+  contracts: ContractsResult;
+  data?: ReviewData;
+}
+
+/**
+ * Everything runAction does between reading the pull request's diff and posting it: reviewer or pool-verify-v1
+ * pipeline, contracts, learn, cap order, fixes, then the payload. Null when nothing would be posted (the reason is
+ * logged). Its only GitHub call is learn's feedback read (learn on). scripts/run-tracehound.ts calls it with a local
+ * diff and base; runAction passes the API's diff and `event.pull_request.base?.sha ?? metadata.base?.sha ?? ""`.
+ */
+export async function prepareReview(
+  event: PullEvent, diff: string, base: string, options: Options, deps: Dependencies,
+): Promise<PreparedReview | null> {
+  const { learn, contractsMode, reviewer } = settings(options);
+  let output: ReturnType<typeof readOutput>;
+  let pipeline: PipelineCounts | undefined;
+  let stages: PipelineOutput["stages"];
+  let sources: FindingSource[] = [];
+  const contractsTask = contractsMode === "on"
+    ? settleContracts(deps.runContracts && (() => deps.runContracts!(options.repoDir ?? "",
+      base, event.pull_request.head.sha)), deps.log)
+    : Promise.resolve<ContractsResult>({ status: "off", findings: [], ms: 0 });
+  try {
+    if (reviewer === "pool-verify-v1") {
+      const result = await deps.runPipeline(buildInput(event, diff), options.model, options.repoDir ?? "", event.pull_request.head.sha);
+      if (!result) { await contractsTask; return null; }
+      pipeline = result.pipeline;
+      stages = result.stages;
+      sources = result.sources;
+      output = readOutput(result);
+    } else {
+      output = readOutput(await deps.runReviewer(buildInput(event, diff), options.model));
+      sources = output.comments.map(() => "diff");
+    }
+  } catch {
+    await contractsTask;
+    deps.log("TraceHound: reviewer failed or returned invalid output; nothing posted.");
+    return null;
+  }
+  const contractsResult = await contractsTask;
+  const contracts: ContractDelivery | undefined = contractsMode === "on" && contractsResult.status !== "off" ? { result: contractsResult,
+    repo: event.repository.full_name, serverUrl: options.serverUrl ?? "https://github.com" } : undefined;
+  if (reviewer === "review-diff-v1" && output.failed) {
+    deps.log("TraceHound: reviewer reported failed chunks; nothing posted.");
+    return null;
+  }
+  // Only model findings are deduplicated, capped, learned from, and sent to fix generation.
+  if (contractsResult.findings.length) {
+    const retained = output.comments.map((finding, index) => ({ finding, index })).filter(({ finding }) =>
+      !contractsResult.findings.some(contract => contract.path === finding.path && contract.line !== null && finding.line !== null
+        && Math.abs(contract.line - finding.line) <= 3));
+    output.comments = retained.map(({ finding }) => finding);
+    sources = retained.map(({ index }) => sources[index]!);
+  }
+  let suppressed: SuppressedFinding[] | undefined;
+  if (learn === "on" && reviewer === "pool-verify-v1" && output.comments.length) {
+    const filtered = filterFeedback(output.comments, await readFeedback(event.repository.full_name, options, deps));
+    output.comments = filtered.kept;
+    sources = filtered.indexes.map(index => sources[index]!);
+    suppressed = filtered.suppressed;
+  }
+  if (options.capOrder === "agreement-first") {
+    const rank: Record<FindingSource, number> = { both: 0, diff: 1, ctx: 2 };
+    const order = output.comments.map((_, i) => i).sort((a, b) => rank[sources[a]!] - rank[sources[b]!] || a - b);
+    output.comments = order.map(i => output.comments[i]!);
+    sources = order.map(i => sources[i]!);
+  }
+  if (!output.comments.length && !suppressed?.length && !contractsResult.findings.length) {
+    deps.log(`TraceHound: reviewer returned no findings; nothing posted${pipeline && stages
+      ? ` (${formatStageCounts({ ...stages, pool: pipeline.pool, kept: pipeline.kept, posted: 0 })})` : ""}.`);
+    return null;
+  }
+  const model = output.model || options.model || "reviewer default";
+  let data: ReviewData | undefined;
+  if (reviewer === "pool-verify-v1" && options.fixes !== "off") {
+    const posted = output.comments.slice(0, options.maxComments);
+    try {
+      data = { fixes: await deps.runFixes(posted, diff, options.repoDir ?? "", event.pull_request.head.sha), sources };
+    } catch {
+      deps.log("TraceHound: fix stage failed; posting findings without suggestions.");
+      data = { sources, fixes: { suggestions: posted.map(() => null),
+        counts: { attempted: posted.length, valid: 0, rejected: posted.length } } };
+    }
+  }
+  if (suppressed?.length) {
+    data ??= { sources, fixes: { suggestions: output.comments.slice(0, options.maxComments).map(() => null),
+      counts: { attempted: 0, valid: 0, rejected: 0 } } };
+    data.suppressed = suppressed;
+  }
+  if (contracts || pipeline?.chunkFailed) data ??= { sources, fixes: { suggestions: output.comments.slice(0, options.maxComments).map(() => null),
+    counts: { attempted: 0, valid: 0, rejected: 0 } } };
+  const findings = output.comments;
+  const payload = buildReview(findings, diff, event.pull_request.head.sha, model, options.maxComments, false, reviewer, pipeline, data, contracts);
+  return { payload, findings, sources, model, reviewer, pipeline, stages, contracts: contractsResult, data,
+    bodyOnly: () => buildReview(findings, diff, event.pull_request.head.sha, model, options.maxComments, true, reviewer, pipeline, data, contracts) };
+}
+
+/** All effects are injected: tests never run the real reviewer or GitHub API. */
+export async function runAction(event: PullEvent, options: Options, deps: Dependencies): Promise<void> {
+  const { reviewer } = settings(options);
   if (event.repository.full_name.toLowerCase() === "calcom/cal.com") {
     deps.log("TraceHound: benchmark test-set repository refused; nothing posted.");
     return;
@@ -260,84 +375,9 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     deps.log("TraceHound: pull request head changed; stale event skipped.");
     return;
   }
-  let output: ReturnType<typeof readOutput>;
-  let pipeline: PipelineCounts | undefined;
-  let stages: PipelineOutput["stages"];
-  let sources: FindingSource[] = [];
-  const contractsTask = contractsMode === "on"
-    ? settleContracts(deps.runContracts && (() => deps.runContracts!(options.repoDir ?? "",
-      event.pull_request.base?.sha ?? metadata.base?.sha ?? "", event.pull_request.head.sha)), deps.log)
-    : Promise.resolve<ContractsResult>({ status: "off", findings: [], ms: 0 });
-  try {
-    if (reviewer === "pool-verify-v1") {
-      const result = await deps.runPipeline(buildInput(event, diff), options.model, options.repoDir ?? "", event.pull_request.head.sha);
-      if (!result) { await contractsTask; return; }
-      pipeline = result.pipeline;
-      stages = result.stages;
-      sources = result.sources;
-      output = readOutput(result);
-    } else {
-      output = readOutput(await deps.runReviewer(buildInput(event, diff), options.model));
-      sources = output.comments.map(() => "diff");
-    }
-  } catch {
-    await contractsTask;
-    deps.log("TraceHound: reviewer failed or returned invalid output; nothing posted.");
-    return;
-  }
-  const contractsResult = await contractsTask;
-  const contracts: ContractDelivery | undefined = contractsMode === "on" && contractsResult.status !== "off" ? { result: contractsResult,
-    repo: event.repository.full_name, serverUrl: options.serverUrl ?? "https://github.com" } : undefined;
-  if (reviewer === "review-diff-v1" && output.failed) {
-    deps.log("TraceHound: reviewer reported failed chunks; nothing posted.");
-    return;
-  }
-  // Only model findings are deduplicated, capped, learned from, and sent to fix generation.
-  if (contractsResult.findings.length) {
-    const retained = output.comments.map((finding, index) => ({ finding, index })).filter(({ finding }) =>
-      !contractsResult.findings.some(contract => contract.path === finding.path && contract.line !== null && finding.line !== null
-        && Math.abs(contract.line - finding.line) <= 3));
-    output.comments = retained.map(({ finding }) => finding);
-    sources = retained.map(({ index }) => sources[index]!);
-  }
-  let suppressed: SuppressedFinding[] | undefined;
-  if (learn === "on" && reviewer === "pool-verify-v1" && output.comments.length) {
-    const filtered = filterFeedback(output.comments, await readFeedback(event.repository.full_name, options, deps));
-    output.comments = filtered.kept;
-    sources = filtered.indexes.map(index => sources[index]!);
-    suppressed = filtered.suppressed;
-  }
-  if (options.capOrder === "agreement-first") {
-    const rank: Record<FindingSource, number> = { both: 0, diff: 1, ctx: 2 };
-    const order = output.comments.map((_, i) => i).sort((a, b) => rank[sources[a]!] - rank[sources[b]!] || a - b);
-    output.comments = order.map(i => output.comments[i]!);
-    sources = order.map(i => sources[i]!);
-  }
-  if (!output.comments.length && !suppressed?.length && !contractsResult.findings.length) {
-    deps.log(`TraceHound: reviewer returned no findings; nothing posted${pipeline && stages
-      ? ` (${formatStageCounts({ ...stages, pool: pipeline.pool, kept: pipeline.kept, posted: 0 })})` : ""}.`);
-    return;
-  }
-  const model = output.model || options.model || "reviewer default";
-  let data: ReviewData | undefined;
-  if (reviewer === "pool-verify-v1" && options.fixes !== "off") {
-    const posted = output.comments.slice(0, options.maxComments);
-    try {
-      data = { fixes: await deps.runFixes(posted, diff, options.repoDir ?? "", event.pull_request.head.sha), sources };
-    } catch {
-      deps.log("TraceHound: fix stage failed; posting findings without suggestions.");
-      data = { sources, fixes: { suggestions: posted.map(() => null),
-        counts: { attempted: posted.length, valid: 0, rejected: posted.length } } };
-    }
-  }
-  if (suppressed?.length) {
-    data ??= { sources, fixes: { suggestions: output.comments.slice(0, options.maxComments).map(() => null),
-      counts: { attempted: 0, valid: 0, rejected: 0 } } };
-    data.suppressed = suppressed;
-  }
-  if (contracts || pipeline?.chunkFailed) data ??= { sources, fixes: { suggestions: output.comments.slice(0, options.maxComments).map(() => null),
-    counts: { attempted: 0, valid: 0, rejected: 0 } } };
-  let payload = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, false, reviewer, pipeline, data, contracts);
+  const prepared = await prepareReview(event, diff, event.pull_request.base?.sha ?? metadata.base?.sha ?? "", options, deps);
+  if (!prepared) return;
+  let payload = prepared.payload;
   if (options.dryRun) {
     deps.log(JSON.stringify(payload, null, 2));
     return;
@@ -355,7 +395,7 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
   } catch (error) {
     if (!(error instanceof GitHubError) || error.status !== 422 || !payload.comments.length) throw error;
     deps.log("TraceHound: GitHub rejected inline comments; retrying as a body-only review.");
-    const fallback = buildReview(output.comments, diff, event.pull_request.head.sha, model, options.maxComments, true, reviewer, pipeline, data, contracts);
+    const fallback = prepared.bodyOnly();
     if (!await canPost()) return;
     await github(`${endpoint}/reviews`, options, deps, { payload: fallback });
     payload = fallback;
@@ -364,5 +404,5 @@ export async function runAction(event: PullEvent, options: Options, deps: Depend
     try { await deps.onReview(payload.body); }
     catch { deps.log("TraceHound: review metadata could not be saved."); }
   }
-  deps.log(`TraceHound: posted review with ${Math.min(output.comments.length, options.maxComments)} findings.`);
+  deps.log(`TraceHound: posted review with ${Math.min(prepared.findings.length, options.maxComments)} findings.`);
 }

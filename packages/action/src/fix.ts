@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
-import { Budget, capsFromEnv } from "../../analyzer/src/llm/budget.ts";
+import { Budget, capsFromEnv, type BudgetCaps } from "../../analyzer/src/llm/budget.ts";
 import { TokenFactoryClient, type ChatRequest } from "../../analyzer/src/llm/client.ts";
 import { SpendLedger } from "../../analyzer/src/llm/ledger.ts";
 import { loadPriceTable } from "../../analyzer/src/llm/prices.ts";
@@ -20,12 +20,13 @@ export type FixClient = { chat(request: ChatRequest, meta: { purpose: string }):
 const root = path.resolve(import.meta.dirname, "../../..");
 const execute = promisify(execFile);
 
-export function createFixClient(): FixClient {
+/** `caps` defaults to the env caps (the Action, unchanged); scripts/run-tracehound.ts passes its per-case caps. */
+export function createFixClient(caps: BudgetCaps = capsFromEnv()): FixClient {
   const ledger = new SpendLedger(path.join(root, ".tracehound/spend.jsonl"));
   return new TokenFactoryClient({
     apiKey: process.env.NEBIUS_API_KEY ?? "",
     prices: loadPriceTable(path.join(root, "config/prices.json")),
-    budget: new Budget(capsFromEnv(), ledger.totalUSD()), ledger,
+    budget: new Budget(caps, ledger.totalUSD()), ledger,
     timeoutMs: 120_000,
   });
 }
