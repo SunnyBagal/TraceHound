@@ -1,32 +1,37 @@
-// scripts/run-tracehound.ts (bunny-runner brief): dry run makes no model and no gh call; the Action's pipeline is
-// called with the case's base/head; per-case and per-run caps; no overwrite; --post guards (owner, fork, parent, PR
-// refs), scoped gh argv, no duplicate comment; a fake key never leaks. A real local git fixture behind a recording
-// shim, a fake pipeline, a fake gh. No network, no model.
+// scripts/run-tracehound.ts (bunny-runner brief, fix round 1): dry run makes no model and no gh call; the Action's
+// pipeline is called with the case's base/head; per-case, global and per-run caps; no overwrite; --post guards (owner,
+// fork, parent, PR refs and both PR shas, re-checked right before the comment), scoped gh argv, allowlisted gh env, no
+// duplicate comment; a fake key never leaks, also when gh fails and dumps its env. One local git fixture repo per file
+// (copied per test) behind a /bin/sh recording shim, a fake pipeline, a fake gh. No network, no model.
+import { copyFileSync, cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
-import { ACTION_DEFAULTS, assertGh, caseCaps, main, MARKER, stageEnv, type RunnerDeps } from "../../../scripts/run-tracehound.ts";
+import { Budget, BudgetExceededError, capsFromEnv } from "../../analyzer/src/llm/budget.ts";
+import { ACTION_DEFAULTS, assertGh, caseCaps, main, MARKER, MIN_CASE_USD, stageEnv, type RunnerDeps } from "../../../scripts/run-tracehound.ts";
 import type { Execute, PipelineOutput } from "../src/pipeline.ts";
 import { parseYaml } from "./yaml-lite.ts";
 
 const FIX = path.join(import.meta.dirname, "fixtures");
-const GH = path.join(FIX, "runner-fake-gh.mjs");
-const GIT = path.join(FIX, "runner-git-shim.mjs");
-chmodSync(GH, 0o755);
-chmodSync(GIT, 0o755);
 const KEY = "sk-fake-SECRET-4242-do-not-leak";
+const OTHER = "other-service-token-7777";
 const FORK = "SunnyBagal/twenty";
 const dirs: string[] = [];
 afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
+// the shared repo is built once, in a hook, so no single test carries its git calls
+beforeAll(() => { repo(); });
 
-type Fixture = { dir: string; clone: string; manifest: string; ledger: string; out: string; gitLog: string; ghLog: string; ghState: string;
-  cases: { id: string; base: string; head: string }[] };
+type Case = { id: string; base: string; head: string; upstream: string };
+type Fixture = { dir: string; clone: string; manifest: string; ledger: string; out: string; gh: string; git: string;
+  gitLog: string; ghLog: string; ghState: string; cases: Case[] };
 
-function fixture(n = 3): Fixture {
-  const dir = mkdtempSync(path.join(tmpdir(), "th-runner-"));
+/** One repo for the whole file: base, then case-901..903 each one commit on it, plus same-tree "upstream" commits. */
+let template: { clone: string; cases: Case[] } | undefined;
+function repo(): { clone: string; cases: Case[] } {
+  if (template) return template;
+  const dir = mkdtempSync(path.join(tmpdir(), "th-runner-template-"));
   dirs.push(dir);
   const clone = path.join(dir, "clone");
   const env = { ...cleanGitEnv(), GIT_AUTHOR_DATE: "2020-01-01T00:00:00Z", GIT_COMMITTER_DATE: "2020-01-01T00:00:00Z" };
@@ -36,26 +41,37 @@ function fixture(n = 3): Fixture {
   git("add", "-A");
   git("commit", "-q", "-m", "base");
   const base = git("rev-parse", "HEAD");
-  const cases: Fixture["cases"] = [];
-  const manifest: unknown[] = [];
-  for (let i = 1; i <= n; i++) {
+  const cases: Case[] = [];
+  for (let i = 1; i <= 3; i++) {
     const id = `case-90${i}`;
-    git("checkout", "-q", "-B", `cases/${id}-base`, base);
-    git("checkout", "-q", "-B", `cases/${id}`, base);
-    writeFileSync(path.join(clone, "a.ts"), `export const a = ${i + 1};\nexport const b${i} = a;\n`);
-    git("add", "-A");
-    git("commit", "-q", "-m", `case ${i}`);
-    const head = git("rev-parse", "HEAD");
-    // the upstream squash commit: same tree, other message
-    const upstream = git("commit-tree", `${head}^{tree}`, "-p", base, "-m", "upstream squash");
-    cases.push({ id, base, head });
-    manifest.push({ id, repo: "twenty", pr: 100 + i, base_sha: base, head_sha: upstream, case_head_sha: head,
-      title: `Case ${i} title`, description: `Case ${i} body` });
+    const blob = execFileSync("git", ["-C", clone, "hash-object", "-w", "--stdin"], { input: `export const a = ${i + 1};\nexport const b${i} = a;\n`, encoding: "utf8", env }).trim();
+    const tree = execFileSync("git", ["-C", clone, "mktree"], { input: `100644 blob ${blob}\ta.ts\n`, encoding: "utf8", env }).trim();
+    const head = git("commit-tree", tree, "-p", base, "-m", `case ${i}`);
+    const upstream = git("commit-tree", tree, "-p", base, "-m", "upstream squash");
+    git("branch", `cases/${id}-base`, base);
+    git("branch", `cases/${id}`, head);
+    cases.push({ id, base, head, upstream });
   }
-  git("checkout", "-q", "main");
+  return (template = { clone, cases });
+}
+
+function fixture(n = 3): Fixture {
+  const t = repo();
+  const dir = mkdtempSync(path.join(tmpdir(), "th-runner-"));
+  dirs.push(dir);
+  const clone = path.join(dir, "clone");
+  cpSync(t.clone, clone, { recursive: true });
+  const cases = t.cases.slice(0, n);
   const f: Fixture = { dir, clone, manifest: path.join(dir, "manifest.json"), ledger: path.join(dir, "spend.jsonl"),
-    out: path.join(dir, "out"), gitLog: path.join(dir, "git.log"), ghLog: path.join(dir, "gh.log"), ghState: path.join(dir, "gh.json"), cases };
-  writeFileSync(f.manifest, JSON.stringify(manifest));
+    out: path.join(dir, "out"), gh: path.join(dir, "gh"), git: path.join(dir, "git"), gitLog: path.join(dir, "git.log"),
+    ghLog: path.join(dir, "gh.log"), ghState: path.join(dir, "gh.json"), cases };
+  // the fakes find their state and logs next to themselves: the runner gives gh and git an allowlisted env only
+  copyFileSync(path.join(FIX, "runner-fake-gh.mjs"), f.gh + ".mjs");
+  writeFileSync(f.gh, `#!/bin/sh\nexec "${process.execPath}" "$(dirname "$0")/gh.mjs" "$@"\n`, { mode: 0o755 });
+  copyFileSync(path.join(FIX, "runner-git-shim.sh"), f.git);
+  execFileSync("chmod", ["+x", f.git]);
+  writeFileSync(f.manifest, JSON.stringify(cases.map((c, i) => ({ id: c.id, repo: "twenty", pr: 101 + i, base_sha: c.base,
+    head_sha: c.upstream, case_head_sha: c.head, title: `Case ${i + 1} title`, description: `Case ${i + 1} body` }))));
   writeFileSync(f.ledger, entry(0.01));
   writeFileSync(f.gitLog, "");
   writeFileSync(f.ghLog, "");
@@ -65,16 +81,15 @@ function fixture(n = 3): Fixture {
 
 const entry = (usd: number) => JSON.stringify({ timestamp: "2026-11-10T00:00:00Z", model: "fake", inputTokens: 1, outputTokens: 1, estCostUSD: usd, purpose: "review" }) + "\n";
 
-function ghState(f: Fixture, over: { repo?: unknown; prs?: Record<string, unknown>; comments?: Record<string, unknown[]> }) {
-  const prs: Record<string, unknown> = {};
-  f.cases.forEach((c, i) => {
-    const n = String(11 + i);
-    prs[n] = { number: 11 + i, url: `https://github.com/${FORK}/pull/${n}`, state: "OPEN", headRefName: `cases/${c.id}`,
-      baseRefName: `cases/${c.id}-base`, headRefOid: c.head, isCrossRepository: false };
-  });
+const prView = (c: Case, n: number, over: Record<string, unknown> = {}) => ({ number: n, url: `https://github.com/${FORK}/pull/${n}`, state: "OPEN",
+  headRefName: `cases/${c.id}`, baseRefName: `cases/${c.id}-base`, baseRefOid: c.base, headRefOid: c.head, isCrossRepository: false, ...over });
+
+function ghState(f: Fixture, over: { repo?: unknown; prs?: Record<string, unknown>; comments?: Record<string, unknown[]>; failComment?: boolean;
+  changeOnView?: Record<string, { after: number; pr: Record<string, unknown> }> }) {
+  const prs = Object.fromEntries(f.cases.map((c, i) => [String(11 + i), prView(c, 11 + i)]));
   writeFileSync(f.ghState, JSON.stringify({
     repo: over.repo ?? { full_name: FORK, fork: true, owner: { login: "SunnyBagal" }, parent: { full_name: "twentyhq/twenty" } },
-    prs: { ...prs, ...over.prs }, comments: over.comments ?? {},
+    prs: { ...prs, ...over.prs }, comments: over.comments ?? {}, failComment: over.failComment ?? false, changeOnView: over.changeOnView ?? {},
   }));
   writeFileSync(path.join(f.dir, "prmap.json"), JSON.stringify(Object.fromEntries(f.cases.map((c, i) => [c.id, 11 + i]))));
 }
@@ -83,7 +98,7 @@ type Calls = { pipeline: { input: unknown; model: string; repo: string; head: st
   model: number; contracts: { base: string; head: string }[]; checkHead: string[]; logs: string[] };
 
 /** spend: $ appended to the ledger per case (by the fake verifier); budget: the stage whose child dies on the budget */
-function deps(f: Fixture, o: { spend?: number; budget?: string; findings?: number } = {}): { d: RunnerDeps; calls: Calls } {
+function deps(f: Fixture, o: { spend?: number; budget?: string; findings?: number; totalCap?: string } = {}): { d: RunnerDeps; calls: Calls } {
   const calls: Calls = { pipeline: [], stages: [], model: 0, contracts: [], checkHead: [], logs: [] };
   const exec: Execute = async (_file, args, options) => {
     calls.stages.push({ cmd: args[1]!, env: options.env });
@@ -93,15 +108,15 @@ function deps(f: Fixture, o: { spend?: number; budget?: string; findings?: numbe
     return {};
   };
   const d: RunnerDeps = {
-    env: { PATH: process.env.PATH, HOME: process.env.HOME, NEBIUS_API_KEY: KEY, TRACEHOUND_BUDGET_TOTAL_USD: "50",
-      FAKE_GH_STATE: f.ghState, FAKE_GH_LOG: f.ghLog, FAKE_GIT_LOG: f.gitLog },
+    env: { PATH: process.env.PATH, HOME: process.env.HOME, NEBIUS_API_KEY: KEY, OTHER_SERVICE_TOKEN: OTHER,
+      TRACEHOUND_BUDGET_TOTAL_USD: o.totalCap ?? "50" },
     log: (l) => calls.logs.push(l), ledgerFile: f.ledger, envFile: path.join(f.dir, "no.env"),
-    runPipeline: async (input, model, repo, head, _log, ex): Promise<PipelineOutput | null> => {
-      calls.pipeline.push({ input, model, repo, head });
+    runPipeline: async (input, model, repoDir, head, _log, ex): Promise<PipelineOutput | null> => {
+      calls.pipeline.push({ input, model, repo: repoDir, head });
+      const child = { cwd: f.dir, env: { ...process.env, NEBIUS_API_KEY: KEY }, maxBuffer: 1 };
       try {
-        await Promise.all([ex(process.execPath, ["bin.ts", "review"], { cwd: f.dir, env: { ...process.env, NEBIUS_API_KEY: KEY }, maxBuffer: 1 }),
-          ex(process.execPath, ["bin.ts", "review-ctx"], { cwd: f.dir, env: { ...process.env, NEBIUS_API_KEY: KEY }, maxBuffer: 1 })]);
-        await ex(process.execPath, ["bin.ts", "verify-ctx"], { cwd: f.dir, env: { ...process.env, NEBIUS_API_KEY: KEY }, maxBuffer: 1 });
+        await Promise.all([ex(process.execPath, ["bin.ts", "review"], child), ex(process.execPath, ["bin.ts", "review-ctx"], child)]);
+        await ex(process.execPath, ["bin.ts", "verify-ctx"], child);
       } catch {
         return null;
       }
@@ -121,9 +136,13 @@ function deps(f: Fixture, o: { spend?: number; budget?: string; findings?: numbe
   return { d, calls };
 }
 
-const args = (f: Fixture, ...extra: string[]) => ["--manifest", f.manifest, "--clone", f.clone, "--out-dir", f.out, "--git-bin", GIT, "--gh-bin", GH, ...extra];
-const ghLines = (f: Fixture) => readFileSync(f.ghLog, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { argv: string[]; GH_REPO: string; env: string; stdin: string; cwd: string });
-const gitLines = (f: Fixture) => readFileSync(f.gitLog, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { argv: string[]; noLazy: string | null });
+const args = (f: Fixture, ...extra: string[]) => ["--manifest", f.manifest, "--clone", f.clone, "--out-dir", f.out, "--git-bin", f.git, "--gh-bin", f.gh, ...extra];
+type GhLine = { argv: string[]; GH_REPO: string; env: string; envKeys: string[]; stdin: string; cwd: string };
+const ghLines = (f: Fixture) => readFileSync(f.ghLog, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as GhLine);
+const gitLines = (f: Fixture) => readFileSync(f.gitLog, "utf8").split("\n").filter(Boolean).map((l) => {
+  const bar = l.lastIndexOf("|");
+  return { argv: l.slice(0, bar).split("\t").slice(0, -1), noLazy: l.slice(bar + 1) };
+});
 const outFiles = (f: Fixture) => existsSync(f.out) ? readdirSync(f.out).sort() : [];
 const post = (f: Fixture) => ["--post", "--repo", FORK, "--pr-map", path.join(f.dir, "prmap.json")];
 
@@ -140,6 +159,7 @@ describe("dry run", () => {
     expect(text).toContain("per case $0.25 (each reviewer $0.125");
     expect(text).toContain("per run $2 (at most 8 case(s)");
     for (const c of f.cases) expect(text).toContain(`${c.id}: twenty base ${c.base} head ${c.head} (tree = upstream head) · diff 1 files`);
+    expect(text).toContain(`allowance min(per-case cap, global total cap − ledger) is computed per case on --execute; minimum $${MIN_CASE_USD}`);
     // git: read-only commands only, never a lazy fetch
     const g = gitLines(f);
     expect(g.length).toBeGreaterThan(0);
@@ -168,6 +188,7 @@ describe("dry run", () => {
   it("reports blobs missing from the clone, and --execute refuses before any model call", async () => {
     const f = fixture(1);
     const blob = execFileSync("git", ["-C", f.clone, "rev-parse", `${f.cases[0]!.head}:a.ts`], { encoding: "utf8", env: cleanGitEnv() }).trim();
+    expect(existsSync(path.join(f.clone, ".git/objects", blob.slice(0, 2), blob.slice(2)))).toBe(true);
     unlinkSync(path.join(f.clone, ".git/objects", blob.slice(0, 2), blob.slice(2)));
     const { d, calls } = deps(f);
     expect(await main(args(f), d)).toBe(0);
@@ -217,8 +238,48 @@ describe("execute", () => {
     expect(env("review")).toMatchObject({ TRACEHOUND_BUDGET_RUN_USD: "0.1", TRACEHOUND_BUDGET_TOTAL_USD: total, TRACEHOUND_CACHE_READ: "off", GIT_NO_LAZY_FETCH: "1" });
     expect(env("review-ctx")).toMatchObject({ TRACEHOUND_BUDGET_RUN_USD: "0.1", TRACEHOUND_BUDGET_TOTAL_USD: total });
     expect(env("verify-ctx")).toMatchObject({ TRACEHOUND_BUDGET_RUN_USD: "0.2", TRACEHOUND_BUDGET_TOTAL_USD: total });
-    expect(caseCaps(0.1, 5, 0.25).totalUSD).toBe(0.1); // the env total cap still wins
     expect(stageEnv({}, "verify-ctx", caseCaps(9, 1, 0.25), "read").TRACEHOUND_CACHE_READ).toBe("on");
+  });
+
+  it("splits the global remainder, not the per-case cap, when the remainder is smaller (codex's $10 / $10.10 / $0.25 probe)", async () => {
+    const caps = caseCaps(10.1, 10, 0.25);
+    expect(caps.allowanceUSD).toBeCloseTo(0.1, 10);
+    expect(caps.reviewerRunUSD).toBeCloseTo(0.05, 10);
+    expect(caseCaps(9, 10, 0.25).allowanceUSD).toBe(0); // ledger already over the global cap
+    // two real Budgets, one per parallel reviewer process, built from the env each child gets
+    const reviewers = ["review", "review-ctx"].map((cmd) => new Budget(capsFromEnv(stageEnv({}, cmd, caps, "off")), 10));
+    let accepted = 0;
+    for (const b of reviewers) {
+      for (;;) {
+        try { b.reserve(0.01, "probe"); accepted += 0.01; } catch (e) { expect(e).toBeInstanceOf(BudgetExceededError); break; }
+      }
+    }
+    expect(accepted).toBeLessThanOrEqual(0.1 + 1e-9);
+    for (const b of reviewers) expect(() => b.reserve(0.08, "probe")).toThrow(BudgetExceededError); // codex's $0.08 each
+    // a later stage starts from the ledger after the reviewers: the total cap leaves it only what is left of the allowance
+    const verifier = new Budget(capsFromEnv(stageEnv({}, "verify-ctx", caps, "off")), 10 + accepted);
+    expect(() => verifier.reserve(0.1 - accepted + 0.001, "probe")).toThrow(BudgetExceededError);
+    expect(() => new Budget(capsFromEnv(stageEnv({}, "verify-ctx", caps, "off")), 10.1).reserve(0.001, "probe")).toThrow(BudgetExceededError);
+    // through the runner: ledger $10, global cap $10.10, per case $0.25 -> reviewers $0.05 each, every total $10.10
+    const f = fixture(1);
+    writeFileSync(f.ledger, entry(10));
+    const { d, calls } = deps(f, { totalCap: "10.1" });
+    expect(await main(args(f, "--execute", "--max-usd-per-case", "0.25"), d)).toBe(0);
+    for (const s of calls.stages) {
+      expect(Number(s.env.TRACEHOUND_BUDGET_TOTAL_USD)).toBeCloseTo(10.1, 10);
+      expect(Number(s.env.TRACEHOUND_BUDGET_RUN_USD)).toBeCloseTo(s.cmd === "verify-ctx" ? 0.1 : 0.05, 10);
+    }
+  });
+
+  it("does not start a case when the global remainder is below the minimum", async () => {
+    const f = fixture(2);
+    writeFileSync(f.ledger, entry(10.05));
+    const { d, calls } = deps(f, { totalCap: "10.1" });
+    expect(await main(args(f, "--execute"), d)).toBe(3);
+    expect(calls.pipeline).toEqual([]);
+    expect(outFiles(f)).toEqual([]);
+    expect(calls.logs.join("\n")).toContain(`STOPPED before case-901: the global total cap leaves $0.0500`);
+    expect(await main(args(f, "--max-usd-per-case", "0.05"), d)).toBe(2); // a per-case cap below the minimum is refused
   });
 
   it("marks a case cap when a stage dies on the budget, and goes on", async () => {
@@ -273,13 +334,12 @@ describe("--post", () => {
   it.each([
     ["a repo that is not a fork", { repo: { full_name: FORK, fork: false, owner: { login: "SunnyBagal" }, parent: { full_name: "twentyhq/twenty" } } }, "is not a fork"],
     ["a wrong parent", { repo: { full_name: FORK, fork: true, owner: { login: "SunnyBagal" }, parent: { full_name: "evil/twenty" } } }, "parent is \"evil/twenty\""],
-    ["a PR whose refs are not the case's", { prs: { "11": { number: 11, url: `https://github.com/${FORK}/pull/11`, state: "OPEN", headRefName: "main",
-      baseRefName: "cases/case-901-base", headRefOid: "x", isCrossRepository: false } } }, "expected cases/case-901-base <- cases/case-901"],
-    ["a PR whose head is another commit", { prs: { "11": { number: 11, url: `https://github.com/${FORK}/pull/11`, state: "OPEN", headRefName: "cases/case-901",
-      baseRefName: "cases/case-901-base", headRefOid: "0".repeat(40), isCrossRepository: false } } }, "not case_head_sha"],
-  ])("refuses %s before any model call", async (_name, over, why) => {
+    ["a PR whose refs are not the case's", (c: Case) => ({ prs: { "11": prView(c, 11, { headRefName: "main" }) } }), "expected cases/case-901-base <- cases/case-901"],
+    ["a PR whose head is another commit", (c: Case) => ({ prs: { "11": prView(c, 11, { headRefOid: "0".repeat(40) }) } }), "head is not case_head_sha"],
+    ["a PR with the right ref names and head but another base sha", (c: Case) => ({ prs: { "11": prView(c, 11, { baseRefOid: "e".repeat(40) }) } }), "base is not base_sha"],
+  ] as [string, (c: Case) => unknown, string][])("refuses %s before any model call", async (_name, over, why) => {
     const f = fixture(1);
-    ghState(f, over as never);
+    ghState(f, (typeof over === "function" ? over(f.cases[0]!) : over) as never);
     const { d, calls } = deps(f);
     expect(await main(args(f, "--execute", ...post(f)), d)).toBe(2);
     expect(calls.logs.join("\n")).toContain(why);
@@ -287,7 +347,16 @@ describe("--post", () => {
     expect(ghLines(f).some((l) => l.argv[1] === "comment")).toBe(false);
   });
 
-  it("posts one comment per case, every gh call scoped to the fork, and never twice on a rerun", async () => {
+  it("never posts twice on a rerun: the case's marker is already on the PR", async () => {
+    const f = fixture(1);
+    ghState(f, { comments: { "11": [{ body: `${MARKER("case-901")}\nan earlier run` }] } });
+    const { d, calls } = deps(f);
+    expect(await main(args(f, "--execute", ...post(f)), d)).toBe(0);
+    expect(ghLines(f).some((l) => l.argv[1] === "comment")).toBe(false);
+    expect(calls.logs.join("\n")).toContain("already has a TraceHound runner comment for this case; not posted again");
+  });
+
+  it("posts one comment per case, every gh call scoped to the fork, and a rerun posts nothing new", async () => {
     const f = fixture(2);
     const { d } = deps(f);
     expect(await main(args(f, "--execute", ...post(f)), d)).toBe(0);
@@ -303,17 +372,52 @@ describe("--post", () => {
     expect(comments[0]!.stdin.startsWith(MARKER("case-901"))).toBe(true);
     expect(comments[0]!.stdin).toContain("Synthetic finding 0");
     expect(outFiles(f)).toEqual(["case-901.json", "case-901.post.json", "case-902.json", "case-902.post.json"]);
+    // the rerun: one case is enough to show the comment from the first run is found (the marker test above covers the rest)
     const r = deps(f);
-    expect(await main(args(f, "--execute", "--rerun", ...post(f)), r.d)).toBe(0);
+    expect(await main(args(f, "--execute", "--rerun", "--ids", "case-901", ...post(f)), r.d)).toBe(0);
     expect(ghLines(f).filter((l) => l.argv[1] === "comment")).toHaveLength(2);
-    expect(r.calls.logs.join("\n")).toContain("already has a TraceHound runner comment for this case; not posted again");
+    expect(r.calls.logs.join("\n")).toContain("case-901: PR #11 already has a TraceHound runner comment for this case; not posted again");
+  });
+
+  it("re-checks the PR right before the comment: a base moved after planning means no comment", async () => {
+    const f = fixture(1);
+    // view 1 is the check before any model call; view 2 is the re-check right before the comment
+    ghState(f, { changeOnView: { "11": { after: 1, pr: { baseRefOid: "e".repeat(40) } } } });
+    const { d, calls } = deps(f);
+    expect(await main(args(f, "--execute", ...post(f)), d)).toBe(0);
+    expect(ghLines(f).filter((l) => l.argv[1] === "view")).toHaveLength(2);
+    expect(ghLines(f).some((l) => l.argv[1] === "comment")).toBe(false);
+    expect(calls.logs.join("\n")).toContain("case-901: not posted, PR re-check failed right before the comment: case-901: PR #11 base is not base_sha");
+    expect(outFiles(f)).toEqual(["case-901.json"]); // the review record is kept; nothing marks it posted
+  });
+
+  it("gives gh an allowlisted env only, and a failing gh's stderr (its env dump) is never echoed", async () => {
+    const f = fixture(1);
+    ghState(f, { failComment: true });
+    const { d, calls } = deps(f);
+    expect(await main(args(f, "--execute", ...post(f)), d)).toBe(0);
+    const lines = ghLines(f);
+    expect(lines.some((l) => l.argv[1] === "comment")).toBe(true);
+    for (const l of lines) {
+      for (const k of l.envKeys) expect(["PATH", "HOME", "TMPDIR", "LANG", "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "GH_TOKEN",
+        "GITHUB_TOKEN", "GH_CONFIG_DIR", "XDG_CONFIG_HOME", "GH_REPO", "GH_HOST", "GH_PROMPT_DISABLED", "LC_ALL",
+        // set by the OS or node itself when the fake starts, never by the runner
+        "__CF_USER_TEXT_ENCODING", "PWD", "SHLVL", "_", "OLDPWD"]).toContain(k);
+      expect(l.env).not.toContain(KEY);
+      expect(l.env).not.toContain(OTHER);
+    }
+    const text = calls.logs.join("\n");
+    expect(text).toContain("case-901: gh pr comment failed (status 1); not retried");
+    expect(text).not.toContain("HTTP 502");
+    expect(text).not.toContain(KEY);
+    for (const n of outFiles(f)) expect(readFileSync(path.join(f.out, n), "utf8")).not.toContain(KEY);
   });
 
   it("assertGh allows only the exact read and write shapes", () => {
     const ok: [string[], boolean][] = [
       [["api", "--method", "GET", `repos/${FORK}`], false],
       [["api", "--method", "GET", `repos/${FORK}/issues/3/comments?per_page=100&page=1`], false],
-      [["pr", "view", "3", "--repo", FORK, "--json", "number,url,state,headRefName,baseRefName,headRefOid,isCrossRepository"], false],
+      [["pr", "view", "3", "--repo", FORK, "--json", "number,url,state,headRefName,baseRefName,baseRefOid,headRefOid,isCrossRepository"], false],
       [["pr", "comment", "3", "--repo", FORK, "--body-file", "-"], true],
     ];
     for (const [a, w] of ok) expect(() => assertGh(a, FORK, w)).not.toThrow();
@@ -335,7 +439,7 @@ describe("--post", () => {
 });
 
 it("a fake key never appears in an output file, a gh or git argv, or a log line", async () => {
-  const f = fixture(2);
+  const f = fixture(1);
   const { d, calls } = deps(f);
   expect(await main(args(f, "--execute", ...post(f)), d)).toBe(0);
   const blobs = [
@@ -344,7 +448,10 @@ it("a fake key never appears in an output file, a gh or git argv, or a log line"
     readFileSync(f.gitLog, "utf8"), readFileSync(f.ghState, "utf8"), calls.logs.join("\n"),
   ];
   expect(blobs.length).toBeGreaterThan(4);
-  for (const b of blobs) expect(b).not.toContain(KEY);
+  for (const b of blobs) {
+    expect(b).not.toContain(KEY);
+    expect(b).not.toContain(OTHER);
+  }
   // the analyzer stages do get it (they need it), through env only
   expect(calls.stages.every((s) => s.env.NEBIUS_API_KEY === KEY)).toBe(true);
 });

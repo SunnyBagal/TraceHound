@@ -44,7 +44,6 @@ import { runContracts as actionRunContracts, type ContractsResult } from "../pac
 import { ledgerMark, ledgerSince, recordingClient, UsageRecorder, type StageUsage } from "../packages/action/src/usage.ts";
 import { BudgetExceededError, capsFromEnv, type BudgetCaps } from "../packages/analyzer/src/llm/budget.ts";
 import { SpendLedger } from "../packages/analyzer/src/llm/ledger.ts";
-import { cleanGitEnv } from "../packages/analyzer/src/git-env.ts";
 import { REVIEW_PROMPT_SHA256 } from "../packages/analyzer/src/review/review.ts";
 import { REVIEW_CTX_PROMPT_SHA256 } from "../packages/analyzer/src/review/review-ctx.ts";
 import { VERIFY_CTX_PROMPT_SHA256 } from "../packages/analyzer/src/review/verify-ctx.ts";
@@ -149,6 +148,7 @@ export function parseCli(argv: string[]): Opts {
   if (values.fixes !== "on" && values.fixes !== "off") refuse("--fixes must be on or off");
   if (values.contracts !== "on" && values.contracts !== "off") refuse("--contracts must be on or off");
   const maxUsdPerCase = usdArg("--max-usd-per-case", values["max-usd-per-case"]);
+  if (maxUsdPerCase < MIN_CASE_USD) refuse(`--max-usd-per-case must be at least $${MIN_CASE_USD} (one full-size call per reviewer)`);
   const maxUsdRun = usdArg("--max-usd-run", values["max-usd-run"]);
   if (maxUsdPerCase > maxUsdRun) refuse("--max-usd-per-case is above --max-usd-run: no case could start");
   let fork: string | null = null;
@@ -264,10 +264,20 @@ export function loadPrMap(file: string, fork: string | null): Map<string, number
 
 export const GIT_READS = ["rev-parse", "diff", "ls-tree", "cat-file"] as const;
 
+/** Runtime, home, temp, locale and certificate variables: what any gh or git child needs. */
+export const BASE_ENV_ALLOW = ["PATH", "HOME", "TMPDIR", "LANG", "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS"] as const;
+/** gh's own auth/config lookup (cli.github.com/manual/gh_help_environment): a token if one is set, else its config dir. */
+export const GH_ENV_ALLOW = ["GH_TOKEN", "GITHUB_TOKEN", "GH_CONFIG_DIR", "XDG_CONFIG_HOME"] as const;
+
+/** An explicit allowlist: nothing else from the parent env (model keys, other services' secrets) reaches the child. */
+export function allowEnv(env: NodeJS.ProcessEnv, names: readonly string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const k of names) if (env[k] !== undefined) out[k] = env[k]!;
+  return out;
+}
+
 function gitEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const out = cleanGitEnv(env);
-  for (const k of ["NEBIUS_API_KEY", "NVIDIA_API_KEY", "GITHUB_TOKEN", "GH_TOKEN"]) delete out[k];
-  return { ...out, GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0", LC_ALL: "C" };
+  return { ...allowEnv(env, BASE_ENV_ALLOW), GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0", LC_ALL: "C" };
 }
 
 function makeGit(gitBin: string, clone: string, env: NodeJS.ProcessEnv) {
@@ -348,10 +358,23 @@ export function outPath(dir: string, id: string, rerun: boolean): string {
 // Per-stage child env (caps, cache) and the case run
 // ---------------------------------------------------------------------------------------------------------------------
 
-export type CaseCaps = { totalUSD: number; reviewerRunUSD: number; stageRunUSD: number };
+export type CaseCaps = { allowanceUSD: number; totalUSD: number; reviewerRunUSD: number; stageRunUSD: number };
 
+/**
+ * Below this a case is not started: one full-size reviewer call reserves about $0.034 on Super-VL (estimate:
+ * 60,000 diff chars ~ 15,000 + prompt ~ 17,000 input tokens x $0.30/M + max_tokens 32,000 x $0.90/M, config/prices.json),
+ * and each of the two parallel reviewers gets half the allowance.
+ */
+export const MIN_CASE_USD = 0.07;
+
+/**
+ * The effective allowance is what the case may spend: max(0, min(per-case cap, global total cap - ledger before the
+ * case)). The two reviewers run in parallel as separate processes whose Budgets cannot see each other, so each gets half
+ * of it as its run cap; every stage's total cap is ledger before + allowance, so later stages see what earlier ones spent.
+ */
 export function caseCaps(globalTotal: number, ledgerBefore: number, perCase: number): CaseCaps {
-  return { totalUSD: Math.min(globalTotal, ledgerBefore + perCase), reviewerRunUSD: perCase / 2, stageRunUSD: perCase };
+  const allowanceUSD = Math.max(0, Math.min(perCase, globalTotal - ledgerBefore));
+  return { allowanceUSD, totalUSD: ledgerBefore + allowanceUSD, reviewerRunUSD: allowanceUSD / 2, stageRunUSD: allowanceUSD };
 }
 
 /** The env one analyzer subprocess of runPipeline gets: the case caps, cache reads, and no lazy git fetch. */
@@ -377,13 +400,11 @@ function tracehoundHead(env: NodeJS.ProcessEnv): { sha: string | null; dirty: bo
 
 type CaseResult = { status: "ok" | "failed" | "cap"; file: string; bodyOnly: string | null; posted: number };
 
-async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, fork: string | null): Promise<CaseResult> {
+async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, fork: string | null, caps: CaseCaps,
+  th: ReturnType<typeof tracehoundHead>): Promise<CaseResult> {
   const c = p.c;
   const startedAt = new Date().toISOString();
-  const ledger = new SpendLedger(deps.ledgerFile);
-  const ledgerBefore = ledger.totalUSD();
   const mark = await ledgerMark(deps.ledgerFile);
-  const caps = caseCaps(capsFromEnv(deps.env).totalUSD, ledgerBefore, o.maxUsdPerCase);
   const recorder = new UsageRecorder();
   const logs: string[] = [];
   const log = recorder.logger((m) => { logs.push(m); deps.log(`${c.id}: ${m}`); });
@@ -450,7 +471,7 @@ async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, for
     prompts: { "review-diff-v1": REVIEW_PROMPT_SHA256, "review-ctx-v1": REVIEW_CTX_PROMPT_SHA256,
       "verify-ctx-v1": VERIFY_CTX_PROMPT_SHA256, fix: sha256(FIX_SYSTEM_PROMPT) },
     versions: { analyzer: ANALYZER_VERSION, action: actionVersion(), runner: 1 },
-    tracehound: tracehoundHead(deps.env),
+    tracehound: th,
     settings: { model: ACTION_DEFAULTS.model, fixModel: FIX_MODEL, maxComments: ACTION_DEFAULTS.maxComments,
       fixes: o.fixes, contracts: o.contracts, learn: ACTION_DEFAULTS.learn, cache: o.cache,
       maxUsdPerCase: o.maxUsdPerCase, maxUsdRun: o.maxUsdRun, caps },
@@ -489,7 +510,7 @@ function actionVersion(): string | null {
 // --post: gh, one central wrapper; exact argv shapes only; every call scoped to the SunnyBagal fork
 // ---------------------------------------------------------------------------------------------------------------------
 
-export const PR_VIEW_FIELDS = "number,url,state,headRefName,baseRefName,headRefOid,isCrossRepository";
+export const PR_VIEW_FIELDS = "number,url,state,headRefName,baseRefName,baseRefOid,headRefOid,isCrossRepository";
 
 /** Throws unless argv is one of the allowed gh calls for this fork. `write` is true exactly for `pr comment`. */
 export function assertGh(argv: string[], fork: string, write: boolean): void {
@@ -523,13 +544,7 @@ export function assertGh(argv: string[], fork: string, write: boolean): void {
 }
 
 function ghEnv(env: NodeJS.ProcessEnv, fork: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(env)) {
-    // GIT_* can redirect git; GH_REPO / GH_HOST are set below; model keys never reach gh
-    if (v === undefined || k.startsWith("GIT_") || k === "GH_REPO" || k === "GH_HOST" || k === "NEBIUS_API_KEY" || k === "NVIDIA_API_KEY") continue;
-    out[k] = v;
-  }
-  return { ...out, GH_REPO: fork, GH_HOST: "github.com", GH_PROMPT_DISABLED: "1" };
+  return { ...allowEnv(env, [...BASE_ENV_ALLOW, ...GH_ENV_ALLOW]), GH_REPO: fork, GH_HOST: "github.com", GH_PROMPT_DISABLED: "1", LC_ALL: "C" };
 }
 
 export function makeGh(o: { fork: string; ghBin: string; env: NodeJS.ProcessEnv; log: (l: string) => void }) {
@@ -577,7 +592,9 @@ export function checkPr(gh: Gh, fork: string, c: Case, n: number): void {
     refuse(`${c.id}: PR #${n} is ${JSON.stringify(j.baseRefName)} <- ${JSON.stringify(j.headRefName)}, expected cases/${c.id}-base <- cases/${c.id}`);
   }
   if (j.isCrossRepository !== false) refuse(`${c.id}: PR #${n} is cross-repository`);
-  if (j.headRefOid !== c.case_head_sha) refuse(`${c.id}: PR #${n} head is ${JSON.stringify(j.headRefOid)}, not case_head_sha`);
+  if (j.headRefOid !== c.case_head_sha) refuse(`${c.id}: PR #${n} head is not case_head_sha`);
+  // the base branch's tip: with the head this binds the PR's diff to the reviewed base..head
+  if (j.baseRefOid !== c.base_sha) refuse(`${c.id}: PR #${n} base is not base_sha`);
 }
 
 export function hasMarker(gh: Gh, n: number, id: string): boolean {
@@ -607,6 +624,7 @@ export async function main(argv: string[], deps: RunnerDeps = defaultDeps()): Pr
     log(`${o.execute ? "EXECUTE" : "DRY RUN (no model call, no gh call; add --execute to run)"}: ${cases.length} ${repo} case(s), clone ${o.clone}`);
     log(`reviewer ${ACTION_DEFAULTS.reviewer} · model ${ACTION_DEFAULTS.model} · fix model ${FIX_MODEL} · fixes ${o.fixes} · contracts ${o.contracts} · learn off · max-comments ${ACTION_DEFAULTS.maxComments} · cache ${o.cache === "off" ? "off (reads off, writes on)" : "read"}`);
     log(`caps: per case $${o.maxUsdPerCase} (each reviewer $${o.maxUsdPerCase / 2}, they run in parallel), per run $${o.maxUsdRun} (at most ${Math.floor(o.maxUsdRun / o.maxUsdPerCase + 1e-9)} case(s) at the full per-case cap)`);
+    log(`allowance min(per-case cap, global total cap − ledger) is computed per case on --execute; minimum $${MIN_CASE_USD}; the reviewers split it`);
     log(`output ${o.outDir}${o.post ? ` · post to ${o.fork}` : " · no posting"}`);
     for (const p of plans) {
       const chunks = Math.max(1, Math.ceil(p.diffChars / 60_000));
@@ -630,7 +648,7 @@ export async function main(argv: string[], deps: RunnerDeps = defaultDeps()): Pr
     if (!deps.env.NEBIUS_API_KEY?.trim()) refuse("NEBIUS_API_KEY is missing (env or .env)");
     // a fresh worktree has an empty ledger, which would hide all earlier spend from the total cap
     if (!fs.existsSync(deps.ledgerFile) || fs.statSync(deps.ledgerFile).size === 0) refuse(`spend ledger ${deps.ledgerFile} is missing or empty; run from the main checkout`);
-    capsFromEnv(deps.env); // a malformed cap refuses here, not in a child
+    const globalTotal = capsFromEnv(deps.env).totalUSD; // a malformed cap refuses here, not in a child
     let gh: Gh | null = null;
     if (o.post) {
       gh = makeGh({ fork: o.fork!, ghBin: o.ghBin, env: deps.env, log });
@@ -638,6 +656,7 @@ export async function main(argv: string[], deps: RunnerDeps = defaultDeps()): Pr
       for (const p of plans) checkPr(gh, o.fork!, p.c, p.prNumber!);
       log(`post checks passed: ${o.fork} is a fork of ${UPSTREAM[repo]}; ${plans.length} PR(s) match their case refs`);
     }
+    const th = tracehoundHead(deps.env); // one HEAD per run
     const runStart = new SpendLedger(deps.ledgerFile).totalUSD();
     let code = 0;
     for (const p of plans) {
@@ -646,7 +665,13 @@ export async function main(argv: string[], deps: RunnerDeps = defaultDeps()): Pr
         log(`STOPPED before ${p.c.id}: run spent $${spent.toFixed(4)} + per-case cap $${o.maxUsdPerCase} > --max-usd-run $${o.maxUsdRun}; not run: ${plans.slice(plans.indexOf(p)).map((x) => x.c.id).join(", ")}`);
         return 3;
       }
-      const r = await runCase(p, o, repo, deps, o.fork);
+      const ledgerBefore = new SpendLedger(deps.ledgerFile).totalUSD();
+      const caps = caseCaps(globalTotal, ledgerBefore, o.maxUsdPerCase);
+      if (caps.allowanceUSD < MIN_CASE_USD) {
+        log(`STOPPED before ${p.c.id}: the global total cap leaves $${caps.allowanceUSD.toFixed(4)} (TRACEHOUND_BUDGET_TOTAL_USD ${globalTotal} - ledger ${ledgerBefore.toFixed(4)}), below the $${MIN_CASE_USD} minimum; not run: ${plans.slice(plans.indexOf(p)).map((x) => x.c.id).join(", ")}`);
+        return 3;
+      }
+      const r = await runCase(p, o, repo, deps, o.fork, caps, th);
       if (r.status !== "ok") code = 1;
       if (gh && r.status === "ok" && r.bodyOnly) postCase(gh, o, p, r.bodyOnly, log);
       else if (gh) log(`${p.c.id}: nothing to post (${r.status === "ok" ? "no findings" : r.status})`);
@@ -666,6 +691,14 @@ export async function main(argv: string[], deps: RunnerDeps = defaultDeps()): Pr
 function postCase(gh: Gh, o: Opts, p: CasePlan, body: string, log: (l: string) => void): void {
   const n = p.prNumber!;
   const record = p.outFile.replace(/\.json$/, ".post.json");
+  // the refs can move during a long review: bind again right before the write
+  try {
+    checkPr(gh, o.fork!, p.c, n);
+  } catch (e) {
+    if (!(e instanceof Refusal)) throw e;
+    log(`${p.c.id}: not posted, PR re-check failed right before the comment: ${e.message}`);
+    return;
+  }
   if (hasMarker(gh, n, p.c.id)) {
     log(`${p.c.id}: PR #${n} already has a TraceHound runner comment for this case; not posted again`);
     return;
