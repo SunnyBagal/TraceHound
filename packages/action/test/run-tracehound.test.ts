@@ -85,11 +85,12 @@ const prView = (c: Case, n: number, over: Record<string, unknown> = {}) => ({ nu
   headRefName: `cases/${c.id}`, baseRefName: `cases/${c.id}-base`, baseRefOid: c.base, headRefOid: c.head, isCrossRepository: false, ...over });
 
 function ghState(f: Fixture, over: { repo?: unknown; prs?: Record<string, unknown>; comments?: Record<string, unknown[]>; failComment?: boolean;
-  changeOnView?: Record<string, { after: number; pr: Record<string, unknown> }> }) {
+  changeOnView?: Record<string, { after: number; pr: Record<string, unknown> }>; changeOnCommentsLookup?: Record<string, Record<string, unknown>> }) {
   const prs = Object.fromEntries(f.cases.map((c, i) => [String(11 + i), prView(c, 11 + i)]));
   writeFileSync(f.ghState, JSON.stringify({
     repo: over.repo ?? { full_name: FORK, fork: true, owner: { login: "SunnyBagal" }, parent: { full_name: "twentyhq/twenty" } },
     prs: { ...prs, ...over.prs }, comments: over.comments ?? {}, failComment: over.failComment ?? false, changeOnView: over.changeOnView ?? {},
+    changeOnCommentsLookup: over.changeOnCommentsLookup ?? {},
   }));
   writeFileSync(path.join(f.dir, "prmap.json"), JSON.stringify(Object.fromEntries(f.cases.map((c, i) => [c.id, 11 + i]))));
 }
@@ -148,7 +149,7 @@ const post = (f: Fixture) => ["--post", "--repo", FORK, "--pr-map", path.join(f.
 
 describe("dry run", () => {
   it("makes zero model calls and zero gh calls, writes nothing, and prints the plan", async () => {
-    const f = fixture();
+    const f = fixture(2);
     const { d, calls } = deps(f);
     expect(await main(args(f), d)).toBe(0);
     expect(calls.model + calls.pipeline.length + calls.stages.length + calls.checkHead.length).toBe(0);
@@ -294,11 +295,13 @@ describe("execute", () => {
   });
 
   it("stops before a case that could take the run over --max-usd-run", async () => {
-    const f = fixture(3);
+    // two cases are enough: the first fits (0 + 0.25 <= 0.4), the second would not (0.2 spent + 0.25 > 0.4)
+    const f = fixture(2);
     const { d, calls } = deps(f, { spend: 0.2 });
-    expect(await main(args(f, "--execute", "--max-usd-per-case", "0.25", "--max-usd-run", "0.6"), d)).toBe(3);
-    expect(outFiles(f)).toEqual(["case-901.json", "case-902.json"]);
-    expect(calls.logs.join("\n")).toContain("STOPPED before case-903: run spent $0.4000 + per-case cap $0.25 > --max-usd-run $0.6");
+    expect(await main(args(f, "--execute", "--max-usd-per-case", "0.25", "--max-usd-run", "0.4"), d)).toBe(3);
+    expect(outFiles(f)).toEqual(["case-901.json"]);
+    expect(calls.pipeline).toHaveLength(1);
+    expect(calls.logs.join("\n")).toContain("STOPPED before case-902: run spent $0.2000 + per-case cap $0.25 > --max-usd-run $0.4; not run: case-902");
   });
 
   it("never overwrites a record; --rerun writes <id>.r2.json", async () => {
@@ -356,7 +359,7 @@ describe("--post", () => {
     expect(calls.logs.join("\n")).toContain("already has a TraceHound runner comment for this case; not posted again");
   });
 
-  it("posts one comment per case, every gh call scoped to the fork, and a rerun posts nothing new", async () => {
+  it("posts one comment per case, every gh call scoped to the fork, the PR re-read last before each write", async () => {
     const f = fixture(2);
     const { d } = deps(f);
     expect(await main(args(f, "--execute", ...post(f)), d)).toBe(0);
@@ -371,12 +374,30 @@ describe("--post", () => {
     expect(comments.map((l) => l.argv[2])).toEqual(["11", "12"]);
     expect(comments[0]!.stdin.startsWith(MARKER("case-901"))).toBe(true);
     expect(comments[0]!.stdin).toContain("Synthetic finding 0");
+    // per case: marker lookup, then the PR view, then the comment; nothing between the view and the write
+    const kinds = first.map((l) => l.argv[0] === "api" ? (l.argv[3]!.includes("/comments") ? "comments" : "repo") : l.argv[1]);
+    expect(kinds).toEqual(["repo", "view", "view", "comments", "view", "comment", "comments", "view", "comment"]);
     expect(outFiles(f)).toEqual(["case-901.json", "case-901.post.json", "case-902.json", "case-902.post.json"]);
-    // the rerun: one case is enough to show the comment from the first run is found (the marker test above covers the rest)
+  });
+
+  it("a rerun after a post posts nothing new", async () => {
+    const f = fixture(1);
+    expect(await main(args(f, "--execute", ...post(f)), deps(f).d)).toBe(0);
     const r = deps(f);
-    expect(await main(args(f, "--execute", "--rerun", "--ids", "case-901", ...post(f)), r.d)).toBe(0);
-    expect(ghLines(f).filter((l) => l.argv[1] === "comment")).toHaveLength(2);
+    expect(await main(args(f, "--execute", "--rerun", ...post(f)), r.d)).toBe(0);
+    expect(ghLines(f).filter((l) => l.argv[1] === "comment")).toHaveLength(1);
     expect(r.calls.logs.join("\n")).toContain("case-901: PR #11 already has a TraceHound runner comment for this case; not posted again");
+  });
+
+  it("a ref that moves during the comment lookup is caught by the final PR view, before the write", async () => {
+    const f = fixture(1);
+    ghState(f, { changeOnCommentsLookup: { "11": { baseRefOid: "e".repeat(40) } } });
+    const { d, calls } = deps(f);
+    expect(await main(args(f, "--execute", ...post(f)), d)).toBe(0);
+    const kinds = ghLines(f).map((l) => l.argv[0] === "api" ? (l.argv[3]!.includes("/comments") ? "comments" : "repo") : l.argv[1]);
+    expect(kinds).toEqual(["repo", "view", "comments", "view"]); // no comment
+    expect(calls.logs.join("\n")).toContain("case-901: not posted, PR re-check failed right before the comment: case-901: PR #11 base is not base_sha");
+    expect(outFiles(f)).toEqual(["case-901.json"]); // the review record is kept
   });
 
   it("re-checks the PR right before the comment: a base moved after planning means no comment", async () => {

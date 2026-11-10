@@ -21,7 +21,12 @@ const out = (x) => process.stdout.write(typeof x === "string" ? x : JSON.stringi
 const save = () => writeFileSync(stateFile, JSON.stringify(state));
 if (argv[0] === "api") {
   const m = /^repos\/[^/]+\/[^/]+\/issues\/(\d+)\/comments\?per_page=100&page=(\d+)$/.exec(argv[3]);
-  if (m) out((state.comments?.[m[1]] ?? []).slice((Number(m[2]) - 1) * 100, Number(m[2]) * 100));
+  if (m) {
+    // changeOnCommentsLookup {n: {...}}: the PR's refs move while the runner reads its comments (the marker lookup)
+    const moved = state.changeOnCommentsLookup?.[m[1]];
+    if (moved) { state.prs[m[1]] = { ...state.prs[m[1]], ...moved }; delete state.changeOnCommentsLookup[m[1]]; save(); }
+    out((state.comments?.[m[1]] ?? []).slice((Number(m[2]) - 1) * 100, Number(m[2]) * 100));
+  }
   else out(state.repo);
 } else if (argv[0] === "pr" && argv[1] === "view") {
   const n = argv[2];

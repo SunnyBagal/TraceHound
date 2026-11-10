@@ -691,20 +691,20 @@ export async function main(argv: string[], deps: RunnerDeps = defaultDeps()): Pr
 function postCase(gh: Gh, o: Opts, p: CasePlan, body: string, log: (l: string) => void): void {
   const n = p.prNumber!;
   const record = p.outFile.replace(/\.json$/, ".post.json");
-  // the refs can move during a long review: bind again right before the write
-  try {
-    checkPr(gh, o.fork!, p.c, n);
-  } catch (e) {
-    if (!(e instanceof Refusal)) throw e;
-    log(`${p.c.id}: not posted, PR re-check failed right before the comment: ${e.message}`);
-    return;
-  }
   if (hasMarker(gh, n, p.c.id)) {
     log(`${p.c.id}: PR #${n} already has a TraceHound runner comment for this case; not posted again`);
     return;
   }
   if (body.length > GH_COMMENT_MAX) {
     log(`${p.c.id}: comment is ${body.length} chars, over ${GH_COMMENT_MAX}; not posted`);
+    return;
+  }
+  // the refs can move during a long review or the lookups above: the last gh read before the write binds both shas
+  try {
+    checkPr(gh, o.fork!, p.c, n);
+  } catch (e) {
+    if (!(e instanceof Refusal)) throw e;
+    log(`${p.c.id}: not posted, PR re-check failed right before the comment: ${e.message}`);
     return;
   }
   const r = gh.comment(n, body);
