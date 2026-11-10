@@ -88,7 +88,7 @@ https://cursor.com/blog/may-2026-bugbot-changes. Full quotes: `tracehound-testse
 2. No secret, no review workflow on any fork. `disable-upstream-workflows.ts` (codex GO) is a fallback only if Actions
    ever has to be turned on; `live/workflows/tracehound-review.yml` (codex NO-GO) is not used.
 
-## 3b. TraceHound, locally (`scripts/run-tracehound.ts`, bunny; codex review pending)
+## 3b. TraceHound, locally (`scripts/run-tracehound.ts`, bunny; codex GO 2026-11-10, merged `d482d38`)
 `node scripts/run-tracehound.ts --manifest <case manifest> --clone <git dir> [--ids …] [--execute] [--out-dir …]
 [--max-usd-per-case x] [--max-usd-run y] [--post --repo SunnyBagal/<F> --pr-map …]`
 - Runs the Action's pipeline (pool-verify-v1, `packages/action/src/pipeline.ts`) on the same commit pair the fork PR shows.
@@ -102,7 +102,7 @@ https://cursor.com/blog/may-2026-bugbot-changes. Full quotes: `tracehound-testse
 **Dev cases only until the freeze tag.** Actions is off (§3), so pushes run nothing. Always dry run first, then
 `--execute`: `node scripts/open-prs.ts --manifest cases/dev/manifest.json --clone repos/F --fork SunnyBagal/F --ids case-0NN`.
 Batches are capped at 10 with a delay; the resume file prevents duplicates. `--trigger coderabbit[,greptile,bugbot]`
-posts the tools' trigger comments on opened PRs, ≤ 10 per hour (pending codex review).
+posts the tools' trigger comments on opened PRs, ≤ 10 per hour per tool and per (tool, fork) (codex GO 2026-11-10). Never pass `bugbot` (excluded); greptile only for the smoke test and held-out.
 
 ## 5. Smoke test: one dev PR (after the freeze is lifted and codex GO on the runner)
 1. Pick one small dev case in one fork (artu1 names it in `docs/budget.md` with the spend line).

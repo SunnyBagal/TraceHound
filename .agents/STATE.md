@@ -1,5 +1,5 @@
 # .agents/STATE.md: read first; rewrite (never append) at the end of every session; ≤ 60 lines
-HEAD: `main` after the 2026-11-10 "dev replacements" commit. If HEAD has moved further, trust code and docs/decisions.md over this file.
+HEAD: `main` after the 2026-11-10 run-tracehound merge (`d482d38`) and the STATE commit after it. If HEAD has moved further, trust code and docs/decisions.md over this file.
 
 ## Goal
 Show, on fresh held-out TypeScript PRs (twenty, medusa, payload, bullmq), whether TraceHound's reviewer (pool-verify-v1) catches real bugs that later fixes repaired.
@@ -21,7 +21,7 @@ artu1 and bunny tune TraceHound later, so they **never open, list, grep or diff*
 - **Attribution** (`check-attribution.py`): dev **30 attributed, 1 moved (case-002), 0 not attributed** (artu1 rerun); held-out 19 attributed / 1 unmappable (numbers only). Held-out reading is off by default: the `heldout` side and `--alternates` need `--heldout-ok` (artu1/bunny never pass it).
 - **Dev clones filled** (artu1, `tracehound-testset/scripts/fill-dev-blobs.py`): 94,091 blobs (medusa 45,773, twenty 37,256, payload 11,062) by batched read-only fetch; all 80 case commits 0 missing.
 - **Forks:** Actions **OFF** on all four. Plan: `docs/live-setup.md`.
-- **Local runner + triggers** (bunny, branch `run-tracehound`, worktree `~/Projects/th-bunny-runner`): round 1 `38c9167` fixed codex's 3 P1s (env allowlist + fixed error text, base/head sha binding, global cap split) and 2 P2s; round 2 `eb41993` fixed the 2 remaining P2s (re-check right before the comment; post/rerun test split). Gates (bunny): `pnpm test` ×3 green (action 302, analyzer 1013 +8 skipped, viewer 215), typecheck OK, testset 45/45. codex: round 1 NO-GO, round 2 NO-GO (P2s only), **round-2 re-review pending** (codex t14 waits on Sunny's approval of its second `pnpm test` gate). On GO: artu1 merges `run-tracehound` to main (merge commit)..
+- **Local runner + triggers** (bunny, branch `run-tracehound`, worktree `~/Projects/th-bunny-runner`): round 1 `38c9167` fixed codex's 3 P1s (env allowlist + fixed error text, base/head sha binding, global cap split) and 2 P2s; round 2 `eb41993` fixed the 2 remaining P2s (re-check right before the comment; post/rerun test split). Gates (bunny): `pnpm test` ×3 green (action 302, analyzer 1013 +8 skipped, viewer 215), typecheck OK, testset 45/45. codex: round 1 NO-GO (`38c9167`: 2 P2s left), **round 2 GO at `eb41993`** (`run/out/codex.runner-rereview2.md`). **Merged to main as `d482d38` (merge commit)**; gates on main: action 302, analyzer 1027 (+6 skipped), viewer 215, typecheck OK..
 
 ## Money (docs/budget.md is the authority)
 - Real balance **$19.31** (console, 2026-11-09). `TRACEHOUND_BUDGET_TOTAL_USD=63.33547` in `.env`. Ledger `.tracehound/spend.jsonl`.
@@ -39,7 +39,7 @@ Coordination: `~/Projects/tracehound-testset/run/{briefs,out,comms}`; `.done` ma
 
 ## OPEN TASKS (in order)
 a. Spend freeze until Sunny confirms the console usage.
-b. codex round-2 verdict (`run/out/codex.runner-rereview2.md`; t14 waiting on Sunny's approval of a test run) → on GO, merge `run-tracehound` (merge commit), re-run gates on main.
+b. Runner usable (dry run any time; `--execute` is paid → freeze). Commit pair `base_sha..case_head_sha`; held-out output needs an `--out-dir` outside artu1/bunny's view.
 c. Sunny: case-025 (codex: attribution unclear) keep or replace? Devin's two schema choices.
 d. Smoke test (live-setup.md §5): one dev case; Greptile's 1 smoke credit; needs the freeze lifted for TraceHound.
 e. Before the held-out run, fix in writing: goldens per case, golden severity, comments per case (budget.md); then the freeze tag.

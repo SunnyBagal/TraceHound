@@ -105,4 +105,4 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   Greptile Starter, Bugbot excluded. $0.
 - **Who:** artu1 (fill, script gate, compare, docs), bunny (runner fixes ×2), codex (attribution rerun, review ×2, blind
   labels), grok (5 replacements, leak audit), devin (out of quota).
-- **Left:** codex's round-2 verdict (waiting on Sunny's approval of a test run), then merge; case-025 caveat; freeze.
+- **Then:** codex round 2 GO at `eb41993`; artu1 merged `run-tracehound` (`d482d38`), gates on main green (302 / 1027 +6 skipped / 215, typecheck). **Left:** case-025 caveat; spend freeze.
