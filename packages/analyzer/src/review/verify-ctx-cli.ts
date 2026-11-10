@@ -13,7 +13,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { PullReview } from "../bench/types.ts";
 import { Budget, capsFromEnv } from "../llm/budget.ts";
-import { ResponseCache } from "../llm/cache.ts";
+import { cacheReadFromEnv, ResponseCache } from "../llm/cache.ts";
 import { TokenFactoryClient } from "../llm/client.ts";
 import { SpendLedger } from "../llm/ledger.ts";
 import { loadPriceTable } from "../llm/prices.ts";
@@ -150,6 +150,7 @@ export async function main(argv: string[]): Promise<number> {
     budget,
     ledger,
     cache: new ResponseCache(path.join(STATE_DIR, "cache")),
+    readCache: cacheReadFromEnv(),
     timeoutMs: 600_000,
   });
   const opts = {

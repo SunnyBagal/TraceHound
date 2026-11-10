@@ -1,0 +1,384 @@
+// scripts/run-tracehound.ts (bunny-runner brief): dry run makes no model and no gh call; the Action's pipeline is
+// called with the case's base/head; per-case and per-run caps; no overwrite; --post guards (owner, fork, parent, PR
+// refs), scoped gh argv, no duplicate comment; a fake key never leaks. A real local git fixture behind a recording
+// shim, a fake pipeline, a fake gh. No network, no model.
+import { execFileSync } from "node:child_process";
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
+import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
+import { ACTION_DEFAULTS, assertGh, caseCaps, main, MARKER, stageEnv, type RunnerDeps } from "../../../scripts/run-tracehound.ts";
+import type { Execute, PipelineOutput } from "../src/pipeline.ts";
+import { parseYaml } from "./yaml-lite.ts";
+
+const FIX = path.join(import.meta.dirname, "fixtures");
+const GH = path.join(FIX, "runner-fake-gh.mjs");
+const GIT = path.join(FIX, "runner-git-shim.mjs");
+chmodSync(GH, 0o755);
+chmodSync(GIT, 0o755);
+const KEY = "sk-fake-SECRET-4242-do-not-leak";
+const FORK = "SunnyBagal/twenty";
+const dirs: string[] = [];
+afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
+
+type Fixture = { dir: string; clone: string; manifest: string; ledger: string; out: string; gitLog: string; ghLog: string; ghState: string;
+  cases: { id: string; base: string; head: string }[] };
+
+function fixture(n = 3): Fixture {
+  const dir = mkdtempSync(path.join(tmpdir(), "th-runner-"));
+  dirs.push(dir);
+  const clone = path.join(dir, "clone");
+  const env = { ...cleanGitEnv(), GIT_AUTHOR_DATE: "2020-01-01T00:00:00Z", GIT_COMMITTER_DATE: "2020-01-01T00:00:00Z" };
+  const git = (...a: string[]) => execFileSync("git", ["-C", clone, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...a], { encoding: "utf8", env }).trim();
+  execFileSync("git", ["init", "-q", "-b", "main", clone], { env });
+  writeFileSync(path.join(clone, "a.ts"), "export const a = 1;\n");
+  git("add", "-A");
+  git("commit", "-q", "-m", "base");
+  const base = git("rev-parse", "HEAD");
+  const cases: Fixture["cases"] = [];
+  const manifest: unknown[] = [];
+  for (let i = 1; i <= n; i++) {
+    const id = `case-90${i}`;
+    git("checkout", "-q", "-B", `cases/${id}-base`, base);
+    git("checkout", "-q", "-B", `cases/${id}`, base);
+    writeFileSync(path.join(clone, "a.ts"), `export const a = ${i + 1};\nexport const b${i} = a;\n`);
+    git("add", "-A");
+    git("commit", "-q", "-m", `case ${i}`);
+    const head = git("rev-parse", "HEAD");
+    // the upstream squash commit: same tree, other message
+    const upstream = git("commit-tree", `${head}^{tree}`, "-p", base, "-m", "upstream squash");
+    cases.push({ id, base, head });
+    manifest.push({ id, repo: "twenty", pr: 100 + i, base_sha: base, head_sha: upstream, case_head_sha: head,
+      title: `Case ${i} title`, description: `Case ${i} body` });
+  }
+  git("checkout", "-q", "main");
+  const f: Fixture = { dir, clone, manifest: path.join(dir, "manifest.json"), ledger: path.join(dir, "spend.jsonl"),
+    out: path.join(dir, "out"), gitLog: path.join(dir, "git.log"), ghLog: path.join(dir, "gh.log"), ghState: path.join(dir, "gh.json"), cases };
+  writeFileSync(f.manifest, JSON.stringify(manifest));
+  writeFileSync(f.ledger, entry(0.01));
+  writeFileSync(f.gitLog, "");
+  writeFileSync(f.ghLog, "");
+  ghState(f, {});
+  return f;
+}
+
+const entry = (usd: number) => JSON.stringify({ timestamp: "2026-11-10T00:00:00Z", model: "fake", inputTokens: 1, outputTokens: 1, estCostUSD: usd, purpose: "review" }) + "\n";
+
+function ghState(f: Fixture, over: { repo?: unknown; prs?: Record<string, unknown>; comments?: Record<string, unknown[]> }) {
+  const prs: Record<string, unknown> = {};
+  f.cases.forEach((c, i) => {
+    const n = String(11 + i);
+    prs[n] = { number: 11 + i, url: `https://github.com/${FORK}/pull/${n}`, state: "OPEN", headRefName: `cases/${c.id}`,
+      baseRefName: `cases/${c.id}-base`, headRefOid: c.head, isCrossRepository: false };
+  });
+  writeFileSync(f.ghState, JSON.stringify({
+    repo: over.repo ?? { full_name: FORK, fork: true, owner: { login: "SunnyBagal" }, parent: { full_name: "twentyhq/twenty" } },
+    prs: { ...prs, ...over.prs }, comments: over.comments ?? {},
+  }));
+  writeFileSync(path.join(f.dir, "prmap.json"), JSON.stringify(Object.fromEntries(f.cases.map((c, i) => [c.id, 11 + i]))));
+}
+
+type Calls = { pipeline: { input: unknown; model: string; repo: string; head: string }[]; stages: { cmd: string; env: NodeJS.ProcessEnv }[];
+  model: number; contracts: { base: string; head: string }[]; checkHead: string[]; logs: string[] };
+
+/** spend: $ appended to the ledger per case (by the fake verifier); budget: the stage whose child dies on the budget */
+function deps(f: Fixture, o: { spend?: number; budget?: string; findings?: number } = {}): { d: RunnerDeps; calls: Calls } {
+  const calls: Calls = { pipeline: [], stages: [], model: 0, contracts: [], checkHead: [], logs: [] };
+  const exec: Execute = async (_file, args, options) => {
+    calls.stages.push({ cmd: args[1]!, env: options.env });
+    if (args[1] === o.budget) throw Object.assign(new Error("Command failed"), { stderr: "BudgetExceededError: refusing review on fake: over TRACEHOUND_BUDGET_RUN_USD=0.125" });
+    calls.model++;
+    if (args[1] === "verify-ctx" && o.spend) writeFileSync(f.ledger, readFileSync(f.ledger, "utf8") + entry(o.spend));
+    return {};
+  };
+  const d: RunnerDeps = {
+    env: { PATH: process.env.PATH, HOME: process.env.HOME, NEBIUS_API_KEY: KEY, TRACEHOUND_BUDGET_TOTAL_USD: "50",
+      FAKE_GH_STATE: f.ghState, FAKE_GH_LOG: f.ghLog, FAKE_GIT_LOG: f.gitLog },
+    log: (l) => calls.logs.push(l), ledgerFile: f.ledger, envFile: path.join(f.dir, "no.env"),
+    runPipeline: async (input, model, repo, head, _log, ex): Promise<PipelineOutput | null> => {
+      calls.pipeline.push({ input, model, repo, head });
+      try {
+        await Promise.all([ex(process.execPath, ["bin.ts", "review"], { cwd: f.dir, env: { ...process.env, NEBIUS_API_KEY: KEY }, maxBuffer: 1 }),
+          ex(process.execPath, ["bin.ts", "review-ctx"], { cwd: f.dir, env: { ...process.env, NEBIUS_API_KEY: KEY }, maxBuffer: 1 })]);
+        await ex(process.execPath, ["bin.ts", "verify-ctx"], { cwd: f.dir, env: { ...process.env, NEBIUS_API_KEY: KEY }, maxBuffer: 1 });
+      } catch {
+        return null;
+      }
+      const comments = Array.from({ length: o.findings ?? 2 }, (_, i) => ({ path: "a.ts", line: 1, body: `Synthetic finding ${i}` }));
+      return { comments, sources: comments.map(() => "diff" as const), review: { model: "fake-model", chunkFailed: 0 },
+        pipeline: { pool: comments.length + 1, kept: comments.length }, stages: { chunksOk: 2, chunksFailed: 0 } };
+    },
+    checkRepoHead: async (_repo, head) => { calls.checkHead.push(head); },
+    runFixes: async (findings, _d, _r, _h, client) => {
+      await client.chat({ model: "fake", messages: [] } as never, { purpose: "fix" });
+      return { suggestions: findings.map(() => null), counts: { attempted: findings.length, valid: 0, rejected: findings.length } };
+    },
+    createFixClient: () => ({ chat: async () => { calls.model++; return { content: "{}" }; } }),
+    runContracts: async (_repo, base, head) => { calls.contracts.push({ base, head }); return { status: "ok", findings: [], ms: 1 }; },
+    exec,
+  };
+  return { d, calls };
+}
+
+const args = (f: Fixture, ...extra: string[]) => ["--manifest", f.manifest, "--clone", f.clone, "--out-dir", f.out, "--git-bin", GIT, "--gh-bin", GH, ...extra];
+const ghLines = (f: Fixture) => readFileSync(f.ghLog, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { argv: string[]; GH_REPO: string; env: string; stdin: string; cwd: string });
+const gitLines = (f: Fixture) => readFileSync(f.gitLog, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { argv: string[]; noLazy: string | null });
+const outFiles = (f: Fixture) => existsSync(f.out) ? readdirSync(f.out).sort() : [];
+const post = (f: Fixture) => ["--post", "--repo", FORK, "--pr-map", path.join(f.dir, "prmap.json")];
+
+describe("dry run", () => {
+  it("makes zero model calls and zero gh calls, writes nothing, and prints the plan", async () => {
+    const f = fixture();
+    const { d, calls } = deps(f);
+    expect(await main(args(f), d)).toBe(0);
+    expect(calls.model + calls.pipeline.length + calls.stages.length + calls.checkHead.length).toBe(0);
+    expect(ghLines(f)).toEqual([]);
+    expect(outFiles(f)).toEqual([]);
+    const text = calls.logs.join("\n");
+    expect(text).toContain("DRY RUN");
+    expect(text).toContain("per case $0.25 (each reviewer $0.125");
+    expect(text).toContain("per run $2 (at most 8 case(s)");
+    for (const c of f.cases) expect(text).toContain(`${c.id}: twenty base ${c.base} head ${c.head} (tree = upstream head) · diff 1 files`);
+    // git: read-only commands only, never a lazy fetch
+    const g = gitLines(f);
+    expect(g.length).toBeGreaterThan(0);
+    for (const l of g) {
+      expect(l.argv.slice(0, 2)).toEqual(["-C", f.clone]);
+      expect(["rev-parse", "diff", "ls-tree", "cat-file"]).toContain(l.argv[2]);
+      expect(l.noLazy).toBe("1");
+    }
+  });
+
+  it("refuses a local branch that is not at the manifest sha, and --post without --execute", async () => {
+    const f = fixture(1);
+    const m = JSON.parse(readFileSync(f.manifest, "utf8"));
+    m[0].case_head_sha = f.cases[0]!.base;
+    writeFileSync(f.manifest, JSON.stringify(m));
+    const { d, calls } = deps(f);
+    expect(await main(args(f), d)).toBe(2);
+    expect(calls.logs.join("\n")).toContain("local cases/case-901 is not case_head_sha");
+    const g = fixture(1);
+    const r = deps(g);
+    expect(await main(args(g, ...post(g)), r.d)).toBe(2);
+    expect(r.calls.logs.join("\n")).toContain("--post needs --execute");
+    expect(ghLines(g)).toEqual([]);
+  });
+
+  it("reports blobs missing from the clone, and --execute refuses before any model call", async () => {
+    const f = fixture(1);
+    const blob = execFileSync("git", ["-C", f.clone, "rev-parse", `${f.cases[0]!.head}:a.ts`], { encoding: "utf8", env: cleanGitEnv() }).trim();
+    unlinkSync(path.join(f.clone, ".git/objects", blob.slice(0, 2), blob.slice(2)));
+    const { d, calls } = deps(f);
+    expect(await main(args(f), d)).toBe(0);
+    expect(calls.logs.join("\n")).toContain("missing blobs base 0 / head 1");
+    expect(await main(args(f, "--execute"), d)).toBe(2);
+    expect(calls.logs.join("\n")).toContain("REFUSED: blobs missing in the clone for case-901");
+    expect(calls.model + calls.pipeline.length).toBe(0);
+  });
+});
+
+describe("execute", () => {
+  it("runs the Action's pipeline on the case's base and head and writes one record per case", async () => {
+    const f = fixture(2);
+    const { d, calls } = deps(f);
+    expect(await main(args(f, "--execute"), d)).toBe(0);
+    expect(calls.pipeline.map((p) => p.head)).toEqual(f.cases.map((c) => c.head));
+    expect(calls.checkHead).toEqual(f.cases.map((c) => c.head));
+    expect(calls.contracts).toEqual(f.cases.map((c) => ({ base: c.base, head: c.head })));
+    for (const p of calls.pipeline) {
+      expect(p.model).toBe(ACTION_DEFAULTS.model);
+      expect(p.repo).toBe(f.clone);
+      const input = p.input as { title: string; body: string; diff: string };
+      expect(input.diff).toBe(execFileSync("git", ["-C", f.clone, "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--find-renames",
+        "--src-prefix=a/", "--dst-prefix=b/", f.cases[calls.pipeline.indexOf(p)]!.base, p.head], { encoding: "utf8", env: cleanGitEnv() }));
+      expect(input.title).toMatch(/^Case \d title$/);
+    }
+    expect(outFiles(f)).toEqual(["case-901.json", "case-902.json"]);
+    const rec = JSON.parse(readFileSync(path.join(f.out, "case-901.json"), "utf8"));
+    expect(rec).toMatchObject({ case: "case-901", repo: "twenty", base: f.cases[0]!.base, head: f.cases[0]!.head, status: "ok",
+      reviewer: "pool-verify-v1", pr_title: "Case 1 title", tree_equal_upstream: true,
+      comments: [{ path: "a.ts", line: 1, body: "Synthetic finding 0" }, { path: "a.ts", line: 1, body: "Synthetic finding 1" }],
+      review: { findings: 2, posted: 2, pool: 3, kept: 2, fixes: { attempted: 2, valid: 0, rejected: 2 } },
+      settings: { cache: "off", maxUsdPerCase: 0.25, fixes: "on", contracts: "on", learn: "off" } });
+    expect(Object.keys(rec.prompts)).toEqual(["review-diff-v1", "review-ctx-v1", "verify-ctx-v1", "fix"]);
+    expect(rec.versions.analyzer).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(rec.tracehound.sha).toMatch(/^[0-9a-f]{40}$/);
+    expect(rec.usage.ledger).toEqual({ calls: 0, cached: 0, inputTokens: 0, outputTokens: 0, costUSD: 0 });
+    expect(ghLines(f)).toEqual([]); // no --post: no gh
+  });
+
+  it("gives every stage the case caps, cache reads off, and no lazy fetch", async () => {
+    const f = fixture(1);
+    const { d, calls } = deps(f);
+    expect(await main(args(f, "--execute", "--max-usd-per-case", "0.2"), d)).toBe(0);
+    const env = (cmd: string) => calls.stages.find((s) => s.cmd === cmd)!.env;
+    const total = String(Math.min(50, 0.01 + 0.2));
+    expect(env("review")).toMatchObject({ TRACEHOUND_BUDGET_RUN_USD: "0.1", TRACEHOUND_BUDGET_TOTAL_USD: total, TRACEHOUND_CACHE_READ: "off", GIT_NO_LAZY_FETCH: "1" });
+    expect(env("review-ctx")).toMatchObject({ TRACEHOUND_BUDGET_RUN_USD: "0.1", TRACEHOUND_BUDGET_TOTAL_USD: total });
+    expect(env("verify-ctx")).toMatchObject({ TRACEHOUND_BUDGET_RUN_USD: "0.2", TRACEHOUND_BUDGET_TOTAL_USD: total });
+    expect(caseCaps(0.1, 5, 0.25).totalUSD).toBe(0.1); // the env total cap still wins
+    expect(stageEnv({}, "verify-ctx", caseCaps(9, 1, 0.25), "read").TRACEHOUND_CACHE_READ).toBe("on");
+  });
+
+  it("marks a case cap when a stage dies on the budget, and goes on", async () => {
+    const f = fixture(2);
+    const { d } = deps(f, { budget: "review-ctx" });
+    expect(await main(args(f, "--execute"), d)).toBe(1);
+    for (const id of ["case-901", "case-902"]) {
+      const rec = JSON.parse(readFileSync(path.join(f.out, `${id}.json`), "utf8"));
+      expect(rec.status).toBe("cap");
+      expect(rec.comments).toEqual([]);
+    }
+  });
+
+  it("stops before a case that could take the run over --max-usd-run", async () => {
+    const f = fixture(3);
+    const { d, calls } = deps(f, { spend: 0.2 });
+    expect(await main(args(f, "--execute", "--max-usd-per-case", "0.25", "--max-usd-run", "0.6"), d)).toBe(3);
+    expect(outFiles(f)).toEqual(["case-901.json", "case-902.json"]);
+    expect(calls.logs.join("\n")).toContain("STOPPED before case-903: run spent $0.4000 + per-case cap $0.25 > --max-usd-run $0.6");
+  });
+
+  it("never overwrites a record; --rerun writes <id>.r2.json", async () => {
+    const f = fixture(1);
+    const { d } = deps(f);
+    expect(await main(args(f, "--execute"), d)).toBe(0);
+    const before = readFileSync(path.join(f.out, "case-901.json"), "utf8");
+    const again = deps(f);
+    expect(await main(args(f, "--execute"), again.d)).toBe(2);
+    expect(again.calls.pipeline).toEqual([]);
+    expect(again.calls.logs.join("\n")).toContain("exists; never overwritten");
+    expect(readFileSync(path.join(f.out, "case-901.json"), "utf8")).toBe(before);
+    expect(await main(args(f, "--execute", "--rerun"), deps(f).d)).toBe(0);
+    expect(outFiles(f)).toEqual(["case-901.json", "case-901.r2.json"]);
+    expect(readFileSync(path.join(f.out, "case-901.json"), "utf8")).toBe(before);
+  });
+});
+
+describe("--post", () => {
+  it.each([
+    ["octocat/twenty", "must match ^SunnyBagal"],
+    ["SunnyBagal/twenty/../x", "must match ^SunnyBagal"],
+    ["SunnyBagal/..", "bad fork name"],
+  ])("refuses --repo %s before any call", async (repo, why) => {
+    const f = fixture(1);
+    const { d, calls } = deps(f);
+    expect(await main(args(f, "--execute", "--post", "--repo", repo, "--pr-map", path.join(f.dir, "prmap.json")), d)).toBe(2);
+    expect(calls.logs.join("\n")).toContain(why);
+    expect(ghLines(f)).toEqual([]);
+    expect(calls.model + calls.pipeline.length).toBe(0);
+  });
+
+  it.each([
+    ["a repo that is not a fork", { repo: { full_name: FORK, fork: false, owner: { login: "SunnyBagal" }, parent: { full_name: "twentyhq/twenty" } } }, "is not a fork"],
+    ["a wrong parent", { repo: { full_name: FORK, fork: true, owner: { login: "SunnyBagal" }, parent: { full_name: "evil/twenty" } } }, "parent is \"evil/twenty\""],
+    ["a PR whose refs are not the case's", { prs: { "11": { number: 11, url: `https://github.com/${FORK}/pull/11`, state: "OPEN", headRefName: "main",
+      baseRefName: "cases/case-901-base", headRefOid: "x", isCrossRepository: false } } }, "expected cases/case-901-base <- cases/case-901"],
+    ["a PR whose head is another commit", { prs: { "11": { number: 11, url: `https://github.com/${FORK}/pull/11`, state: "OPEN", headRefName: "cases/case-901",
+      baseRefName: "cases/case-901-base", headRefOid: "0".repeat(40), isCrossRepository: false } } }, "not case_head_sha"],
+  ])("refuses %s before any model call", async (_name, over, why) => {
+    const f = fixture(1);
+    ghState(f, over as never);
+    const { d, calls } = deps(f);
+    expect(await main(args(f, "--execute", ...post(f)), d)).toBe(2);
+    expect(calls.logs.join("\n")).toContain(why);
+    expect(calls.model + calls.pipeline.length).toBe(0);
+    expect(ghLines(f).some((l) => l.argv[1] === "comment")).toBe(false);
+  });
+
+  it("posts one comment per case, every gh call scoped to the fork, and never twice on a rerun", async () => {
+    const f = fixture(2);
+    const { d } = deps(f);
+    expect(await main(args(f, "--execute", ...post(f)), d)).toBe(0);
+    const first = ghLines(f);
+    for (const l of first) {
+      expect(l.GH_REPO).toBe(FORK);
+      expect(realpathSync(l.cwd)).toBe(realpathSync(tmpdir()));
+      if (l.argv[0] === "api") expect(l.argv[3] === `repos/${FORK}` || l.argv[3]!.startsWith(`repos/${FORK}/issues/`)).toBe(true);
+      else expect(l.argv.slice(3, 5)).toEqual(["--repo", FORK]);
+    }
+    const comments = first.filter((l) => l.argv[1] === "comment");
+    expect(comments.map((l) => l.argv[2])).toEqual(["11", "12"]);
+    expect(comments[0]!.stdin.startsWith(MARKER("case-901"))).toBe(true);
+    expect(comments[0]!.stdin).toContain("Synthetic finding 0");
+    expect(outFiles(f)).toEqual(["case-901.json", "case-901.post.json", "case-902.json", "case-902.post.json"]);
+    const r = deps(f);
+    expect(await main(args(f, "--execute", "--rerun", ...post(f)), r.d)).toBe(0);
+    expect(ghLines(f).filter((l) => l.argv[1] === "comment")).toHaveLength(2);
+    expect(r.calls.logs.join("\n")).toContain("already has a TraceHound runner comment for this case; not posted again");
+  });
+
+  it("assertGh allows only the exact read and write shapes", () => {
+    const ok: [string[], boolean][] = [
+      [["api", "--method", "GET", `repos/${FORK}`], false],
+      [["api", "--method", "GET", `repos/${FORK}/issues/3/comments?per_page=100&page=1`], false],
+      [["pr", "view", "3", "--repo", FORK, "--json", "number,url,state,headRefName,baseRefName,headRefOid,isCrossRepository"], false],
+      [["pr", "comment", "3", "--repo", FORK, "--body-file", "-"], true],
+    ];
+    for (const [a, w] of ok) expect(() => assertGh(a, FORK, w)).not.toThrow();
+    const bad: [string[], boolean][] = [
+      [["api", "--method", "POST", `repos/${FORK}/issues/3/comments`], false],
+      [["api", "--method", "GET", "repos/twentyhq/twenty"], false],
+      [["api", "--method", "GET", `repos/${FORK}-evil`], false],
+      [["api", "--method", "GET", `repos/${FORK}/issues/3/comments?per_page=100&page=1`], true],
+      [["pr", "comment", "3", "--repo", "twentyhq/twenty", "--body-file", "-"], true],
+      [["pr", "comment", "3", "--repo", FORK, "--body-file", "-"], false],
+      [["pr", "comment", "3", "--body-file", "-"], true],
+      [["pr", "comment", "3", "-R", FORK, "--body", "x"], true],
+      [["pr", "merge", "3", "--repo", FORK], true],
+      [["issue", "comment", "3", "--repo", FORK, "--body-file", "-"], true],
+    ];
+    for (const [a, w] of bad) expect(() => assertGh(a, FORK, w)).toThrow(/refusing gh call/);
+    expect(() => assertGh(["api", "--method", "GET", "repos/octocat/x"], "octocat/x", false)).toThrow(/SunnyBagal/);
+  });
+});
+
+it("a fake key never appears in an output file, a gh or git argv, or a log line", async () => {
+  const f = fixture(2);
+  const { d, calls } = deps(f);
+  expect(await main(args(f, "--execute", ...post(f)), d)).toBe(0);
+  const blobs = [
+    ...outFiles(f).map((n) => readFileSync(path.join(f.out, n), "utf8")),
+    ...ghLines(f).map((l) => JSON.stringify(l.argv) + l.env + l.stdin),
+    readFileSync(f.gitLog, "utf8"), readFileSync(f.ghState, "utf8"), calls.logs.join("\n"),
+  ];
+  expect(blobs.length).toBeGreaterThan(4);
+  for (const b of blobs) expect(b).not.toContain(KEY);
+  // the analyzer stages do get it (they need it), through env only
+  expect(calls.stages.every((s) => s.env.NEBIUS_API_KEY === KEY)).toBe(true);
+});
+
+it("ACTION_DEFAULTS equal action.yml's input defaults", () => {
+  const yml = parseYaml(readFileSync(new URL("../../../.github/actions/tracehound-review/action.yml", import.meta.url), "utf8")) as
+    { inputs: Record<string, { default?: string }> };
+  const def = (k: string) => yml.inputs[k]!.default;
+  expect(ACTION_DEFAULTS).toEqual({ model: def("model"), reviewer: def("reviewer"), maxComments: Number(def("max-comments")),
+    fixes: def("fixes"), contracts: def("contracts"), learn: def("learn") });
+});
+
+it("prepareReview's payload is the review runAction prints on dry run (same inputs)", async () => {
+  const { prepareReview, runAction } = await import("../src/action.ts");
+  const diff = "diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1,2 @@\n-export const a = 1;\n+export const a = 2;\n+export const b = a;\n";
+  const event = { repository: { full_name: FORK }, pull_request: { title: "T", body: "B", number: 5, base: { sha: "b".repeat(40) },
+    head: { sha: "c".repeat(40), repo: { full_name: FORK } } } };
+  const options = { token: "t", apiUrl: "https://api.example.invalid", model: "m", maxComments: 15, dryRun: true, repoDir: "/r" };
+  const logs: string[] = [];
+  const contracts: string[] = [];
+  const base = {
+    fetch: (async (_u: string, init: { headers: Record<string, string> }) => init.headers.Accept === "application/vnd.github.diff"
+      ? new Response(diff) : new Response(JSON.stringify({ head: { sha: "c".repeat(40) }, base: { sha: "b".repeat(40) } }))) as unknown as typeof fetch,
+    runReviewer: async () => ({}), checkRepoHead: async () => {},
+    runPipeline: async () => ({ comments: [{ path: "a.ts", line: 2, body: "Synthetic" }], sources: ["both" as const],
+      review: { model: "m", chunkFailed: 0 }, pipeline: { pool: 2, kept: 1 }, stages: { chunksOk: 2, chunksFailed: 0 } }),
+    runFixes: async () => ({ suggestions: [null], counts: { attempted: 1, valid: 0, rejected: 1 } }),
+    runContracts: async (_r: string, b: string) => { contracts.push(b); return { status: "ok" as const, findings: [], ms: 1 }; },
+    log: (m: string) => logs.push(m),
+  };
+  await runAction(event, options, base);
+  const printed = JSON.parse(logs.find((l) => l.startsWith("{"))!);
+  const prepared = await prepareReview(event, diff, "b".repeat(40), options, base);
+  expect(prepared!.payload).toEqual(printed);
+  expect(contracts).toEqual(["b".repeat(40), "b".repeat(40)]);
+  expect(prepared!.bodyOnly().comments).toEqual([]);
+});
