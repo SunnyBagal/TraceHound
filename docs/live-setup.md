@@ -1,4 +1,4 @@
-# Live setup: TraceHound (local), CodeRabbit, Greptile, Cursor Bugbot on the test-set forks
+# Live setup: TraceHound (local), CodeRabbit and Greptile on the test-set forks
 
 Rewritten 2026-11-10 by artu1 after Sunny's decisions of the same day. Sources: `tracehound-testset/run/out/grok.live-setup.md`
 (doc quotes re-checked by artu1 on the pages below), `grok.triggers.md` (trigger facts; see §2), bunny's scripts, codex's
@@ -16,8 +16,12 @@ inside the fork, so **no case PR targets the default branch**.
    base..head (`scripts/run-tracehound.ts`, §3). Its findings are scored from the local output; posting them on the PR is
    optional (`--post`). No Nebius secret exists on GitHub anywhere.
 3. **Actions is OFF on all four forks** (done 2026-11-10, §3 step 1).
-4. Still blocked: **the spend freeze** (any TraceHound run with `--execute` is paid; it needs the freeze lifted, a line in
-   `docs/budget.md` and artu1's approval). CodeRabbit costs $0.
+4. **Tools:** CodeRabbit (free, manual trigger) and **Greptile on the free Starter plan (50 credits/month), held-out plus
+   one smoke test only, no dev runs.** **Cursor Bugbot is excluded** unless Sunny confirms his Cursor plan covers it at
+   $0 (limitation: the comparison has no Bugbot row).
+5. Dev clones filled (Sunny approved; read-only fetch from the SunnyBagal forks only; §3 step 3).
+6. Still blocked: **the spend freeze** (any TraceHound run with `--execute` is paid; it needs the freeze lifted, a line in
+   `docs/budget.md` and artu1's approval). CodeRabbit and Greptile Starter cost $0.
 
 ## 1. CodeRabbit
 What the docs say (re-checked 2026-11-10):
@@ -42,17 +46,26 @@ Click steps:
 4. Per case PR: comment `@coderabbitai full review` (`open-prs.ts --trigger coderabbit`, ≤ 10 per hour, §4). On the
    first PR, also comment `@coderabbitai configuration` and keep the reply (it shows where each setting came from).
 
-## 2. Greptile and Cursor Bugbot
-Trigger comments, non-default-base behaviour, rate limits and free use: **see `grok.triggers.md`** (summary table copied
-into §2.1 once artu1 has checked its URLs). `open-prs.ts --trigger` refuses greptile/bugbot until their strings are
-confirmed there and added to its table.
+## 2. Greptile (Starter) and Cursor Bugbot (excluded)
+Trigger facts: `grok.triggers.md`, summary in §2.1. `open-prs.ts --trigger` knows all three strings; **don't pass
+`bugbot`** unless Sunny lifts the exclusion.
+**Greptile budget (Starter, 50 credits/month, 1 credit per base review):** 1 smoke-test review (one dev case) + 29
+held-out = 30 credits, 20 spare for a retry; **no dev runs**. Check the credit balance in the dashboard before the
+held-out window; a review that doesn't complete costs nothing ("Only completed reviews spend credits"). Use base
+reviews only (Plus = 3, Apex = 10 credits). If the smoke test and the held-out window fall in different calendar months,
+each month has its own 50.
+Click steps (Greptile): sign in at https://app.greptile.com with GitHub as SunnyBagal → install the Greptile GitHub App
+with "Only select repositories": medusa, twenty, payload, bullmq → Code Review settings → Greptile Review
+Configuration → **Automatic reviews: Never**; leave excluded branches empty; then trigger with `@greptileai` per PR.
 - Greptile: `greptile.json` / `.greptile/`: none on any fork tip or dev base. "Settings are read from the source branch of
   the PR and override dashboard settings" (https://www.greptile.com/docs/code-review/greptile-json-reference);
   `includeBranches` empty means all branches except excluded ones. Dashboard: "Code Review settings" → "Greptile Review
   Configuration" sets the trigger (Never / On PR opened / On new pushes / On all events)
   (https://www.greptile.com/docs/code-review/controlling-nitpickiness). Install on the four forks only; trigger "Never"
   and comment by hand, so every tool starts in the same window.
-- Free use on public repos or forks: per `grok.triggers.md`; check pricing before installing either app.
+- **Bugbot (excluded):** needs a paid Cursor plan (not in Free/Plus; about $1.00–1.50 a run); no app install. If Sunny
+  confirms his plan covers it at $0: post `bugbot run` from his user token, and first check `.cursor/config/bugbot.yaml`
+  on the case bases (Bugbot reads config from the base).
 
 ### 2.1 Trigger summary (grok, read 2026-11-10; artu1 re-found 16 key phrases on the cited pages the same day)
 | tool | trigger comment | non-default base | limits / cost | free on a 0-star public fork? |
@@ -60,11 +73,9 @@ confirmed there and added to its table.
 | CodeRabbit | `@coderabbitai full review`, alone on its line | auto-review: default branch only; the manual command runs anyway (auto-review page) | OSS 1–10 reviews per developer per hour, scoped per repository; each command counts (plans, review-commands) | yes: <10 stars needs the manual trigger, OSS tier, no application documented |
 | Greptile | `@greptileai` (or `@greptile`); an excluded base blocks it | yes when `includeBranches` is empty (greptile-json-reference) | credits: base review 1 credit ($1); Starter 50 credits/month for 1 developer; no hourly cap documented (billing-seats, pricing) | not as such: OSS program needs ≥ 50 stars (open-source FAQ); Starter's 50 credits/month would cover 29 + a few dev cases |
 | Cursor Bugbot | `bugbot run` or `cursor review`; **ignored when a bot account or GitHub App posts it** | "any PR"; no base filter documented (docs/bugbot) | usage-based, about $1.00–1.50 a run (May 2026 blog); no review quota documented | no: Premium ($30/month) or above, or Teams; not in Free/Plus (pricing) |
-Consequences: triggers are posted by Sunny's own user token via `gh`, never an app token (Bugbot). Greptile and
-Bugbot are not free here: **Sunny decides** whether to pay (Greptile likely fits Starter's 50 credits; Bugbot needs a
-paid Cursor plan, about $30–45 for 29 held-out + a few dev runs, estimate from the blog's per-run cost). Bugbot reads its
-config from the PR's base, Greptile and CodeRabbit from the head. No `greptile.json` on any fork tip or dev base
-(`grok.live-setup.md`); `.cursor/config/bugbot.yaml` on the case bases is **not checked yet** (check before any Bugbot run).
+Decision (Sunny, 2026-11-10): CodeRabbit + Greptile Starter; Bugbot excluded (limitation). Triggers are posted by
+Sunny's own user token via `gh`. Greptile and CodeRabbit read config from the PR head; no `greptile.json` on any fork
+tip or dev base (`grok.live-setup.md`).
 Source URLs: https://docs.coderabbit.ai/management/plans, https://docs.coderabbit.ai/reference/review-commands,
 https://www.greptile.com/docs/code-review/developer-essentials, https://www.greptile.com/docs/account/billing-seats,
 https://www.greptile.com/open-source, https://cursor.com/docs/bugbot, https://cursor.com/pricing,

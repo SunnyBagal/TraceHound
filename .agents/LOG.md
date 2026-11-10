@@ -89,3 +89,20 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   blocked on a permission prompt), grok (trigger facts, case-027, case-016), devin (out of quota).
 - **Left:** codex: dev rerun + second label of the new case-027, then GO/NO-GO on the runner and triggers. Sunny:
   case-016, Greptile/Bugbot spend, codex's prompt, the spend freeze.
+
+## 2026-11-10 (Tue, night): dev replacements, clone fill, runner fixes
+- **Changed:** Sunny ruled: case-016 dropped (not a bug); dev cases failing attribution replaced (next in screening
+  order passing every check, else dev −1); case-002 stays; Greptile free Starter (held-out + 1 smoke test), Bugbot
+  excluded (limitation); dev clone fill approved. codex's attribution rerun: dev 26 attributed / 1 moved / 4 not
+  attributed (case-003, 025, 028 and grok's first case-027 replacement). grok replaced 5 slots (1 medusa, 4 twenty;
+  payload and medusa pools exhausted, fallback b), leak audit 0; codex labelled them blind: 5/5 strict and bug/clean;
+  codex flags case-025 unclear. artu1's attribution rerun: dev 30 attributed, 1 moved, 0 not attributed. Dev stays 40
+  (31 bug / 9 clean; medusa 16, payload 9, twenty 15). artu1 filled the dev clones: worktree checkout fell back to
+  one-blob-at-a-time fetches (commit-graph error), so a batched `fetch --stdin` of the missing ids replaced it:
+  94,091 blobs, all 80 case commits complete (`tracehound-testset/scripts/fill-dev-blobs.py`). artu1 gated
+  `check-attribution.py`'s held-out reading behind `--heldout-ok`. bunny fixed codex's NO-GO (3 P1, 2 P2) in
+  `38c9167`, then round 2's two P2s in `eb41993`; `pnpm test` ×3 green, testset 45/45. live-setup.md: CodeRabbit +
+  Greptile Starter, Bugbot excluded. $0.
+- **Who:** artu1 (fill, script gate, compare, docs), bunny (runner fixes ×2), codex (attribution rerun, review ×2, blind
+  labels), grok (5 replacements, leak audit), devin (out of quota).
+- **Left:** codex's round-2 verdict (waiting on Sunny's approval of a test run), then merge; case-025 caveat; freeze.
