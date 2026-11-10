@@ -68,3 +68,24 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   devin (dev re-check).
 - **Left:** Sunny: §0 blockers (public forks vs held-out, turn Actions off, spend freeze); controller repo + action change;
   case-027.
+
+## 2026-11-10 (Tue, evening): local runner plan, Actions off, case-027
+- **Changed:** Sunny ruled: held-out PRs open only after the final freeze tag (then all tools in one window; dev only
+  until then); no controller repo or GitHub review workflow, TraceHound runs locally per case and is scored from local
+  output; case-027 replaced if possible. artu1 turned Actions **off** on SunnyBagal/{medusa,twenty,payload,bullmq}
+  (each reads back `enabled:false`) and rewrote `docs/live-setup.md`. bunny built `scripts/run-tracehound.ts` (branch
+  `run-tracehound` @ `3ce5aa3`, not merged; Action pipeline via `prepareReview`; dry run default; per-case/per-run caps;
+  all gates green) and `open-prs.ts --trigger` (coderabbit/greptile/bugbot, ≤ 10/h, user token only). grok found the
+  trigger facts (Greptile `@greptileai`, credits; Bugbot `bugbot run`, paid Cursor plan, ignores bot posters; CodeRabbit
+  manual on <10 stars); artu1 re-found 16 key phrases on the cited pages. codex's attribution check: held-out 20 bug →
+  19 attributed / 1 unmappable (numbers only); dev pass 1 25 attributed, 1 moved, 5 missing blobs. artu1 filled the
+  dev blobs by read-only lazy fetch from the forks (probe 31/31). devin hit its weekly quota; grok replaced case-027
+  (medusa #16100 ← #12713) and read case-016 as **drop**. $0.
+- **Firewall note:** artu1 ran codex's script once in `--probe dev` mode before seeing that it adds
+  `heldout/repos/*/.git/objects` as an alternate object store: counts printed only, no held-out content seen; asked
+  codex to make it opt-in. artu1 read devin's screen once (dev task) and saw two introducing-PR numbers devin had
+  excluded from held-out earlier (dropped, not held-out cases).
+- **Who:** artu1 (Actions, briefs, URL check, hydration, docs), bunny (runner, triggers), codex (attribution; then
+  blocked on a permission prompt), grok (trigger facts, case-027, case-016), devin (out of quota).
+- **Left:** codex: dev rerun + second label of the new case-027, then GO/NO-GO on the runner and triggers. Sunny:
+  case-016, Greptile/Bugbot spend, codex's prompt, the spend freeze.
