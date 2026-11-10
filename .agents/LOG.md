@@ -55,3 +55,16 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
 - **Who:** artu1 (briefs, firewall, compare script, state), codex (BullMQ mining + labels, two reviews), grok (licence,
   second labels, leak audit, agreement), bunny (PR opener + fix); devin out of quota.
 - **Left:** Sunny decides when to run the PR opener and the two schema choices; spend freeze stays.
+
+## 2026-11-10 (Tue, later): live setup prep
+- **Changed:** codex got `~/Projects/tracehound-testset` as a writable root. grok mapped the forks (bot configs, 104
+  trigger-bearing workflows, CodeRabbit/Greptile docs; artu1 re-checked the key quotes). bunny wrote a dispatch-only
+  review workflow and an upstream-workflow disabler; codex: disabler GO, workflow NO-GO (setup-node's `yarn --version`
+  runs in the PR tree, so a `.yarnrc` `yarn-path` could run PR content; setup-node not sha-pinned). bunny found Actions
+  is ON at the API level on the forks and case branches add workflow paths. New plan in `docs/live-setup.md`: Actions
+  off on all forks, reviews from a controller repo (to build), CodeRabbit by manual `@coderabbitai full review`. devin
+  re-checked 10 dev cases: 9/10 clean, case-027 misattributed. $0.
+- **Who:** artu1 (briefs, doc check, live-setup.md), grok (fork facts, docs), bunny (workflow, disabler), codex (review),
+  devin (dev re-check).
+- **Left:** Sunny: §0 blockers (public forks vs held-out, turn Actions off, spend freeze); controller repo + action change;
+  case-027.
