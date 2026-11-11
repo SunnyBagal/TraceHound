@@ -49,6 +49,9 @@ export interface Replay {
 
 export class RefusalError extends Error {}
 
+/** A case id becomes a file name under --out: letters, digits, dot, dash, underscore, and never "." or "..". */
+export const CASE_ID = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/;
+
 const key = (f: Finding) => JSON.stringify([f.path, f.line, f.body]);
 const obj = (v: unknown): Record<string, unknown> | null =>
   v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : null;
@@ -69,6 +72,7 @@ function findingList(v: unknown): Finding[] | null {
 export function replayArms(record: unknown, maxComments = MAX_COMMENTS): Replay {
   const r = obj(record);
   if (!r || typeof r.case !== "string") throw new RefusalError("not a run-tracehound.ts record");
+  if (!CASE_ID.test(r.case)) throw new RefusalError("a record's case id is not a plain file name");
   const lineage = obj(r.lineage);
   if (!lineage || lineage.v !== 1) throw new RefusalError(`${r.case}: record has no lineage (written by runner < 2)`);
   const review = obj(r.review);
@@ -83,8 +87,9 @@ export function replayArms(record: unknown, maxComments = MAX_COMMENTS): Replay 
     return { status: "ok", candidates: list.length, comments: deduped.slice(0, maxComments) };
   };
   const kept = findingList(obj(obj(lineage["verify-ctx-v1"])?.kept)?.comments);
-  // The Action posts nothing when the pipeline failed; a completed run with no prepared review had nothing to post.
-  const a0Available = review !== null || r.status === "ok";
+  // A0 is what the Action would post, so only an official `ok` case has one: the runner posts nothing for a failed or
+  // cap case even when a review was prepared. A completed run with no prepared review had nothing to post (A0 empty).
+  const a0Available = r.status === "ok";
   const arms: Record<Arm, ArmResult> = {
     A0: a0Available ? finish(kept ?? (review === null ? [] : null), "no valid verifier kept file in the lineage")
       : { status: "unavailable", reason: `run status ${String(r.status)}: the Action posts nothing`, candidates: 0, comments: [] },
@@ -140,6 +145,8 @@ export function main(argv: string[], log: (line: string) => void = console.log):
     names.add(r.case);
   }
   const targets = [path.join(values.out, "replay.json"), ...replays.flatMap((r) => Object.values(ARMS).map((name) => path.join(values.out!, name, `${r.case}.json`)))];
+  const root = path.resolve(values.out) + path.sep;
+  if (targets.some((t) => !path.resolve(t).startsWith(root))) { log("refused: an output path would leave --out"); return 2; }
   const existing = targets.find((t) => fs.existsSync(t));
   if (existing) { log(`refused: ${existing} exists; never overwritten (use a new --out)`); return 2; }
   const summary = [];

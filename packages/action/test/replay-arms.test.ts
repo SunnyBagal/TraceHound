@@ -1,7 +1,14 @@
 // scripts/testset/replay-arms.ts (B1): arms rebuilt from a record's lineage, with no inclusion assumed between arms.
 // Synthetic records only; no model, no network.
 import { describe, expect, it } from "vitest";
-import { replayArms, RefusalError } from "../../../scripts/testset/replay-arms.ts";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterAll } from "vitest";
+import { main, replayArms, RefusalError } from "../../../scripts/testset/replay-arms.ts";
+
+const dirs: string[] = [];
+afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
 
 type F = { path: string; line: number | null; body: string };
 const f = (i: number, file = "x.ts"): F => ({ path: file, line: 100 * i, body: `finding ${i}` });
@@ -71,5 +78,34 @@ describe("replayArms", () => {
     const bad = record({ diff: [f(1)] });
     (bad.lineage.pool as { findings: unknown[] }).findings = [{ path: "", line: 1, body: "x" }];
     expect(replayArms(bad).arms.A1).toMatchObject({ status: "unavailable" });
+  });
+
+  it("codex C1 probe 1: a case id that is not a plain file name refuses before any write", () => {
+    const d = mkdtempSync(path.join(tmpdir(), "replay-probe-"));
+    dirs.push(d);
+    const records = path.join(d, "records");
+    const out = path.join(d, "a", "b", "out");
+    for (const bad of ["../../outside", "..", "a/b", "x\\y"]) {
+      expect(() => replayArms({ ...record({ diff: [f(1)] }), case: bad })).toThrow(/not a plain file name/);
+    }
+    rmSync(records, { recursive: true, force: true });
+    mkdirSync(records, { recursive: true });
+    writeFileSync(path.join(records, "evil.json"), JSON.stringify({ ...record({ diff: [f(1)] }), case: "../../outside" }));
+    const lines: string[] = [];
+    expect(main(["--records", records, "--out", out], (l) => lines.push(l))).toBe(2);
+    expect(lines[0]).toMatch(/^refused: .*not a plain file name/);
+    expect(existsSync(out)).toBe(false);
+    expect(readdirSync(d).sort()).toEqual(["records"]); // nothing outside --out either
+  });
+
+  it("codex C1 probe 2: a cap (or failed) case with a prepared review has no A0; A1 and A2 still replay", () => {
+    for (const status of ["cap", "failed"]) {
+      const r = replayArms(record({ diff: [f(1), f(2)], status })); // prepared review and a kept file exist
+      expect(r.arms.A0).toMatchObject({ status: "unavailable", reason: `run status ${status}: the Action posts nothing` });
+      expect(r.a0MatchesPosted).toBeNull();
+      expect(r.a0NotInA1).toBeNull();
+      expect(r.arms.A1.comments).toEqual([f(1), f(2)]);
+      expect(r.arms.A2.comments).toEqual([f(1), f(2)]);
+    }
   });
 });
