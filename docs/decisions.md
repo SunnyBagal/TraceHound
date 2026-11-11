@@ -3839,3 +3839,67 @@ gate. The defaults stay as set in 073a: the append retry after an invalid reply 
 42 first replies spent all 32,000 output tokens on reasoning and came back empty, and the append retry recovered 7 of
 those 26 to a valid reply with a kept finding (15 to any valid reply). No reasoning-token budget exists on Token Factory
 to prevent it (074 (a)). Reopen only with a new mechanism or a provider change, with its own budget line.
+
+## 076 — S0 rulings and the pre-registered plan to the held-out run (2026-11-11)
+
+**Status: pre-registered; nothing run.** Plan `docs/plan/2026-11-10-plan.md` (`cd5525a`), audited in
+`docs/plan/2026-11-10-plan-audit.md` (`fabf2ac`: 185 claims, 141 verified / 17 contradicted / 21 unsupported / 6 marked
+guesses). Rulings by Sunny, 2026-11-11 (S0). Budget lines: `docs/budget.md` ("The split of $19.31 (2026-11-11)").
+**The spend freeze stays** until Sunny reports the Nebius console check; nothing paid runs before that.
+
+**Audit corrections.** Accepted as written: 1 (claim wording: "no detectable difference" unless the exact test rejects;
+no "catches as many"; no "reachable only if ≈ 30 points"; exact two-sided sign test on discordant bugs; Wilson without
+continuity correction), 2 (cost per PR: $0.075 measured on non-TS; any TS figure is an estimate), 5 (L1 does not assume
+A1 ⊇ A0), 6 (tool comments counted by the existing rule: top-level line review comments from the tool's bot), 7
+(CodeRabbit's limit is per developer, also scoped per repository, 1–10 by stars), 8 (Greptile's 50 credits may be per
+billing period, not calendar month; check before S1 and H1), 9 (L2 is the empty-reply lever; small fixes; every
+estimate labelled). Correction 3 (caps) and 4 (tie rule) as below. **Every cost and time estimate is labelled as an
+estimate** (C003, C023, C025, C127).
+**Caps (correction 3).** **L3 step 2 is cut**; L3 step 1 ($0, `review-ctx --context-only` reference share on the 40 dev
+cases) still runs and is reported. Job caps: S1 $0.45, R1 $4.15, L1 $0.40, L2 $0.80, L4 $0.10, R2 $4.15, H1 $3.15, H2 $0.40,
+reserve $3.00, unallocated $1.71; total **$18.31** (+ $1.00 margin = $19.31). **Each batch runs with `--max-usd-run` =
+min(batch estimate + $0.40, job cap − job spend so far)** (the runner starts a case only if spent + case cap ≤ run cap,
+`scripts/run-tracehound.ts:663`). Re-plan if console ÷ ledger is above **1.08**. Cut order: L2, then R2 becomes a cache
+replay of run 1. H1, H2 and the reserve are never cut.
+**Tie rule (correction 4).** A margin under 3 cases is a tie and the **incumbent (A0, pool-verify-v1) stays**; this
+replaces "the simpler arm wins" in `docs/budget.md`. If several arms pass a gate, the cheaper one wins.
+
+**Gates, verbatim from the plan** (all on the 31 dev bug cases; "judged" = bench-judge-v1 match to the case's label;
+"location hit" = a posted comment on the labelled file within ±10 lines of the labelled range, model-free), each with
+bunny's error range from the audit beside it (`tracehound-testset/run/out/bunny.plan-audit.md`; estimates, they depend
+on quantities not yet measured on TS):
+- **L1** (choose the configuration: A0 pool-verify-v1, A1 pool-raw, A2 review-diff-v1 alone; each capped at 15 comments
+  in pool order): "Replay run 1's lineage. Adopt an arm only if judged bugs caught ≥ A0 + 3, location hits ≥ A0's, and
+  its comments per case ≤ CodeRabbit's on the same dev cases (or ≤ 2 × A0 if that row is missing). Several pass: the
+  cheaper one." — **error range (b5a):** false adopt 1–16%, false reject 14–80%, depending on the arms' discordance on
+  TS (unmeasured).
+- **L2** (third attempt after an invalid or empty reply: redraw the original request, reasoning on, default 3
+  attempts): "Reliability test, cache bypassed: every reviewer chunk that ends `CHUNK_FAILED` in run 1 gets 2 fresh
+  redraws. Adopt if ≥ 50% of those chunks return a valid reply in at least one draw. If run 1 has fewer than 4 failed
+  chunks: no test, no change, report the rate." — **error range (b5c):** P(pass) 0.80 at 074's redraw rate 0.59;
+  0.35–0.53 at rates 0.3–0.4 with 4 chunks. **Framed as a test of the hypothesis (audit C076)** that redraws are
+  independent enough to recover about half of the lost chunks, not as a premise.
+- **R2** (dev run 2: fresh draw of the candidate, same command shape as held-out): "Gate: judged bugs caught ≥ run 1's
+  same-arm count − 2. If it fails, revert to the run 1 incumbent and say so." — **error range (b5b):** ≈ 12–26% false
+  reject of an equal candidate (draw-to-draw correlation on TS unmeasured).
+- **L4** (union of runs 1 and 2): report only, not adoptable.
+
+**S0 rulings.**
+1. **Multi-file bugs:** when one fix repairs the same defect in more than one file, every such row is labelled as the same
+   bug; the case counts once, and a comment matching any of those rows counts as catching it. **The primary is the first
+   file in git's path order** (`git show --no-renames --name-only --format= <fix>`), chosen by the rule, never by hand,
+   on dev and held-out alike; the other rows are alternates. For dev case-025 the migration is the primary and the entity
+   row an alternate. Its strict agreement stays 0/1 as measured.
+2. **Schema choices:** devin's two choices as written in `tracehound-testset/run/out/devin.schema.md` (the multi-file
+   primary rule above; any line overlap counts as agreement). The plan makes no recommendation on them.
+3. **Metric:** bugs caught of 20 with a Wilson interval, comments per PR, cost per PR. F on dev only.
+4. **Window:** 72 h, the same PR order for every tool, one re-trigger per tool per PR for tool errors only. CodeRabbit is
+   planned at 1 review per hour; P1 measures the real rate, and D1 fixes the trigger schedule from it before the freeze tag.
+5. **Firewall:** lifts for artu1 and bunny after the held-out outputs and score files are frozen and hashed.
+6. **Hand-check:** Sunny, one 2–3 h sitting. The held-out window is not booked until Sunny confirms the dates.
+**Caps check after recording (bunny, 2026-11-11):** under a realistic per-case cost spread the caps as ruled still
+stop R1/R2 (all cases run with P ≈ 0.29) and H1 (≈ 0.40) early, L4 at concurrency 4 is refused at the end, and
+judge-only jobs need per-job env caps to be enforced; details and options in `docs/budget.md` "S0 rulings". Awaiting
+Sunny; the caps above are unchanged.
+**Rejected:** running the plan as written (its caps stop early and two arguments are false, per the audit); "the simpler
+arm wins" ties; L3 step 2 at ≈ $2.17; choosing a multi-file primary by hand.

@@ -15,11 +15,13 @@ artu1 and bunny tune TraceHound later, so they **never open, list, grep or diff*
 - Held-out PRs open only after the final freeze tag (all tools in one window); forks get dev cases only until then. TraceHound runs locally per case (`scripts/run-tracehound.ts`), scored from local output.
 - Dev replacements: next candidate in screening order passing every check (incl. attribution, and since 2026-11-11 "bug visible at the introducing PR"), else dev −1. case-002 ("moved") stays.
 - Tools: CodeRabbit + Greptile free Starter (held-out + one smoke test); Bugbot excluded (limitation).
+- **S0 rulings (2026-11-11, decision 076, `docs/budget.md` "S0 rulings"):** audit corrections 1, 2, 5–9 accepted; caps S1 0.45 · R1 4.15 · L1 0.40 · L2 0.80 · L4 0.10 · R2 4.15 · H1 3.15 · H2 0.40 · reserve 3.00 · unallocated 1.71 = $18.31 (L3 step 2 cut, step 1 $0 runs); batch `--max-usd-run` = min(batch estimate + $0.40, job cap − job spend); re-plan if console ÷ ledger > 1.08; cut order L2, then R2 as cache replay. Tie (margin < 3) → incumbent A0 stays; several pass → cheaper. Gates L1/L2/R2 as the plan wrote them, with bunny's error ranges in 076; L2 tests hypothesis C076. Multi-file: every row of one defect = same bug, counts once, any row catches it, **primary = first file in git path order (never by hand)**; case-025 primary = migration, entity = alternate (strict 0/1 kept). Schema: devin's two choices as written. Metric: bugs caught of 20 (Wilson), comments/PR, cost/PR; F dev only. Window 72 h, same order, one re-trigger per tool per PR for tool errors; CodeRabbit 1/h until P1 measures. Firewall lifts after held-out outputs + scores are frozen and hashed. Hand-check: Sunny, one 2–3 h sitting; window not booked until Sunny confirms dates.
 
 ## Tracks
 - **Track B** (private `SunnyBagal/tracehound-testset`): dev **40** (31 bug, 9 clean; medusa 16, payload 9, twenty 15), held-out **29** (20 bug, 9 clean). Attribution: dev 30 attributed / 1 moved / 0 not attributed (artu1 rerun 2026-11-11); held-out 19 / 1 unmappable.
 - **case-025 (2026-11-11):** the #22392 case replaced (bug only visible after a later PR) by twenty fix #22795 ← #21674 (grok; 3 candidates dropped first; attribution 100%; leak 0; blobs filled). codex blind label: bug/clean 1/1, **strict 0/1**: grok chose the migration file, codex the entity file; the fix changes the same index in both. The open "multi-file primary" schema choice decides it (`labels/dev/compare-replace.md`).
-- **Plan audit (2026-11-11, $0):** `docs/plan/2026-11-10-plan-audit.md` merges codex (internal), bunny (stats/budget), grok (external): 185 claims, **141 VERIFIED, 17 CONTRADICTED, 21 UNSUPPORTED, 6 marked guesses**. The planner (Fable) accepted bunny's 6 contradictions. **13 tasks BLOCKED:** A1, D1, B2 (part), S1, P1, R1, E1 (L1, L2, L3 step 2), L4, A2, R2, F1, H1, W1. Clear: S0, B1, B3, C1, G1, H2, L3 step 1. The $3 reserve is inside the $17.25. Corrections listed for Sunny; plan not edited.
+- **Plan audit (2026-11-11, $0):** `docs/plan/2026-11-10-plan-audit.md`: 185 claims, 141 / 17 / 21 / 6; Sunny ruled on its corrections (S0 above). PR #71 (upgrade plan) merged `d04db68`.
+- **S0 lanes (2026-11-11, $0):** bunny caps check → B1 (lineage, replay-arms; no A1 ⊇ A0) → B3 (dev audits incl. L3 step 1) → B2 (after D1 draft; bot logins a config value); codex D1 `docs/eval/ts-protocol.md` → multi-file rule on dev + held-out labels (held-out counts only) → C1; grok G1 tool facts → D1 review → fork default branches to the last upstream commit before 2026-07-01 (dry run, then apply). Briefs `run/briefs/{bunny,codex,grok}-s0.md`.
 - **Brain:** backfill D062–D075, P010, 7 topic notes, rules (`29e8515`; codex GO round 2 after a NO-GO: D070 precision floors + 8 P2s); plan-audit note `6c4fbb0` (codex GO round 3, after two NO-GOs on power wording and the L4 listing).
 - **Local runner + triggers:** merged `d482d38` (codex GO). Never run paid. Dev clones filled (`tracehound-testset/scripts/fill-dev-blobs.py`).
 - **Forks:** Actions OFF on all four. Plan `docs/live-setup.md`. **CI:** review workflows manual; left: Action pins, label.
@@ -39,11 +41,10 @@ artu1 `t9` · bunny `t15` (dev side only) · codex `t14` (review GO/NO-GO, secon
 Coordination: `~/Projects/tracehound-testset/run/{briefs,out,comms}`; `.done` markers. Commands: `docs/herdr.md`.
 
 ## OPEN TASKS (in order)
-a. Spend freeze until Sunny confirms the console usage.
-b. Sunny: rule on the plan audit's corrections (audit doc, last section); blocked tasks stay blocked until then.
-c. Sunny: case-025 multi-file primary (and devin's two schema choices).
-d. Before the held-out run, fix in writing: goldens per case, golden severity, comments per case (budget.md); then the freeze tag.
-e. Bump the Action pins and create the `tracehound-review` label in the four repos.
+a. Spend freeze until Sunny reports the Nebius console check (S0's last open item).
+b. S0 lanes above; A1 (budget table + 076) is pushed after bunny's caps check.
+c. Sunny: confirm held-out window dates (hand-check sitting) before H1 is booked.
+d. Bump the Action pins and create the `tracehound-review` label in the four repos.
 
 ## Where things are
 Decisions `docs/decisions.md` · budget `docs/budget.md` · plan + audit `docs/plan/` · live plan `docs/live-setup.md` · results `docs/bench/results.md` · history `.agents/LOG.md` · herdr `docs/herdr.md` · test set `~/Projects/tracehound-testset` · brain `~/Projects/tracehound-brain`.

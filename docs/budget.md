@@ -1,4 +1,4 @@
-# Budget (2026-11-09)
+# Budget (2026-11-09; split replaced 2026-11-11, decision 076)
 
 **Money left: $19.31** (the owner's console reading, 2026-11-09; it was $23.39 on 2026-11-08). That is all the money the
 project has. Every model call from here on has a line below, or it does not happen.
@@ -13,6 +13,34 @@ new key is only in local `.env`.
 real: $0.22 unexplained (≈ 6% of the two jobs' $3.86, within a price-estimate error; not proven). codex found no
 Nebius-key-capable CI run in the 48 h (`run/out/codex.leak.md` § 48 h) and grok no committed key in 53 public repos
 (`run/out/grok.secrets.md`). The "≈ $3.59 off-ledger overnight" in the log below is superseded by this.
+
+## S0 rulings (Sunny, 2026-11-11; decision 076)
+- The plan (`docs/plan/2026-11-10-plan.md`) runs only as corrected by its audit (`docs/plan/2026-11-10-plan-audit.md`);
+  corrections 1, 2, 5–9 accepted as written, 3 and 4 as below. **The freeze above stays** until the console check.
+- **Caps:** the table below. L3 step 2 is cut (L3 step 1 is $0 and still runs). Each batch runs with
+  `--max-usd-run` = min(batch estimate + $0.40, job cap − job spend so far). Re-plan if console ÷ ledger > **1.08**.
+  Cut order: L2, then R2 becomes a cache replay. H1, H2 and the reserve are never cut.
+- **Ties:** a margin under 3 cases is a tie and the incumbent (A0, pool-verify-v1) stays; if several arms pass, the cheaper
+  one wins.
+- **Multi-file bugs:** every row of one defect is the same bug; the case counts once; a comment matching any row catches
+  it; the primary is the first file in git's path order (rule, never by hand); the others are alternates.
+- **Schema:** devin's two choices as written (`tracehound-testset/run/out/devin.schema.md`). **Metric:** bugs caught of 20
+  (Wilson), comments per PR, cost per PR; F on dev only. **Window:** 72 h, same PR order for every tool, one re-trigger
+  per tool per PR for tool errors only; CodeRabbit planned at 1/h until P1 measures it. **Firewall** lifts for artu1 and
+  bunny after held-out outputs and score files are frozen and hashed. **Hand-check:** Sunny, one 2–3 h sitting; the
+  window is not booked until Sunny confirms dates.
+- Every cost and time below is an **estimate** unless marked measured.
+- **Caps check (bunny, 2026-11-11, `tracehound-testset/run/out/bunny.caps-check.md`; estimates, TS costs unmeasured):**
+  at the estimate ($0.0934 per case) every job completes, but R1/R2 have 3% headroom and H1 5%. Under a realistic
+  per-case spread, the batch rule as written runs every case with P ≈ 0.29 (R1, R2) and ≈ 0.40 (H1): one expensive case
+  early in a batch makes its last cases stop (`run-tracehound.ts:663`). L4 at `bench score --concurrency 4` reserves
+  ≈ $0.107 > $0.10 and its last calls are refused. Judge-only jobs (L1, L4, H2) are capped only by
+  `TRACEHOUND_BUDGET_RUN_USD` (default $1) and the `.env` total unless set per job. S1, L1, L2 (≤ 11 failed chunks) and
+  H2 fit. **Options for Sunny (not applied):** batch `--max-usd-run` = job cap − job spend so far, unstarted ids rolled
+  into the next batch (P ≈ 0.66 / 0.71 alone); job caps for 95% completion R1/R2 $4.68, H1 $3.53 (+$1.44 from the
+  $1.71 unallocated; 90%: +$1.03); or unstarted held-out cases run from the reserve. Procedural, also pending: L4 at
+  `--concurrency 1–2`; for every judge-only process set `TRACEHOUND_BUDGET_TOTAL_USD = ledger at job start + job cap`
+  and `TRACEHOUND_BUDGET_RUN_USD = job cap`; L2 pre-registers what happens above 11 failed chunks.
 
 ## Rules
 1. **No experiment without a line in this file** (job, cap, status). A job's cap is enforced in its own runner as well.
@@ -75,29 +103,36 @@ $19.40. Audit cost: $0; only console usage can reconcile the actual charges.
 | judging per PR: v1 only / v1 + x1 | $0.0012 / $0.0014 | same |
 | cache-replay run, per PR (073r arm A) | ≈ $0.0073 incl. both judges (8 of 96 first attempts plus misses went live) | recovery-ab.md |
 
-## The split of $19.31 (2026-11-09)
-Estimates use the costs above on 40-PR sets, plus 25% for larger TypeScript diffs (an assumption; TS PRs are not measured).
+## The split of $19.31 (2026-11-11, decision 076; replaces the 2026-11-09 split, which is in git history)
+Bases are **estimates** from the unit costs above (measured on non-TS repos) plus 25% for TS diffs (an assumption).
+Job caps are Sunny's (S0). A batch's `--max-usd-run` = min(batch estimate + $0.40, job cap − job spend so far).
 
-| line | what | cap | basis | status |
+| line | what | cap | basis (estimate unless marked) | status |
 |---|---|---|---|---|
-| TS-dev run 1 | pool-verify-v1, fresh, 40 PRs, judge v1 | **$3.80** | 40 × ($0.0747 + $0.0012) = $3.04, + 25% | not started (needs the TS dev set) |
-| TS-dev run 2 | same, second draw | **$3.80** | same | not started |
-| held-out run | pool-verify-v1, fresh, 40 PRs, judges v1 + x1 | **$3.80** | 40 × ($0.0747 + $0.0014) = $3.04, + 25% | not started (needs the held-out set) |
-| held-out scoring | every row (ours + any tool reviews Sunny obtains) × 40 PRs × v1 + x1 | **$0.60** | e.g. 8 rows × 40 × $0.0014 = $0.45, + 30% | not started |
-| reserve | reruns after an infrastructure failure, a console-check correction | **$3.00** | owner, 2026-11-09 (was $4) | held |
-| unallocated | needs a new line here before use | **$3.31** | $19.31 − $1.00 margin − the lines above | held |
-| CI review runs | manual Action runs (label or dispatch) in any of the four repos | **$0.00** | none planned; each run needs a line first (≈ $0.075/PR + fixes) | none since 2026-11-01 |
-| safety margin | never spent (it is outside the global hard stop) | $1.00 | rule 3 | — |
-| **total** | | **$19.31** | | |
+| S1 smoke | one dev case end to end, all three tools | **$0.45** | one case at the $0.40 case cap + judging | blocked by the freeze |
+| R1 dev run 1 | pool-verify-v1, fresh, 40 dev cases, judge v1, batches | **$4.15** | 40 × ($0.0747 + $0.0012) × 1.25 ≈ $3.80, + batch headroom | not started |
+| L1 arm scoring | replay of run 1's lineage, 3 arms, judge v1 | **$0.40** | 3 × 40 × $0.0012 ≈ $0.15, + CodeRabbit's dev row | not started |
+| L2 redraw test | 2 fresh redraws per `CHUNK_FAILED` chunk of run 1, cache bypassed | **$0.80** | ≈ 8 chunks × 2 × $0.035 (TS count unmeasured) | not started; first to cut |
+| L3 step 2 | — | **cut** | (≈ $2.17, above its cap; audit b7f) | cut by S0 |
+| L4 union | report only, judge the union of runs 1 and 2 | **$0.10** | ≈ $0.05 (audit C088: unmeasured) | not started |
+| R2 dev run 2 | fresh draw of the candidate | **$4.15** | as R1 | not started; becomes a cache replay if cut |
+| H1 held-out run | 29 cases, from the freeze tag | **$3.15** | 29 × $0.0761 × 1.25 ≈ $2.76 | never cut |
+| H2 scoring | 3 tools + 2 secondary rows × 29 × v1 + x1 | **$0.40** | ≈ $0.20 | never cut |
+| reserve | infrastructure reruns (held-out first), a console-check correction | **$3.00** | owner | held; never cut |
+| unallocated | needs a new line here before use | **$1.71** | $18.31 − the lines above | held |
+| CI review runs | manual Action runs | **$0.00** | none planned; each needs a line first | none since 2026-11-01 |
+| safety margin | never spent (outside the global hard stop) | $1.00 | rule 3 | — |
+| **total** | | **$19.31** | $18.31 usable + $1.00 margin | |
 
-Done before this split: 075 ($0.49090, ledger; INCONCLUSIVE). The $23.39 split of 2026-11-08 is in git history.
+Done before this split: 075 ($0.49090, ledger; INCONCLUSIVE).
 
 The external review tools (Augment, Cursor, Greptile, CodeRabbit, Copilot) cost no Nebius money to score once their
 reviews exist, but getting their reviews of new PRs is outside this budget.
 
 ## Scoring scheme for the new sets (devin, `run/out/devin.budget.md`)
 - TS-dev: one judge (bench-judge-v1). Use it to select only on a margin of at least 3 cases; anything closer is a tie and
-  the simpler arm wins. Dev numbers are reported as unverified.
+  the incumbent (A0, pool-verify-v1) stays; if several arms pass a gate, the cheaper one wins (S0, 2026-11-11; this
+  replaced "the simpler arm wins"). Dev numbers are reported as unverified.
 - Held-out: both judges, then Sunny checks by hand every match either judge reports, every case where they disagree, and
   every comment on a labelled file within ±10 lines of a labelled range (catches matches both judges missed).
 - Before the held-out run, fix in writing: whether every labelled row of a case is a golden (the pilot has several rows per
@@ -122,3 +157,4 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 | 2026-11-09 | CI audit (no spend) | — | $0 since the $23.39 reading (0 Action runs after 2026-11-01) | **$22.90** = $23.39 (Sunny's console reading) − $0.49090 (075, ledger) − $0 CI |
 | 2026-11-09 | billing-lag finding: the $23.39 reading predates 074's charge ($3.36463); expected 23.39 − 3.36463 − 0.49090 = $19.53 vs real $19.31 ($0.22 unexplained). Freeze until the console confirms | — | — | **$19.31** |
 | 2026-11-09 | local-ledger audit (codex): 72 files; evaluation copy deduplicated; $0 additional non-test spend demonstrated; $19.40 off-ledger / $12.7–$14.2 after CI remains unexplained | — | $0 (audit; no calls) | **$19.31** |
+| 2026-11-11 | S0 rulings and decision 076: new split ($18.31 usable: S1 0.45, R1 4.15, L1 0.40, L2 0.80, L4 0.10, R2 4.15, H1 3.15, H2 0.40, reserve 3.00, unallocated 1.71; L3 step 2 cut); freeze stays | — | $0 | **$19.31** |
