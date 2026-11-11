@@ -49,8 +49,9 @@ c. **B2 follow-up** (`docs/specs/B2.md` §5.1/§5.2/§7): branch `b2-followup` @
 d. **codex (t14) is blocked on a permission prompt** (seen 2026-11-11 ~16:30): Sunny must answer it; agents never answer another's dialog. Its queue: part 4 of `codex-076a.md` (plan v2 audit), then `codex-b2-followup.md`.
 e. **Plan v2** (`docs/plan/2026-11-11-plan-v2.md`, Planner A, supersedes v1): artu1 confirmed its runner findings on main (one repo per invocation, `run-tracehound.ts:215`; manifest order, `--ids` filters only; defaults case cap $0.25, fixes/contracts on → every command needs `--fixes off --contracts off --max-usd-per-case 0.40`). Under the rolling rule the caps re-check's completion figures do not depend on batch layout. Open points R-1 (re-trigger collision), R-2 (P1 rate → H1 schedule), R-3 (Planner B's proposals).
 f. Branch heads: B1/B2 merged; `b2-followup` `3668819` (review pending); D1 `codex/ts-protocol` `c64e77d` (pushed; not merged until Sunny rules on Planner B's note).
-g. Sunny: rule on Planner B's D1 note; confirm window dates; answer codex's permission prompt.
-h. Bump the Action pins and create the `tracehound-review` label in the four repos.
+g. **Before R1 (from codex's plan-v2 audit question):** R1/R2's post-run judging has no job-envelope binding (the runner never judges; `bench score` takes RUN $1 default / TOTAL global hard stop; 076a (5) covers L1/L4/H2 only). Proposed: judging runs with TOTAL = ledger at the job's start + job cap, RUN = job cap − runner spend, `--concurrency 1`; needs a ruling or spec line (`run/comms/codex-to-bunny-076a-plan-v2-1.answer.md`).
+h. Sunny: rule on Planner B's D1 note; confirm window dates; answer codex's permission prompt.
+i. Bump the Action pins and create the `tracehound-review` label in the four repos.
 
 ## Where things are
 Decisions `docs/decisions.md` · budget `docs/budget.md` · plan + audit `docs/plan/` · live plan `docs/live-setup.md` · results `docs/bench/results.md` · history `.agents/LOG.md` · herdr `docs/herdr.md` · test set `~/Projects/tracehound-testset` · brain `~/Projects/tracehound-brain`.
