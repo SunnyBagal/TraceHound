@@ -1,0 +1,119 @@
+# Runbook H2: scoring the held-out window and the blind hand-check
+
+For codex (operator), Sunny (the hand-check, one sitting of 2–3 hours), artu1 (receives counts; lifts the firewall at
+the end). Planner A, 2026-11-11. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md`
+§4, §10 (it wins over this runbook). Budget line: **H2, cap $0.40**. Starts after H1's snapshot is hashed.
+
+**Order fixed by decision 076a §13.7:** sheet hashed → unblind → score files hashed and committed → the firewall lifts.
+Nothing in a later step may be seen before the earlier one is done.
+
+```sh
+TH=~/Projects/th-h1; HO=~/Projects/tracehound-ho-window; S=$HO/score; mkdir -p $S
+ledger() { node $TH/packages/analyzer/src/spend.ts | sed -n 's/^Total est. spend: \$\([0-9.]*\).*/\1/p'; }
+POLICY=$(ls $TH/scripts/testset/policy*076a.json); G=$HO/goldens          # goldens built and hashed at F1 §4.3
+ARM=<candidate arm directory name, from decision 077>
+SEED=<the hand-check seed in docs/bench/ts-freeze.md>
+```
+Every kit command below carries `--side heldout --heldout-ok` (written once here, omitted in the lines for length).
+
+## 1. Assemble the rows (no model call)
+1. Official TraceHound records: `mkdir $S/official`; per case copy `<id>.r2.json` where a rerun exists, else `<id>.json`,
+   from `$HO/th`. A case with no record stays absent (it is a miss by policy `unstarted_case: miss`).
+2. `node scripts/testset/replay-arms.ts --records $S/official --out $S/arms` → exit 0. Exit 1 (A0 differs from the
+   posted comments): stop and tell Sunny; do not score.
+3. External tools: merge the per-repository collections of H1 §6 into one directory and one status file per tool:
+   `mkdir -p $S/coderabbit $S/greptile; cp $HO/tools-*/coderabbit/*.json $S/coderabbit/; jq -s add $HO/tools-*/coderabbit.status.json > $S/coderabbit.status.json`
+   (and the same for greptile).
+4. Rows. **Primary (these three make the claim):** `tracehound` = `$S/arms/$ARM`, `coderabbit`, `greptile`.
+   **Secondary (report only, judges only, not hand-checked):** the two TraceHound arms that are not the candidate.
+
+## 2. Judging (the only paid step)
+`L0=$(ledger)`. For each of the five rows, first bench-judge-v1, then bench-judge-x1, one process after the other:
+```sh
+E="TRACEHOUND_BUDGET_RUN_USD=0.40 TRACEHOUND_BUDGET_TOTAL_USD=$(echo "$L0 + 0.40" | bc)"
+env $E node $TH/packages/analyzer/src/bin.ts bench score --golden $G/bench-golden.json --reviews <row dir> --detail $S/judge/<row>.v1.json --concurrency 1
+env $E node $TH/packages/analyzer/src/bin.ts bench score --golden $G/bench-golden.json --reviews <row dir> --detail $S/judge/<row>.x1.json --concurrency 1 \
+  --model Qwen/Qwen3-235B-A22B-Instruct-2507 --reasoning off
+```
+At most 5 rows × 20 bug cases × 2 judges = 200 calls (a clean case or an empty review makes none,
+`packages/analyzer/src/bench/score.ts:125-126`). A refused call (cap) or a `JUDGE_FAILED` entry: note the count; rerun
+that one process once into a new detail file name (`…v1.b.json`) if money is left under the $0.40; never edit a detail
+file. If the cap is reached with rows unjudged, the secondary rows are the ones left unjudged, and the report says so.
+
+## 3. Pre-check tables (private; nobody but codex reads them)
+```sh
+node scripts/testset/location-hit.ts --goldens $G/goldens.json --tool tracehound=$S/arms/$ARM --tool coderabbit=$S/coderabbit --tool greptile=$S/greptile --out $S/location.json
+node scripts/testset/score-testset.ts --goldens $G/goldens.json --policy $POLICY \
+  --tool tracehound=$S/arms/$ARM --tool coderabbit=$S/coderabbit --tool greptile=$S/greptile \
+  --judge tracehound=$S/judge/tracehound.v1.json --judge coderabbit=… --judge greptile=… \
+  --judge-x1 tracehound=$S/judge/tracehound.x1.json --judge-x1 coderabbit=… --judge-x1 greptile=… \
+  --records tracehound=$HO/th --status coderabbit=$S/coderabbit.status.json --status greptile=$S/greptile.status.json \
+  --out $S/summary.judges.json
+```
+This is the judges-only result. It is **not** the headline and is not shown to Sunny before his sitting.
+
+## 4. The blind sheet
+```sh
+node scripts/testset/handcheck-sheet.ts build --goldens $G/goldens.json --policy $POLICY \
+  --tool tracehound=$S/arms/$ARM --tool coderabbit=$S/coderabbit --tool greptile=$S/greptile \
+  --judge … (the three v1 details) --judge-x1 … (the three x1 details) --seed $SEED --strip scripts/testset/strip.json --out $S/sheet
+grep -i -c 'coderabbit\|greptile\|tracehound' $S/sheet/sheet.md        # must print 0
+shasum -a 256 $S/sheet/sheet.md $S/sheet/decisions.json $S/sheet/mapping.json $S/sheet/hashes.json > $S/sheet.blank.sha256
+```
+- Candidates on the sheet (protocol §10): every comment either judge matched, and every comment within ±10 lines of
+  any target. So every judge disagreement is on it. Everything else stays unmatched; say so in the write-up.
+- If the `grep` prints anything but 0: do **not** edit `strip.json` (it is frozen). Tell Sunny the count; he decides
+  whether to proceed with a known cue or to void the sheet. Record the decision.
+- codex gives Sunny `sheet.md` and `decisions.json` only. `mapping.json` never leaves `$HO`.
+
+## 5. Sunny's sitting (one sitting; nobody helps; no tool output open elsewhere)
+For each item the sheet shows the labelled bug (description and locations) and one comment. Write in `decisions.json`:
+- **`same-bug`** if the comment points at the labelled defect: the same faulty behaviour, at the labelled place or at a
+  place the label lists. Different words are fine. A correct fix suggestion is not required.
+- **`not`** if it is about something else in the same file or nearby, is too vague to tell which defect it means, or
+  only restates what the code does. When unsure, write `not` and the reason "unsure".
+- A reason of a few words for every item.
+Rules: decide every item (the resolve step refuses a blank). Do not look up the PR, the fix or any tool's page. Do not
+go back and change earlier items after seeing later ones, except for a slip noticed at once. Note the start and end time.
+When done, Sunny sends `decisions.json` back and says "final".
+
+## 6. Hash, unblind, final score
+1. `shasum -a 256 $S/sheet/decisions.json > $S/sheet.filled.sha256`; codex sends Sunny that hash; Sunny confirms it
+   matches his file. **Only then:**
+2. `node scripts/testset/handcheck-sheet.ts resolve --mapping $S/sheet/mapping.json --decisions $S/sheet/decisions.json --out $S/handcheck.json`
+3. Final tables: the §3 `score-testset.ts` line again with `--handcheck $S/handcheck.json --out $S/summary.final.json`.
+4. Secondary rows: one more `score-testset.ts` run with the two other arms, their v1 and x1 details, no `--handcheck`,
+   `--out $S/summary.secondary.json`.
+5. `( cd $S && find . -type f | sort | xargs shasum -a 256 > ../hashes.score.txt ); shasum -a 256 $HO/hashes.score.txt`
+6. codex checks `summary.final.json` and `summary.secondary.json` contain **no case id, title, path or comment text**
+   (`grep -c 'ho-[0-9]' …` prints 0; the kit writes counts only). If they do, strip nothing by hand: report it and stop.
+7. codex commits to `TraceHound/docs/bench/`: `ts-heldout.summary.json` (a copy of `summary.final.json`),
+   `ts-heldout.secondary.json`, and `ts-heldout.hashes.md` with the three single-line hashes (window, blank sheet +
+   filled sheet, score) and the counts of §7. Push.
+8. **The firewall lifts** for artu1 and bunny when that commit is on `main`. artu1 records the time in STATE. The lift
+   does not allow changing the frozen reviewer or the scored protocol (protocol §10).
+
+## 7. Report: `run/out/codex.ho-score.md` (counts only)
+Per primary tool: completed of 29 (bug n, clean m); caught K of 20 by v1, by x1, by the hand-check; Wilson interval of
+the hand-check K; comments per attempted and per completed PR (mean, median); comments on clean cases; location hits.
+Pairs (TraceHound–CodeRabbit, TraceHound–Greptile, CodeRabbit–Greptile): paired n, only-A, only-B, exact p. Hand-check:
+items on the sheet, `same-bug` count, judge-matched items Sunny rejected, location-only items Sunny accepted, sitting
+length. Judging: calls, `JUDGE_FAILED`, spend. TraceHound cost per PR (mean, median, max, total) from the records.
+
+## 8. Failures and rules
+| failure | rule |
+|---|---|
+| A detail file does not cover a completed bug case | `score-testset.ts` refuses (exit 2). Re-judge that row once; never mark the case a miss by hand. |
+| Sunny cannot finish in one sitting | He stops, the partial file is hashed and kept, and he finishes in a second sitting without seeing anything else in between; the report says "two sittings". |
+| Sunny's file hash does not match | Use his file; hash again together; never the operator's copy. |
+| Sunny wants to change a decision after unblinding | Not allowed. It is recorded as a note next to the result. |
+| The two judges disagree on many items | Nothing to do: the hand-check decides, and the disagreement count is reported. |
+| A label looks wrong to Sunny during the sitting | He writes it in the reason. No relabelling, no dropped case (protocol §9). It is listed under limits in the write-up. |
+
+## 9. The three most likely ways to get this wrong
+1. **Unblinding early.** Running `resolve`, or showing any per-tool table to Sunny, before his filled sheet's hash is
+   confirmed, makes the hand-check an interested party's check again (plan v1 M10).
+2. **Scoring a different arm than the frozen candidate.** `$ARM` comes from decision 077, not from whichever arm looks
+   best in `summary.judges.json`. The other two arms are secondary rows whatever they score.
+3. **Committing private content.** Only the three files of step 6.7 go to the repo, and only after the check of step
+   6.6. Records, details, the sheet and the mapping stay in `$HO`.
