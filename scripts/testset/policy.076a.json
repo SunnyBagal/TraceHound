@@ -3,7 +3,7 @@
  "approved": {
   "by": "Sunny",
   "on": "2026-11-11",
-  "ref": "TraceHound docs/decisions.md 076a (protocol section 13 items 1-8; item 9 pending). Items the kit applies: 3 -> official_attempt, failed_case, unstarted_case; 4 -> no_review_in_pairs; 5 -> sheet_judge_cues. Items 1 (alpha 0.05 two-sided), 2 (equal-cost order), 6 (re-trigger at +24 h), 7 (sheet hash, unblind, score files hashed and committed, firewall lifts) and 8 (claim repos) have no consumer in the kit; see scripts/testset/policy.076a.md."
+  "ref": "TraceHound docs/decisions.md 076a (protocol section 13 items 1-8; item 9 pending) and 076b items 1 and 4. Items the kit applies: 076a 3 -> official_attempt, failed_case, unstarted_case; 076a 4 -> no_review_in_pairs; 076a 5 -> sheet_judge_cues. Items with no consumer in the kit: 076a 1 (alpha 0.05 two-sided), 2 (equal-cost order), 6 (re-trigger at +24 h; amended by 076b 2), 7 (sheet hash, unblind, score files hashed and committed, firewall lifts), 8 (claim repos); 076b 1 (R1/R2 judging: TOTAL = ledger at job start + job cap, RUN = job cap - runner spend, --concurrency 1), 076b 4 (canary only after 2 consecutive held-out provider/transport failures; at most 3 tries, at least 30 min apart, at most $0.40 in total from the reserve; all 3 fail -> stop and tell Sunny). See scripts/testset/policy.076a.md."
  },
  "official_attempt": "last",
  "failed_case": "miss",
