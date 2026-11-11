@@ -10,6 +10,9 @@
  *   A0 pool-verify-v1  the verifier's kept file (what the Action posts; checked against the record's `comments`)
  *   A1 pool-raw        the pool (review-diff-v1 findings, then ctx-only findings), no verifier
  *   A2 review-diff-v1  the diff reviewer's findings alone (partial when chunks failed, as decision 068 counts them)
+ * Contract units: when the record says contracts emitted findings (`review.contracts.emitted`: inline, then body; the
+ * overflow is only a count in the product), every available arm ends with them, as the product's review would; they are
+ * outside the 15-comment model cap. A0's identity check covers the model part.
  * No arm is assumed to contain another: the 15-comment cap is applied to each arm's own order, so A0 can hold findings
  * that A1's first 15 do not (the count is reported as `a0NotInA1`).
  *
@@ -32,7 +35,10 @@ export interface ArmResult {
   reason?: string;
   /** findings before the contract dedupe and the cap */
   candidates: number;
+  /** model comments after the dedupe and the cap, then every emitted contract unit (record.review.contracts.emitted) */
   comments: Finding[];
+  /** how many of `comments` are model comments (the rest are contract units) */
+  model: number;
 }
 export interface Replay {
   case: string;
@@ -43,8 +49,10 @@ export interface Replay {
   contractsSource: "prepared" | "lineage" | "none";
   /** A0 equals the record's posted `comments`; null when the record has no prepared review to compare with */
   a0MatchesPosted: boolean | null;
-  /** A0 comments that are not among A1's comments (A1 ⊇ A0 does not hold in general) */
+  /** A0 model comments that are not among A1's model comments (A1 ⊇ A0 does not hold in general) */
   a0NotInA1: number | null;
+  /** contract units appended to every available arm */
+  contractUnits: number;
 }
 
 export class RefusalError extends Error {}
@@ -81,10 +89,17 @@ export function replayArms(record: unknown, maxComments = MAX_COMMENTS): Replay 
   const contractsSource: Replay["contractsSource"] = Array.isArray(preparedContracts) ? "prepared" : Array.isArray(rawContracts) ? "lineage" : "none";
   const contracts = (contractsSource === "prepared" ? preparedContracts : contractsSource === "lineage" ? rawContracts : []) as
     { path: string; line: number | null }[];
+  const emitted = obj(review?.contracts)?.emitted;
+  const units = emitted === null || emitted === undefined ? [] : (() => {
+    const e = obj(emitted);
+    const inline = findingList(e?.inline), body = findingList(e?.body);
+    if (!inline || !body) throw new RefusalError(`${r.case}: review.contracts.emitted is not {inline, body} findings`);
+    return [...inline, ...body];
+  })();
   const finish = (list: Finding[] | null, missing: string): ArmResult => {
-    if (!list) return { status: "unavailable", reason: missing, candidates: 0, comments: [] };
-    const deduped = dropContractDuplicates(list, list.map(() => null), contracts).comments;
-    return { status: "ok", candidates: list.length, comments: deduped.slice(0, maxComments) };
+    if (!list) return { status: "unavailable", reason: missing, candidates: 0, comments: [], model: 0 };
+    const capped = dropContractDuplicates(list, list.map(() => null), contracts).comments.slice(0, maxComments);
+    return { status: "ok", candidates: list.length, comments: [...capped, ...units], model: capped.length };
   };
   const kept = findingList(obj(obj(lineage["verify-ctx-v1"])?.kept)?.comments);
   // A0 is what the Action would post, so only an official `ok` case has one: the runner posts nothing for a failed or
@@ -92,19 +107,19 @@ export function replayArms(record: unknown, maxComments = MAX_COMMENTS): Replay 
   const a0Available = r.status === "ok";
   const arms: Record<Arm, ArmResult> = {
     A0: a0Available ? finish(kept ?? (review === null ? [] : null), "no valid verifier kept file in the lineage")
-      : { status: "unavailable", reason: `run status ${String(r.status)}: the Action posts nothing`, candidates: 0, comments: [] },
+      : { status: "unavailable", reason: `run status ${String(r.status)}: the Action posts nothing`, candidates: 0, comments: [], model: 0 },
     A1: finish(findingList(obj(lineage.pool)?.findings), "no pool in the lineage (a reviewer failed)"),
     A2: finish(findingList(obj(lineage["review-diff-v1"])?.comments), "no valid review-diff-v1 output in the lineage"),
   };
   const posted = findingList(r.comments);
   const a0MatchesPosted = review === null || arms.A0.status !== "ok" || !posted ? null
-    : posted.length === arms.A0.comments.length && posted.every((f, i) => key(f) === key(arms.A0.comments[i]!));
-  const a1Keys = new Set(arms.A1.comments.map(key));
-  const a0NotInA1 = arms.A0.status === "ok" && arms.A1.status === "ok" ? arms.A0.comments.filter((f) => !a1Keys.has(key(f))).length : null;
+    : posted.length === arms.A0.model && posted.every((f, i) => key(f) === key(arms.A0.comments[i]!));
+  const a1Keys = new Set(arms.A1.comments.slice(0, arms.A1.model).map(key));
+  const a0NotInA1 = arms.A0.status === "ok" && arms.A1.status === "ok" ? arms.A0.comments.slice(0, arms.A0.model).filter((f) => !a1Keys.has(key(f))).length : null;
   return {
     case: r.case, pr_title: typeof r.pr_title === "string" ? r.pr_title : "",
     ...(typeof r.pr_number === "number" && { pr_number: r.pr_number }),
-    arms, contractsSource, a0MatchesPosted, a0NotInA1,
+    arms, contractsSource, a0MatchesPosted, a0NotInA1, contractUnits: units.length,
   };
 }
 
@@ -161,11 +176,11 @@ export function main(argv: string[], log: (line: string) => void = console.log):
         comments: a.comments }, null, 1) + "\n", { flag: "wx" });
     }
     const counts = Object.fromEntries((Object.keys(ARMS) as Arm[]).map((arm) => [arm, r.arms[arm].status === "ok"
-      ? { candidates: r.arms[arm].candidates, comments: r.arms[arm].comments.length } : { unavailable: r.arms[arm].reason }]));
-    summary.push({ case: r.case, ...counts, contractsSource: r.contractsSource, a0MatchesPosted: r.a0MatchesPosted, a0NotInA1: r.a0NotInA1 });
-    const show = (arm: Arm) => r.arms[arm].status === "ok" ? `${r.arms[arm].comments.length}/${r.arms[arm].candidates}` : "n/a";
+      ? { candidates: r.arms[arm].candidates, model: r.arms[arm].model, comments: r.arms[arm].comments.length } : { unavailable: r.arms[arm].reason }]));
+    summary.push({ case: r.case, ...counts, contractsSource: r.contractsSource, contractUnits: r.contractUnits, a0MatchesPosted: r.a0MatchesPosted, a0NotInA1: r.a0NotInA1 });
+    const show = (arm: Arm) => r.arms[arm].status === "ok" ? `${r.arms[arm].model}/${r.arms[arm].candidates}` : "n/a";
     log(`${r.case}: A0 ${show("A0")} · A1 ${show("A1")} · A2 ${show("A2")} (posted/candidates) · A0 not in A1 ${r.a0NotInA1 ?? "n/a"}`
-      + ` · A0 = posted ${r.a0MatchesPosted ?? "n/a"}`);
+      + ` · A0 = posted ${r.a0MatchesPosted ?? "n/a"}${r.contractUnits ? ` · + ${r.contractUnits} contract unit(s) per arm` : ""}`);
     if (r.a0MatchesPosted === false) { mismatch = true; log(`MISMATCH: ${r.case}: the A0 replay differs from the record's posted comments`); }
   }
   fs.mkdirSync(values.out, { recursive: true });

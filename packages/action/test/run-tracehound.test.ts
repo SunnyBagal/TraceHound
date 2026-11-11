@@ -578,9 +578,12 @@ describe("lineage and replay-arms (B1)", () => {
     const rec = record(f);
     const r = replayArms(rec);
     expect(r.a0MatchesPosted).toBe(true);
-    expect(r.arms.A0.comments).toEqual(rec.comments);
+    // the model part equals the posted comments; every arm then ends with the emitted contract unit
+    expect(r.arms.A0.comments.slice(0, r.arms.A0.model)).toEqual(rec.comments);
+    expect(rec.review.contracts.emitted.inline.length + rec.review.contracts.emitted.body.length).toBe(1);
+    for (const arm of ["A0", "A1", "A2"] as const) expect(r.arms[arm].comments.slice(r.arms[arm].model)).toEqual([CONTRACT]);
     expect(r.contractsSource).toBe("prepared");
-    const bodies = (arm: "A0" | "A1" | "A2") => r.arms[arm].comments.map((c) => c.body);
+    const bodies = (arm: "A0" | "A1" | "A2") => r.arms[arm].comments.slice(0, r.arms[arm].model).map((c) => c.body);
     // A1 = pool minus diff 30 (contract), first 15: diff 10, 20 DROP, 40..120, ctx 10..40
     expect(bodies("A1")).toEqual(["diff 10", "diff 20 DROP", ...[40, 50, 60, 70, 80, 90, 100, 110, 120].map((n) => `diff ${n}`), "ctx 10", "ctx 20", "ctx 30", "ctx 40"]);
     // A0 holds ctx 60, which A1's first 15 do not: A1 ⊇ A0 is false here
@@ -596,9 +599,9 @@ describe("lineage and replay-arms (B1)", () => {
       const review = PullReview.parse(JSON.parse(readFileSync(path.join(out, name, "case-901.json"), "utf8")));
       expect(review.comments.length).toBeGreaterThan(0);
     }
-    expect(JSON.parse(readFileSync(path.join(out, "pool-verify-v1", "case-901.json"), "utf8")).comments).toEqual(rec.comments);
+    expect(JSON.parse(readFileSync(path.join(out, "pool-verify-v1", "case-901.json"), "utf8")).comments).toEqual([...rec.comments, CONTRACT]);
     expect(lines.join("\n")).not.toMatch(/diff \d|ctx \d/);
-    expect(lines[0]).toBe("case-901: A0 15/18 · A1 15/20 · A2 11/12 (posted/candidates) · A0 not in A1 1 · A0 = posted true");
+    expect(lines[0]).toBe("case-901: A0 15/18 · A1 15/20 · A2 11/12 (posted/candidates) · A0 not in A1 1 · A0 = posted true · + 1 contract unit(s) per arm");
     // never overwrites
     const again: string[] = [];
     expect(replayMain(["--records", f.out, "--out", out], (l) => again.push(l))).toBe(2);

@@ -109,3 +109,22 @@ describe("replayArms", () => {
     }
   });
 });
+
+describe("contract units (codex C1 question 2)", () => {
+  it("every available arm ends with the emitted contract units, outside the model cap; A0's identity covers the model part", () => {
+    const diff = Array.from({ length: 16 }, (_, i) => f(i + 1, "a.ts"));
+    const rec = record({ diff, contracts: [{ path: "c.ts", line: 7, body: "contract one" }] }) as ReturnType<typeof record> & { review: Record<string, unknown> };
+    const units = { inline: [{ path: "c.ts", line: 7, body: "contract one" }], body: [{ path: "d.ts", line: null, body: "contract two" }], more: 3 };
+    (rec.review.contracts as Record<string, unknown>).emitted = units;
+    const r = replayArms(rec);
+    expect(r.contractUnits).toBe(2);
+    for (const arm of ["A0", "A1", "A2"] as const) {
+      expect(r.arms[arm].model).toBe(15);
+      expect(r.arms[arm].comments).toHaveLength(17);
+      expect(r.arms[arm].comments.slice(15)).toEqual([units.inline[0], units.body[0]]);
+    }
+    expect(r.a0MatchesPosted).toBe(true); // record.comments holds the 15 model comments
+    (rec.review.contracts as Record<string, unknown>).emitted = { inline: "x" };
+    expect(() => replayArms(rec)).toThrow(/emitted is not/);
+  });
+});

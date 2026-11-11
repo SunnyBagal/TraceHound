@@ -44,7 +44,7 @@ import { prepareReview, type Dependencies, type Finding, type Options, type Pull
 import { checkRepoHead as actionCheckRepoHead, runPipeline as actionRunPipeline, type Execute, type LineagePart, type PipelineOptions, type PipelineOutput } from "../packages/action/src/pipeline.ts";
 import { createFixClient, FIX_MODEL, runFixes as actionRunFixes, type FixClient, type FixOutput } from "../packages/action/src/fix.ts";
 import { FIX_SYSTEM_PROMPT } from "../packages/action/src/fix-prompt.ts";
-import { runContracts as actionRunContracts, type ContractsResult } from "../packages/action/src/contracts.ts";
+import { runContracts as actionRunContracts, selectContracts, type ContractsResult } from "../packages/action/src/contracts.ts";
 import { ledgerMark, ledgerSince, recordingClient, UsageRecorder, type StageUsage } from "../packages/action/src/usage.ts";
 import { BudgetExceededError, capsFromEnv, type BudgetCaps } from "../packages/analyzer/src/llm/budget.ts";
 import { SpendLedger } from "../packages/analyzer/src/llm/ledger.ts";
@@ -499,7 +499,9 @@ async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, for
       chunksOk: prepared.stages?.chunksOk ?? null, chunksFailed: prepared.stages?.chunksFailed ?? null,
       fixes: prepared.data?.fixes.counts ?? null,
       suggestions: prepared.data?.fixes.suggestions ?? null,
-      contracts: { status: prepared.contracts.status, findings: prepared.contracts.findings },
+      contracts: { status: prepared.contracts.status, findings: prepared.contracts.findings,
+        // the contract units the review emits (inline, then body; `more` only as a count): scored with the comments
+        emitted: o.contracts === "on" && prepared.contracts.status !== "off" ? selectContracts(prepared.contracts.findings, p.diff!) : null },
     } : null,
     usage: { stages: Object.fromEntries(recorder.stages), unreadable: recorder.unreadable, ledger: ledgerDelta },
     lineage,
