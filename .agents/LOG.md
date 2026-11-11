@@ -122,5 +122,5 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
 - **Who:** artu1 (briefs, rulings applied, label compare, attribution rerun, audit merge, brain push), bunny (brain
   backfill + fixes, stats/budget audit), codex (blind label, brain reviews ×3, internal audit), grok (case-025, vault
   link check, external audit), planner (plan, audit briefs, author's response).
-- **Left:** Sunny's rulings on the audit corrections and on case-025's primary file; codex GO on the plan-audit brain
-  note; spend freeze.
+- **Then:** plan-audit brain note pushed `6c4fbb0` after codex NO-GO ×2 (power assumptions, L4 missing) and GO.
+- **Left:** Sunny's rulings on the audit corrections and on case-025's primary file; spend freeze.
