@@ -237,6 +237,18 @@ function settings(options: Options): { learn: "on" | "off"; contractsMode: "on" 
   return { learn, contractsMode, reviewer };
 }
 
+/**
+ * prepareReview's contract dedupe: drop every model finding within 3 lines of a contract finding on the same path
+ * (both lines non-null), keeping order and each finding's source. scripts/testset/replay-arms.ts reuses it.
+ */
+export function dropContractDuplicates<S>(comments: Finding[], sources: S[],
+  contracts: readonly { path: string; line: number | null }[]): { comments: Finding[]; sources: S[] } {
+  const retained = comments.map((finding, index) => ({ finding, index })).filter(({ finding }) =>
+    !contracts.some(contract => contract.path === finding.path && contract.line !== null && finding.line !== null
+      && Math.abs(contract.line - finding.line) <= 3));
+  return { comments: retained.map(({ finding }) => finding), sources: retained.map(({ index }) => sources[index]!) };
+}
+
 export interface PreparedReview {
   /** The review runAction posts (or prints on dry-run). */
   payload: ReviewPayload;
@@ -297,11 +309,9 @@ export async function prepareReview(
   }
   // Only model findings are deduplicated, capped, learned from, and sent to fix generation.
   if (contractsResult.findings.length) {
-    const retained = output.comments.map((finding, index) => ({ finding, index })).filter(({ finding }) =>
-      !contractsResult.findings.some(contract => contract.path === finding.path && contract.line !== null && finding.line !== null
-        && Math.abs(contract.line - finding.line) <= 3));
-    output.comments = retained.map(({ finding }) => finding);
-    sources = retained.map(({ index }) => sources[index]!);
+    const retained = dropContractDuplicates(output.comments, sources, contractsResult.findings);
+    output.comments = retained.comments;
+    sources = retained.sources;
   }
   let suppressed: SuppressedFinding[] | undefined;
   if (learn === "on" && reviewer === "pool-verify-v1" && output.comments.length) {

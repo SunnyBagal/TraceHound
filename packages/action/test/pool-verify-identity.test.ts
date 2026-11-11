@@ -18,7 +18,7 @@ import { reviewPull, type PullInput } from "../../analyzer/src/review/review.ts"
 import { VERIFY_CTX_SYSTEM_PROMPT } from "../../analyzer/src/review/verify-ctx-prompt.ts";
 import { keptReview, verifyReviewWithContext } from "../../analyzer/src/review/verify-ctx.ts";
 import { runAction, type Finding, type Options, type PullEvent, type ReviewPayload } from "../src/action.ts";
-import { checkRepoHead, runPipeline, type Execute } from "../src/pipeline.ts";
+import { checkRepoHead, runPipeline, type Execute, type LineagePart } from "../src/pipeline.ts";
 
 const repos: string[] = [];
 afterAll(() => repos.forEach((r) => rmSync(r, { recursive: true, force: true })));
@@ -92,7 +92,7 @@ const stub: ChatClient = {
 };
 
 /** The analyzer CLIs (review, review-ctx, verify-ctx) in process, writing what they write. */
-function inProcess(outputs: Record<string, unknown>): Execute {
+function inProcess(outputs: Record<string, unknown>, client: ChatClient = stub): Execute {
   return async (file, args) => {
     if (file === "git") return execFileSync("git", args, { env: cleanGitEnv() });
     const command = args[1]!;
@@ -104,13 +104,13 @@ function inProcess(outputs: Record<string, unknown>): Execute {
       outputs[name] = data;
       writeFileSync(file, JSON.stringify(data, null, 1) + "\n");
     };
-    if (command === "review") write("review", value("--out"), await reviewPull(stub, input, opts));
+    if (command === "review") write("review", value("--out"), await reviewPull(client, input, opts));
     else {
       const repo = { source: gitSource(value("--repo"), value("--head")), head: value("--head") };
-      if (command === "review-ctx") write("review-ctx", value("--out"), await reviewPullWithContext(stub, input, repo, opts));
+      if (command === "review-ctx") write("review-ctx", value("--out"), await reviewPullWithContext(client, input, repo, opts));
       else {
         const review = PullReview.parse(JSON.parse(readFileSync(value("--review"), "utf8")));
-        const v = await verifyReviewWithContext(stub, input, review, repo, { ...opts, concurrency: 4 });
+        const v = await verifyReviewWithContext(client, input, review, repo, { ...opts, concurrency: 4 });
         write("verify-ctx", value("--out"), v);
         write("kept", value("--kept"), keptReview(v));
       }
@@ -149,4 +149,30 @@ it("pool-verify-v1 end to end: payload, footer, log and every stage record match
   const text = JSON.stringify({ log: log.mock.calls, posts, outputs },
     (key, v) => (volatile.has(key) ? 0 : v), 1).replaceAll(repo.head, "<head>").replaceAll(repo.dir, "<repo>");
   await expect(text + "\n").toMatchFileSnapshot("./__snapshots__/pool-verify-identity.json");
+}, 60_000);
+
+it("the lineage sidecar (B1) changes no request and no result, even when it throws", async () => {
+  const repo = miniRepo();
+  const input = { title: "Synthetic PR", body: "Synthetic description", number: 7, diff: repo.diff };
+  const run = async (onLineage?: (part: LineagePart) => void) => {
+    const requests: string[] = [];
+    const client: ChatClient = { chat: async (request, ...rest) => { requests.push(JSON.stringify(request)); return stub.chat(request, ...rest); } };
+    const outputs: Record<string, unknown> = {};
+    const result = await runPipeline(input, "fake-model", repo.dir, repo.head, () => {}, inProcess(outputs, client), onLineage ? { onLineage } : {});
+    return { requests: requests.sort(), result };
+  };
+  const parts: LineagePart[] = [];
+  const plain = await run();
+  const withLineage = await run((part) => parts.push(part));
+  const throwing = await run(() => { throw new Error("sidecar bug"); });
+  expect(withLineage.requests).toEqual(plain.requests);
+  expect(throwing.requests).toEqual(plain.requests);
+  expect(withLineage.result).toEqual(plain.result);
+  expect(throwing.result).toEqual(plain.result);
+  expect(parts.map((p) => p.stage).sort()).toEqual(["pool", "review-ctx-v1", "review-diff-v1", "verify-ctx-v1"]);
+  const pool = parts.find((p) => p.stage === "pool") as Extract<LineagePart, { stage: "pool" }>;
+  expect(pool.findings).toHaveLength(plain.result!.pipeline.pool);
+  const verify = parts.find((p) => p.stage === "verify-ctx-v1") as Extract<LineagePart, { stage: "verify-ctx-v1" }>;
+  expect((verify.kept as { comments: unknown[] }).comments).toEqual(plain.result!.comments);
+  expect((verify.verdicts as { comments: { reason: unknown }[] }).comments.map((c) => c.reason)).toContain("stub drop");
 }, 60_000);

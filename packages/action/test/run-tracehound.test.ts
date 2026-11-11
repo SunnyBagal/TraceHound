@@ -11,7 +11,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
 import { Budget, BudgetExceededError, capsFromEnv } from "../../analyzer/src/llm/budget.ts";
 import { ACTION_DEFAULTS, assertGh, caseCaps, main, MARKER, MIN_CASE_USD, stageEnv, type RunnerDeps } from "../../../scripts/run-tracehound.ts";
-import type { Execute, PipelineOutput } from "../src/pipeline.ts";
+import { runPipeline, type Execute, type PipelineOutput } from "../src/pipeline.ts";
+import { PullReview } from "../../analyzer/src/bench/types.ts";
+import { main as replayMain, replayArms } from "../../../scripts/testset/replay-arms.ts";
 import { parseYaml } from "./yaml-lite.ts";
 
 const FIX = path.join(import.meta.dirname, "fixtures");
@@ -509,4 +511,111 @@ it("prepareReview's payload is the review runAction prints on dry run (same inpu
   expect(prepared!.payload).toEqual(printed);
   expect(contracts).toEqual(["b".repeat(40), "b".repeat(40)]);
   expect(prepared!.bodyOnly().comments).toEqual([]);
+});
+
+// B1 (bunny-s0 brief): the record keeps every stage's lineage, and replay-arms.ts rebuilds the arms from it. The real
+// runPipeline runs over fake analyzer CLIs that write stage outputs; no model, no network.
+describe("lineage and replay-arms (B1)", () => {
+  type F = { path: string; line: number | null; body: string };
+  /** diff: a.ts every 10 lines (12); ctx: b.ts every 10 lines (8, none agrees with diff); the verifier drops bodies with DROP */
+  const DIFF: F[] = Array.from({ length: 12 }, (_, i) => ({ path: "a.ts", line: 10 * (i + 1), body: `diff ${10 * (i + 1)}${i === 1 ? " DROP" : ""}` }));
+  const CTX: F[] = Array.from({ length: 8 }, (_, i) => ({ path: "b.ts", line: 10 * (i + 1), body: `ctx ${10 * (i + 1)}${i === 4 ? " DROP" : ""}` }));
+  const CONTRACT = { path: "a.ts", line: 31, body: "contract finding" }; // removes diff 30 (within 3 lines)
+
+  function cliOutputs(o: { verifier?: "ok" | "invalid" } = {}): Execute {
+    return async (_file, args) => {
+      const cmd = args[1]!;
+      const flag = (name: string) => args[args.indexOf(name) + 1]!;
+      const review = (comments: F[]) => ({ pr_title: "t", pr_number: 11, comments,
+        review: { version: cmd === "review" ? "review-diff-v1" : "review-ctx-v1", model: "fake-model", chunkFailed: 1,
+          chunks: [{ index: 0, status: "OK", attempts: 1, attemptsDetail: [{ finishReason: "stop" }] },
+            { index: 1, status: "CHUNK_FAILED", attempts: 2, failure: "the reply is not valid JSON; after one retry: the reply is not valid JSON" }] } });
+      if (cmd === "review") writeFileSync(flag("--out"), JSON.stringify(review(DIFF)));
+      else if (cmd === "review-ctx") writeFileSync(flag("--out"), JSON.stringify(review(CTX)));
+      else if (cmd === "verify-ctx") {
+        const pool = JSON.parse(readFileSync(flag("--review"), "utf8")).comments as F[];
+        const verdicts = pool.map((f) => ({ ...f, status: "VERIFIED", verdict: f.body.includes("DROP") ? "drop" : "keep", reason: `reason for ${f.body}` }));
+        const kept = verdicts.filter((v) => v.verdict === "keep").map(({ path: p, line, body }) => ({ path: p, line, body }));
+        const n = o.verifier === "invalid" ? pool.length + 1 : pool.length;
+        writeFileSync(flag("--out"), JSON.stringify({ pr_title: "t", comments: verdicts,
+          verify: { model: "fake-model", findings: n, kept: kept.length, dropped: pool.length - kept.length, verifyFailed: 0 } }));
+        writeFileSync(flag("--kept"), JSON.stringify({ pr_title: "t", comments: kept, verify: { model: "fake-model", kept: kept.length } }));
+      }
+      return {};
+    };
+  }
+  function lineageDeps(f: Fixture, o: { verifier?: "ok" | "invalid" } = {}): RunnerDeps {
+    const { d } = deps(f);
+    const stageOutputs = cliOutputs(o);
+    return { ...d, exec: stageOutputs, runPipeline: (input, model, repoDir, head, log, ex, opts) => runPipeline(input, model, repoDir, head, log, ex, opts),
+      runContracts: async () => ({ status: "ok", findings: [CONTRACT], ms: 1 }) };
+  }
+  const record = (f: Fixture, id = "case-901") => JSON.parse(readFileSync(path.join(f.out, `${id}.json`), "utf8"));
+
+  it("keeps each reviewer's findings, chunk statuses and attempts, the pool with sources, verdicts with reasons, and contracts", async () => {
+    const f = fixture(1);
+    expect(await main(args(f, "--execute", "--fixes", "off"), lineageDeps(f))).toBe(0);
+    const rec = record(f);
+    expect(rec.versions.runner).toBe(2);
+    const l = rec.lineage;
+    expect(Object.keys(l).sort()).toEqual(["contracts", "pool", "review-ctx-v1", "review-diff-v1", "v", "verify-ctx-v1"]);
+    expect(l["review-diff-v1"].comments).toEqual(DIFF);
+    expect(l["review-ctx-v1"].comments).toEqual(CTX);
+    expect(l["review-diff-v1"].review.chunks.map((c: { status: string; attempts: number }) => [c.status, c.attempts])).toEqual([["OK", 1], ["CHUNK_FAILED", 2]]);
+    expect(l.pool.findings).toEqual([...DIFF, ...CTX]);
+    expect(l.pool.sources).toEqual([...DIFF.map(() => "diff"), ...CTX.map(() => "ctx")]);
+    expect(l["verify-ctx-v1"].verdicts.comments).toHaveLength(20);
+    expect(l["verify-ctx-v1"].verdicts.comments[1]).toMatchObject({ verdict: "drop", reason: "reason for diff 20 DROP" });
+    expect(l["verify-ctx-v1"].kept.comments).toHaveLength(18);
+    expect(l.contracts.findings).toEqual([CONTRACT]);
+    // the Action's own steps: 18 kept, the contract removes diff 30, 17 left, 15 posted
+    expect(rec.review).toMatchObject({ findings: 17, posted: 15, omitted: 2, pool: 20, kept: 18 });
+  });
+
+  it("A0 replayed from the lineage equals the posted comments; A1 does not contain A0 (the 15-comment cap)", async () => {
+    const f = fixture(1);
+    expect(await main(args(f, "--execute", "--fixes", "off"), lineageDeps(f))).toBe(0);
+    const rec = record(f);
+    const r = replayArms(rec);
+    expect(r.a0MatchesPosted).toBe(true);
+    expect(r.arms.A0.comments).toEqual(rec.comments);
+    expect(r.contractsSource).toBe("prepared");
+    const bodies = (arm: "A0" | "A1" | "A2") => r.arms[arm].comments.map((c) => c.body);
+    // A1 = pool minus diff 30 (contract), first 15: diff 10, 20 DROP, 40..120, ctx 10..40
+    expect(bodies("A1")).toEqual(["diff 10", "diff 20 DROP", ...[40, 50, 60, 70, 80, 90, 100, 110, 120].map((n) => `diff ${n}`), "ctx 10", "ctx 20", "ctx 30", "ctx 40"]);
+    // A0 holds ctx 60, which A1's first 15 do not: A1 ⊇ A0 is false here
+    expect(bodies("A0")).toContain("ctx 60");
+    expect(r.a0NotInA1).toBe(1);
+    expect(bodies("A2")).toEqual(["diff 10", "diff 20 DROP", ...[40, 50, 60, 70, 80, 90, 100, 110, 120].map((n) => `diff ${n}`)]);
+    expect(r.arms.A2.candidates).toBe(12);
+    // the CLI writes the neutral format bench score reads, and counts only on stdout
+    const out = path.join(f.dir, "arms");
+    const lines: string[] = [];
+    expect(replayMain(["--records", f.out, "--out", out], (l) => lines.push(l))).toBe(0);
+    for (const name of ["pool-verify-v1", "pool-raw", "review-diff-v1"]) {
+      const review = PullReview.parse(JSON.parse(readFileSync(path.join(out, name, "case-901.json"), "utf8")));
+      expect(review.comments.length).toBeGreaterThan(0);
+    }
+    expect(JSON.parse(readFileSync(path.join(out, "pool-verify-v1", "case-901.json"), "utf8")).comments).toEqual(rec.comments);
+    expect(lines.join("\n")).not.toMatch(/diff \d|ctx \d/);
+    expect(lines[0]).toBe("case-901: A0 15/18 · A1 15/20 · A2 11/12 (posted/candidates) · A0 not in A1 1 · A0 = posted true");
+    // never overwrites
+    const again: string[] = [];
+    expect(replayMain(["--records", f.out, "--out", out], (l) => again.push(l))).toBe(2);
+    expect(again[0]).toMatch(/^refused: .* exists; never overwritten/);
+  });
+
+  it("a verifier failure keeps the reviewers' lineage: A0 unavailable (nothing posted), A1 and A2 replayable", async () => {
+    const f = fixture(1);
+    expect(await main(args(f, "--execute", "--fixes", "off"), lineageDeps(f, { verifier: "invalid" }))).toBe(1);
+    const rec = record(f);
+    expect(rec.status).toBe("failed");
+    expect(rec.comments).toEqual([]);
+    expect(rec.lineage.pool.findings).toHaveLength(20);
+    const r = replayArms(rec);
+    expect(r.arms.A0).toMatchObject({ status: "unavailable" });
+    expect(r.arms.A1.comments).toHaveLength(15);
+    expect(r.arms.A2.comments).toHaveLength(11);
+    expect(r.a0MatchesPosted).toBeNull();
+  });
 });
