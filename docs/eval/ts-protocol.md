@@ -72,7 +72,7 @@ Six net bugs is the minimum observed gap that can be significant at20 bugs, not 
 
 Under bunny's independent-catch examples,20% versus50% and15% versus45% recall give exact-test power0.37–0.39 at n20, α0.05. For20% versus50%, power rises to0.44/0.53 at catch correlations0.2/0.4. Baseline recalls and correlations on TS are unmeasured. Approximate gap/power estimates from that model are not empirical requirements or promises of detection.
 
-S0.3's scope is **29 cases from four TypeScript repositories, K/20**. This supersedes budget.md's older two-repository claim paragraph. Use, after results: “On29 attempted PR cases from four TypeScript repositories,20 carrying a labelled later-fixed defect, tool T caught K/20, posted C eligible comments per PR and cost D per PR. The A/B paired comparison used N cases and discordance a/b (exact two-sided p=P).” Add completion counts and the approved missing-review treatment after Sunny rules; fill counts from frozen records and the blind hand-check, not forecasts.
+S0.3 fixes the **metric**: bugs caught of20 with a Wilson interval, comments per PR and cost per PR; F on dev only. Metric template: “Tool T caught K/20 labelled bugs (Wilson interval L–U), posted C eligible comments per PR and cost D per PR.” The repository/population scope of a public claim is **pending Sunny**, not superseded by this protocol; the29-case/four-repository wording is proposed in section13. Fill the metric from frozen records and the blind hand-check, not forecasts.
 
 If the exact test does not reject, say **“no detectable difference at this sample size.”** Never “catches as many,” “matches,” equivalence, or a rank. If it rejects, describe the observed pair, count gap, paired n and p without extrapolating to other languages/tools or claiming a global winner. State selection history, limited labels, no-review exclusions and possible context/ref visibility limitations.
 
@@ -158,6 +158,7 @@ None of these choices is operative until Sunny rules and the ruling is recorded 
 
 | Proposed choice | Reason |
 |---|---|
+|The public claim names29 cases from four TypeScript repositories|Matches the current population, butS0.3 rules only on the metric; budget.md's older two-repository scope remains pending Sunny rather than superseded.|
 |Sign-test α0.05, pairwise unadjusted/exploratory reporting and explicit lack of familywise control|Matches the plan's historical examples, but076 names the exact test without adopting this threshold/adjustment policy.|
 |Equal measured-cost tie: retain incumbent if among passing arms, otherwise A1 thenA2|Provides a deterministic fallback beyond the ruled “cheaper one”; no source picks it.|
 |One rerun for a failed/cap TraceHound case; second result official even if fewer findings; twice-failed case is a miss; no third attempt|Carries the original plan's operational proposal forward without pretending076 adopted it.|
