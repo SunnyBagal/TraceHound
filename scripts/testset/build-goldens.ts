@@ -11,6 +11,8 @@
  * - Alternates come only from `--overlay` ({v: 1, alternates: [{case, file, lines_at_head, fix_sha, reason}]}), never
  *   inferred: every alternate names the same fix. The primary among the defect's rows is the first file in
  *   `git show --no-renames --name-only --format= <fix>` order (by rule, never by hand); the others are alternates.
+ *   Labels name paths at the case head: a file renamed before the fix is followed by rename detection (case head →
+ *   the fix's parent). A defect with a single row needs no lookup in the fix.
  * - Preflight: every target file must exist at the case head and its range must lie inside the file; a case without a
  *   label of record, an ambiguous primary, a duplicate target or a duplicate PR title refuses the build (exit 2,
  *   nothing written).
@@ -77,13 +79,26 @@ export function buildGoldens(o: {
       if (rows.some((x) => x.file === a.file && x.lines[0] <= r[1] && r[0] <= x.lines[1])) { errors.push(`${c.id}: duplicate target ${a.file} (same file, overlapping range)`); continue; }
       rows.push({ file: a.file, lines: r });
     }
-    // primary by rule: first in git's path order of the fix
-    const order = o.git(c.repo, ["show", "--no-renames", "--name-only", "--format=", fix]);
-    if (!order.ok) { errors.push(`${c.id}: fix ${fix.slice(0, 7)} not readable in the ${c.repo} clone`); continue; }
-    const fixFiles = order.out.split("\n").filter(Boolean);
-    const missing = rows.filter((x) => !fixFiles.includes(x.file));
-    if (missing.length) { errors.push(`${c.id}: ${missing.length} target file(s) not touched by the fix`); continue; }
-    rows.sort((x, y) => fixFiles.indexOf(x.file) - fixFiles.indexOf(y.file));
+    // primary by rule: first in git's path order of the fix (only needed when the defect has several rows). Labels name
+    // paths at the case head; a file renamed between the head and the fix is followed by rename detection
+    // (head → the fix's parent) before its place in the fix's list is looked up.
+    if (rows.length > 1) {
+      const order = o.git(c.repo, ["show", "--no-renames", "--name-only", "--format=", fix]);
+      if (!order.ok) { errors.push(`${c.id}: fix ${fix.slice(0, 7)} not readable in the ${c.repo} clone`); continue; }
+      const fixFiles = order.out.split("\n").filter(Boolean);
+      const renames = new Map<string, string>();
+      if (rows.some((x) => !fixFiles.includes(x.file))) {
+        const moved = o.git(c.repo, ["diff", "--find-renames", "--name-status", "--no-color", c.case_head_sha, `${fix}^`]);
+        if (moved.ok) for (const line of moved.out.split("\n")) {
+          const [st, from, to] = line.split("\t");
+          if (st?.startsWith("R") && from && to) renames.set(from, to);
+        }
+      }
+      const place = (file: string) => fixFiles.indexOf(fixFiles.includes(file) ? file : renames.get(file) ?? file);
+      const missing = rows.filter((x) => place(x.file) < 0);
+      if (missing.length) { errors.push(`${c.id}: ${missing.length} target file(s) not touched by the fix (after following renames)`); continue; }
+      rows.sort((x, y) => place(x.file) - place(y.file));
+    }
     // preflight against the case head
     let bad = false;
     for (const x of rows) {

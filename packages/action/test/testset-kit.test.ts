@@ -64,7 +64,7 @@ describe("kit", () => {
 });
 
 // a tiny repo "web": base → introducing head (case-1) → fix touching src/b.ts and src/a.ts (git lists a before b)
-function goldensFixture() {
+function goldensFixture(o: { rename?: boolean } = {}) {
   const d = tmp();
   const repo = path.join(d, "repos", "web");
   const env = { ...cleanGitEnv(), GIT_AUTHOR_DATE: "2020-01-01T00:00:00Z", GIT_COMMITTER_DATE: "2020-01-01T00:00:00Z" };
@@ -76,7 +76,10 @@ function goldensFixture() {
   git("add", "-A"); git("commit", "-qm", "base"); const base = git("rev-parse", "HEAD");
   writeFileSync(path.join(repo, "src/a.ts"), lines(40, "a2")); writeFileSync(path.join(repo, "src/b.ts"), lines(40, "b2"));
   git("add", "-A"); git("commit", "-qm", "introduce"); const head = git("rev-parse", "HEAD");
-  writeFileSync(path.join(repo, "src/a.ts"), lines(40, "a3")); writeFileSync(path.join(repo, "src/b.ts"), lines(40, "b3"));
+  // optionally, src/a.ts moves to lib/a.ts between the case head and the fix (labels keep head paths)
+  const aFix = o.rename ? "lib/a.ts" : "src/a.ts";
+  if (o.rename) { mkdirSync(path.join(repo, "lib")); git("mv", "src/a.ts", "lib/a.ts"); git("commit", "-qm", "move"); }
+  writeFileSync(path.join(repo, aFix), lines(40, "a3")); writeFileSync(path.join(repo, "src/b.ts"), lines(40, "b3"));
   git("add", "-A"); git("commit", "-qm", "fix"); const fix = git("rev-parse", "HEAD");
   const manifest = [
     { id: "case-1", repo: "web", title: "Bug PR", base_sha: base, case_head_sha: head, head_sha: head },
@@ -340,5 +343,21 @@ describe("collect-tool-reviews", () => {
     expect(() => assertGhRead(["api", "--method", "POST", "repos/SunnyBagal/twenty/pulls/1"], "SunnyBagal/twenty")).toThrow();
     expect(() => assertGhRead(["api", "--method", "GET", "repos/twentyhq/twenty/pulls/1"], "SunnyBagal/twenty")).toThrow();
     expect(() => assertGhRead(["api", "--method", "GET", "repos/SunnyBagal/twenty/pulls/1/comments?per_page=100&page=1"], "SunnyBagal/twenty")).not.toThrow();
+  });
+});
+
+describe("build-goldens with a rename between the case head and the fix", () => {
+  it("follows the rename to place the head path in the fix's order; a single-row defect needs no fix lookup", () => {
+    const f = goldensFixture({ rename: true });
+    const out = path.join(f.d, "dev", "goldens-r");
+    const r = run(buildMain, ["--side", "dev", "--manifest", path.join(f.d, "dev", "manifest.json"), "--labels", f.labels, "--overlay", f.overlay, "--repos", f.repos, "--out", out]);
+    expect(r.code).toBe(0);
+    const g = JSON.parse(readFileSync(path.join(out, "goldens.json"), "utf8"));
+    // the fix lists lib/a.ts before src/b.ts; src/a.ts (the head path) was renamed to lib/a.ts, so it is the primary
+    expect(g.cases[0].targets.map((t: { file: string; role: string }) => [t.file, t.role])).toEqual([["src/a.ts", "primary"], ["src/b.ts", "alternate"]]);
+    // without the overlay the case has one row: no fix-order lookup, the labeller's primary stands
+    const out2 = path.join(f.d, "dev", "goldens-r2");
+    expect(run(buildMain, ["--side", "dev", "--manifest", path.join(f.d, "dev", "manifest.json"), "--labels", f.labels, "--repos", f.repos, "--out", out2]).code).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(out2, "goldens.json"), "utf8")).cases[0].targets).toEqual([{ file: "src/b.ts", lines: [10, 12], role: "primary" }]);
   });
 });
