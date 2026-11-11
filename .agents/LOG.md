@@ -136,3 +136,14 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   (contracts off; L3 step 1 31% → 86%), B2 scoring kit. Brain: 076, costs, competitors, strengths-and-gaps, NOW
   (uncommitted, awaiting codex review). $0.
 - **Left:** Sunny's rulings on the caps options and D1 §13; codex C1 and brain review; console check.
+
+## 2026-11-11 (Wed, evening): 076a, caps re-check, plan v2
+- **Changed:** Sunny ruled on the caps check and the protocol's §13 (decision 076a, `800af8d`): rolling batch caps, R1
+  $4.68, R2/H1 via 077 from R1's measured costs, judge-only env caps, §13 items 1–8; item 9 waits for Planner B; D1 not
+  merged until Sunny rules on that note. bunny: policy file on B2 (`d415440`), caps re-check with the rolling rule (R1 all
+  cases P 0.96; R2/H1 placeholders 0.66/0.71; H1 + reserve 1.00), 077 recipe script. codex C1: B1 GO at `8707752`
+  (`bec2ead` added after), B2 NO-GO at `c3fb14e` (fixed at `554cd28`); held-out reach 20/20 (counts). Planner A wrote plan
+  v2 (main `2413788`); artu1 confirmed its runner findings 1–3. codex blocked on a permission prompt before its re-review.
+  Planner-only folders: `docs/plan/`, `docs/specs/`, `docs/runbooks/`. $0.
+- **Left:** codex C1 re-review → merges; brain review → push; D1 rev 3 → push branch for Planner B → grok re-check;
+  plan v2 audit; console check.

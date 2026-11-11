@@ -45,8 +45,10 @@ Coordination: `~/Projects/tracehound-testset/run/{briefs,out,comms}`; `.done` ma
 ## OPEN TASKS (in order)
 a. Spend freeze until Sunny reports the Nebius console check.
 b. Lanes (briefs `run/briefs/{bunny,codex,grok}-076a.md`): bunny policy file + caps re-check with the rolling rule; codex C1 re-review (B2 `554cd28`, B1 `8707752..bec2ead`) → brain review → D1 rev 3; grok re-checks D1 rev 3. artu1: merge B1/B2 on GO (merge commits), push the brain after codex GO, push `codex/ts-protocol` for Planner B after rev 3.
-c. Sunny: rule on Planner B's D1 note; confirm window dates.
-d. Bump the Action pins and create the `tracehound-review` label in the four repos.
+c. **Plan v2** (`docs/plan/2026-11-11-plan-v2.md`, Planner A, supersedes v1): artu1 confirmed its runner findings on main (one repo per invocation, `run-tracehound.ts:215`; manifest order, `--ids` filters only; defaults case cap $0.25, fixes/contracts on → every command needs `--fixes off --contracts off --max-usd-per-case 0.40`). codex audits the rest (part 4 of `run/briefs/codex-076a.md`; send the pointer when t14 unblocks). Open points R-1 (re-trigger collision), R-2 (P1 rate → H1 schedule), R-3 (Planner B's proposals).
+d. Branch heads: B1 `b1-lineage` `bec2ead` (GO at `8707752`, delta under re-review), B2 `b2-scoring` `d415440` (fixes `554cd28` + 076a policy file `d415440`, under re-review), D1 `codex/ts-protocol` `c76851a` (rev 3 pending). Nothing merged.
+e. Sunny: rule on Planner B's D1 note; confirm window dates.
+f. Bump the Action pins and create the `tracehound-review` label in the four repos.
 
 ## Where things are
 Decisions `docs/decisions.md` · budget `docs/budget.md` · plan + audit `docs/plan/` · live plan `docs/live-setup.md` · results `docs/bench/results.md` · history `.agents/LOG.md` · herdr `docs/herdr.md` · test set `~/Projects/tracehound-testset` · brain `~/Projects/tracehound-brain`.
