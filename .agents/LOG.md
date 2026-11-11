@@ -147,3 +147,14 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   Planner-only folders: `docs/plan/`, `docs/specs/`, `docs/runbooks/`. $0.
 - **Left:** codex C1 re-review → merges; brain review → push; D1 rev 3 → push branch for Planner B → grok re-check;
   plan v2 audit; console check.
+
+## 2026-11-11 (Wed, late): bunny as temp orchestrator (artu1 at its session limit until 19:10)
+- **Changed:** codex C1 re-review GO on B1 `bec2ead` and B2 `251d6e5` (incl. the 076a policy file; codex's two 076a probes
+  fixed first: `..` after a symlink in the dev guard, and hand-check evidence completeness). bunny merged both (merge
+  commits `4b70033`, `c379055`; gates on main: action 335, analyzer 1027 +6 skipped, viewer 215, typecheck) and pushed.
+  Brain review 4 GO → six brain files committed byte-equal to codex's recorded hashes and pushed (`a4fc2e7`). D1 rev 3
+  (`c64e77d`) pushed on `codex/ts-protocol` for Planner B; grok sent its D1 re-check. bunny did the B2 spec follow-up
+  (`b2-followup` `3668819`: policy file renamed to `policy.076a.json` for S1, one-rerun refusal, §7 values pinned;
+  review pending). codex blocked on a permission prompt. $0.
+- **Who:** bunny (orchestration, merges, B2 follow-up), codex (C1 re-review, brain review 4, D1 rev 3), grok (D1 re-check).
+- **Left:** Sunny answers codex's prompt; codex plan-v2 audit then b2-followup review; grok D1 re-check; Planner B's note.

@@ -1,5 +1,5 @@
 # .agents/STATE.md: read first; rewrite (never append) at the end of every session; ≤ 60 lines
-HEAD: `main` after the 2026-11-11 plan-audit commit. If HEAD has moved further, trust code and docs/decisions.md over this file.
+HEAD: `main` `c379055` (B1 + B2 merged, 2026-11-11 evening, bunny as temp orchestrator while artu1 resets) and the STATE commit after it. If HEAD has moved further, trust code and docs/decisions.md over this file.
 
 ## Goal
 Show, on fresh held-out TypeScript PRs (twenty, medusa, payload, bullmq), whether TraceHound's reviewer (pool-verify-v1) catches real bugs that later fixes repaired.
@@ -44,11 +44,13 @@ Coordination: `~/Projects/tracehound-testset/run/{briefs,out,comms}`; `.done` ma
 
 ## OPEN TASKS (in order)
 a. Spend freeze until Sunny reports the Nebius console check.
-b. Lanes (briefs `run/briefs/{bunny,codex,grok}-076a.md`): bunny policy file + caps re-check with the rolling rule; codex C1 re-review (B2 `554cd28`, B1 `8707752..bec2ead`) → brain review → D1 rev 3; grok re-checks D1 rev 3. artu1: merge B1/B2 on GO (merge commits), push the brain after codex GO, push `codex/ts-protocol` for Planner B after rev 3.
-c. **Plan v2** (`docs/plan/2026-11-11-plan-v2.md`, Planner A, supersedes v1): artu1 confirmed its runner findings on main (one repo per invocation, `run-tracehound.ts:215`; manifest order, `--ids` filters only; defaults case cap $0.25, fixes/contracts on → every command needs `--fixes off --contracts off --max-usd-per-case 0.40`). codex audits the rest (part 4 of `run/briefs/codex-076a.md`; send the pointer when t14 unblocks). Open points R-1 (re-trigger collision), R-2 (P1 rate → H1 schedule), R-3 (Planner B's proposals).
-d. Branch heads: B1 `b1-lineage` `bec2ead` (GO at `8707752`, delta under re-review), B2 `b2-scoring` `d415440` (fixes `554cd28` + 076a policy file `d415440`, under re-review), D1 `codex/ts-protocol` `c76851a` (rev 3 pending). Nothing merged.
-e. Sunny: rule on Planner B's D1 note; confirm window dates.
-f. Bump the Action pins and create the `tracehound-review` label in the four repos.
+b. **Done 2026-11-11 evening (bunny, temp orchestrator):** codex C1 re-review **GO** B1 `bec2ead` + B2 `251d6e5` (incl. the 076a policy file; `run/out/codex.c1-rereview.md`) → both merged with merge commits (`4b70033`, `c379055`), gates on main green (action 335, analyzer 1027 +6 skipped, viewer 215, typecheck), **pushed**. Brain review 4 **GO** → the six files, checked byte-equal against codex's recorded SHA-256s, committed and **pushed** (brain `a4fc2e7`). D1 rev 3 done (`c64e77d`: 076a §13 items 1–8 operative, 3 proposals pending in §13) → branch `codex/ts-protocol` **pushed** for Planner B; grok sent `grok-076a.md` (D1 re-check, running).
+c. **B2 follow-up** (`docs/specs/B2.md` §5.1/§5.2/§7): branch `b2-followup` @ `3668819` (policy renamed to `scripts/testset/policy.076a.json`, the path `docs/specs/S1.md` uses; one rerun max; §7 values pinned; gates green, action 340). **Not merged:** needs codex review (`run/briefs/codex-b2-followup.md`, send after its current queue). Until it merges, S1's precondition (`policy.076a.json` exists) fails on main.
+d. **codex (t14) is blocked on a permission prompt** (seen 2026-11-11 ~16:30): Sunny must answer it; agents never answer another's dialog. Its queue: part 4 of `codex-076a.md` (plan v2 audit), then `codex-b2-followup.md`.
+e. **Plan v2** (`docs/plan/2026-11-11-plan-v2.md`, Planner A, supersedes v1): artu1 confirmed its runner findings on main (one repo per invocation, `run-tracehound.ts:215`; manifest order, `--ids` filters only; defaults case cap $0.25, fixes/contracts on → every command needs `--fixes off --contracts off --max-usd-per-case 0.40`). Under the rolling rule the caps re-check's completion figures do not depend on batch layout. Open points R-1 (re-trigger collision), R-2 (P1 rate → H1 schedule), R-3 (Planner B's proposals).
+f. Branch heads: B1/B2 merged; `b2-followup` `3668819` (review pending); D1 `codex/ts-protocol` `c64e77d` (pushed; not merged until Sunny rules on Planner B's note).
+g. Sunny: rule on Planner B's D1 note; confirm window dates; answer codex's permission prompt.
+h. Bump the Action pins and create the `tracehound-review` label in the four repos.
 
 ## Where things are
 Decisions `docs/decisions.md` · budget `docs/budget.md` · plan + audit `docs/plan/` · live plan `docs/live-setup.md` · results `docs/bench/results.md` · history `.agents/LOG.md` · herdr `docs/herdr.md` · test set `~/Projects/tracehound-testset` · brain `~/Projects/tracehound-brain`.
