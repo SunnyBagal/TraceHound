@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { symlinkSync } from "node:fs";
 import { afterAll, describe, expect, it } from "vitest";
 import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
@@ -205,7 +206,9 @@ function scoringFixture() {
     }) });
   detail("th", { P1: ["G1", null], P2: ["G1"], P3: ["G1"], P4: [null] });
   detail("cr", { P1: [null], P3: ["G1"], P4: [] });
-  json(path.join(d, "dev", "th-x1.detail.json"), { detail: [{ prTitle: "P1", status: "SCORED", comments: [{ path: "x.ts", line: 11, body: "alpha finds bug one", matched: null }, { path: "x.ts", line: 90, body: "alpha noise", matched: null }] }] });
+  // x1 judged every th review and matched nothing
+  json(path.join(d, "dev", "th-x1.detail.json"), { detail: ["P1", "P2", "P3", "P4"].map((t) => ({ prTitle: t, status: "SCORED",
+    comments: JSON.parse(readFileSync(path.join(d, "dev", "th", `c${t.slice(1)}.json`), "utf8")).comments.map((c: object) => ({ ...c, matched: null })) })) });
   // runner records for th: c3 failed (a miss), costs per case
   for (const [id, status, cost] of [["c1", "ok", 0.05], ["c2", "ok", 0.07], ["c3", "failed", 0.02], ["c4", "ok", 0.04]] as const) {
     json(path.join(d, "dev", "th-records", `${id}.json`), { case: id, status, usage: { ledger: { costUSD: cost } } });
@@ -292,7 +295,9 @@ describe("score-testset", () => {
   it("a hand-check replaces the judge; a JUDGE_FAILED case is counted, not caught; refusals", () => {
     const f = scoringFixture();
     const hc = f.dir("handcheck.json");
-    json(hc, { decisions: [{ tool: "th", case: "c1", caught: false }, { tool: "cr", case: "c1", caught: true }] });
+    const sha = (tool: string, id: string) => createHash("sha256").update(readFileSync(f.dir(`${tool}/${id}.json`))).digest("hex");
+    json(hc, { decisions: [{ tool: "th", case: "c1", caught: false, review_sha256: sha("th", "c1") }, { tool: "cr", case: "c1", caught: true, review_sha256: sha("cr", "c1") }],
+      reviewed: [["th", "c1"], ["th", "c2"], ["th", "c3"], ["cr", "c1"], ["cr", "c3"]].map(([t, c]) => ({ tool: t, case: c, review_sha256: sha(t!, c!) })) });
     const out = f.dir("s2.json");
     const r = run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`, "--handcheck", hc, "--out", out]);
     expect(r.code).toBe(0);
@@ -351,7 +356,10 @@ describe("handcheck-sheet", () => {
     const r = run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(a, "mapping.json"), "--decisions", dec, "--out", f.dir("hc.json")]);
     expect(r.code).toBe(0);
     const hc = JSON.parse(readFileSync(f.dir("hc.json"), "utf8"));
-    expect(hc.decisions.filter((d: { caught: boolean }) => d.caught)).toEqual([{ tool: "th", case: "c1", caught: true }]);
+    expect(hc.decisions.filter((d: { caught: boolean }) => d.caught).map(({ tool, case: c, caught }: { tool: string; case: string; caught: boolean }) => ({ tool, case: c, caught })))
+      .toEqual([{ tool: "th", case: "c1", caught: true }]);
+    expect(hc.decisions.every((d: { review_sha256: string }) => /^[0-9a-f]{64}$/.test(d.review_sha256))).toBe(true);
+    expect(hc.reviewed.length).toBe(5); // th c1-c3, cr c1 and c3
     json(dec, filled.slice(1));
     expect(run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(a, "mapping.json"), "--decisions", dec, "--out", f.dir("hc2.json")]).out).toMatch(/has no decision/);
     // the judge cue is a policy choice: absent unless the policy says "shown"
@@ -484,5 +492,74 @@ describe("build-goldens with the schema-v2 overlay (codex C1 question 2)", () =>
     const r = build(f, onClean, path.join(f.d, "dev", "o4"));
     expect(r.out).toContain("preflight error: case-1: bug case has no rows in the overlay");
     expect(r.out).toContain("preflight error: case-2: overlay rows on a clean case");
+  });
+});
+
+describe("hand-check evidence completeness (codex 076a re-review 2)", () => {
+  it("sheet build: v1 required for every tool, x1 too on held-out; a reviewed bug case without a judge entry refuses; JUDGE_FAILED lists every comment", () => {
+    const f = scoringFixture();
+    const sheet = (out: string, ...extra: string[]) => run(sheetMain, ["build", "--side", "dev", "--goldens", f.goldens, "--tool", `th=${f.dir("th")}`,
+      "--seed", "1", "--out", out, "--policy", f.policy(), ...extra]);
+    expect(sheet(f.dir("s0")).out).toMatch(/th has no --judge \(v1\) detail/);
+    // held-out: both judges required
+    const hg = f.dir("ho-goldens.json");
+    json(hg, { ...JSON.parse(readFileSync(f.goldens, "utf8")), side: "heldout" });
+    const ho = run(sheetMain, ["build", "--side", "heldout", "--heldout-ok", "--goldens", hg, "--tool", `th=${f.dir("th")}`, "--judge", `th=${f.dir("th.detail.json")}`,
+      "--seed", "1", "--out", f.dir("s1"), "--policy", f.policy()]);
+    expect(ho.out).toMatch(/th has no --judge-x1 detail \(held-out uses both judges\)/);
+    // a judge detail with no entry for a reviewed bug case
+    const partial = f.dir("partial.detail.json");
+    const d = JSON.parse(readFileSync(f.dir("th.detail.json"), "utf8"));
+    json(partial, { detail: d.detail.filter((x: { prTitle: string }) => x.prTitle !== "P2") });
+    expect(sheet(f.dir("s2"), "--judge", `th=${partial}`).out).toMatch(/no judged entry for 1 reviewed bug case\(s\)/);
+    // the probe: a review whose comment is outside the location range and a judge with no entry for it can no longer give an empty sheet
+    const failed = f.dir("failed.detail.json");
+    json(failed, { detail: d.detail.map((x: { prTitle: string }) => (x.prTitle === "P1" ? { prTitle: "P1", status: "JUDGE_FAILED", comments: [] } : x)) });
+    const out = f.dir("s3");
+    expect(sheet(out, "--judge", `th=${failed}`).code).toBe(0);
+    const items = JSON.parse(readFileSync(path.join(out, "mapping.json"), "utf8")).items as { case: string; comment: number; reasons: string[] }[];
+    // both of c1's comments are listed (judge failed), including x.ts:90, which is outside the location range
+    expect(items.filter((i) => i.case === "c1").map((i) => [i.comment, i.reasons]).sort()).toEqual([[0, ["judge-v1-failed", "location"]], [1, ["judge-v1-failed"]]]);
+  });
+
+  it("score --handcheck: a completed case without its review, an unconsidered review or a changed review refuses; build → resolve → score works", () => {
+    const f = scoringFixture();
+    // the probe: status completed, empty review directory, a hand-check catch
+    const empty = f.dir("empty-reviews");
+    mkdirSync(empty);
+    const st = f.dir("st.json");
+    json(st, { c1: "completed", c2: "no-review", c3: "no-review", c4: "no-review" });
+    const hc0 = f.dir("hc0.json");
+    json(hc0, { decisions: [{ tool: "th", case: "c1", caught: true, review_sha256: "0".repeat(64) }], reviewed: [] });
+    const r0 = run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${empty}`, "--status", `th=${st}`, "--handcheck", hc0, "--out", f.dir("h0.json")]);
+    expect(r0.code).toBe(2);
+    expect(r0.out).toContain("incomplete: th: 1 completed case(s) have no review file");
+    expect(r0.out).toContain("incomplete: th: 1 hand-check decision(s) are not bound to a completed case's current review");
+    expect(existsSync(f.dir("h0.json"))).toBe(false);
+    // the real path: build the sheet, decide, resolve, score
+    const sheetDir = f.dir("sheet");
+    expect(run(sheetMain, ["build", "--side", "dev", "--goldens", f.goldens, "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`,
+      "--judge", `th=${f.dir("th.detail.json")}`, "--judge", `cr=${f.dir("cr.detail.json")}`, "--seed", "5", "--out", sheetDir, "--policy", f.policy()]).code).toBe(0);
+    const mapping = JSON.parse(readFileSync(path.join(sheetDir, "mapping.json"), "utf8"));
+    const decided = f.dir("decided.json");
+    json(decided, mapping.items.map((i: { item: string; tool: string; case: string }) => ({ item: i.item, decision: i.tool === "cr" && i.case === "c3" ? "same-bug" : "not", reason: "r" })));
+    const hc = f.dir("hc.json");
+    expect(run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(sheetDir, "mapping.json"), "--decisions", decided, "--out", hc]).code).toBe(0);
+    const args = (out: string) => ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`, "--handcheck", hc, "--out", out];
+    expect(run(scoreMain, args(f.dir("h1.json"))).code).toBe(0);
+    const s1 = JSON.parse(readFileSync(f.dir("h1.json"), "utf8"));
+    expect([s1.tools.th.caught, s1.tools.cr.caught]).toEqual([0, 1]);
+    // a review that changed after the hand-check refuses
+    const r = JSON.parse(readFileSync(f.dir("cr/c3.json"), "utf8"));
+    r.comments.push({ path: "w.ts", line: 9, body: "added later" });
+    json(f.dir("cr/c3.json"), r);
+    const r2 = run(scoreMain, args(f.dir("h2.json")));
+    expect(r2.code).toBe(2);
+    expect(r2.out).toContain("incomplete: cr: the hand-check did not consider the current review of 1 completed bug case(s)");
+    expect(r2.out).toContain("incomplete: cr: 1 hand-check decision(s) are not bound to a completed case's current review");
+    // an old-style hand-check without the reviewed list refuses
+    const old = f.dir("old.json");
+    json(old, { decisions: [] });
+    expect(run(scoreMain, [...args(f.dir("h3.json")).slice(0, -4), "--handcheck", old, "--out", f.dir("h3.json")]).out).toMatch(/must be handcheck-sheet.ts resolve output/);
   });
 });

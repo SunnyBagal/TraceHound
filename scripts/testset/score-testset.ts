@@ -16,7 +16,10 @@
  * Judge evidence is bound, never assumed: without --handcheck, every completed bug case needs its entry in the tool's
  * judge detail, and the judged comments must be that tool's review comments, in order (the same check as
  * handcheck-sheet.ts). A missing entry or a mismatch refuses the run (exit 2) instead of becoming a scored miss.
- * JUDGE_FAILED is counted and is never a catch. --judge-x1, when given, is bound the same way.
+ * JUDGE_FAILED is counted and is never a catch. --judge-x1, when given, is bound the same way. Every completed case
+ * needs its review file in every mode. With --handcheck (resolve's output), every completed bug case's current review
+ * must be in its `reviewed` list with the same sha256, and every decision must be bound to a completed case's current
+ * review; otherwise refuse: no catch stands without the review that was scored.
  * The protocol's pending choices (§13) apply only through --policy (kit.ts POLICY_CHOICES, with who approved them):
  * official_attempt (first | last record of a rerun case), failed_case and unstarted_case (miss | no-review), and
  * no_review_in_pairs (exclude | not-caught). Status: --status (completed | no-review | miss) > --records > a review
@@ -31,6 +34,7 @@ import { checkSide, locationHit, mean, median, pairs, readGoldens, readJson, rea
   type GoldenCase, type Policy, type Review } from "./kit.ts";
 
 export type Status = "completed" | "no-review" | "miss";
+export interface HandCheck { decisions: { tool: string; case: string; caught: boolean; review_sha256?: string }[]; reviewed: { tool: string; case: string; review_sha256: string }[] }
 type JudgeEntry = { verdict: boolean | "judge-failed"; comments: { path: string; line: number | null; body: string }[] };
 interface Detail { detail?: { prTitle: string; status: string; comments: { path: string; line: number | null; body: string; matched: string | null }[] }[] }
 
@@ -83,7 +87,11 @@ const sameComments = (a: { path: string; line: number | null; body: string }[], 
 export function score(o: {
   cases: GoldenCase[]; reviews: Map<string, Map<string, Review>>; judge: Map<string, Map<string, JudgeEntry>>;
   judgeX1: Map<string, Map<string, JudgeEntry>>; status: Map<string, Map<string, Status>>;
-  records: Map<string, Map<string, RecordInfo>>; handcheck: { tool: string; case: string; caught: boolean }[] | null; policy: Policy;
+  records: Map<string, Map<string, RecordInfo>>; policy: Policy;
+  /** resolve's output (handcheck-sheet.ts): decisions and the reviews the sheet considered, bound by sha256 */
+  handcheck: HandCheck | null;
+  /** sha256 of each tool's review file, by case */
+  reviewSha: Map<string, Map<string, string>>;
 }): { tools: Record<string, ToolScore>; pairs: { a: string; b: string; n: number; onlyA: number; onlyB: number; p: number }[]; incomplete: string[] } {
   const tools: Record<string, ToolScore> = {};
   const caughtBy = new Map<string, Map<string, boolean>>();
@@ -99,14 +107,25 @@ export function score(o: {
     }
     statuses.set(tool, st);
     const completedBug = bug.filter((c) => st.get(c.case) === "completed");
+    // a completed case is scored from its review file, whichever way catches are decided
+    const missingReview = o.cases.filter((c) => st.get(c.case) === "completed" && !reviews.has(c.case)).length;
+    if (missingReview) incomplete.push(`${tool}: ${missingReview} completed case(s) have no review file`);
+    if (o.handcheck) {
+      // the hand-check must have considered exactly the reviews scored now, and no catch stands without one
+      const sha = o.reviewSha.get(tool) ?? new Map<string, string>();
+      const seen = (id: string) => o.handcheck!.reviewed.find((r) => r.tool === tool && r.case === id);
+      const uncovered = completedBug.filter((c) => reviews.has(c.case) && seen(c.case)?.review_sha256 !== sha.get(c.case)).length;
+      if (uncovered) incomplete.push(`${tool}: the hand-check did not consider the current review of ${uncovered} completed bug case(s)`);
+      const unbound = o.handcheck.decisions.filter((d) => d.tool === tool && (st.get(d.case) !== "completed" || !reviews.has(d.case)
+        || d.review_sha256 !== sha.get(d.case))).length;
+      if (unbound) incomplete.push(`${tool}: ${unbound} hand-check decision(s) are not bound to a completed case's current review`);
+    }
     // bind judge evidence to the reviews actually scored
     for (const [label, m] of [["judge", o.handcheck ? undefined : o.judge.get(tool)], ["judge-x1", o.judgeX1.get(tool)]] as const) {
       if (!m) continue;
-      const missingReview = completedBug.filter((c) => !reviews.has(c.case)).length;
       const missing = completedBug.filter((c) => reviews.has(c.case) && !m.has(c.case)).length;
       const mismatch = completedBug.filter((c) => m.has(c.case) && reviews.has(c.case) && m.get(c.case)!.verdict !== "judge-failed"
         && !sameComments(m.get(c.case)!.comments, reviews.get(c.case)!.comments)).length;
-      if (missingReview) incomplete.push(`${tool}: ${missingReview} completed bug case(s) have no review file`);
       if (missing) incomplete.push(`${tool}: ${label} detail lacks ${missing} completed bug case(s)`);
       if (mismatch) incomplete.push(`${tool}: ${label} judged other comments than the review for ${mismatch} case(s)`);
     }
@@ -116,7 +135,7 @@ export function score(o: {
     for (const c of bug) {
       let k = false;
       if (st.get(c.case) === "completed") {
-        if (o.handcheck) k = o.handcheck.some((h) => h.tool === tool && h.case === c.case && h.caught);
+        if (o.handcheck) k = o.handcheck.decisions.some((h) => h.tool === tool && h.case === c.case && h.caught);
         else {
           const j = judged?.get(c.case)?.verdict;
           if (j === "judge-failed") judgeFailed++;
@@ -190,11 +209,15 @@ export function main(argv: string[], log: (line: string) => void = console.log):
         return [k, s as Status];
       }));
     };
-    const hc = values.handcheck ? (readJson(values.handcheck) as { decisions?: { tool: string; case: string; caught: boolean }[] }).decisions ?? null : null;
-    if (values.handcheck && !Array.isArray(hc)) throw new RefusalError("--handcheck must be {decisions: [{tool, case, caught}]}");
+    const hc = values.handcheck ? readJson(values.handcheck) as HandCheck : null;
+    if (hc && (!Array.isArray(hc.decisions) || !Array.isArray(hc.reviewed))) {
+      throw new RefusalError("--handcheck must be handcheck-sheet.ts resolve output ({decisions, reviewed}, bound to review sha256)");
+    }
     const r = score({
       cases: g.cases, policy,
       reviews: new Map([...tools].map(([t, d]) => [t, readReviews(d, ids)])),
+      reviewSha: new Map([...tools].map(([t, d]) => [t, new Map(ids.filter((id) => fs.existsSync(path.join(d, `${id}.json`)))
+        .map((id) => [id, sha256(fs.readFileSync(path.join(d, `${id}.json`)))]))])),
       judge: new Map([...judge].map(([t, f]) => [t, judgeEntries(f, g.cases)])),
       judgeX1: new Map([...x1].map(([t, f]) => [t, judgeEntries(f, g.cases)])),
       status: new Map([...status].map(([t, f]) => [t, toStatus(f)])),

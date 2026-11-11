@@ -28,15 +28,21 @@ import { checkSide, commentHits, pairs, readGoldens, readJson, readPolicy, readR
 
 interface DetailFile { detail?: { prTitle: string; status: string; comments: { path: string; line: number | null; body: string; matched: string | null }[] }[] }
 
-/** Comment indexes a judge matched to G1, by case; checks that the detail's comments are the review's, in order. */
-function judgeMatches(file: string, cases: GoldenCase[], reviews: Map<string, { comments: Comment[] }>): Map<string, Set<number>> {
+/**
+ * Comment indexes a judge matched to G1, by case, or "failed" for a JUDGE_FAILED case. Every bug case the tool has a
+ * review for must have an entry (a judge that matched nothing is an entry with no matches; no entry is missing
+ * evidence and refuses), and a scored entry must have judged exactly the review's comments, in order.
+ */
+export function judgeMatches(file: string, cases: GoldenCase[], reviews: Map<string, { comments: Comment[] }>): Map<string, Set<number> | "failed"> {
   const d = readJson(file) as DetailFile;
   if (!Array.isArray(d.detail)) throw new RefusalError(`${file} is not a bench score --detail file`);
   const byTitle = new Map(cases.map((c) => [c.pr_title, c.case]));
-  const out = new Map<string, Set<number>>();
+  const out = new Map<string, Set<number> | "failed">();
   for (const p of d.detail) {
     const id = byTitle.get(p.prTitle);
-    if (!id || p.status !== "SCORED") continue;
+    if (!id) continue;
+    if (out.has(id)) throw new RefusalError(`${file}: two judged entries for one PR title`);
+    if (p.status !== "SCORED") { out.set(id, "failed"); continue; }
     const review = reviews.get(id);
     if (!review || review.comments.length !== p.comments.length
       || p.comments.some((c, i) => c.path !== review.comments[i]!.path || c.line !== review.comments[i]!.line || c.body !== review.comments[i]!.body)) {
@@ -44,28 +50,38 @@ function judgeMatches(file: string, cases: GoldenCase[], reviews: Map<string, { 
     }
     out.set(id, new Set(p.comments.flatMap((c, i) => (c.matched === "G1" ? [i] : []))));
   }
+  const missing = cases.filter((c) => c.label === "bug" && reviews.has(c.case) && !out.has(c.case)).length;
+  if (missing) throw new RefusalError(`${file}: no judged entry for ${missing} reviewed bug case(s) (missing evidence is never "no match")`);
   return out;
 }
 
-export interface Item { item: string; tool: string; case: string; comment: number; reasons: string[] }
+export interface Item { item: string; tool: string; case: string; comment: number; reasons: string[]; review_sha256: string }
+/** Every (tool, bug case) the sheet considered, with the sha256 of the review file it read: score-testset checks it. */
+export interface Reviewed { tool: string; case: string; review_sha256: string }
 
 export function buildSheet(o: {
-  cases: GoldenCase[]; reviews: Map<string, Map<string, { comments: Comment[] }>>;
-  v1: Map<string, Map<string, Set<number>>>; x1: Map<string, Map<string, Set<number>>>; seed: number; strip: RegExp[];
+  cases: GoldenCase[]; reviews: Map<string, Map<string, { comments: Comment[] }>>; reviewSha: Map<string, Map<string, string>>;
+  v1: Map<string, Map<string, Set<number> | "failed">>; x1: Map<string, Map<string, Set<number> | "failed">>; seed: number; strip: RegExp[];
   /** policy sheet_judge_cues (ts-protocol §13, pending): "shown" adds whether a judge proposed a match; "hidden" does not */
   judgeCues: "hidden" | "shown";
-}): { sheet: string; decisions: { item: string; decision: null; reason: string }[]; mapping: Item[] } {
+}): { sheet: string; decisions: { item: string; decision: null; reason: string }[]; mapping: Item[]; reviewed: Reviewed[] } {
   const raw: Omit<Item, "item">[] = [];
+  const reviewed: Reviewed[] = [];
+  // a JUDGE_FAILED case has no judge evidence, so every comment of it goes on the sheet
+  const judged = (m: Map<string, Set<number> | "failed"> | undefined, id: string, i: number, label: string) => {
+    const e = m?.get(id);
+    return e === "failed" ? [`${label}-failed`] : e?.has(i) ? [label] : [];
+  };
   for (const c of o.cases.filter((x) => x.label === "bug")) {
     for (const [tool, reviews] of o.reviews) {
-      const comments = reviews.get(c.case)?.comments ?? [];
-      comments.forEach((cm, i) => {
-        const reasons = [
-          ...(o.v1.get(tool)?.get(c.case)?.has(i) ? ["judge-v1"] : []),
-          ...(o.x1.get(tool)?.get(c.case)?.has(i) ? ["judge-x1"] : []),
-          ...(commentHits(cm, c.targets) ? ["location"] : []),
-        ];
-        if (reasons.length) raw.push({ tool, case: c.case, comment: i, reasons });
+      const review = reviews.get(c.case);
+      if (!review) continue;
+      const sha = o.reviewSha.get(tool)!.get(c.case)!;
+      reviewed.push({ tool, case: c.case, review_sha256: sha });
+      review.comments.forEach((cm, i) => {
+        const reasons = [...judged(o.v1.get(tool), c.case, i, "judge-v1"), ...judged(o.x1.get(tool), c.case, i, "judge-x1"),
+          ...(commentHits(cm, c.targets) ? ["location"] : [])];
+        if (reasons.length) raw.push({ tool, case: c.case, comment: i, reasons, review_sha256: sha });
       });
     }
   }
@@ -83,21 +99,22 @@ export function buildSheet(o: {
     parts.push(`## ${m.item}`, "", "**Labelled bug:**", "", "```text", g.description ?? "(no description)", "```", "",
       `**Locations:** ${g.targets.map((t) => `${t.file}:${t.lines[0]}-${t.lines[1]}`).join("; ")}`, "",
       `**Comment at** \`${cm.path}:${cm.line ?? "(no line)"}\`:`, "", "```text", clean(cm.body), "```", "",
-      ...(o.judgeCues === "shown" ? [`**A judge proposed a match:** ${m.reasons.some((x) => x.startsWith("judge")) ? "yes" : "no"}`, ""] : []));
+      ...(o.judgeCues === "shown" ? [`**A judge proposed a match:** ${m.reasons.some((x) => x === "judge-v1" || x === "judge-x1") ? "yes" : "no"}`, ""] : []));
   }
-  return { sheet: parts.join("\n") + "\n", decisions: mapping.map((m) => ({ item: m.item, decision: null, reason: "" })), mapping };
+  return { sheet: parts.join("\n") + "\n", decisions: mapping.map((m) => ({ item: m.item, decision: null, reason: "" })), mapping, reviewed };
 }
 
-export function resolve(mapping: Item[], decisions: { item: string; decision: unknown; reason?: unknown }[]): { tool: string; case: string; caught: boolean }[] {
+export function resolve(mapping: Item[], decisions: { item: string; decision: unknown; reason?: unknown }[]): { tool: string; case: string; caught: boolean; review_sha256: string }[] {
   const byItem = new Map(decisions.map((d) => [d.item, d]));
   if (byItem.size !== decisions.length) throw new RefusalError("decisions name an item twice");
-  const out = new Map<string, { tool: string; case: string; caught: boolean }>();
+  const out = new Map<string, { tool: string; case: string; caught: boolean; review_sha256: string }>();
   for (const m of mapping) {
     const d = byItem.get(m.item);
     if (!d || (d.decision !== "same-bug" && d.decision !== "not")) throw new RefusalError(`${m.item} has no decision (same-bug or not)`);
+    if (typeof m.review_sha256 !== "string") throw new RefusalError(`${m.item}: the mapping does not bind its review file`);
     const key = `${m.tool}\0${m.case}`;
     const prev = out.get(key);
-    out.set(key, { tool: m.tool, case: m.case, caught: (prev?.caught ?? false) || d.decision === "same-bug" });
+    out.set(key, { tool: m.tool, case: m.case, caught: (prev?.caught ?? false) || d.decision === "same-bug", review_sha256: m.review_sha256 });
   }
   if (decisions.some((d) => !mapping.some((m) => m.item === d.item))) throw new RefusalError("decisions name an item the mapping does not have");
   return [...out.values()];
@@ -117,9 +134,12 @@ export function main(argv: string[], log: (line: string) => void = console.log):
       checkSide(values.side, values["heldout-ok"]!, [values.mapping, values.decisions, values.out]);
       if (!values.mapping || !values.decisions || !values.out) throw new RefusalError("usage: handcheck-sheet.ts resolve --side dev --mapping <f> --decisions <f> --out <f>");
       if (fs.existsSync(values.out)) throw new RefusalError(`${values.out} exists; never overwritten`);
-      const mapping = (readJson(values.mapping) as { items: Item[] }).items;
+      const mapFile = readJson(values.mapping) as { items: Item[]; reviewed?: Reviewed[] };
+      if (!Array.isArray(mapFile.reviewed)) throw new RefusalError("the mapping has no reviewed list (rebuild the sheet)");
+      const mapping = mapFile.items;
       const decided = resolve(mapping, readJson(values.decisions) as { item: string; decision: unknown }[]);
-      writeNew(values.out, JSON.stringify({ v: 1, decisions: decided, inputs: { mapping: sha256(fs.readFileSync(values.mapping)), decisions: sha256(fs.readFileSync(values.decisions)) } }, null, 1) + "\n");
+      writeNew(values.out, JSON.stringify({ v: 1, decisions: decided, reviewed: mapFile.reviewed,
+        inputs: { mapping: sha256(fs.readFileSync(values.mapping)), decisions: sha256(fs.readFileSync(values.decisions)) } }, null, 1) + "\n");
       log(`resolved ${mapping.length} item(s) into ${decided.length} (tool, case) decision(s), ${decided.filter((d) => d.caught).length} caught -> ${values.out}`);
       return 0;
     }
@@ -129,18 +149,24 @@ export function main(argv: string[], log: (line: string) => void = console.log):
     const seed = Number(values.seed);
     if (!values.goldens || !tools.size || !values.out || !Number.isSafeInteger(seed)) throw new RefusalError("usage: handcheck-sheet.ts build --side dev --goldens <f> --tool name=dir … --judge name=detail … --seed <int> --out <dir>");
     for (const m of [v1, x1]) for (const k of m.keys()) if (!tools.has(k)) throw new RefusalError(`${k} is not a --tool`);
+    // judge evidence is required: v1 for every tool, and on held-out x1 as well (both judges propose matches there)
+    for (const t of tools.keys()) {
+      if (!v1.has(t)) throw new RefusalError(`${t} has no --judge (v1) detail`);
+      if (side === "heldout" && !x1.has(t)) throw new RefusalError(`${t} has no --judge-x1 detail (held-out uses both judges)`);
+    }
     for (const f of ["sheet.md", "decisions.json", "mapping.json", "hashes.json"]) if (fs.existsSync(path.join(values.out, f))) throw new RefusalError(`${path.join(values.out, f)} exists; never overwritten`);
     const g = readGoldens(values.goldens);
     if (g.side !== side) throw new RefusalError(`goldens are for side ${g.side}, not ${side}`);
     const ids = g.cases.map((c) => c.case);
     const reviews = new Map([...tools].map(([t, d]) => [t, readReviews(d, ids)]));
+    const reviewSha = new Map([...tools].map(([t, d]) => [t, new Map([...reviews.get(t)!.keys()].map((id) => [id, sha256(fs.readFileSync(path.join(d, `${id}.json`)))]))]));
     const stripSrc = values.strip ? readJson(values.strip) as string[] : [];
     if (!Array.isArray(stripSrc) || stripSrc.some((s) => typeof s !== "string")) throw new RefusalError("--strip must be a JSON array of regex strings");
-    const built = buildSheet({ cases: g.cases, reviews, seed, strip: stripSrc.map((s) => new RegExp(s, "g")), judgeCues: policy.sheet_judge_cues!,
+    const built = buildSheet({ cases: g.cases, reviews, reviewSha, seed, strip: stripSrc.map((s) => new RegExp(s, "g")), judgeCues: policy.sheet_judge_cues!,
       v1: new Map([...v1].map(([t, f]) => [t, judgeMatches(f, g.cases, reviews.get(t)!)])),
       x1: new Map([...x1].map(([t, f]) => [t, judgeMatches(f, g.cases, reviews.get(t)!)])) });
     const sheet = built.sheet, decisions = JSON.stringify(built.decisions, null, 1) + "\n";
-    const mapping = JSON.stringify({ v: 1, side, seed, strip: stripSrc, policy, items: built.mapping }, null, 1) + "\n";
+    const mapping = JSON.stringify({ v: 1, side, seed, strip: stripSrc, policy, reviewed: built.reviewed, items: built.mapping }, null, 1) + "\n";
     writeNew(path.join(values.out, "sheet.md"), sheet);
     writeNew(path.join(values.out, "decisions.json"), decisions);
     writeNew(path.join(values.out, "mapping.json"), mapping);
