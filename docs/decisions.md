@@ -3903,3 +3903,27 @@ judge-only jobs need per-job env caps to be enforced; details and options in `do
 Sunny; the caps above are unchanged.
 **Rejected:** running the plan as written (its caps stop early and two arguments are false, per the audit); "the simpler
 arm wins" ties; L3 step 2 at ≈ $2.17; choosing a multi-file primary by hand.
+
+## 076a — Caps after the caps check, and the protocol's open choices (2026-11-11)
+
+**Status: ruled by Sunny; nothing run.** Amends 076. Sources: bunny's caps check
+(`tracehound-testset/run/out/bunny.caps-check.md`), the protocol draft `docs/eval/ts-protocol.md` §13 (branch
+`codex/ts-protocol`), grok's reviews (`run/out/grok.d1-review*.md`).
+**Caps.** (1) Every runner job: batch `--max-usd-run` = job cap − job spend so far; unstarted ids roll into the next batch
+(replaces "min(batch estimate + $0.40, …)"). (2) R1 cap **$4.68** (+$0.53 from unallocated, which becomes **$1.18**).
+(3) R2 and H1 caps are recomputed once from R1's measured per-case costs by the caps-check method at 95% completion and
+recorded in **decision 077 before R2's first call**; funded from unallocated only, H1 first; if R2 can't reach 95% it runs
+at what fits and reports the missing cases. (4) A held-out case left unstarted at H1's cap runs from the reserve. (5) L4
+runs at `--concurrency 1`; every judge-only job (L1, L4, H2) sets `TRACEHOUND_BUDGET_RUN_USD` = job cap and
+`TRACEHOUND_BUDGET_TOTAL_USD` = ledger at job start + job cap. (6) L2 with more than 11 failed chunks redraws the first 11
+by case id, then chunk index, and applies the gate to those.
+**Protocol §13.** (1) Significance level 0.05, two-sided. (2) Equal cost: A0 first; between A1 and A2, fewer comments per
+case. (3) A failed TraceHound case gets one rerun and the rerun's result counts; two failures is a miss; a case unstarted
+at the window's end is a miss. (4) A tool with no review after its re-trigger leaves that case out of that tool's paired
+comparison; n is reported. (5) The hand-check sheet hides the judges' verdicts. (6) The re-trigger is 24 h after that
+PR's own trigger. (7) Order: sheet hashed, unblind, score files hashed and committed, then the firewall lifts. (8) The
+claim names exactly the repos with at least one held-out case, with per-repo counts (filled by codex); the two-repo
+paragraph in `docs/budget.md` is superseded. (9) The three newer proposals (unmappable targets, within-file ranges, caps
+procedures) wait for Planner B's review and recommendation; **D1 is not merged until Sunny rules on that note.**
+**Rejected:** the first batch rule (a batch's last cases stop after one expensive case); R2/H1 caps fixed before any TS
+cost is measured; letting a judge-only job run under the $1 default cap.

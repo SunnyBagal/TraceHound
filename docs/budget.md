@@ -17,9 +17,9 @@ Nebius-key-capable CI run in the 48 h (`run/out/codex.leak.md` § 48 h) and grok
 ## S0 rulings (Sunny, 2026-11-11; decision 076)
 - The plan (`docs/plan/2026-11-10-plan.md`) runs only as corrected by its audit (`docs/plan/2026-11-10-plan-audit.md`);
   corrections 1, 2, 5–9 accepted as written, 3 and 4 as below. **The freeze above stays** until the console check.
-- **Caps:** the table below. L3 step 2 is cut (L3 step 1 is $0 and still runs). Each batch runs with
-  `--max-usd-run` = min(batch estimate + $0.40, job cap − job spend so far). Re-plan if console ÷ ledger > **1.08**.
-  Cut order: L2, then R2 becomes a cache replay. H1, H2 and the reserve are never cut.
+- **Caps:** the table below. L3 step 2 is cut (L3 step 1 is $0 and still runs). Batch run caps: see the caps ruling below
+  (it replaced "min(batch estimate + $0.40, …)"). Re-plan if console ÷ ledger > **1.08**. Cut order: L2, then R2 becomes a
+  cache replay. H1, H2 and the reserve are never cut.
 - **Ties:** a margin under 3 cases is a tie and the incumbent (A0, pool-verify-v1) stays; if several arms pass, the cheaper
   one wins.
 - **Multi-file bugs:** every row of one defect is the same bug; the case counts once; a comment matching any row catches
@@ -30,6 +30,14 @@ Nebius-key-capable CI run in the 48 h (`run/out/codex.leak.md` § 48 h) and grok
   bunny after held-out outputs and score files are frozen and hashed. **Hand-check:** Sunny, one 2–3 h sitting; the
   window is not booked until Sunny confirms dates.
 - Every cost and time below is an **estimate** unless marked measured.
+- **Caps ruling (Sunny, 2026-11-11, after the caps check; decision 076a):** (1) every runner job: batch `--max-usd-run` =
+  job cap − job spend so far, unstarted ids roll into the next batch; (2) R1 cap **$4.68** (+$0.53 from unallocated →
+  **$1.18**); (3) R2 and H1 caps are recomputed once from R1's measured per-case costs by the caps-check method at 95%
+  completion and recorded in decision 077 before R2's first call, funded from unallocated only, H1 first; if R2 can't
+  reach 95% it runs at what fits and reports the missing cases; (4) a held-out case left unstarted at H1's cap runs
+  from the reserve; (5) L4 at `--concurrency 1`; every judge-only job (L1, L4, H2) sets `TRACEHOUND_BUDGET_RUN_USD` = job cap
+  and `TRACEHOUND_BUDGET_TOTAL_USD` = ledger at job start + job cap; (6) L2 with more than 11 failed chunks redraws the
+  first 11 by case id, then chunk index, and applies the gate to those. The caps-check options paragraph below is superseded by this.
 - **Caps check (bunny, 2026-11-11, `tracehound-testset/run/out/bunny.caps-check.md`; estimates, TS costs unmeasured):**
   at the estimate ($0.0934 per case) every job completes, but R1/R2 have 3% headroom and H1 5%. Under a realistic
   per-case spread, the batch rule as written runs every case with P ≈ 0.29 (R1, R2) and ≈ 0.40 (H1): one expensive case
@@ -105,21 +113,22 @@ $19.40. Audit cost: $0; only console usage can reconcile the actual charges.
 
 ## The split of $19.31 (2026-11-11, decision 076; replaces the 2026-11-09 split, which is in git history)
 Bases are **estimates** from the unit costs above (measured on non-TS repos) plus 25% for TS diffs (an assumption).
-Job caps are Sunny's (S0). A batch's `--max-usd-run` = min(batch estimate + $0.40, job cap − job spend so far).
+Job caps are Sunny's (S0, amended 2026-11-11 after the caps check). **Every runner job's batch `--max-usd-run` = job cap − job
+spend so far; unstarted ids roll into the next batch** (this replaced "min(batch estimate + $0.40, …)").
 
 | line | what | cap | basis (estimate unless marked) | status |
 |---|---|---|---|---|
 | S1 smoke | one dev case end to end, all three tools | **$0.45** | one case at the $0.40 case cap + judging | blocked by the freeze |
-| R1 dev run 1 | pool-verify-v1, fresh, 40 dev cases, judge v1, batches | **$4.15** | 40 × ($0.0747 + $0.0012) × 1.25 ≈ $3.80, + batch headroom | not started |
+| R1 dev run 1 | pool-verify-v1, fresh, 40 dev cases, judge v1, batches | **$4.68** | 95% completion under bunny's spread model (caps check), incl. ≈ $0.05 judging; was $4.15 | not started |
 | L1 arm scoring | replay of run 1's lineage, 3 arms, judge v1 | **$0.40** | 3 × 40 × $0.0012 ≈ $0.15, + CodeRabbit's dev row | not started |
 | L2 redraw test | 2 fresh redraws per `CHUNK_FAILED` chunk of run 1, cache bypassed | **$0.80** | ≈ 8 chunks × 2 × $0.035 (TS count unmeasured) | not started; first to cut |
 | L3 step 2 | — | **cut** | (≈ $2.17, above its cap; audit b7f) | cut by S0 |
 | L4 union | report only, judge the union of runs 1 and 2 | **$0.10** | ≈ $0.05 (audit C088: unmeasured) | not started |
-| R2 dev run 2 | fresh draw of the candidate | **$4.15** | as R1 | not started; becomes a cache replay if cut |
-| H1 held-out run | 29 cases, from the freeze tag | **$3.15** | 29 × $0.0761 × 1.25 ≈ $2.76 | never cut |
+| R2 dev run 2 | fresh draw of the candidate | **$4.15** until decision 077 | recomputed once from R1's measured per-case costs (95% completion), funded from unallocated only, after H1 | not started; becomes a cache replay if cut |
+| H1 held-out run | 29 cases, from the freeze tag | **$3.15** until decision 077 | recomputed once from R1's measured costs (95% completion), funded from unallocated first; an unstarted held-out case at the cap runs from the reserve | never cut |
 | H2 scoring | 3 tools + 2 secondary rows × 29 × v1 + x1 | **$0.40** | ≈ $0.20 | never cut |
 | reserve | infrastructure reruns (held-out first), a console-check correction | **$3.00** | owner | held; never cut |
-| unallocated | needs a new line here before use | **$1.71** | $18.31 − the lines above | held |
+| unallocated | needs a new line here before use | **$1.18** | $1.71 − $0.53 to R1 (2026-11-11 ruling) | held; funds the 077 recompute (H1 first, then R2) |
 | CI review runs | manual Action runs | **$0.00** | none planned; each needs a line first | none since 2026-11-01 |
 | safety margin | never spent (outside the global hard stop) | $1.00 | rule 3 | — |
 | **total** | | **$19.31** | $18.31 usable + $1.00 margin | |
@@ -138,7 +147,7 @@ reviews exist, but getting their reviews of new PRs is outside this budget.
 - Before the held-out run, fix in writing: whether every labelled row of a case is a golden (the pilot has several rows per
   bug case and none for clean cases, `pilot/PILOT.md`), the scope rule for pre-cutoff and unclear fixes, golden severity
   (SZZ labels have none; the scorer drops Low), and comments per case reported beside precision.
-- *(Written when the sets were twenty and medusa only; the held-out set is now 29 cases from four repos. The claim's repo scope is pending Sunny (proposed in `docs/eval/ts-protocol.md` §13). Kept as written:)* Claim it supports (devin): "On N held-out pull requests from twenty and medusa whose changed lines a later merged fix
+- *(**Superseded** (Sunny, 2026-11-11, decision 076a): the claim names exactly the repos with at least one held-out case, with per-repo counts. Kept as written for the record:)* Claim it supports (devin): "On N held-out pull requests from twenty and medusa whose changed lines a later merged fix
   repaired (labelled by SZZ, two labellers), tool T commented on the later-fixed defect for X of the N labelled bugs
   (matches proposed by two judges and confirmed by hand), with Y of its Z comments matching a label; comments on issues
   that no later fix repaired count against it, so Y/Z is a lower bound on its precision." Not supported: true precision,
@@ -158,3 +167,4 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 | 2026-11-09 | billing-lag finding: the $23.39 reading predates 074's charge ($3.36463); expected 23.39 − 3.36463 − 0.49090 = $19.53 vs real $19.31 ($0.22 unexplained). Freeze until the console confirms | — | — | **$19.31** |
 | 2026-11-09 | local-ledger audit (codex): 72 files; evaluation copy deduplicated; $0 additional non-test spend demonstrated; $19.40 off-ledger / $12.7–$14.2 after CI remains unexplained | — | $0 (audit; no calls) | **$19.31** |
 | 2026-11-11 | S0 rulings and decision 076: new split ($18.31 usable: S1 0.45, R1 4.15, L1 0.40, L2 0.80, L4 0.10, R2 4.15, H1 3.15, H2 0.40, reserve 3.00, unallocated 1.71; L3 step 2 cut); freeze stays | — | $0 | **$19.31** |
+| 2026-11-11 | caps ruling (076a): R1 $4.68, unallocated $1.18; rolling batch rule; R2/H1 recomputed in 077 from R1's measured costs; judge-only env caps; L4 concurrency 1 | — | $0 | **$19.31** |

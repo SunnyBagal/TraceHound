@@ -12,6 +12,8 @@ artu1 and bunny tune TraceHound later, so they **never open, list, grep or diff*
 - **Plans are hypotheses:** verify a task's premises against repo data (file:line) before executing it; report contradictions instead of working around them.
 
 ## Sunny's decisions (2026-11-10/11)
+- **076a (2026-11-11, after the caps check):** batch `--max-usd-run` = job cap − job spend so far, unstarted ids roll over; R1 $4.68, unallocated $1.18; R2/H1 caps recomputed once from R1's measured per-case costs (95% completion) in **decision 077 before R2's first call**, unallocated only, H1 first; unstarted held-out case at H1's cap runs from the reserve; L4 `--concurrency 1`; judge-only jobs set RUN = job cap, TOTAL = ledger at start + job cap; L2 > 11 failed chunks → first 11 by case id, chunk index. Protocol §13: α 0.05 two-sided; equal cost A0 first, then fewer comments/case; one rerun (rerun counts; two failures = miss; unstarted at window end = miss); no review after re-trigger → out of that tool's paired comparison, n reported; sheet hides judge verdicts; re-trigger 24 h after the PR's trigger; sheet hashed → unblind → score files hashed + committed → firewall lifts; claim names every repo with ≥ 1 held-out case (per-repo counts); three newer proposals wait for Planner B; **D1 not merged until Sunny rules on Planner B's note**.
+- **Planner files no Herdr agent edits:** `docs/plan/`, `docs/specs/`, `docs/runbooks/`. Planners leave notes in `tracehound-testset/run/comms/planner.*.md`: check that folder after each task.
 - Held-out PRs open only after the final freeze tag (all tools in one window); forks get dev cases only until then. TraceHound runs locally per case (`scripts/run-tracehound.ts`), scored from local output.
 - Dev replacements: next candidate in screening order passing every check (incl. attribution, and since 2026-11-11 "bug visible at the introducing PR"), else dev −1. case-002 ("moved") stays.
 - Tools: CodeRabbit + Greptile free Starter (held-out + one smoke test); Bugbot excluded (limitation).
@@ -42,8 +44,8 @@ Coordination: `~/Projects/tracehound-testset/run/{briefs,out,comms}`; `.done` ma
 
 ## OPEN TASKS (in order)
 a. Spend freeze until Sunny reports the Nebius console check.
-b. Sunny: the caps-check options (budget.md S0); D1 §13 proposals (α, equal-cost order, reruns, unstarted cases, external no-review, sheet cues, +24 h, firewall/sheet order, claim repo scope); confirm window dates.
-c. codex: C1 (B1 re-review, B2, held-out reach), then `run/briefs/codex-brain-review4.md` (send it when t14 unblocks); artu1 pushes the brain after GO, merges B1/B2/D1 after GO.
+b. Lanes (briefs `run/briefs/{bunny,codex,grok}-076a.md`): bunny policy file + caps re-check with the rolling rule; codex C1 re-review (B2 `554cd28`, B1 `8707752..bec2ead`) → brain review → D1 rev 3; grok re-checks D1 rev 3. artu1: merge B1/B2 on GO (merge commits), push the brain after codex GO, push `codex/ts-protocol` for Planner B after rev 3.
+c. Sunny: rule on Planner B's D1 note; confirm window dates.
 d. Bump the Action pins and create the `tracehound-review` label in the four repos.
 
 ## Where things are
