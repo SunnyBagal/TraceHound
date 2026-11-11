@@ -124,3 +124,15 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   link check, external audit), planner (plan, audit briefs, author's response).
 - **Then:** plan-audit brain note pushed `6c4fbb0` after codex NO-GO ×2 (power assumptions, L4 missing) and GO.
 - **Left:** Sunny's rulings on the audit corrections and on case-025's primary file; spend freeze.
+
+## 2026-11-11 (Wed, later): S0 rulings, A1, $0 lanes
+- **Changed:** Sunny ruled on the audit (S0): corrections, caps, tie rule, gates with error ranges, multi-file rule
+  (primary by git path order after a stop on the conflict with devin's rule), metric, window, firewall, hand-check.
+  artu1 wrote decision 076 and the budget split (A1, `588f723`) and merged PR #71 (`d04db68`). bunny's caps check: the
+  caps as ruled still stop R1/R2/H1 early under a realistic cost spread; options recorded for Sunny. grok: G1 tool facts
+  (5/5 quotes re-found), fork default branches moved to the last upstream commit before 2026-07-01 (dry run, then
+  apply; read back), two D1 reviews. codex: D1 protocol (two revisions; open choices in §13 for Sunny), multi-file
+  overlays (dev 3/31, held-out 1/20), C1 started (B1 NO-GO on 2 P2s; bunny fixed). bunny: B1 lineage, B3 audits
+  (contracts off; L3 step 1 31% → 86%), B2 scoring kit. Brain: 076, costs, competitors, strengths-and-gaps, NOW
+  (uncommitted, awaiting codex review). $0.
+- **Left:** Sunny's rulings on the caps options and D1 §13; codex C1 and brain review; console check.

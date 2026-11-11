@@ -138,7 +138,7 @@ reviews exist, but getting their reviews of new PRs is outside this budget.
 - Before the held-out run, fix in writing: whether every labelled row of a case is a golden (the pilot has several rows per
   bug case and none for clean cases, `pilot/PILOT.md`), the scope rule for pre-cutoff and unclear fixes, golden severity
   (SZZ labels have none; the scorer drops Low), and comments per case reported beside precision.
-- Claim it supports (devin): "On N held-out pull requests from twenty and medusa whose changed lines a later merged fix
+- *(Written when the sets were twenty and medusa only; the held-out set is now 29 cases from four repos. The claim's repo scope is pending Sunny (proposed in `docs/eval/ts-protocol.md` §13). Kept as written:)* Claim it supports (devin): "On N held-out pull requests from twenty and medusa whose changed lines a later merged fix
   repaired (labelled by SZZ, two labellers), tool T commented on the later-fixed defect for X of the N labelled bugs
   (matches proposed by two judges and confirmed by hand), with Y of its Z comments matching a label; comments on issues
   that no later fix repaired count against it, so Y/Z is a lower bound on its precision." Not supported: true precision,
