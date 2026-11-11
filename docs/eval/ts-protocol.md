@@ -34,7 +34,7 @@ Adopt the existing rule in `packages/analyzer/src/bench/convert.ts`: **top-level
 
 Freeze an explicit per-tool API `user.login`/`user.type` allowlist after G1/S1 observes real comments. A mention handle or App slug alone is not evidence of API identity. Collect and archive all raw relevant API objects as evidence, then apply the rule; an excluded summary is not an actionable comment for scoring. Every counted GitHub comment is counted once by immutable object ID. Preserve original body, file, current/original line, review ID, author, commit binding and timestamps. Do not include later revisions created outside the window.
 
-TraceHound is scored from its **local neutral finding export**, one proposed comment per finding the frozen product would emit, not the single optional PR body wrapper. Use only official successful-case output; exclude diagnostics, pool candidates dropped before posting, fix suggestions and usage/footer text. Apply the frozen15-comment model-finding cap in pool order. If contracts are enabled by B3, export every emitted contract finding as well, with source and the product's model/contract dedupe applied; a model-only export would be incomplete. Keep all emitted finding units in comment-count and judge inputs. Fixes are off.
+TraceHound is scored from its **local neutral finding export**, one proposed comment per finding the frozen product would emit, not the single optional PR body wrapper. Use only official successful-case output; exclude diagnostics, pool candidates dropped before posting, fix suggestions and usage/footer text. Apply the frozen15-comment model-finding cap in pool order. **Contracts are OFF by B3's ruled recommendation criterion:** the40-case dev audit found0 findings and0 label hits (typed stage skipped-budget in37 cases, a recorded limitation). With no label hit the plan's “on only if≥1 hit and≤1 finding/case” condition fails. Fixes are off. If a later separately ruled configuration enables contracts, every emitted contract finding must also be exported with product dedupe; a model-only export would then be incomplete.
 
 For each tool/case, record attempt/completion status separately from zero comments. An explicit terminal successful review with no eligible comments is a valid zero. A startup walkthrough alone is not proof of completion. Freeze tool-specific terminal-evidence extraction configuration from G1/S1; retain API evidence. A missing/incomplete review is `no-review`, not an invented zero-comment completed review.
 
@@ -95,7 +95,7 @@ Freeze the exact checked-out code, model/prompt hashes, scripts, manifests/overl
 ```sh
 node scripts/run-tracehound.ts --manifest <manifest> --clone <complete-local-clone> \
   --ids <frozen-batch-ids> --out-dir <private-job-output> \
-  --fixes off --contracts <B3-on-or-off> --cache off \
+  --fixes off --contracts off --cache off \
   --max-usd-per-case 0.40 --max-usd-run <computed-batch-cap>
 ```
 
@@ -143,7 +143,7 @@ The write-up scores predictions right/wrong/too-vague, reports all pre-registere
 
 | Slot | Owner/input | Required before |
 |---|---|---|
-|Contracts on/off and exact neutral contract export|B3 recommendation: on only if≥1 label hit and≤1 finding/case; else off; C1 verifies exports|S1; frozen identically for scored arms unless a separately registered comparison says otherwise|
+|Contracts: RESOLVED OFF|B3 dev audit:40 cases,0 findings,0 label hits; typed skipped-budget37; the ruled recommendation criterion selects off|S1/F1 command frozen with contracts off; same policy for all scored arms|
 |CodeRabbit measured rate, common-order trigger/recovery schedule|P1/G1 and Sunny's dates; planned1/hour until measured|F1; no booked held-out window beforehand|
 |Exact72h UTC window and Sunny2–3h sitting|Sunny|F1/H1|
 |Tool API identity and terminal-review evidence configuration|G1/S1 real observations; no hard-coded guessed bot login|Final collection/scoring configuration atF1|
