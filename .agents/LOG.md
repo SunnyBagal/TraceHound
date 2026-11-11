@@ -158,3 +158,12 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   review pending). codex blocked on a permission prompt. $0.
 - **Who:** bunny (orchestration, merges, B2 follow-up), codex (C1 re-review, brain review 4, D1 rev 3), grok (D1 re-check).
 - **Left:** Sunny answers codex's prompt; codex plan-v2 audit then b2-followup review; grok D1 re-check; Planner B's note.
+
+## 2026-11-11 (Wed, night): 076b
+- **Changed:** while artu1 was away bunny (temp orchestrator) merged B1 (`4b70033`) and B2 (`c379055`) on codex GO, pushed the
+  brain (`a4fc2e7`) and D1 rev 3 (`c64e77d`, grok 0 differences); Planner A wrote specs (B1-review, B2, E1, P1, R1, R2, S1),
+  runbooks (F1, H1, H2, W1) and the after-held-out backlog. codex's plan-v2 audit: 55 verified / 2 contradicted; P2-1
+  (R1/R2 judging envelope) → Sunny's 076b: judging inside the job cap, re-trigger slots, CodeRabbit rate check before the
+  window, canary ≤ $0.40 from the reserve, adopted-arm cost reporting, budget.md firewall order fixed. Item g closed.
+  Lanes: bunny (policy file + R1 spec env lines, note to Planner A), codex (b2-followup review, D1 rev 4), grok (076b check
+  of protocol + H1 runbook). $0.

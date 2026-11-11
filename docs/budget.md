@@ -26,8 +26,9 @@ Nebius-key-capable CI run in the 48 h (`run/out/codex.leak.md` § 48 h) and grok
   it; the primary is the first file in git's path order (rule, never by hand); the others are alternates.
 - **Schema:** devin's two choices as written (`tracehound-testset/run/out/devin.schema.md`). **Metric:** bugs caught of 20
   (Wilson), comments per PR, cost per PR; F on dev only. **Window:** 72 h, same PR order for every tool, one re-trigger
-  per tool per PR for tool errors only; CodeRabbit planned at 1/h until P1 measures it. **Firewall** lifts for artu1 and
-  bunny after held-out outputs and score files are frozen and hashed. **Hand-check:** Sunny, one 2–3 h sitting; the
+  per tool per PR for tool errors only (re-trigger slot per 076b); CodeRabbit planned at 1/h until P1 measures it.
+  **Firewall** (076a order): hand-check sheet hashed → unblind → score files hashed and committed → the firewall lifts for
+  artu1 and bunny. **Hand-check:** Sunny, one 2–3 h sitting; the
   window is not booked until Sunny confirms dates.
 - Every cost and time below is an **estimate** unless marked measured.
 - **Caps ruling (Sunny, 2026-11-11, after the caps check; decision 076a):** (1) every runner job: batch `--max-usd-run` =
@@ -38,6 +39,15 @@ Nebius-key-capable CI run in the 48 h (`run/out/codex.leak.md` § 48 h) and grok
   from the reserve; (5) L4 at `--concurrency 1`; every judge-only job (L1, L4, H2) sets `TRACEHOUND_BUDGET_RUN_USD` = job cap
   and `TRACEHOUND_BUDGET_TOTAL_USD` = ledger at job start + job cap; (6) L2 with more than 11 failed chunks redraws the
   first 11 by case id, then chunk index, and applies the gate to those. The caps-check options paragraph below is superseded by this.
+- **076b (Sunny, 2026-11-11):** (1) **R1/R2 judging:** the post-run `bench score` of R1 and R2 runs inside the job's
+  cap: `TRACEHOUND_BUDGET_TOTAL_USD` = ledger at job start + job cap, `TRACEHOUND_BUDGET_RUN_USD` = job cap − runner spend,
+  `--concurrency 1`. (2) **Re-triggers:** first triggers always go before re-triggers; a re-trigger takes the first free
+  hourly slot at or after 24 h from that PR's own trigger, in PR order (amends 076a's "24 h after"). (3) **CodeRabbit
+  allowance:** P1 records the hourly rate at its start and its end; if it shrank, the held-out window starts at least 7
+  days after P1's last review. (4) **Canary:** only after two held-out cases in a row fail with a provider or transport
+  error; at most 3 tries, ≥ 30 min apart, **$0.40 in total from the reserve**; if all 3 fail, stop and tell Sunny.
+  (5) An adopted A1 or A2 is run by the unchanged runner and extracted by replay; the write-up reports the cost paid per
+  PR and, beside it, the adopted arm's own calls from the ledger.
 - **Caps check (bunny, 2026-11-11, `tracehound-testset/run/out/bunny.caps-check.md`; estimates, TS costs unmeasured):**
   at the estimate ($0.0934 per case) every job completes, but R1/R2 have 3% headroom and H1 5%. Under a realistic
   per-case spread, the batch rule as written runs every case with P ≈ 0.29 (R1, R2) and ≈ 0.40 (H1): one expensive case
@@ -127,7 +137,7 @@ spend so far; unstarted ids roll into the next batch** (this replaced "min(batch
 | R2 dev run 2 | fresh draw of the candidate | **$4.15** until decision 077 | recomputed once from R1's measured per-case costs (95% completion), funded from unallocated only, after H1 | not started; becomes a cache replay if cut |
 | H1 held-out run | 29 cases, from the freeze tag | **$3.15** until decision 077 | recomputed once from R1's measured costs (95% completion), funded from unallocated first; an unstarted held-out case at the cap runs from the reserve | never cut |
 | H2 scoring | 3 tools + 2 secondary rows × 29 × v1 + x1 | **$0.40** | ≈ $0.20 | never cut |
-| reserve | infrastructure reruns (held-out first), a console-check correction | **$3.00** | owner | held; never cut |
+| reserve | infrastructure reruns (held-out first), a console-check correction, unstarted held-out cases (076a), the canary (≤ $0.40, 076b) | **$3.00** | owner | held; never cut |
 | unallocated | needs a new line here before use | **$1.18** | $1.71 − $0.53 to R1 (2026-11-11 ruling) | held; funds the 077 recompute (H1 first, then R2) |
 | CI review runs | manual Action runs | **$0.00** | none planned; each needs a line first | none since 2026-11-01 |
 | safety margin | never spent (outside the global hard stop) | $1.00 | rule 3 | — |
@@ -168,3 +178,4 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 | 2026-11-09 | local-ledger audit (codex): 72 files; evaluation copy deduplicated; $0 additional non-test spend demonstrated; $19.40 off-ledger / $12.7–$14.2 after CI remains unexplained | — | $0 (audit; no calls) | **$19.31** |
 | 2026-11-11 | S0 rulings and decision 076: new split ($18.31 usable: S1 0.45, R1 4.15, L1 0.40, L2 0.80, L4 0.10, R2 4.15, H1 3.15, H2 0.40, reserve 3.00, unallocated 1.71; L3 step 2 cut); freeze stays | — | $0 | **$19.31** |
 | 2026-11-11 | caps ruling (076a): R1 $4.68, unallocated $1.18; rolling batch rule; R2/H1 recomputed in 077 from R1's measured costs; judge-only env caps; L4 concurrency 1 | — | $0 | **$19.31** |
+| 2026-11-11 | 076b: R1/R2 judging inside the job cap; re-trigger slots; CodeRabbit rate check; canary ≤ $0.40 from the reserve; adopted-arm cost reporting | — | $0 | **$19.31** |

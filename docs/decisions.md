@@ -3927,3 +3927,25 @@ paragraph in `docs/budget.md` is superseded. (9) The three newer proposals (unma
 procedures) wait for Planner B's review and recommendation; **D1 is not merged until Sunny rules on that note.**
 **Rejected:** the first batch rule (a batch's last cases stop after one expensive case); R2/H1 caps fixed before any TS
 cost is measured; letting a judge-only job run under the $1 default cap.
+
+## 076b — R1/R2 judging envelope, re-trigger slots, CodeRabbit allowance, canary (2026-11-11)
+
+**Status: ruled by Sunny; nothing run.** Amends 076/076a. Sources: codex's plan-v2 audit
+(`tracehound-testset/run/out/codex.plan-v2-audit.md`, P2-1), bunny's answer (`run/comms/codex-to-bunny-076a-plan-v2-1.answer.md`),
+plan v2 open point R-1, the H1 runbook's canary (`docs/runbooks/H1-window.md`).
+1. **R1/R2 judging** (closes STATE item g): the post-run judging of R1 and R2 runs inside the job's cap:
+   `TRACEHOUND_BUDGET_TOTAL_USD` = ledger at job start + job cap; `TRACEHOUND_BUDGET_RUN_USD` = job cap − runner spend;
+   `--concurrency 1`.
+2. **Re-triggers** (R-1): first triggers always go before re-triggers. A re-trigger takes the first free hourly slot at
+   or after 24 h from that PR's own trigger, in PR order. Amends 076a §13 (6), "24 h after that PR's own trigger".
+3. **CodeRabbit allowance:** P1 records the hourly rate at its start and at its end. If the rate shrank, the held-out
+   window starts at least 7 days after P1's last review.
+4. **Canary:** approved with limits. It runs only after two held-out cases in a row fail with a provider or transport
+   error; at most 3 tries, at least 30 minutes apart, **$0.40 in total from the reserve**. If all 3 fail, stop and tell
+   Sunny.
+5. **Adopted arm:** an adopted A1 or A2 is run by the unchanged runner and extracted by replay. The write-up reports the
+   cost paid per PR and, beside it, the adopted arm's own calls from the ledger.
+6. `docs/budget.md`'s firewall sentence follows 076a's order (sheet hashed → unblind → score files hashed and committed →
+   firewall lifts).
+**Rejected:** judging R1/R2 under the $1 per-process default; re-triggers interleaved with first triggers at a fixed
++24 h; an open-ended canary.
