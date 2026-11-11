@@ -106,3 +106,21 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
 - **Who:** artu1 (fill, script gate, compare, docs), bunny (runner fixes ×2), codex (attribution rerun, review ×2, blind
   labels), grok (5 replacements, leak audit), devin (out of quota).
 - **Then:** codex round 2 GO at `eb41993`; artu1 merged `run-tracehound` (`d482d38`), gates on main green (302 / 1027 +6 skipped / 215, typecheck). **Left:** case-025 caveat; spend freeze.
+
+## 2026-11-11 (Wed): case-025 again, brain backfill, plan audit
+- **Changed:** Sunny ruled case-025 (#22392) out: its bug only showed after a later PR. grok replaced it with the next
+  twenty candidate passing every check plus a new "visible at the introducing PR" check (3 dropped first; attribution
+  100%; leak 0); codex labelled blind: bug/clean agree, strict 0/1 (same defect, two files; open multi-file-primary
+  choice). Dev 40 (31/9), attribution 30/1/0. tracehound-brain backfilled by bunny (D062–D075, P010, 7 topic notes;
+  index/digest/timeline/NOW/lessons); codex NO-GO (D070 showed precision floors as F floors; 8 P2s), fixed by bunny
+  and artu1 (inbox/README rule per Sunny: agents may edit curated notes, codex GO before push; D061 outcome from D062;
+  codex-20 inbox report kept with a provenance note; seeded totals labelled unverified), codex GO, pushed `29e8515`.
+  grok: 411 vault links, 0 new broken (3 old). Two standing rules in CLAUDE.md/AGENTS.md/STATE: brain at session end;
+  plans are hypotheses. Plan audit (`docs/plan/2026-11-10-plan-audit.md`): the planner had dispatched the three audit
+  lanes and handed the merge to artu1; 185 claims, 141 verified / 17 contradicted / 21 unsupported / 6 guesses; the
+  planner accepted bunny's 6 contradictions; 13 tasks blocked; reserve is inside the $17.25. $0.
+- **Who:** artu1 (briefs, rulings applied, label compare, attribution rerun, audit merge, brain push), bunny (brain
+  backfill + fixes, stats/budget audit), codex (blind label, brain reviews ×3, internal audit), grok (case-025, vault
+  link check, external audit), planner (plan, audit briefs, author's response).
+- **Left:** Sunny's rulings on the audit corrections and on case-025's primary file; codex GO on the plan-audit brain
+  note; spend freeze.

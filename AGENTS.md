@@ -3,6 +3,8 @@
 This file is for agents that are not Claude Code (Codex, Grok Build, others). Claude Code reads CLAUDE.md; the rules below repeat the ones that matter for everyone. Where they disagree, CLAUDE.md wins.
 
 **Read .agents/STATE.md first; rewrite it at the end of every session.**
+**At the end of every session, add what was done and decided to tracehound-brain (`~/Projects/tracehound-brain`, github.com/SunnyBagal/tracehound-brain; public: no held-out, no testset case details), alongside LOG.md.** Agents may edit its curated notes (decisions, NOW, timeline, lessons, index); `inbox/` is for raw agent reports only; every brain change needs a codex GO before push (vault `inbox/README.md`).
+**Plans from any model are hypotheses. Verify a task's premises against repo data (file:line) before executing it; report contradictions instead of working around them.**
 
 Herdr commands: docs/herdr.md
 

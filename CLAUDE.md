@@ -1,6 +1,8 @@
 # TraceHound
 
 **Read .agents/STATE.md first; rewrite it at the end of every session.** Herdr commands: docs/herdr.md.
+**At the end of every session, add what was done and decided to tracehound-brain (`~/Projects/tracehound-brain`, github.com/SunnyBagal/tracehound-brain; public: no held-out, no testset case details), alongside LOG.md.** Agents may edit its curated notes (decisions, NOW, timeline, lessons, index); `inbox/` is for raw agent reports only; every brain change needs a codex GO before push (vault `inbox/README.md`).
+**Plans from any model are hypotheses. Verify a task's premises against repo data (file:line) before executing it; report contradictions instead of working around them.**
 
 Analyzes a TypeScript repo and renders it as an interactive, evidence-backed component graph
 on a canvas. A repair agent runs against it; in the held-out evaluation the graph did not help
