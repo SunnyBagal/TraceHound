@@ -19,11 +19,30 @@ export function checkSide(side: string | undefined, heldoutOk: boolean, paths: (
   if (side !== "dev" && side !== "heldout") throw new RefusalError("--side dev|heldout is required");
   if (side === "heldout" && !heldoutOk) throw new RefusalError("--side heldout needs --heldout-ok (never passed by tuning agents)");
   if (side === "dev") {
+    const heldout = (p: string) => p.split(path.sep).some((s) => /^heldout$/i.test(s));
     for (const p of paths) {
-      if (p && path.resolve(p).split(path.sep).some((s) => /^heldout$/i.test(s))) throw new RefusalError(`--side dev refuses a held-out path: ${p}`);
+      if (p && (heldout(path.resolve(p)) || heldout(resolveLinks(p)))) throw new RefusalError(`--side dev refuses a held-out path: ${p}`);
     }
   }
   return side;
+}
+
+/**
+ * The path with every existing component resolved through symlinks, one component at a time (a dangling link is
+ * followed to its target too), and the components that do not exist yet appended as given: so an output under an
+ * aliased parent is judged by where it would really be written.
+ */
+export function resolveLinks(p: string, depth = 0): string {
+  if (depth > 40) throw new RefusalError(`too many symlinks resolving ${p}`);
+  const parts = path.resolve(p).split(path.sep).filter(Boolean);
+  let cur = path.parse(path.resolve(p)).root;
+  for (let i = 0; i < parts.length; i++) {
+    const next = path.join(cur, parts[i]!);
+    let st: fs.Stats;
+    try { st = fs.lstatSync(next); } catch { return path.join(cur, ...parts.slice(i)); }
+    cur = st.isSymbolicLink() ? resolveLinks(path.resolve(cur, fs.readlinkSync(next)), depth + 1) : next;
+  }
+  return cur;
 }
 
 export const sha256 = (data: string | Buffer) => createHash("sha256").update(data).digest("hex");
@@ -157,4 +176,39 @@ export function shuffled<T>(items: T[], seed: number): T[] {
     [out[i], out[j]] = [out[j]!, out[i]!];
   }
   return out;
+}
+
+// ---- policy (docs/eval/ts-protocol.md §13: proposed, pending Sunny) ----------------------------------------------
+
+/**
+ * Choices the protocol leaves pending. The kit applies none by default: a command that needs one refuses until a policy
+ * file names it, with who approved it, when, and where the ruling is recorded.
+ */
+export const POLICY_CHOICES = {
+  /** which record of a rerun case is official (score-testset --records) */
+  official_attempt: ["last", "first"],
+  /** an official failed/cap TraceHound case */
+  failed_case: ["miss", "no-review"],
+  /** a case with no runner record at all (never started) */
+  unstarted_case: ["miss", "no-review"],
+  /** a tool's no-review case in a pair: left out of that pair, or kept as not caught */
+  no_review_in_pairs: ["exclude", "not-caught"],
+  /** whether the hand-check sheet tells the checker a judge proposed a match */
+  sheet_judge_cues: ["hidden", "shown"],
+} as const;
+export type PolicyChoice = keyof typeof POLICY_CHOICES;
+export type Policy = { v: 1; approved: { by: string; on: string; ref: string } } & { [K in PolicyChoice]?: (typeof POLICY_CHOICES)[K][number] };
+
+export function readPolicy(file: string | undefined, needed: PolicyChoice[]): Policy {
+  if (!file) throw new RefusalError(`--policy is required: ${needed.join(", ")} are pending (ts-protocol §13) until a recorded ruling names them`);
+  const p = readJson(file) as Policy;
+  if (!p || p.v !== 1) throw new RefusalError(`${file} is not a policy file (v1)`);
+  const a = p.approved;
+  if (!a || [a.by, a.on, a.ref].some((x) => typeof x !== "string" || !x.trim())) throw new RefusalError(`${file}: approved.by, approved.on and approved.ref are required`);
+  for (const k of needed) {
+    const allowed = POLICY_CHOICES[k] as readonly string[];
+    if (!allowed.includes(p[k] as string)) throw new RefusalError(`${file}: ${k} must be one of ${allowed.join(" | ")}`);
+  }
+  for (const k of Object.keys(p)) if (!["v", "approved", ...Object.keys(POLICY_CHOICES)].includes(k)) throw new RefusalError(`${file}: unknown field ${k}`);
+  return p;
 }

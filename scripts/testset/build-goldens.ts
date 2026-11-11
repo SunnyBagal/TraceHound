@@ -8,7 +8,12 @@
  * Rules (decision 076 S0.1; docs/eval/ts-protocol.md §2):
  * - The label of record for a case is the first `--labels` file with a row for it whose introducing commit is the
  *   manifest's head_sha: a `clean` row, or one bug row with `role: "primary"` (its fix is the case's one scored defect).
- * - Alternates come only from `--overlay` ({v: 1, alternates: [{case, file, lines_at_head, fix_sha, reason}]}), never
+ * - Overlay, the assigned form: schema-v2 JSONL rows (`labels/<side>/multifile.jsonl`): per bug case one `role:
+ *   "primary"` row and any `role: "alternate"` rows of the same fix and introducing commit, `file` the path at the case
+ *   head, `fix_file` its path in the fix (a historical rename alias). These rows are the targets and their roles are
+ *   canonical: the build checks that the primary is first of them in git's path order of the fix (via `fix_file`) and
+ *   refuses otherwise; it never re-chooses. Every bug case must have overlay rows; clean cases must have none.
+ * - Older form: alternates come only from `--overlay` ({v: 1, alternates: [{case, file, lines_at_head, fix_sha, reason}]}), never
  *   inferred: every alternate names the same fix. The primary among the defect's rows is the first file in
  *   `git show --no-renames --name-only --format= <fix>` order (by rule, never by hand); the others are alternates.
  *   Labels name paths at the case head: a file renamed before the fix is followed by rename detection (case head →
@@ -28,7 +33,7 @@ import { parseArgs } from "node:util";
 import { checkSide, readJson, readJsonl, RefusalError, sha256, writeNew, type GoldenCase, type Goldens, type Target } from "./kit.ts";
 
 interface ManifestCase { id: string; repo: string; title: string; base_sha: string; case_head_sha: string; head_sha: string }
-interface Row { id?: unknown; label?: unknown; role?: unknown; file?: unknown; lines_at_head?: unknown; fix_sha?: unknown; introducing_sha?: unknown; description?: unknown }
+interface Row { id?: unknown; label?: unknown; role?: unknown; file?: unknown; lines_at_head?: unknown; fix_sha?: unknown; introducing_sha?: unknown; description?: unknown; fix_file?: unknown }
 interface OverlayAlt { case: string; file: string; lines_at_head: [number, number]; fix_sha: string; reason: string }
 
 const GIT_ENV = (): NodeJS.ProcessEnv => ({ PATH: process.env.PATH, HOME: process.env.HOME, GIT_NO_LAZY_FETCH: "1",
@@ -42,12 +47,15 @@ export interface BuildResult { goldens: Goldens; bench: { pr_title: string; comm
 
 export function buildGoldens(o: {
   side: "dev" | "heldout"; manifest: ManifestCase[]; labels: { name: string; rows: Row[] }[]; overlay: OverlayAlt[];
+  /** schema-v2 overlay rows (role primary | alternate per bug case); when given, they are every bug case's targets */
+  roleRows?: Row[];
   git: (repo: string, args: string[]) => { ok: boolean; out: string };
 }): BuildResult {
   const errors: string[] = [];
   const cases: GoldenCase[] = [];
   const titles = new Map<string, string>();
   for (const alt of o.overlay) if (!o.manifest.some((c) => c.id === alt.case)) errors.push(`${alt.case}: overlay names a case not in the manifest`);
+  for (const id of new Set((o.roleRows ?? []).map((r) => String(r.id)))) if (!o.manifest.some((c) => c.id === id)) errors.push(`${id}: overlay names a case not in the manifest`);
   for (const c of o.manifest) {
     if (titles.has(c.title)) errors.push(`${c.id}: same PR title as ${titles.get(c.title)} (goldens are keyed by title)`);
     titles.set(c.title, c.id);
@@ -63,15 +71,33 @@ export function buildGoldens(o: {
     const row = record.rows[0]!;
     const alts = o.overlay.filter((a) => a.case === c.id);
     if (row.label === "clean") {
-      if (alts.length) errors.push(`${c.id}: overlay alternates on a clean case`);
+      if (alts.length || o.roleRows?.some((r) => r.id === c.id)) errors.push(`${c.id}: overlay rows on a clean case`);
       cases.push({ case: c.id, pr_title: c.title, label: "clean", targets: [] });
       continue;
     }
     const fix = String(row.fix_sha ?? "");
     const r0 = range(row.lines_at_head);
     if (!SHA.test(fix) || typeof row.file !== "string" || !row.file || !r0) { errors.push(`${c.id}: primary row lacks fix_sha, file or a valid range`); continue; }
-    const rows: { file: string; lines: [number, number] }[] = [{ file: row.file, lines: r0 }];
-    for (const a of alts) {
+    let rows: { file: string; lines: [number, number]; fixFile?: string; given?: "primary" | "alternate" }[] = [{ file: row.file, lines: r0 }];
+    let description = typeof row.description === "string" ? row.description : undefined;
+    if (o.roleRows) {
+      // schema-v2 overlay: its rows are the defect's targets, with canonical roles (checked, never re-chosen)
+      const mine = o.roleRows.filter((r) => r.id === c.id);
+      if (!mine.length) { errors.push(`${c.id}: bug case has no rows in the overlay`); continue; }
+      const bad = mine.find((r) => r.label !== "bug" || (r.role !== "primary" && r.role !== "alternate") || typeof r.file !== "string" || !r.file
+        || !range(r.lines_at_head) || !samePrefix(String(r.fix_sha ?? ""), fix) || !samePrefix(String(r.introducing_sha ?? ""), c.head_sha)
+        || (r.fix_file !== undefined && (typeof r.fix_file !== "string" || !r.fix_file)));
+      if (bad) { errors.push(`${c.id}: an overlay row is not a bug row of this case's fix and introducing commit with a role, file and range`); continue; }
+      const primaries = mine.filter((r) => r.role === "primary");
+      if (primaries.length !== 1) { errors.push(`${c.id}: the overlay has ${primaries.length} primary rows (need exactly one)`); continue; }
+      const p = primaries[0]!;
+      rows = [p, ...mine.filter((r) => r !== p)].map((r) => ({ file: r.file as string, lines: range(r.lines_at_head)!,
+        ...(typeof r.fix_file === "string" && { fixFile: r.fix_file }), given: r.role as "primary" | "alternate" }));
+      if (typeof p.description === "string") description = p.description;
+      const dup = rows.find((x, i) => rows.some((y, j) => j < i && y.file === x.file && y.lines[0] <= x.lines[1] && x.lines[0] <= y.lines[1]));
+      if (dup) { errors.push(`${c.id}: duplicate target ${dup.file} (same file, overlapping range)`); continue; }
+    }
+    for (const a of o.roleRows ? [] : alts) {
       const r = range(a.lines_at_head);
       if (!r || typeof a.file !== "string" || !a.file) { errors.push(`${c.id}: overlay alternate lacks a file or a valid range`); continue; }
       if (!samePrefix(String(a.fix_sha ?? ""), fix)) { errors.push(`${c.id}: overlay alternate names another fix (alternates are the same defect)`); continue; }
@@ -94,10 +120,16 @@ export function buildGoldens(o: {
           if (st?.startsWith("R") && from && to) renames.set(from, to);
         }
       }
-      const place = (file: string) => fixFiles.indexOf(fixFiles.includes(file) ? file : renames.get(file) ?? file);
-      const missing = rows.filter((x) => place(x.file) < 0);
+      // the overlay's fix_file (the path in the fix; a historical rename alias) first, then the head path and renames
+      const place = (x: { file: string; fixFile?: string }) => {
+        if (x.fixFile && fixFiles.includes(x.fixFile)) return fixFiles.indexOf(x.fixFile);
+        return fixFiles.indexOf(fixFiles.includes(x.file) ? x.file : renames.get(x.file) ?? x.file);
+      };
+      const missing = rows.filter((x) => place(x) < 0);
       if (missing.length) { errors.push(`${c.id}: ${missing.length} target file(s) not touched by the fix (after following renames)`); continue; }
-      rows.sort((x, y) => place(x.file) - place(y.file));
+      const given = rows[0]!.given === "primary" ? rows[0] : undefined;
+      rows.sort((x, y) => place(x) - place(y));
+      if (given && rows[0] !== given) { errors.push(`${c.id}: the overlay's primary is not the first of its files in git's path order of the fix`); continue; }
     }
     // preflight against the case head
     let bad = false;
@@ -110,7 +142,7 @@ export function buildGoldens(o: {
     if (bad) continue;
     const targets: Target[] = rows.map((x, i) => ({ file: x.file, lines: x.lines, role: i === 0 ? "primary" : "alternate" }));
     cases.push({ case: c.id, pr_title: c.title, label: "bug", fix_sha: fix, introducing_sha: String(row.introducing_sha),
-      targets, ...(typeof row.description === "string" && { description: row.description }) });
+      targets, ...(description !== undefined && { description }) });
   }
   const bench = cases.map((g) => ({ pr_title: g.pr_title, comments: g.label === "clean" ? [] : [{ severity: "High" as const,
     comment: `${g.description ?? "(no description)"}\nLocations (a comment at any one of them is about this bug): `
@@ -134,14 +166,17 @@ export function main(argv: string[], log: (line: string) => void = console.log):
       if (fs.existsSync(path.join(values.out, f))) throw new RefusalError(`${path.join(values.out, f)} exists; never overwritten`);
     }
     const manifest = readJson(values.manifest) as ManifestCase[];
-    const overlayRaw = values.overlay ? readJson(values.overlay) as { v?: number; alternates?: OverlayAlt[] } : { v: 1, alternates: [] };
-    if (overlayRaw.v !== 1 || !Array.isArray(overlayRaw.alternates)) throw new RefusalError("--overlay must be {v: 1, alternates: [...]}");
+    // --overlay: the schema-v2 multi-file rows (.jsonl: primary + alternates per bug case, the assigned format), or the
+    // older {v: 1, alternates: [...]} JSON listing alternates only
+    const roleRows = values.overlay?.endsWith(".jsonl") ? readJsonl(values.overlay) as Row[] : undefined;
+    const overlayRaw = !values.overlay || roleRows ? { v: 1, alternates: [] as OverlayAlt[] } : readJson(values.overlay) as { v?: number; alternates?: OverlayAlt[] };
+    if (overlayRaw.v !== 1 || !Array.isArray(overlayRaw.alternates)) throw new RefusalError("--overlay must be schema-v2 rows (.jsonl) or {v: 1, alternates: [...]}");
     const git = (repo: string, args: string[]) => {
       if (!/^[A-Za-z0-9._-]+$/.test(repo)) return { ok: false, out: "" };
       const r = spawnSync(values["git-bin"]!, ["-C", path.join(values.repos!, repo), ...args], { encoding: "utf8", env: GIT_ENV(), maxBuffer: 256 * 1024 * 1024 });
       return { ok: r.status === 0, out: r.stdout ?? "" };
     };
-    const result = buildGoldens({ side, manifest, overlay: overlayRaw.alternates,
+    const result = buildGoldens({ side, manifest, overlay: overlayRaw.alternates, ...(roleRows && { roleRows }),
       labels: labelFiles.map((f) => ({ name: path.basename(f), rows: readJsonl(f) as Row[] })), git });
     if (result.errors.length) {
       for (const e of result.errors) log(`preflight error: ${e}`);

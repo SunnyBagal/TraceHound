@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { symlinkSync } from "node:fs";
 import { afterAll, describe, expect, it } from "vitest";
 import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
 import { GoldenFile } from "../../analyzer/src/bench/types.ts";
@@ -42,6 +43,19 @@ describe("kit", () => {
     expect(checkSide("heldout", true, ["/x/heldout/y"])).toBe("heldout");
     expect(() => checkSide("dev", false, ["/data/heldout/labels.jsonl"])).toThrow(/refuses a held-out path/);
     expect(checkSide("dev", false, ["/data/dev/heldout-notes-not-a-segment.json", undefined])).toBe("dev");
+  });
+
+  it("codex C1 probe 1: the dev guard follows symlinks, for existing paths and for new outputs under an aliased parent", () => {
+    const d = tmp();
+    mkdirSync(path.join(d, "store", "heldout"), { recursive: true });
+    writeFileSync(path.join(d, "store", "heldout", "labels.jsonl"), "");
+    symlinkSync(path.join(d, "store", "heldout"), path.join(d, "alias"));
+    expect(() => checkSide("dev", false, [path.join(d, "alias", "labels.jsonl")])).toThrow(/refuses a held-out path/);
+    expect(() => checkSide("dev", false, [path.join(d, "alias", "new", "out.json")])).toThrow(/refuses a held-out path/);
+    symlinkSync(path.join(d, "store", "heldout", "later"), path.join(d, "dangling"));
+    expect(() => checkSide("dev", false, [path.join(d, "dangling", "x.json")])).toThrow(/refuses a held-out path/);
+    symlinkSync(path.join(d, "store"), path.join(d, "fine"));
+    expect(checkSide("dev", false, [path.join(d, "fine", "dev.json")])).toBe("dev");
   });
 
   it("location hit: ±10 lines of any target, inclusive; null lines and other files never hit", () => {
@@ -176,14 +190,23 @@ function scoringFixture() {
     json(path.join(d, "dev", "th-records", `${id}.json`), { case: id, status, usage: { ledger: { costUSD: cost } } });
   }
   json(path.join(d, "dev", "th-records", "c3.r2.json"), { case: "c3", status: "failed", usage: { ledger: { costUSD: 0.03 } } });
-  return { d, goldens, dir: (x: string) => path.join(d, "dev", x) };
+  const policy = (over: Record<string, string> = {}, name = "policy.json") => {
+    const file = path.join(d, "dev", name);
+    json(file, { v: 1, approved: { by: "synthetic test", on: "2026-11-11", ref: "test fixture" }, official_attempt: "last", failed_case: "miss",
+      unstarted_case: "miss", no_review_in_pairs: "exclude", sheet_judge_cues: "hidden", ...over });
+    return file;
+  };
+  return { d, goldens, dir: (x: string) => path.join(d, "dev", x), policy };
 }
 
 describe("score-testset", () => {
   it("catches per case once, misses scored, no-review out of pairs, Wilson, comments, location hits, cost; counts only on stdout", () => {
     const f = scoringFixture();
     const out = f.dir("summary.json");
-    const r = run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`,
+    // x1 detail covers th's completed bug cases c1 and c2 (c3 is a miss under the policy)
+    json(f.dir("th-x1.detail.json"), { detail: ["P1", "P2"].map((t) => ({ prTitle: t, status: "SCORED",
+      comments: JSON.parse(readFileSync(f.dir(`th/c${t.slice(1)}.json`), "utf8")).comments.map((c: object) => ({ ...c, matched: null })) })) });
+    const r = run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`,
       "--judge", `th=${f.dir("th.detail.json")}`, "--judge", `cr=${f.dir("cr.detail.json")}`, "--judge-x1", `th=${f.dir("th-x1.detail.json")}`,
       "--records", `th=${f.dir("th-records")}`, "--out", out]);
     expect(r.code).toBe(0);
@@ -201,6 +224,48 @@ describe("score-testset", () => {
     expect(r.out).not.toMatch(/finds bug|noise|alt-file/);
     expect(r.out).toContain("th: caught 2/3");
     expect(r.out).toContain("pair th vs cr: paired n 2 · th only 1 · cr only 1 · exact two-sided p 1.0000");
+    expect(r.out).toContain("policy: approved by synthetic test on 2026-11-11 (test fixture)");
+    expect(s.policy.no_review_in_pairs).toBe("exclude");
+  });
+
+  it("pending policies apply only through --policy, with each choice's effect", () => {
+    const f = scoringFixture();
+    const base = ["--side", "dev", "--goldens", f.goldens, "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`,
+      "--judge", `th=${f.dir("th.detail.json")}`, "--judge", `cr=${f.dir("cr.detail.json")}`, "--records", `th=${f.dir("th-records")}`];
+    expect(run(scoreMain, [...base, "--out", f.dir("p0.json")]).out).toMatch(/--policy is required: no_review_in_pairs, official_attempt, failed_case, unstarted_case are pending/);
+    const partial = f.dir("partial.json");
+    json(partial, { v: 1, approved: { by: "x", on: "2026-11-11", ref: "r" }, no_review_in_pairs: "exclude" });
+    expect(run(scoreMain, [...base, "--policy", partial, "--out", f.dir("p1.json")]).out).toMatch(/official_attempt must be one of last \| first/);
+    const unapproved = f.dir("unapproved.json");
+    json(unapproved, { v: 1, approved: { by: "", on: "2026-11-11", ref: "r" }, official_attempt: "last", failed_case: "miss", unstarted_case: "miss", no_review_in_pairs: "exclude" });
+    expect(run(scoreMain, [...base, "--policy", unapproved, "--out", f.dir("p2.json")]).out).toMatch(/approved.by, approved.on and approved.ref are required/);
+    // failed_case no-review: th's c3 leaves the pair (n 1)
+    expect(run(scoreMain, [...base, "--policy", f.policy({ failed_case: "no-review" }, "pa.json"), "--out", f.dir("p3.json")]).code).toBe(0);
+    const p3 = JSON.parse(readFileSync(f.dir("p3.json"), "utf8"));
+    expect([p3.tools.th.misses, p3.tools.th.noReview, p3.pairs[0].n]).toEqual([0, 1, 1]);
+    // no_review_in_pairs not-caught: every bug case is in the pair; cr's no-review c2 counts as not caught (th caught it)
+    expect(run(scoreMain, [...base, "--policy", f.policy({ no_review_in_pairs: "not-caught" }, "pb.json"), "--out", f.dir("p4.json")]).code).toBe(0);
+    expect(JSON.parse(readFileSync(f.dir("p4.json"), "utf8")).pairs[0]).toMatchObject({ n: 3, onlyA: 2, onlyB: 1 });
+    // official_attempt first + a case never started: unstarted_case no-review
+    rmSync(f.dir("th-records/c4.json"));
+    expect(run(scoreMain, [...base, "--policy", f.policy({ official_attempt: "first", unstarted_case: "no-review" }, "pc.json"), "--out", f.dir("p5.json")]).code).toBe(0);
+    expect(JSON.parse(readFileSync(f.dir("p5.json"), "utf8")).tools.th).toMatchObject({ noReview: 1, completedClean: 0, misses: 1 });
+  });
+
+  it("codex C1 probe 3: missing or mismatched judge evidence refuses; it never becomes a scored miss", () => {
+    const f = scoringFixture();
+    const empty = f.dir("empty.detail.json");
+    json(empty, { detail: [] });
+    const r = run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--judge", `th=${empty}`, "--out", f.dir("e1.json")]);
+    expect(r.code).toBe(2);
+    expect(r.out).toContain("incomplete: th: judge detail lacks 3 completed bug case(s)");
+    expect(existsSync(f.dir("e1.json"))).toBe(false);
+    const other = f.dir("other.detail.json");
+    const d = JSON.parse(readFileSync(f.dir("th.detail.json"), "utf8"));
+    d.detail[0].comments[0].body = "a different comment";
+    json(other, d);
+    const r2 = run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--judge", `th=${other}`, "--out", f.dir("e2.json")]);
+    expect(r2.out).toContain("incomplete: th: judge judged other comments than the review for 1 case(s)");
   });
 
   it("a hand-check replaces the judge; a JUDGE_FAILED case is counted, not caught; refusals", () => {
@@ -208,18 +273,20 @@ describe("score-testset", () => {
     const hc = f.dir("handcheck.json");
     json(hc, { decisions: [{ tool: "th", case: "c1", caught: false }, { tool: "cr", case: "c1", caught: true }] });
     const out = f.dir("s2.json");
-    const r = run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`, "--handcheck", hc, "--out", out]);
+    const r = run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`, "--handcheck", hc, "--out", out]);
     expect(r.code).toBe(0);
     const s = JSON.parse(readFileSync(out, "utf8"));
     expect([s.tools.th.caught, s.tools.cr.caught, s.tools.th.handchecked]).toEqual([0, 1, true]);
     const d2 = f.dir("th.detail2.json");
-    json(d2, { detail: [{ prTitle: "P1", status: "JUDGE_FAILED", comments: [] }] });
+    const all = JSON.parse(readFileSync(f.dir("th.detail.json"), "utf8"));
+    all.detail[0] = { prTitle: "P1", status: "JUDGE_FAILED", comments: [] };
+    json(d2, all);
     const s3 = f.dir("s3.json");
-    expect(run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--tool", `th=${f.dir("th")}`, "--judge", `th=${d2}`, "--out", s3]).code).toBe(0);
-    expect(JSON.parse(readFileSync(s3, "utf8")).tools.th).toMatchObject({ judgeFailed: 1, caught: 0 });
-    expect(run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--tool", `th=${f.dir("th")}`, "--out", f.dir("s4.json")]).out).toMatch(/needs a --judge/);
-    expect(run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--tool", `th=${f.dir("th")}`, "--judge", `th=${d2}`, "--out", s3]).out).toMatch(/never overwritten/);
-    expect(run(scoreMain, ["--side", "heldout", "--heldout-ok", "--goldens", f.goldens, "--tool", `th=${f.dir("th")}`, "--judge", `th=${d2}`, "--out", f.dir("s5.json")]).out)
+    expect(run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--judge", `th=${d2}`, "--out", s3]).code).toBe(0);
+    expect(JSON.parse(readFileSync(s3, "utf8")).tools.th).toMatchObject({ judgeFailed: 1, caught: 2 });
+    expect(run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--out", f.dir("s4.json")]).out).toMatch(/needs a --judge/);
+    expect(run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--judge", `th=${d2}`, "--out", s3]).out).toMatch(/never overwritten/);
+    expect(run(scoreMain, ["--side", "heldout", "--heldout-ok", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--judge", `th=${d2}`, "--out", f.dir("s5.json")]).out)
       .toMatch(/goldens are for side dev/);
   });
 
@@ -234,8 +301,9 @@ describe("score-testset", () => {
 describe("handcheck-sheet", () => {
   it("is blind (no tool, no judge outcome, no reason), shuffled by a recorded seed, hashed; resolve needs every decision", () => {
     const f = scoringFixture();
-    const args = (out: string, seed: string) => ["build", "--side", "dev", "--goldens", f.goldens, "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`,
-      "--judge", `th=${f.dir("th.detail.json")}`, "--judge", `cr=${f.dir("cr.detail.json")}`, "--judge-x1", `th=${f.dir("th-x1.detail.json")}`, "--seed", seed, "--out", out];
+    const args = (out: string, seed: string, cues = false) => ["build", "--side", "dev", "--goldens", f.goldens, "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`,
+      "--judge", `th=${f.dir("th.detail.json")}`, "--judge", `cr=${f.dir("cr.detail.json")}`, "--judge-x1", `th=${f.dir("th-x1.detail.json")}`, "--seed", seed, "--out", out,
+      "--policy", f.policy(cues ? { sheet_judge_cues: "shown" } : {}, cues ? "cues.json" : "policy.json")];
     const a = f.dir("sheet-a"), b = f.dir("sheet-b"), c = f.dir("sheet-c");
     expect(run(sheetMain, args(a, "42")).code).toBe(0);
     expect(run(sheetMain, args(b, "42")).code).toBe(0);
@@ -265,6 +333,13 @@ describe("handcheck-sheet", () => {
     expect(hc.decisions.filter((d: { caught: boolean }) => d.caught)).toEqual([{ tool: "th", case: "c1", caught: true }]);
     json(dec, filled.slice(1));
     expect(run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(a, "mapping.json"), "--decisions", dec, "--out", f.dir("hc2.json")]).out).toMatch(/has no decision/);
+    // the judge cue is a policy choice: absent unless the policy says "shown"
+    expect(sheet).not.toContain("A judge proposed a match");
+    const shown = f.dir("sheet-cues");
+    expect(run(sheetMain, args(shown, "42", true)).code).toBe(0);
+    expect(readFileSync(path.join(shown, "sheet.md"), "utf8")).toContain("**A judge proposed a match:** yes");
+    const noPolicy = args(f.dir("sheet-np"), "42").slice(0, -2);
+    expect(run(sheetMain, noPolicy).out).toMatch(/--policy is required: sheet_judge_cues/);
   });
 });
 
@@ -359,5 +434,34 @@ describe("build-goldens with a rename between the case head and the fix", () => 
     const out2 = path.join(f.d, "dev", "goldens-r2");
     expect(run(buildMain, ["--side", "dev", "--manifest", path.join(f.d, "dev", "manifest.json"), "--labels", f.labels, "--repos", f.repos, "--out", out2]).code).toBe(0);
     expect(JSON.parse(readFileSync(path.join(out2, "goldens.json"), "utf8")).cases[0].targets).toEqual([{ file: "src/b.ts", lines: [10, 12], role: "primary" }]);
+  });
+});
+
+describe("build-goldens with the schema-v2 overlay (codex C1 question 2)", () => {
+  function overlayRows(f: ReturnType<typeof goldensFixture>, rows: { file: string; fix_file: string; role: string; lines: [number, number] }[], id = "case-1") {
+    const file = path.join(f.d, "dev", `multifile-${Math.random().toString(36).slice(2)}.jsonl`);
+    writeFileSync(file, rows.map((r, i) => JSON.stringify({ id, label: "bug", file: r.file, lines_at_head: r.lines, description: `row ${i}`, fix_sha: f.fix,
+      introducing_sha: f.head, role: r.role, fix_file: r.fix_file, fix_path_order: i + 1, source_label_file: "x.jsonl", source_rows: [] })).join("\n") + "\n");
+    return file;
+  }
+  const build = (f: ReturnType<typeof goldensFixture>, overlay: string, out: string) =>
+    run(buildMain, ["--side", "dev", "--manifest", path.join(f.d, "dev", "manifest.json"), "--labels", f.labels, "--overlay", overlay, "--repos", f.repos, "--out", out]);
+
+  it("keeps the overlay's canonical roles, uses fix_file for renamed paths, and refuses a primary out of git order", () => {
+    const f = goldensFixture({ rename: true });
+    const good = overlayRows(f, [{ file: "src/a.ts", fix_file: "lib/a.ts", role: "primary", lines: [20, 22] }, { file: "src/b.ts", fix_file: "src/b.ts", role: "alternate", lines: [10, 12] }]);
+    const out = path.join(f.d, "dev", "o1");
+    expect(build(f, good, out).code).toBe(0);
+    const g = JSON.parse(readFileSync(path.join(out, "goldens.json"), "utf8"));
+    expect(g.cases[0].targets).toEqual([{ file: "src/a.ts", lines: [20, 22], role: "primary" }, { file: "src/b.ts", lines: [10, 12], role: "alternate" }]);
+    expect(g.cases[0].description).toBe("row 0");
+    const wrong = overlayRows(f, [{ file: "src/b.ts", fix_file: "src/b.ts", role: "primary", lines: [10, 12] }, { file: "src/a.ts", fix_file: "lib/a.ts", role: "alternate", lines: [20, 22] }]);
+    expect(build(f, wrong, path.join(f.d, "dev", "o2")).out).toContain("the overlay's primary is not the first of its files in git's path order");
+    const two = overlayRows(f, [{ file: "src/a.ts", fix_file: "lib/a.ts", role: "primary", lines: [20, 22] }, { file: "src/b.ts", fix_file: "src/b.ts", role: "primary", lines: [10, 12] }]);
+    expect(build(f, two, path.join(f.d, "dev", "o3")).out).toContain("the overlay has 2 primary rows");
+    const onClean = overlayRows(f, [{ file: "src/a.ts", fix_file: "lib/a.ts", role: "primary", lines: [20, 22] }], "case-2");
+    const r = build(f, onClean, path.join(f.d, "dev", "o4"));
+    expect(r.out).toContain("preflight error: case-1: bug case has no rows in the overlay");
+    expect(r.out).toContain("preflight error: case-2: overlay rows on a clean case");
   });
 });

@@ -10,7 +10,8 @@
  * Candidates: every eligible comment either judge matched to the case's golden, and every comment within ±10 lines of
  * any target (primary or alternate). A judge disagreement is a comment one judge matched and the other did not, so it
  * is in the set already. Items from every tool and case are shuffled together with the recorded seed, and the sheet
- * shows no tool name, no judge outcome and no reason the item is there. Bodies lose HTML comments (tool markers) and
+ * shows no tool name and no reason the item is there. Whether it shows a judge cue is policy `sheet_judge_cues`
+ * (`--policy`, required: pending Sunny in ts-protocol §13). Bodies lose HTML comments (tool markers) and
  * any `--strip` regexes (a JSON array of patterns, frozen with the sheet); the finding text is otherwise unchanged.
  * Files: sheet.md (for Sunny), decisions.json (blank, item order), mapping.json (private: item → tool, case, comment,
  * reasons; never shown to the checker), hashes.json (sha256 of all three and the recipe: seed and strip patterns).
@@ -22,7 +23,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { checkSide, commentHits, pairs, readGoldens, readJson, readReviews, RefusalError, sha256, shuffled, writeNew,
+import { checkSide, commentHits, pairs, readGoldens, readJson, readPolicy, readReviews, RefusalError, sha256, shuffled, writeNew,
   type Comment, type GoldenCase } from "./kit.ts";
 
 interface DetailFile { detail?: { prTitle: string; status: string; comments: { path: string; line: number | null; body: string; matched: string | null }[] }[] }
@@ -51,6 +52,8 @@ export interface Item { item: string; tool: string; case: string; comment: numbe
 export function buildSheet(o: {
   cases: GoldenCase[]; reviews: Map<string, Map<string, { comments: Comment[] }>>;
   v1: Map<string, Map<string, Set<number>>>; x1: Map<string, Map<string, Set<number>>>; seed: number; strip: RegExp[];
+  /** policy sheet_judge_cues (ts-protocol §13, pending): "shown" adds whether a judge proposed a match; "hidden" does not */
+  judgeCues: "hidden" | "shown";
 }): { sheet: string; decisions: { item: string; decision: null; reason: string }[]; mapping: Item[] } {
   const raw: Omit<Item, "item">[] = [];
   for (const c of o.cases.filter((x) => x.label === "bug")) {
@@ -79,7 +82,8 @@ export function buildSheet(o: {
     const cm = o.reviews.get(m.tool)!.get(m.case)!.comments[m.comment]!;
     parts.push(`## ${m.item}`, "", "**Labelled bug:**", "", "```text", g.description ?? "(no description)", "```", "",
       `**Locations:** ${g.targets.map((t) => `${t.file}:${t.lines[0]}-${t.lines[1]}`).join("; ")}`, "",
-      `**Comment at** \`${cm.path}:${cm.line ?? "(no line)"}\`:`, "", "```text", clean(cm.body), "```", "");
+      `**Comment at** \`${cm.path}:${cm.line ?? "(no line)"}\`:`, "", "```text", clean(cm.body), "```", "",
+      ...(o.judgeCues === "shown" ? [`**A judge proposed a match:** ${m.reasons.some((x) => x.startsWith("judge")) ? "yes" : "no"}`, ""] : []));
   }
   return { sheet: parts.join("\n") + "\n", decisions: mapping.map((m) => ({ item: m.item, decision: null, reason: "" })), mapping };
 }
@@ -107,6 +111,7 @@ export function main(argv: string[], log: (line: string) => void = console.log):
       side: { type: "string" }, "heldout-ok": { type: "boolean", default: false }, goldens: { type: "string" },
       tool: { type: "string", multiple: true }, judge: { type: "string", multiple: true }, "judge-x1": { type: "string", multiple: true },
       seed: { type: "string" }, strip: { type: "string" }, out: { type: "string" }, mapping: { type: "string" }, decisions: { type: "string" },
+      policy: { type: "string" },
     } });
     if (mode === "resolve") {
       checkSide(values.side, values["heldout-ok"]!, [values.mapping, values.decisions, values.out]);
@@ -119,7 +124,8 @@ export function main(argv: string[], log: (line: string) => void = console.log):
       return 0;
     }
     const tools = pairs(values.tool, "--tool"), v1 = pairs(values.judge, "--judge"), x1 = pairs(values["judge-x1"], "--judge-x1");
-    const side = checkSide(values.side, values["heldout-ok"]!, [values.goldens, values.strip, values.out, ...tools.values(), ...v1.values(), ...x1.values()]);
+    const side = checkSide(values.side, values["heldout-ok"]!, [values.goldens, values.strip, values.out, values.policy, ...tools.values(), ...v1.values(), ...x1.values()]);
+    const policy = readPolicy(values.policy, ["sheet_judge_cues"]);
     const seed = Number(values.seed);
     if (!values.goldens || !tools.size || !values.out || !Number.isSafeInteger(seed)) throw new RefusalError("usage: handcheck-sheet.ts build --side dev --goldens <f> --tool name=dir … --judge name=detail … --seed <int> --out <dir>");
     for (const m of [v1, x1]) for (const k of m.keys()) if (!tools.has(k)) throw new RefusalError(`${k} is not a --tool`);
@@ -130,16 +136,16 @@ export function main(argv: string[], log: (line: string) => void = console.log):
     const reviews = new Map([...tools].map(([t, d]) => [t, readReviews(d, ids)]));
     const stripSrc = values.strip ? readJson(values.strip) as string[] : [];
     if (!Array.isArray(stripSrc) || stripSrc.some((s) => typeof s !== "string")) throw new RefusalError("--strip must be a JSON array of regex strings");
-    const built = buildSheet({ cases: g.cases, reviews, seed, strip: stripSrc.map((s) => new RegExp(s, "g")),
+    const built = buildSheet({ cases: g.cases, reviews, seed, strip: stripSrc.map((s) => new RegExp(s, "g")), judgeCues: policy.sheet_judge_cues!,
       v1: new Map([...v1].map(([t, f]) => [t, judgeMatches(f, g.cases, reviews.get(t)!)])),
       x1: new Map([...x1].map(([t, f]) => [t, judgeMatches(f, g.cases, reviews.get(t)!)])) });
     const sheet = built.sheet, decisions = JSON.stringify(built.decisions, null, 1) + "\n";
-    const mapping = JSON.stringify({ v: 1, side, seed, strip: stripSrc, items: built.mapping }, null, 1) + "\n";
+    const mapping = JSON.stringify({ v: 1, side, seed, strip: stripSrc, policy, items: built.mapping }, null, 1) + "\n";
     writeNew(path.join(values.out, "sheet.md"), sheet);
     writeNew(path.join(values.out, "decisions.json"), decisions);
     writeNew(path.join(values.out, "mapping.json"), mapping);
     writeNew(path.join(values.out, "hashes.json"), JSON.stringify({ v: 1, "sheet.md": sha256(sheet), "decisions.json": sha256(decisions),
-      "mapping.json": sha256(mapping), recipe: sha256(JSON.stringify({ seed, strip: stripSrc })) }, null, 1) + "\n");
+      "mapping.json": sha256(mapping), recipe: sha256(JSON.stringify({ seed, strip: stripSrc, judgeCues: policy.sheet_judge_cues })) }, null, 1) + "\n");
     log(`hand-check sheet: ${built.mapping.length} item(s) from ${tools.size} tool(s), seed ${seed} -> ${values.out} (keep mapping.json away from the checker)`);
     return 0;
   } catch (e) {
