@@ -25,6 +25,10 @@
  * parallel and cannot see each other, so each also gets TRACEHOUND_BUDGET_RUN_USD = A/2. The case can never spend
  * more than A. --max-usd-run R: a case is not started when (ledger now - ledger at run start) + A > R.
  *
+ * Lineage (B1): each record keeps `lineage`, every stage's output as the stage wrote it: both reviewers (findings, chunk
+ * statuses and attempts), the pool with sources, the verifier's verdicts (with reasons) and kept file, and the contracts
+ * result. scripts/testset/replay-arms.ts rebuilds the arms (A0 pool-verify-v1, A1 pool-raw, A2 review-diff-v1) from it.
+ *
  * Exit codes: 0 every case ok, 1 a case failed or hit its cap (each has its file), 2 refused (bad input or a safety
  * check failed; nothing was spent), 3 stopped before a case by --max-usd-run.
  * Node >= 24 type stripping: erasable TypeScript only, no new dependencies.
@@ -37,10 +41,10 @@ import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs, promisify } from "node:util";
 import { prepareReview, type Dependencies, type Finding, type Options, type PullEvent, type ReviewerInput } from "../packages/action/src/action.ts";
-import { checkRepoHead as actionCheckRepoHead, runPipeline as actionRunPipeline, type Execute, type PipelineOptions, type PipelineOutput } from "../packages/action/src/pipeline.ts";
+import { checkRepoHead as actionCheckRepoHead, runPipeline as actionRunPipeline, type Execute, type LineagePart, type PipelineOptions, type PipelineOutput } from "../packages/action/src/pipeline.ts";
 import { createFixClient, FIX_MODEL, runFixes as actionRunFixes, type FixClient, type FixOutput } from "../packages/action/src/fix.ts";
 import { FIX_SYSTEM_PROMPT } from "../packages/action/src/fix-prompt.ts";
-import { runContracts as actionRunContracts, type ContractsResult } from "../packages/action/src/contracts.ts";
+import { runContracts as actionRunContracts, selectContracts, type ContractsResult } from "../packages/action/src/contracts.ts";
 import { ledgerMark, ledgerSince, recordingClient, UsageRecorder, type StageUsage } from "../packages/action/src/usage.ts";
 import { BudgetExceededError, capsFromEnv, type BudgetCaps } from "../packages/analyzer/src/llm/budget.ts";
 import { SpendLedger } from "../packages/analyzer/src/llm/ledger.ts";
@@ -410,6 +414,11 @@ async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, for
   const log = recorder.logger((m) => { logs.push(m); deps.log(`${c.id}: ${m}`); });
   let capHit = false;
   let pipelineFailed = false;
+  const lineage: Record<string, unknown> = { v: 1 };
+  const onLineage = (part: LineagePart) => {
+    const { stage, ...rest } = part;
+    lineage[stage] = "output" in rest ? rest.output : rest;
+  };
   const stageExec: Execute = async (file, args, options) => {
     try {
       return await deps.exec(file, args, { ...options, env: stageEnv(options.env, args[1] ?? "", caps, o.cache) });
@@ -435,7 +444,7 @@ async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, for
     runReviewer: async () => { throw new Error("pool-verify-v1 only"); },
     checkRepoHead: deps.checkRepoHead,
     runPipeline: async (input, model, repoDir, head) => {
-      const r = await deps.runPipeline(input, model, repoDir, head, log, stageExec, { onUsage: recorder.add });
+      const r = await deps.runPipeline(input, model, repoDir, head, log, stageExec, { onUsage: recorder.add, onLineage });
       if (!r) pipelineFailed = true;
       return r;
     },
@@ -446,7 +455,11 @@ async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, for
       } };
       return deps.runFixes(findings, diff, repoDir, head, client);
     },
-    runContracts: (repoDir, base, head) => deps.runContracts(repoDir, base, head, { ...deps.env, GIT_NO_LAZY_FETCH: "1" }),
+    runContracts: async (repoDir, base, head) => {
+      const r = await deps.runContracts(repoDir, base, head, { ...deps.env, GIT_NO_LAZY_FETCH: "1" });
+      lineage.contracts = r;
+      return r;
+    },
     log,
   };
   let prepared: Awaited<ReturnType<typeof prepareReview>> = null;
@@ -470,7 +483,7 @@ async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, for
     reviewer: ACTION_DEFAULTS.reviewer,
     prompts: { "review-diff-v1": REVIEW_PROMPT_SHA256, "review-ctx-v1": REVIEW_CTX_PROMPT_SHA256,
       "verify-ctx-v1": VERIFY_CTX_PROMPT_SHA256, fix: sha256(FIX_SYSTEM_PROMPT) },
-    versions: { analyzer: ANALYZER_VERSION, action: actionVersion(), runner: 1 },
+    versions: { analyzer: ANALYZER_VERSION, action: actionVersion(), runner: 2 },
     tracehound: th,
     settings: { model: ACTION_DEFAULTS.model, fixModel: FIX_MODEL, maxComments: ACTION_DEFAULTS.maxComments,
       fixes: o.fixes, contracts: o.contracts, learn: ACTION_DEFAULTS.learn, cache: o.cache,
@@ -486,9 +499,12 @@ async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, for
       chunksOk: prepared.stages?.chunksOk ?? null, chunksFailed: prepared.stages?.chunksFailed ?? null,
       fixes: prepared.data?.fixes.counts ?? null,
       suggestions: prepared.data?.fixes.suggestions ?? null,
-      contracts: { status: prepared.contracts.status, findings: prepared.contracts.findings },
+      contracts: { status: prepared.contracts.status, findings: prepared.contracts.findings,
+        // the contract units the review emits (inline, then body; `more` only as a count): scored with the comments
+        emitted: o.contracts === "on" && prepared.contracts.status !== "off" ? selectContracts(prepared.contracts.findings, p.diff!) : null },
     } : null,
     usage: { stages: Object.fromEntries(recorder.stages), unreadable: recorder.unreadable, ledger: ledgerDelta },
+    lineage,
     log: logs,
     started_at: startedAt, finished_at: new Date().toISOString(),
   };

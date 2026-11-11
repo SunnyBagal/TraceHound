@@ -164,15 +164,24 @@ function escapeContractText(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/[\\[\]`]/g, "\\$&").replace(/@/g, "@\u200b");
 }
-export function placeContracts(findings: Finding[], diff: string, bodyOnly = false) {
+/**
+ * Which contract findings a review emits, as the findings themselves: up to CONTRACT_LIMIT inline (on a new-side diff
+ * line), then up to CONTRACT_LIMIT more in the body section; the rest only as a count. placeContracts renders this;
+ * scripts/run-tracehound.ts records it so a scored export holds every emitted contract unit.
+ */
+export function selectContracts(findings: Finding[], diff: string, bodyOnly = false): { inline: Finding[]; body: Finding[]; more: number } {
   const lines = new Map(parseDiff(diff).filter(file => file.newPath !== null).map(file => [file.newPath!, newSideLines(file)]));
-  const inline: (Finding & { line: number; side: "RIGHT" })[] = [], body: Finding[] = [];
+  const inline: Finding[] = [], body: Finding[] = [];
   for (const finding of findings) {
-    if (!bodyOnly && inline.length < CONTRACT_LIMIT && finding.line !== null && lines.get(finding.path)?.has(finding.line)) {
-      inline.push({ ...finding, line: finding.line, side: "RIGHT", body: `Contract: ${escapeContractText(finding.body)}` });
-    } else body.push(finding);
+    if (!bodyOnly && inline.length < CONTRACT_LIMIT && finding.line !== null && lines.get(finding.path)?.has(finding.line)) inline.push(finding);
+    else body.push(finding);
   }
   return { inline, body: body.slice(0, CONTRACT_LIMIT), more: Math.max(0, body.length - CONTRACT_LIMIT) };
+}
+export function placeContracts(findings: Finding[], diff: string, bodyOnly = false) {
+  const s = selectContracts(findings, diff, bodyOnly);
+  return { inline: s.inline.map(finding => ({ ...finding, line: finding.line!, side: "RIGHT" as const, body: `Contract: ${escapeContractText(finding.body)}` })),
+    body: s.body, more: s.more };
 }
 
 const encodeSegment = (part: string) => encodeURIComponent(part).replace(/[!'()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);

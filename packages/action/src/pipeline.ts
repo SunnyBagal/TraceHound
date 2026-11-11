@@ -76,11 +76,25 @@ function findings(value: unknown): Finding[] {
   });
 }
 
+/**
+ * One stage's lineage, as the stage wrote it (before validation): each reviewer's whole output (findings, chunk
+ * statuses, attempts, usage), the pool with its sources, and the verifier's verdicts (with reasons) and kept file.
+ */
+export type LineagePart =
+  | { stage: "review-diff-v1" | "review-ctx-v1"; output: unknown }
+  | { stage: "pool"; findings: Finding[]; sources: FindingSource[] }
+  | { stage: "verify-ctx-v1"; verdicts: unknown; kept: unknown };
+
 export interface PipelineOptions {
   /** pool step only: "separate" (default, today) or "merge", where the same normalised path with both lines null agrees */
   poolNullLines?: "separate" | "merge";
   /** Job-summary sidecar: each stage's usage record as soon as its output is read, before validation. */
   onUsage?: (stage: Stage, usage: unknown) => void;
+  /**
+   * Lineage sidecar (scripts/run-tracehound.ts): each stage's output as soon as it is read, so a later stage's failure
+   * keeps the earlier ones. Never changes a request or the result; an exception thrown by it is ignored.
+   */
+  onLineage?: (part: LineagePart) => void;
 }
 
 const poolAgrees = (nullLines: PipelineOptions["poolNullLines"]) => nullLines === "merge"
@@ -116,6 +130,9 @@ export async function runPipeline(
 ): Promise<PipelineOutput | null> {
   let directory: string | undefined;
   const counts: StageCounts = {};
+  const lineage = (part: LineagePart) => {
+    try { options.onLineage?.(part); } catch { /* a sidecar never changes the pipeline */ }
+  };
   try {
     directory = await mkdtemp(path.join(tmpdir(), "tracehound-pool-"));
     const inputPath = path.join(directory, "input.json");
@@ -131,7 +148,9 @@ export async function runPipeline(
     const reviewer = (name: string, command: string, args: string[]) => stage(name, async () => {
       const file = path.join(directory!, `${command}.json`);
       await run(command, ["--pr", inputPath, "--out", file, ...args]);
-      const output = object(await json(file));
+      const raw = await json(file);
+      lineage({ stage: name as "review-diff-v1" | "review-ctx-v1", output: raw });
+      const output = object(raw);
       const review = object(output.review);
       options.onUsage?.(name === "review-diff-v1" ? "diff reviewer" : "ctx reviewer", review.usage);
       const comments = findings(output.comments);
@@ -160,15 +179,19 @@ export async function runPipeline(
     const pool = poolFindings(diff.comments, ctx.comments, options.poolNullLines);
     const sources = poolSources(diff.comments, ctx.comments, options.poolNullLines);
     counts.pool = pool.length;
+    lineage({ stage: "pool", findings: pool, sources });
     await stage("pool", () => writeFile(poolPath, JSON.stringify({
       pr_title: input.title, pr_number: input.number, comments: pool,
     }), { mode: 0o600 }));
     return await stage("verify-ctx-v1", async () => {
       await run("verify-ctx", ["--review", poolPath, "--pr", inputPath, "--head", head,
         "--repo", repo, "--out", verdictsPath, "--kept", keptPath]);
-      const verdicts = object(await json(verdictsPath));
+      const rawVerdicts = await json(verdictsPath);
+      const rawKept = await json(keptPath).catch(() => null);
+      lineage({ stage: "verify-ctx-v1", verdicts: rawVerdicts, kept: rawKept });
+      const verdicts = object(rawVerdicts);
       options.onUsage?.("verifier", (verdicts.verify as { usage?: unknown } | undefined)?.usage);
-      const kept = object(await json(keptPath));
+      const kept = object(rawKept);
       const verified = findings(verdicts.comments);
       const comments = findings(kept.comments);
       const verify = object(verdicts.verify);
