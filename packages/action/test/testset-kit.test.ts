@@ -32,6 +32,7 @@ describe("kit", () => {
     expect(signTest(6, 0)).toBeCloseTo(0.03125, 10);
     expect(signTest(5, 0)).toBeCloseTo(0.0625, 10);
     expect(signTest(7, 1)).toBeCloseTo(0.0703125, 10);
+    expect(signTest(8, 1)).toBeCloseTo(0.0390625, 10); // §7 row, as written
     expect(signTest(1, 8)).toBeCloseTo(0.0390625, 10);
     expect(signTest(10, 2)).toBeCloseTo(0.03857421875, 10);
     expect(signTest(0, 0)).toBe(1);
@@ -362,6 +363,15 @@ describe("handcheck-sheet", () => {
     expect(hc.reviewed.length).toBe(5); // th c1-c3, cr c1 and c3
     json(dec, filled.slice(1));
     expect(run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(a, "mapping.json"), "--decisions", dec, "--out", f.dir("hc2.json")]).out).toMatch(/has no decision/);
+    // a decision present but left null (as build writes it) or blank: exit 2, no output (§7)
+    for (const [name, blank] of [["null", null], ["empty", ""], ["space", " "]] as const) {
+      json(dec, filled.map((d) => (d.item === thC1 ? { ...d, decision: blank } : d)));
+      const outFile = f.dir(`hc-${name}.json`);
+      const rb = run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(a, "mapping.json"), "--decisions", dec, "--out", outFile]);
+      expect(rb.code).toBe(2);
+      expect(rb.out).toContain(`${thC1} has no decision`);
+      expect(existsSync(outFile)).toBe(false);
+    }
     // the judge cue is a policy choice: absent unless the policy says "shown"
     expect(sheet).not.toContain("A judge proposed a match");
     const shown = f.dir("sheet-cues");
