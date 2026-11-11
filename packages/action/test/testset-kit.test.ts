@@ -58,6 +58,27 @@ describe("kit", () => {
     expect(checkSide("dev", false, [path.join(d, "fine", "dev.json")])).toBe("dev");
   });
 
+  it("codex 076a re-review: `..` after a symlink steps up from the link's target (literal alias/../ paths)", () => {
+    const d = tmp();
+    mkdirSync(path.join(d, "store", "heldout", "nested"), { recursive: true });
+    writeFileSync(path.join(d, "store", "heldout", "labels.jsonl"), "");
+    mkdirSync(path.join(d, "dev"));
+    symlinkSync(path.join(d, "store", "heldout", "nested"), path.join(d, "dev", "alias"));
+    // built by string, not path.join, which would normalise the `..` away
+    const input = `${d}/dev/alias/../labels.jsonl`;
+    expect(readFileSync(input, "utf8")).toBe(""); // the filesystem reads the held-out file through it
+    expect(() => checkSide("dev", false, [input])).toThrow(/refuses a held-out path/);
+    expect(() => checkSide("dev", false, [`${d}/dev/alias/../new/out.json`])).toThrow(/refuses a held-out path/);
+    expect(checkSide("dev", false, [`${d}/dev/alias/../../x.json`])).toBe("dev"); // nested/.. = heldout, heldout/.. = store: not held-out
+    // a relative literal path from a working directory behind the link
+    const cwd = process.cwd();
+    try {
+      process.chdir(path.join(d, "dev"));
+      expect(() => checkSide("dev", false, ["alias/../labels.jsonl"])).toThrow(/refuses a held-out path/);
+      expect(checkSide("dev", false, ["plain/../dev-only.json"])).toBe("dev");
+    } finally { process.chdir(cwd); }
+  });
+
   it("location hit: ±10 lines of any target, inclusive; null lines and other files never hit", () => {
     const t: Target[] = [{ file: "a.ts", lines: [50, 55], role: "primary" }, { file: "b.ts", lines: [5, 5], role: "alternate" }];
     expect(commentHits({ path: "a.ts", line: 40, body: "" }, t)).toBe(true);

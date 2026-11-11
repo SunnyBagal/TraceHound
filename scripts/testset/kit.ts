@@ -21,26 +21,34 @@ export function checkSide(side: string | undefined, heldoutOk: boolean, paths: (
   if (side === "dev") {
     const heldout = (p: string) => p.split(path.sep).some((s) => /^heldout$/i.test(s));
     for (const p of paths) {
-      if (p && (heldout(path.resolve(p)) || heldout(resolveLinks(p)))) throw new RefusalError(`--side dev refuses a held-out path: ${p}`);
+      // the literal path, its lexical form and its real (link-resolved, filesystem-order) form
+      if (p && (heldout(p) || heldout(path.resolve(p)) || heldout(resolveLinks(p)))) throw new RefusalError(`--side dev refuses a held-out path: ${p}`);
     }
   }
   return side;
 }
 
 /**
- * The path with every existing component resolved through symlinks, one component at a time (a dangling link is
- * followed to its target too), and the components that do not exist yet appended as given: so an output under an
- * aliased parent is judged by where it would really be written.
+ * The real path the filesystem would use, resolved one component at a time in filesystem order: a symlink is expanded
+ * where it stands (a dangling link is followed to its target too), and `..` then steps up from the directory reached so
+ * far, never lexically before an earlier symlink (`alias/../x` is the parent of alias's target). Components that do not
+ * exist (a new output) are kept as given, and later ones are still resolved. No `path.resolve`/`path.join` normalising
+ * of the input before this walk.
  */
 export function resolveLinks(p: string, depth = 0): string {
   if (depth > 40) throw new RefusalError(`too many symlinks resolving ${p}`);
-  const parts = path.resolve(p).split(path.sep).filter(Boolean);
-  let cur = path.parse(path.resolve(p)).root;
-  for (let i = 0; i < parts.length; i++) {
-    const next = path.join(cur, parts[i]!);
-    let st: fs.Stats;
-    try { st = fs.lstatSync(next); } catch { return path.join(cur, ...parts.slice(i)); }
-    cur = st.isSymbolicLink() ? resolveLinks(path.resolve(cur, fs.readlinkSync(next)), depth + 1) : next;
+  const raw = path.isAbsolute(p) ? p : `${process.cwd()}${path.sep}${p}`;
+  let cur = path.parse(raw).root;
+  for (const part of raw.slice(cur.length).split(path.sep)) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") { cur = path.dirname(cur); continue; }
+    const next = cur.endsWith(path.sep) ? `${cur}${part}` : `${cur}${path.sep}${part}`;
+    let st: fs.Stats | null = null;
+    try { st = fs.lstatSync(next); } catch { /* not there (yet): keep the name, resolve what follows */ }
+    if (st?.isSymbolicLink()) {
+      const target = fs.readlinkSync(next);
+      cur = resolveLinks(path.isAbsolute(target) ? target : `${cur}${path.sep}${target}`, depth + 1);
+    } else cur = next;
   }
   return cur;
 }
