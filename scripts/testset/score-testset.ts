@@ -23,7 +23,7 @@
  * The protocol's pending choices (§13) apply only through --policy (kit.ts POLICY_CHOICES, with who approved them):
  * official_attempt (first | last record of a rerun case), failed_case and unstarted_case (miss | no-review), and
  * no_review_in_pairs (exclude | not-caught). Status: --status (completed | no-review | miss) > --records > a review
- * file exists → completed, else no-review. Pairs: every pair of tools, exact two-sided sign test p (no α, no verdict).
+ * file exists → completed, else no-review. A case with more than two runner records (one rerun, 076a §13.3) refuses. Pairs: every pair of tools, exact two-sided sign test p (no α, no verdict).
  * stdout: counts only. --out: the same counts as JSON, with the policy. Never overwrites.
  */
 import * as fs from "node:fs";
@@ -63,6 +63,10 @@ export function readRecords(dir: string, cases: string[], policy: Policy): Map<s
     const rank = (f: string) => { const m = new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\.r(\\d+))?\\.json$`).exec(f); return m ? Number(m[1] ?? 1) : null; };
     const files = names.filter((f) => rank(f) !== null).sort((a, b) => rank(a)! - rank(b)!).map((f) => path.join(dir, f));
     if (!files.length) continue;
+    // 076a §13.3 allows one rerun: <case>.json and <case>.r2.json at most
+    if (files.length > 2 || files.some((f) => (rank(path.basename(f)) ?? 0) > 2)) {
+      throw new RefusalError(`${id}: ${files.length} runner records (decision 076a allows one rerun: <case>.json and <case>.r2.json)`);
+    }
     const official = readJson(policy.official_attempt === "first" ? files[0]! : files.at(-1)!) as { status?: string };
     const cost = files.reduce((s, f) => s + ((readJson(f) as { usage?: { ledger?: { costUSD?: number } | null } }).usage?.ledger?.costUSD ?? 0), 0);
     out.set(id, { status: official.status === "ok" ? "completed" : policy.failed_case as Status, costUSD: cost });

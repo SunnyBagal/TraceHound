@@ -1,6 +1,6 @@
 # Track B scoring policy: decision 076a (Sunny, 2026-11-11)
 
-`policy-076a.json` is the `--policy` file for `score-testset.ts` and `handcheck-sheet.ts build`. The kit applies only the fields it reads (`kit.ts` `POLICY_CHOICES`) and refuses unknown ones, so the 076a protocol rulings without a kit consumer are listed here with where they apply. Source: TraceHound `docs/decisions.md` 076a, "Protocol §13", items 1–8. Item 9 (unmappable targets, within-file ranges, caps procedures) is pending and is not in this policy.
+`policy.076a.json` is the `--policy` file for `score-testset.ts` and `handcheck-sheet.ts build`. The kit applies only the fields it reads (`kit.ts` `POLICY_CHOICES`) and refuses unknown ones, so the 076a protocol rulings without a kit consumer are listed here with where they apply. Source: TraceHound `docs/decisions.md` 076a, "Protocol §13", items 1–8. Item 9 (unmappable targets, within-file ranges, caps procedures) is pending and is not in this policy.
 
 | 076a §13 item | ruling | where it applies |
 |---|---|---|
