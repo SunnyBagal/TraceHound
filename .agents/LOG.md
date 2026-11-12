@@ -183,3 +183,8 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   table, Process, firewall), CLAUDE.md (pointer), STATE (rewritten), `_common.md` (rewritten), budget.md (caps
   procedures), live-setup.md (Greptile credits, re-triggers). Briefs in the new template to codex, bunny, grok; note to
   Planner A with 076c's item numbers. $0.
+- **Then (2026-11-12/13):** Planner A applied 076c to every file of its own (`6099685` … `fdc2911`). codex: rows 4/7/11
+  confirmed; protocol rev 6 (grok clean but for one clause, rev 7 briefed); no U4–U11 disagreement; tag-worktree mechanism
+  ready for review; rehearsal running detached. bunny: `b4-076c` (collector completion, guess column, invalid-binding)
+  and the re-trigger mode (testset, uncommitted), both to codex review. grok: guess test 0/62; ancestry 7/40 dev and 5/29
+  held-out bases contain another case's fix (needs Sunny's ruling before F1). Items 15–17 re-sent by Sunny: already done.
