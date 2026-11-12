@@ -793,3 +793,32 @@ describe("spec B2 §7 collector row", () => {
     expect(readFileSync(path.join(out, "coderabbit", "c1.json"), "utf8")).not.toMatch(/REVIEW BODY|ISSUE COMMENT/);
   });
 });
+
+// decision 076c item 9 / premortem row 11 / Planner B's U6: the collector's statuses through the scorer
+describe("collector statuses in score-testset (076c, U6)", () => {
+  it("invalid-binding is no-review for that tool (out of its pairs, counted); read-failed is not a result and refuses", () => {
+    const f = scoringFixture();
+    const st = f.dir("cr.status.json");
+    json(st, { c1: "invalid-binding", c2: "no-review", c3: "completed", c4: "completed" });
+    const args = (out: string) => ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`,
+      "--judge", `th=${f.dir("th.detail.json")}`, "--judge", `cr=${f.dir("cr.detail.json")}`, "--status", `cr=${st}`, "--out", out];
+    const r = run(scoreMain, args(f.dir("u6.json")));
+    expect(r.code).toBe(0);
+    const s = JSON.parse(readFileSync(f.dir("u6.json"), "utf8"));
+    expect([s.tools.cr.noReview, s.tools.cr.invalidBinding, s.tools.cr.completedBug, s.tools.cr.caught]).toEqual([2, 1, 1, 1]);
+    expect(s.tools.th.invalidBinding).toBe(0);
+    expect(r.out).toContain("cr: caught 1/3");
+    expect(r.out).toContain("no-review 2 (invalid-binding 1)");
+    // c1 (invalid-binding) and c2 (no-review) leave the pair; c3 is caught by both
+    expect(s.pairs).toEqual([{ a: "th", b: "cr", n: 1, onlyA: 0, onlyB: 0, p: 1 }]);
+    // read-failed: exit 2, the reason, no output
+    json(st, { c1: "read-failed", c2: "no-review", c3: "completed", c4: "completed" });
+    const rf = run(scoreMain, args(f.dir("u6-rf.json")));
+    expect(rf.code).toBe(2);
+    expect(rf.out).toContain("c1 is read-failed, which is not a result: repeat the collection into a new directory");
+    expect(existsSync(f.dir("u6-rf.json"))).toBe(false);
+    // any other status still refuses
+    json(st, { c1: "pending", c2: "no-review", c3: "completed", c4: "completed" });
+    expect(run(scoreMain, args(f.dir("u6-x.json"))).out).toMatch(/c1 has status pending/);
+  });
+});

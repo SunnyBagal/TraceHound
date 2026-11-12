@@ -22,8 +22,10 @@
  * review; otherwise refuse: no catch stands without the review that was scored.
  * The protocol's pending choices (§13) apply only through --policy (kit.ts POLICY_CHOICES, with who approved them):
  * official_attempt (first | last record of a rerun case), failed_case and unstarted_case (miss | no-review), and
- * no_review_in_pairs (exclude | not-caught). Status: --status (completed | no-review | miss) > --records > a review
- * file exists → completed, else no-review. A case with more than two runner records (one rerun, 076a §13.3) refuses. Pairs: every pair of tools, exact two-sided sign test p (no α, no verdict).
+ * no_review_in_pairs (exclude | not-caught). Status: --status (completed | no-review | miss | invalid-binding) > --records >
+ * a review file exists → completed, else no-review. The collector's `invalid-binding` is `no-review` for that tool (out
+ * of its pairs, counted and printed); its `read-failed` is not a result and refuses: the collection is repeated into a
+ * new directory until it reads, and the last complete collection is official (decision 076c item 5, Planner B's U6). A case with more than two runner records (one rerun, 076a §13.3) refuses. Pairs: every pair of tools, exact two-sided sign test p (no α, no verdict).
  * stdout: counts only. --out: the same counts as JSON, with the policy. Never overwrites.
  */
 import * as fs from "node:fs";
@@ -80,6 +82,8 @@ export interface ToolScore {
   attempted: number; bugCases: number; cleanCases: number;
   caught: number; caughtWilson: [number, number] | null;
   completedBug: number; completedClean: number; noReview: number; misses: number; judgeFailed: number;
+  /** cases of noReview that the collector marked invalid-binding (U6) */
+  invalidBinding: number;
   caughtOfCompleted: string; caughtOfCompletedWilson: [number, number] | null;
   caughtX1: number | null; handchecked: boolean;
   comments: { total: number; perAttempted: { mean: number | null; median: number | null }; perCompleted: { mean: number | null; median: number | null }; clean: number };
@@ -98,6 +102,8 @@ export function score(o: {
   handcheck: HandCheck | null;
   /** sha256 of each tool's review file, by case */
   reviewSha: Map<string, Map<string, string>>;
+  /** per tool, the case ids its --status file marked invalid-binding (scored as no-review) */
+  invalidBinding?: Map<string, Set<string>>;
 }): { tools: Record<string, ToolScore>; pairs: { a: string; b: string; n: number; onlyA: number; onlyB: number; p: number }[]; incomplete: string[] } {
   const tools: Record<string, ToolScore> = {};
   const caughtBy = new Map<string, Map<string, boolean>>();
@@ -163,6 +169,7 @@ export function score(o: {
       caught: K, caughtWilson: wilson(K, bug.length),
       completedBug: n, completedClean: completed.length - n,
       noReview: [...st.values()].filter((s) => s === "no-review").length, misses: [...st.values()].filter((s) => s === "miss").length,
+      invalidBinding: o.invalidBinding?.get(tool)?.size ?? 0,
       judgeFailed, caughtOfCompleted: `${K}/${n}`, caughtOfCompletedWilson: wilson(K, n),
       caughtX1: x1 ? completedBug.filter((c) => x1.get(c.case)?.verdict === true).length : null,
       handchecked: !!o.handcheck,
@@ -208,9 +215,14 @@ export function main(argv: string[], log: (line: string) => void = console.log):
     const g = readGoldens(values.goldens);
     if (g.side !== side) throw new RefusalError(`goldens are for side ${g.side}, not ${side}`);
     const ids = g.cases.map((c) => c.case);
-    const toStatus = (file: string) => {
+    const invalidBinding = new Map<string, Set<string>>();
+    const toStatus = (tool: string, file: string) => {
       const v = readJson(file) as Record<string, string>;
+      const bad = new Set<string>();
+      invalidBinding.set(tool, bad);
       return new Map(Object.entries(v).map(([k, s]) => {
+        if (s === "read-failed") throw new RefusalError(`${file}: ${k} is read-failed, which is not a result: repeat the collection into a new directory; the last complete collection is official (U6)`);
+        if (s === "invalid-binding") { bad.add(k); return [k, "no-review" as Status]; }
         if (!["completed", "no-review", "miss"].includes(s)) throw new RefusalError(`${file}: ${k} has status ${s}`);
         return [k, s as Status];
       }));
@@ -226,7 +238,8 @@ export function main(argv: string[], log: (line: string) => void = console.log):
         .map((id) => [id, sha256(fs.readFileSync(path.join(d, `${id}.json`)))]))])),
       judge: new Map([...judge].map(([t, f]) => [t, judgeEntries(f, g.cases)])),
       judgeX1: new Map([...x1].map(([t, f]) => [t, judgeEntries(f, g.cases)])),
-      status: new Map([...status].map(([t, f]) => [t, toStatus(f)])),
+      status: new Map([...status].map(([t, f]) => [t, toStatus(t, f)])),
+      invalidBinding,
       records: new Map([...records].map(([t, d]) => [t, readRecords(d, ids, policy)])),
       handcheck: hc,
     });
@@ -239,7 +252,7 @@ export function main(argv: string[], log: (line: string) => void = console.log):
       ...(hc?.guess ? { handcheckGuess: hc.guess } : {}) }, null, 1) + "\n");
     for (const [t, s] of Object.entries(r.tools)) {
       log(`${t}: caught ${s.caught}/${s.bugCases} (Wilson ${pct(s.caughtWilson)})${s.handchecked ? " [hand-checked]" : ""} · completed bug ${s.completedBug}/${s.bugCases}, clean ${s.completedClean}/${s.cleanCases}`
-        + ` · caught of completed ${s.caughtOfCompleted} · no-review ${s.noReview} · miss ${s.misses} · judge-failed ${s.judgeFailed}${s.caughtX1 === null ? "" : ` · x1 caught ${s.caughtX1}`}`);
+        + ` · caught of completed ${s.caughtOfCompleted} · no-review ${s.noReview}${s.invalidBinding ? ` (invalid-binding ${s.invalidBinding})` : ""} · miss ${s.misses} · judge-failed ${s.judgeFailed}${s.caughtX1 === null ? "" : ` · x1 caught ${s.caughtX1}`}`);
       log(`${t}: comments ${s.comments.total} · per attempted PR mean ${num(s.comments.perAttempted.mean)} median ${num(s.comments.perAttempted.median)}`
         + ` · per completed PR mean ${num(s.comments.perCompleted.mean)} median ${num(s.comments.perCompleted.median)} · on clean cases ${s.comments.clean}`
         + ` · location hits ${s.locationHits}/${s.bugCases}${s.costUSD ? ` · cost $${s.costUSD.total.toFixed(4)} (mean $${num(s.costUSD.perAttemptedMean, 4)}, median $${num(s.costUSD.median, 4)}, max $${num(s.costUSD.max, 4)})` : ""}`);
