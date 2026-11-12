@@ -98,9 +98,11 @@ filled in later. Fields (protocol §11):
 6. The size of the hand-check sheet: the number of items expected, from the dev sheet count of `docs/specs/E1.md` §1
    step 4 scaled to 20 bugs and three tools, and Sunny's minutes per item (gap G14). If items × minutes is over 3 hours,
    Sunny says before the tag whether he books a longer sitting; the window is not booked on an unknown sheet.
-7. The smallest paired n for which the write-up will give a test sentence for a pair (gap G10). **Sunny's number; this
-   runbook sets no default.** Below it, the pair is reported as counts only (`W1-writeup.md` §3.2). Without the number
-   in 078 the freeze stops.
+7. The floor for a test sentence (gap G10), **fixed by decision 076c item 6: 15.** A pair with fewer than 15 of the
+   20 bug cases reviewed by both tools is reported as counts, with no test sentence (`W1-writeup.md` §3.2). 078 copies
+   the number; it is not a prediction and is not chosen again. "Reviewed by both" for a pair = bug cases where
+   TraceHound's official record has `status: "ok"` and the other tool's collector status is `completed`; a TraceHound
+   case that is a miss by rule (failed twice, unstarted) stays in the pair's n but is not a reviewed case.
 Basis to cite: dev runs 1 and 2 (`docs/bench/ts-dev.md`), CodeRabbit's dev row, and the power table of plan-v2 §2.
 078 also records: the claim wording for each outcome (`docs/runbooks/W1-writeup.md` §3, copied), the window's UTC
 start and end, the Greptile credit reading, and the sha256 of `ts-freeze.md`.

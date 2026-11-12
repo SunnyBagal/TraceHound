@@ -114,7 +114,11 @@ When done, Sunny sends `decisions.json` back and says "final".
 ## 7. Report: `run/out/codex.ho-score.md` (counts only)
 Per primary tool: completed of 29 (bug n, clean m); caught K of 20 by v1, by x1, by the hand-check; Wilson interval of
 the hand-check K; comments per attempted and per completed PR (mean, median); comments on clean cases; location hits.
-Pairs (TraceHound–CodeRabbit, TraceHound–Greptile, CodeRabbit–Greptile): paired n, only-A, only-B, exact p. Hand-check:
+Pairs (TraceHound–CodeRabbit, TraceHound–Greptile, CodeRabbit–Greptile): paired n, only-A, only-B, exact p; and per
+pair **m = bug cases reviewed by both** (TraceHound's official record `status: "ok"` and the tool's collector status
+`completed`; for the CodeRabbit–Greptile pair, both `completed`). 076c item 6: below m = 15 the pair is counts only.
+Until `score-testset.ts` prints m (bunny's open change on 076c's Touches list), codex counts it from `$S/official` and
+the two status files and writes the three numbers here. Hand-check:
 items on the sheet, `same-bug` count, judge-matched items Sunny rejected, location-only items Sunny accepted, sitting
 length. Judging: calls, `JUDGE_FAILED`, spend. TraceHound cost per PR (mean, median, max, total) from the records.
 

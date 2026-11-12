@@ -72,11 +72,13 @@ and pairs use only the pull requests both tools reviewed."
 > tools' catches are independent (more often if both catch the same easy bugs; that was not measured).
 
 - If the observed gap is 6 or more but p ≥ 0.05 (for example 9–3), it is outcome C; add "the observed gap of G bugs is
-- **Too few paired cases (premortem gap G10).** Decision 078 holds Sunny's number N_min, the smallest paired n for
-  which a pair gets a test sentence (`F1-freeze.md` §5 field 7). If a pair's n is below N_min, none of A, B, C is used
-  for it. The sentence is: "Only n of the 20 bugs were reviewed by both TraceHound and X; TraceHound caught a that X
-  missed and X caught b that TraceHound missed. That is too few to compare." The table still shows the counts and p.
   not distinguishable from chance here".
+- **Too few cases reviewed by both (premortem gap G10; decision 076c item 6).** A pair with fewer than **15** of the 20
+  bug cases reviewed by both tools is reported as counts, with no test sentence. Let m = bug cases reviewed by both
+  (`F1-freeze.md` §5 field 7 says how m is counted; `H2-scoring.md` §7 reports it). If m < 15, none of A, B, C is used
+  for that pair. The sentence is: "Only m of the 20 bugs were reviewed by both TraceHound and X; TraceHound caught a
+  that X missed and X caught b that TraceHound missed. That is too few for a test." The table shows m, n, a and b for
+  that pair and a dash in the p column. The floor is checked before the p-value is looked at.
 - If a + b = 0: "the two tools caught the same bugs" is allowed as a description of the 20 cases; it is still outcome C.
 - CodeRabbit against Greptile gets the same three templates, in the table only, not in the summary.
 - Outcomes A and B always end with: "One run, 20 bugs, R only."
