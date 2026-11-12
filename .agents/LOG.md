@@ -210,3 +210,12 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   was wrong (6 dev-only / 2 held-out-only / 3 both), exposure at first review 0 of 20; correction and Sunny's freeze lift
   (no console check; S1 ratio guard 1.08) recorded (`54b302b`, `47a8d03`). Planner A note revised (`329091b`); brain lines
   updated, brief amendment 2 (`9997e02`) sent to codex for after the r3 rehearsal (09:56 IST). $0.
+- **`.env` (2026-11-13, Sunny item 4):** missing newline added on line 10, values unchanged; `TRACEHOUND_BUDGET_TOTAL_USD` is now
+  defined twice (line 11 `52`, line 14 `63.15547`). It is read through `capsFromEnv` (`packages/analyzer/src/llm/budget.ts`); the runner `scripts/run-tracehound.ts` passes each stage min(that cap, …);
+  every loader is Node's (`process.loadEnvFile` in `bin.ts`, `--env-file` in scripts and the tag-worktree verifier), which
+  takes the last value: measured 63.15547 on node v26.13.1. Line 11 is dead but misleading (Sunny's call to delete it).
+- **Then (2026-11-13, ~05:00–06:00 IST):** grok briefed (`run/briefs/grok.076d-reviews.md`): **NO-GO `ffb615b`** (tag worktree:
+  one stale "keep the spend freeze" sentence; verifier gives 63.15547 with the duplicate cap and refuses an inherited 52)
+  and **NO-GO `1a60db5`** (protocol rev 8: exposure from planned order instead of addendum (e)'s branch log; freeze sentence
+  and canary row). Nothing merged. grok's inbox note screened by pattern (0 case ids / paths / PRs / dates / forks) and added
+  to the brain brief as amendment 3. S1 held until `pa-076d` merges. $0.
