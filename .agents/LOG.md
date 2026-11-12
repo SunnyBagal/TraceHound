@@ -188,3 +188,16 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   ready for review; rehearsal running detached. bunny: `b4-076c` (collector completion, guess column, invalid-binding)
   and the re-trigger mode (testset, uncommitted), both to codex review. grok: guess test 0/62; ancestry 7/40 dev and 5/29
   held-out bases contain another case's fix (needs Sunny's ruling before F1). Items 15–17 re-sent by Sunny: already done.
+
+## 2026-11-13 (Fri): 076d
+- **Changed:** Sunny's rulings recorded as decision 076d (`8cef322`): ancestry (no case excluded; dev case branches deleted
+  from the forks after P1's collection; held-out branches pushed one at a time in base-date order at their own first-trigger
+  slot; exposed / unexposed reported separately; grok re-counts exposure at first review, > 0 → Sunny again before F1),
+  "in progress" / "skipped" / "paused" messages are `notCompletion`, the window scheduler moves to bunny, the collector
+  gets an explicit untriggered-case flag (codex's P2-1 / P2-2 on `b4-076c` and the re-trigger patch; bunny's fixes approved).
+  Balance correction under 076c: the 2026-11-09 reading was $19.13 (not $19.31): usable $18.13, unallocated $1.00,
+  billing-lag unexplained $0.40; `.env` hard stop 63.15547. Notes to Planner A and B (testset `6eeb9b8`, `a68df6f`); brain
+  076d lines added to the pending review, brief amended (`4ca2682`) and sent to codex. `run/comms/planner.a.gaps.md` was
+  already committed (`bd5ca83`, unchanged since). Nothing merged: no GO exists ($0).
+- **Who:** artu1; lanes pasted by Sunny directly to bunny (P2 fixes), codex, grok.
+- **Left:** GOs on the fixed `b4-076c`, the re-trigger patch and `ffb615b` (no reviewer assigned); grok's 076d count; brain GO.
