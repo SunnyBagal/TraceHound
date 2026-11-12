@@ -205,7 +205,13 @@ export const POLICY_CHOICES = {
   sheet_judge_cues: ["hidden", "shown"],
 } as const;
 export type PolicyChoice = keyof typeof POLICY_CHOICES;
-export type Policy = { v: 1; approved: { by: string; on: string; ref: string } } & { [K in PolicyChoice]?: (typeof POLICY_CHOICES)[K][number] };
+/**
+ * The pre-registered tests (decision 076c items 4 and 6; level from 076a §13 item 1): the pairs of tool names that get
+ * an exact two-sided sign test, its level, and the least number of bug cases reviewed by both tools for a test to be
+ * reported. Without this field score-testset.ts reports counts for every pair and no p-value.
+ */
+export interface RegisteredTests { pairs: [string, string][]; alpha: number; min_reviewed_by_both: number }
+export type Policy = { v: 1; approved: { by: string; on: string; ref: string }; registered_tests?: RegisteredTests } & { [K in PolicyChoice]?: (typeof POLICY_CHOICES)[K][number] };
 
 export function readPolicy(file: string | undefined, needed: PolicyChoice[]): Policy {
   if (!file) throw new RefusalError(`--policy is required: ${needed.join(", ")} are pending (ts-protocol §13) until a recorded ruling names them`);
@@ -217,6 +223,16 @@ export function readPolicy(file: string | undefined, needed: PolicyChoice[]): Po
     const allowed = POLICY_CHOICES[k] as readonly string[];
     if (!allowed.includes(p[k] as string)) throw new RefusalError(`${file}: ${k} must be one of ${allowed.join(" | ")}`);
   }
-  for (const k of Object.keys(p)) if (!["v", "approved", ...Object.keys(POLICY_CHOICES)].includes(k)) throw new RefusalError(`${file}: unknown field ${k}`);
+  for (const k of Object.keys(p)) if (!["v", "approved", "registered_tests", ...Object.keys(POLICY_CHOICES)].includes(k)) throw new RefusalError(`${file}: unknown field ${k}`);
+  if (p.registered_tests !== undefined) {
+    const r = p.registered_tests;
+    const bad = (why: string): never => { throw new RefusalError(`${file}: registered_tests ${why}`); };
+    if (!r || typeof r !== "object" || Object.keys(r).sort().join() !== "alpha,min_reviewed_by_both,pairs") bad("must be exactly {pairs, alpha, min_reviewed_by_both}");
+    if (!Array.isArray(r.pairs) || r.pairs.some((x) => !Array.isArray(x) || x.length !== 2 || x.some((n) => typeof n !== "string" || !n.trim()) || x[0] === x[1])) bad("pairs must be a list of [tool, other tool]");
+    const keys = r.pairs.map((x) => [...x].sort().join("\u0000"));
+    if (new Set(keys).size !== keys.length) bad("names a pair twice");
+    if (typeof r.alpha !== "number" || !(r.alpha > 0 && r.alpha < 1)) bad("alpha must be a number between 0 and 1");
+    if (!Number.isSafeInteger(r.min_reviewed_by_both) || r.min_reviewed_by_both < 0) bad("min_reviewed_by_both must be a whole number ≥ 0");
+  }
   return p;
 }

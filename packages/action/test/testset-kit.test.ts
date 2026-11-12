@@ -2,7 +2,7 @@
 // build-goldens (multi-file primary by git order, preflight), score-testset, the blind hand-check sheet, and the
 // read-only tool-comment collector against a fake gh. Synthetic fixtures only; no model, no network.
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -10,7 +10,7 @@ import { symlinkSync } from "node:fs";
 import { afterAll, describe, expect, it } from "vitest";
 import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
 import { GoldenFile } from "../../analyzer/src/bench/types.ts";
-import { checkSide, commentHits, locationHit, RefusalError, shuffled, signTest, wilson, type Target } from "../../../scripts/testset/kit.ts";
+import { checkSide, commentHits, locationHit, readPolicy, RefusalError, shuffled, signTest, wilson, type Target } from "../../../scripts/testset/kit.ts";
 import { main as buildMain } from "../../../scripts/testset/build-goldens.ts";
 import { main as scoreMain } from "../../../scripts/testset/score-testset.ts";
 import { main as sheetMain } from "../../../scripts/testset/handcheck-sheet.ts";
@@ -215,7 +215,7 @@ function scoringFixture() {
     json(path.join(d, "dev", "th-records", `${id}.json`), { case: id, status, usage: { ledger: { costUSD: cost } } });
   }
   json(path.join(d, "dev", "th-records", "c3.r2.json"), { case: "c3", status: "failed", usage: { ledger: { costUSD: 0.03 } } });
-  const policy = (over: Record<string, string> = {}, name = "policy.json") => {
+  const policy = (over: Record<string, unknown> = {}, name = "policy.json") => {
     const file = path.join(d, "dev", name);
     json(file, { v: 1, approved: { by: "synthetic test", on: "2026-11-11", ref: "test fixture" }, official_attempt: "last", failed_case: "miss",
       unstarted_case: "miss", no_review_in_pairs: "exclude", sheet_judge_cues: "hidden", ...over });
@@ -245,10 +245,14 @@ describe("score-testset", () => {
     // cr: c2 has no review file → no-review; c3 caught
     expect(s.tools.cr).toMatchObject({ caught: 1, completedBug: 2, noReview: 1, misses: 0, locationHits: 1 });
     // pair: c2 is out (cr no-review); c1 th only, c3 cr only (th's miss counts as not caught)
-    expect(s.pairs).toEqual([{ a: "th", b: "cr", n: 2, onlyA: 1, onlyB: 1, p: 1 }]);
+    // no registered test in this policy: counts only, no p (decision 076c item 4); reviewed by both: c1 only
+    expect(s.pairs).toEqual([{ a: "th", b: "cr", registered: false, n: 2, reviewedByBoth: 1, onlyA: 1, onlyB: 1, both: 0, neither: 0, p: null }]);
+    expect(s.registeredTests).toBeNull();
     expect(r.out).not.toMatch(/finds bug|noise|alt-file/);
     expect(r.out).toContain("th: caught 2/3");
-    expect(r.out).toContain("pair th vs cr: paired n 2 · th only 1 · cr only 1 · exact two-sided p 1.0000");
+    expect(r.out).toContain("pair th vs cr: paired n 2 · reviewed by both 1 · th only 1 · cr only 1 · both 0 · neither 0 · counts only (not a registered pair)");
+    expect(r.out).toContain("pairs: counts only (the policy registers no tests)");
+    expect(r.out).not.toMatch(/sign test p/);
     expect(r.out).toContain("policy: approved by synthetic test on 2026-11-11 (test fixture)");
     expect(s.policy.no_review_in_pairs).toBe("exclude");
   });
@@ -732,8 +736,11 @@ describe("spec B2 §7 pinned values", () => {
       const r = JSON.parse(readFileSync(dir(`${tool}/c${i}.json`), "utf8"));
       return { prTitle: `P${i}`, status: "SCORED", comments: r.comments.map((c: object) => ({ ...c, matched: caught.includes(i) ? "G1" : null })) };
     }) });
-    json(dir("policy.json"), { v: 1, approved: { by: "synthetic", on: "2026-11-11", ref: "spec B2 §7" }, official_attempt: "last", failed_case: "miss",
-      unstarted_case: "miss", no_review_in_pairs: "exclude", sheet_judge_cues: "hidden" });
+    const base = { v: 1, approved: { by: "synthetic", on: "2026-11-11", ref: "spec B2 §7" }, official_attempt: "last", failed_case: "miss",
+      unstarted_case: "miss", no_review_in_pairs: "exclude", sheet_judge_cues: "hidden" };
+    json(dir("policy.json"), base);
+    // the pair registered (named in the other order) with a floor of 3 or 4 reviewed-by-both cases
+    for (const floor of [3, 4]) json(dir(`policy-floor${floor}.json`), { ...base, registered_tests: { pairs: [["B", "A"]], alpha: 0.05, min_reviewed_by_both: floor } });
     return { d, dir, write, detail };
   }
 
@@ -741,13 +748,20 @@ describe("spec B2 §7 pinned values", () => {
     const f = specFixture();
     f.write("A", [1, 2, 3, 4, 5]); f.write("B", [2, 3, 4, 5]);
     f.detail("A", [1, 2, 3, 4, 5], [1, 2]); f.detail("B", [2, 3, 4, 5], [2, 3, 4]);
-    const args = (out: string, aDetail = "A.detail.json") => ["--side", "dev", "--goldens", f.dir("goldens.json"), "--policy", f.dir("policy.json"),
+    // the pair is registered with a floor of 3, so §7's p is reported
+    const args = (out: string, aDetail = "A.detail.json") => ["--side", "dev", "--goldens", f.dir("goldens.json"), "--policy", f.dir("policy-floor3.json"),
       "--tool", `A=${f.dir("A")}`, "--tool", `B=${f.dir("B")}`, "--judge", `A=${f.dir(aDetail)}`, "--judge", `B=${f.dir("B.detail.json")}`, "--out", out];
     expect(run(scoreMain, args(f.dir("s1.json"))).code).toBe(0);
     const s = JSON.parse(readFileSync(f.dir("s1.json"), "utf8"));
     expect([s.tools.A.caught, s.tools.A.bugCases, s.tools.A.caughtWilson.map((x: number) => +x.toFixed(3))]).toEqual([2, 4, [0.15, 0.85]]);
     expect([s.tools.B.caught, s.tools.B.caughtOfCompleted]).toEqual([3, "3/3"]);
-    expect(s.pairs).toEqual([{ a: "A", b: "B", n: 3, onlyA: 0, onlyB: 2, p: 0.5 }]);
+    expect(s.pairs).toEqual([{ a: "A", b: "B", registered: true, n: 3, reviewedByBoth: 3, onlyA: 0, onlyB: 2, both: 1, neither: 0, p: 0.5 }]);
+    // one case under the floor: the same counts, no p, no test line (decision 076c item 6)
+    const low = run(scoreMain, args(f.dir("s1-floor.json")).map((a) => (a === f.dir("policy-floor3.json") ? f.dir("policy-floor4.json") : a)));
+    expect(low.code).toBe(0);
+    expect(JSON.parse(readFileSync(f.dir("s1-floor.json"), "utf8")).pairs).toEqual([{ a: "A", b: "B", registered: true, n: 3, reviewedByBoth: 3, onlyA: 0, onlyB: 2, both: 1, neither: 0, p: null, noTest: "reviewed by both 3 < 4" }]);
+    expect(low.out).toContain("pair A vs B [registered]: paired n 3 · reviewed by both 3 · A only 0 · B only 2 · both 1 · neither 0 · no test: reviewed by both 3 < 4 (counts only)");
+    expect(low.out).not.toMatch(/sign test p/);
     // a second comment on c2 that also matches: A still 2 of 4
     f.write("A", [2], { 2: 1 });
     f.detail("A", [1, 2, 3, 4, 5], [1, 2], "A2.detail.json");
@@ -842,7 +856,7 @@ describe("collector statuses in score-testset (076c, U6)", () => {
     expect(r.out).toContain("cr: caught 1/3");
     expect(r.out).toContain("no-review 2 (invalid-binding 1)");
     // c1 (invalid-binding) and c2 (no-review) leave the pair; c3 is caught by both
-    expect(s.pairs).toEqual([{ a: "th", b: "cr", n: 1, onlyA: 0, onlyB: 0, p: 1 }]);
+    expect(s.pairs).toEqual([{ a: "th", b: "cr", registered: false, n: 1, reviewedByBoth: 1, onlyA: 0, onlyB: 0, both: 1, neither: 0, p: null }]);
     // read-failed: exit 2, the reason, no output
     json(st, { c1: "read-failed", c2: "no-review", c3: "completed", c4: "completed" });
     const rf = run(scoreMain, args(f.dir("u6-rf.json")));
@@ -852,5 +866,107 @@ describe("collector statuses in score-testset (076c, U6)", () => {
     // any other status still refuses
     json(st, { c1: "pending", c2: "no-review", c3: "completed", c4: "completed" });
     expect(run(scoreMain, args(f.dir("u6-x.json"))).out).toMatch(/c1 has status pending/);
+  });
+});
+
+// decision 076c items 4 and 6 (registered pairs, the floor of 15) and 076d item 1d (exposed / unexposed bug cases)
+describe("score-testset: registered pairs, the reviewed-by-both floor, the exposure split", () => {
+  const REG = (floor: number, pairs: string[][] = [["th", "cr"], ["th", "gr"]]) => ({ registered_tests: { pairs, alpha: 0.05, min_reviewed_by_both: floor } });
+  /** th, cr and gr (gr is a copy of cr): judge only, no runner records, so th completed c1-c3 and caught all three. */
+  function three() {
+    const f = scoringFixture();
+    cpSync(f.dir("cr"), f.dir("gr"), { recursive: true });
+    copyFileSync(f.dir("cr.detail.json"), f.dir("gr.detail.json"));
+    const args = (out: string, policy: string, tools = ["th", "cr", "gr"], ...extra: string[]) => ["--side", "dev", "--goldens", f.goldens, "--policy", policy,
+      ...tools.flatMap((t) => ["--tool", `${t}=${f.dir(t)}`, "--judge", `${t}=${f.dir(`${t}.detail.json`)}`]), "--out", out, ...extra];
+    return { f, args };
+  }
+
+  it("a p-value only for the registered pairs; any other pair is counts only; the summary carries no other p", () => {
+    const { f, args } = three();
+    const r = run(scoreMain, args(f.dir("r1.json"), f.policy(REG(1), "reg1.json")));
+    expect(r.code).toBe(0);
+    const s = JSON.parse(readFileSync(f.dir("r1.json"), "utf8"));
+    // th caught c1, c2, c3; cr and gr: c1 completed and missed, c2 no-review, c3 caught. Pairs with th: c2 is out.
+    const withTh = { registered: true, n: 2, reviewedByBoth: 2, onlyA: 1, onlyB: 0, both: 1, neither: 0, p: 1 };
+    expect(s.pairs).toEqual([{ a: "th", b: "cr", ...withTh }, { a: "th", b: "gr", ...withTh },
+      { a: "cr", b: "gr", registered: false, n: 2, reviewedByBoth: 2, onlyA: 0, onlyB: 0, both: 1, neither: 1, p: null }]);
+    expect(s.pairs.filter((p: { p: number | null }) => p.p !== null).map((p: { a: string; b: string }) => `${p.a}-${p.b}`)).toEqual(["th-cr", "th-gr"]);
+    expect(s.registeredTests).toEqual({ pairs: [["th", "cr"], ["th", "gr"]], alpha: 0.05, min_reviewed_by_both: 1, test: "exact two-sided sign test on the discordant bug cases, uncorrected" });
+    expect(r.out).toContain("pair th vs cr [registered]: paired n 2 · reviewed by both 2 · th only 1 · cr only 0 · both 1 · neither 0 · exact two-sided sign test p 1 (level 0.05, uncorrected for 2 registered test(s))");
+    expect(r.out).toContain("pair cr vs gr: paired n 2 · reviewed by both 2 · cr only 0 · gr only 0 · both 1 · neither 1 · counts only (not a registered pair)");
+    expect(r.out.match(/sign test p/g)).toHaveLength(2);
+    expect(r.out).not.toMatch(/significant|reject/i); // no verdict
+  });
+
+  it("under the floor a registered pair is counts only, with the reason; exactly at the floor it is tested", () => {
+    const { f, args } = three();
+    const low = run(scoreMain, args(f.dir("f15.json"), f.policy(REG(15), "reg15.json")));
+    expect(low.code).toBe(0);
+    const s = JSON.parse(readFileSync(f.dir("f15.json"), "utf8"));
+    expect(s.pairs.map((p: { p: number | null; noTest?: string }) => [p.p, p.noTest])).toEqual([[null, "reviewed by both 2 < 15"], [null, "reviewed by both 2 < 15"], [null, undefined]]);
+    expect(low.out).not.toMatch(/sign test p/);
+    expect(low.out.match(/no test: reviewed by both 2 < 15 \(counts only\)/g)).toHaveLength(2);
+    expect(run(scoreMain, args(f.dir("f2.json"), f.policy(REG(2), "reg2.json"))).code).toBe(0);
+    expect(JSON.parse(readFileSync(f.dir("f2.json"), "utf8")).pairs.map((p: { p: number | null }) => p.p)).toEqual([1, 1, null]);
+    expect(run(scoreMain, args(f.dir("f3.json"), f.policy(REG(3), "reg3.json"))).code).toBe(0);
+    expect(JSON.parse(readFileSync(f.dir("f3.json"), "utf8")).pairs.map((p: { p: number | null }) => p.p)).toEqual([null, null, null]);
+    // a registered tool that is not scored: refused, never dropped
+    const absent = run(scoreMain, args(f.dir("m.json"), f.policy(REG(2), "regm.json"), ["th", "cr"]));
+    expect(absent.code).toBe(2);
+    expect(absent.out).toMatch(/registered pair th vs gr: gr is not a --tool/);
+    expect(existsSync(f.dir("m.json"))).toBe(false);
+    // a miss by rule stays in the paired n but is not a reviewed case: th's c3 failed twice (--records)
+    const one = run(scoreMain, [...args(f.dir("m1.json"), f.policy(REG(2, [["th", "cr"]]), "regm1.json"), ["th", "cr"]), "--records", `th=${f.dir("th-records")}`]);
+    expect(one.code).toBe(0);
+    expect(JSON.parse(readFileSync(f.dir("m1.json"), "utf8")).pairs).toEqual([{ a: "th", b: "cr", registered: true, n: 2, reviewedByBoth: 1, onlyA: 1, onlyB: 1, both: 0, neither: 0, p: null, noTest: "reviewed by both 1 < 2" }]);
+  });
+
+  it("the policy's registered_tests are checked; the committed 076c policy registers the two pairs at 0.05 with the floor of 15", () => {
+    const { f, args } = three();
+    for (const [bad, want] of [[{ pairs: [["th", "th"]], alpha: 0.05, min_reviewed_by_both: 15 }, /pairs must be a list of \[tool, other tool\]/],
+      [{ pairs: [["th", "cr"], ["cr", "th"]], alpha: 0.05, min_reviewed_by_both: 15 }, /names a pair twice/],
+      [{ pairs: [["th", "cr"]], alpha: 5, min_reviewed_by_both: 15 }, /alpha must be a number between 0 and 1/],
+      [{ pairs: [["th", "cr"]], alpha: 0.05, min_reviewed_by_both: 1.5 }, /min_reviewed_by_both must be a whole number/],
+      [{ pairs: [["th", "cr"]], alpha: 0.05 }, /must be exactly \{pairs, alpha, min_reviewed_by_both\}/]] as const) {
+      const r = run(scoreMain, args(f.dir("bad.json"), f.policy({ registered_tests: bad }, "bad-policy.json")));
+      expect(r.code).toBe(2);
+      expect(r.out).toMatch(want);
+      expect(existsSync(f.dir("bad.json"))).toBe(false);
+    }
+    const committed = path.resolve(import.meta.dirname, "../../../scripts/testset/policy.076c.json");
+    const p = readPolicy(committed, ["official_attempt", "failed_case", "unstarted_case", "no_review_in_pairs", "sheet_judge_cues"]);
+    expect(p.registered_tests).toEqual({ pairs: [["tracehound", "coderabbit"], ["tracehound", "greptile"]], alpha: 0.05, min_reviewed_by_both: 15 });
+    const a = JSON.parse(readFileSync(path.resolve(import.meta.dirname, "../../../scripts/testset/policy.076a.json"), "utf8"));
+    for (const k of ["official_attempt", "failed_case", "unstarted_case", "no_review_in_pairs", "sheet_judge_cues"] as const) expect(p[k]).toBe(a[k]);
+  });
+
+  it("--exposure: each tool's catches on exposed and unexposed bug cases, as counts; ids that are not bug cases refuse", () => {
+    const { f, args } = three();
+    const exposure = f.dir("exposure.json");
+    json(exposure, { v: 1, exposed: ["c1", "c3"] });
+    const r = run(scoreMain, args(f.dir("x.json"), f.policy(), ["th", "cr"], "--exposure", exposure));
+    expect(r.code).toBe(0);
+    const s = JSON.parse(readFileSync(f.dir("x.json"), "utf8"));
+    expect(s.tools.th.exposure).toEqual({ exposed: { bugCases: 2, completedBug: 2, caught: 2 }, unexposed: { bugCases: 1, completedBug: 1, caught: 1 } });
+    expect(s.tools.cr.exposure).toEqual({ exposed: { bugCases: 2, completedBug: 2, caught: 1 }, unexposed: { bugCases: 1, completedBug: 0, caught: 0 } });
+    expect(s.exposure).toEqual({ sha256: createHash("sha256").update(readFileSync(exposure)).digest("hex"), exposedBugCases: 2, unexposedBugCases: 1 });
+    expect(r.out).toContain("th: exposed bug cases 2: caught 2, completed 2 · unexposed bug cases 1: caught 1, completed 1");
+    expect(r.out).toContain("cr: exposed bug cases 2: caught 1, completed 2 · unexposed bug cases 1: caught 0, completed 0");
+    // the two parts add up to the tool's line
+    for (const t of ["th", "cr"]) expect(s.tools[t].exposure.exposed.caught + s.tools[t].exposure.unexposed.caught).toBe(s.tools[t].caught);
+    // without the flag there is no split
+    expect(run(scoreMain, args(f.dir("x0.json"), f.policy(), ["th", "cr"])).out).not.toMatch(/exposed/);
+    expect(JSON.parse(readFileSync(f.dir("x0.json"), "utf8")).tools.th.exposure).toBeNull();
+    const refuse = (v: unknown, name: string) => { json(f.dir(name), v); return run(scoreMain, args(f.dir(`${name}.out`), f.policy(), ["th", "cr"], "--exposure", f.dir(name))); };
+    expect(refuse({ v: 1, exposed: ["c1", "c4"] }, "e-clean.json").out).toMatch(/--exposure lists 1 id\(s\) that are not bug cases of the goldens/);
+    expect(refuse({ v: 1, exposed: ["zz"] }, "e-unknown.json").out).toMatch(/lists 1 id\(s\) that are not bug cases/);
+    expect(refuse({ v: 1, exposed: ["c1", "c1"] }, "e-twice.json").out).toMatch(/lists a case twice/);
+    expect(refuse({ exposed: ["c1"] }, "e-shape.json").out).toMatch(/--exposure must be \{v: 1, exposed/);
+    for (const n of ["e-clean.json", "e-unknown.json", "e-twice.json", "e-shape.json"]) expect(existsSync(f.dir(`${n}.out`))).toBe(false);
+    // the dev side refuses an exposure file under a held-out path
+    mkdirSync(f.dir("heldout"), { recursive: true });
+    json(f.dir("heldout/exposure.json"), { v: 1, exposed: ["c1"] });
+    expect(run(scoreMain, args(f.dir("xh.json"), f.policy(), ["th", "cr"], "--exposure", f.dir("heldout/exposure.json"))).out).toMatch(/--side dev refuses a held-out path/);
   });
 });
