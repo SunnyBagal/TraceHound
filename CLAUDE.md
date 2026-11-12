@@ -306,6 +306,10 @@ When running inside Herdr, artu1 orchestrates and splits work across every open 
 - devin: methodology review: pre-registrations, gates, cache/blindness rules, and whether a result means what we claim. Also independent labelling.
 - grok: web and docs research with source URLs; leak and consistency audits. artu1 spot-checks its claims before using them.
 Rules: each worker writes to its own output file and a .done marker; artu1 reads files, not panes; only artu1 approves spend; work runs in parallel wherever steps don't depend on each other.
+**File ownership, process rules (claim file, Touches, GO on a full sha, stand-ins, 90-minute rule, written handover, one brain
+review per day) and the full firewall (held-out paths, panes, and from T0 the four forks' pulls/issues/notifications): `AGENTS.md`
+("Who owns which files", "Process", "Blindness"), decision 076c.** Planners A and B run outside Herdr and only write documents.
+Briefs use the template in `docs/plan/team-process.md` §2.
 Note (2026-11-08): the `hc` installed here (herdr-core) has no `agent` subcommand. `hc ls` lists terminals and their t-addresses (`hc ls --json` gives the agent kind), `hc send <t-address> "<text>"` prompts one, and `hc wait <t-address>` waits on it; a `name=` label is not addressable.
 
 ## Product rule (non-negotiable)

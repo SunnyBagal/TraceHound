@@ -3964,3 +3964,79 @@ what I changed", and `git grep 076b` on main and on `codex/ts-protocol`):
 - record: `docs/decisions.md`, `.agents/STATE.md`, `.agents/LOG.md`, brain `decisions/digest.md` (076b).
 Planner A's list covers its own files and matches the planner rows above; the rows it doesn't list are the files of other
 owners (budget.md beyond item 6, the policy file, the protocol), which artu1, bunny and codex changed.
+
+## 076c — Planner B's protocol review, premortem and team process ruled (2026-11-12)
+
+**Status: ruled by Sunny; nothing run.** Amends 076, 076a, 076b. Sources: `tracehound-testset/run/comms/planner.b.d1-review.md`
+(protocol review of `docs/eval/ts-protocol.md` rev 3; U1–U11), `docs/plan/premortem.md` (rows, gaps G1–G20, §4 lanes),
+`docs/plan/team-process.md` (ten changes), Planner A's choices (`run/comms/planner.a.gaps.md`). **The spend freeze stays.**
+
+**Protocol**
+1. §13: **unmappable targets, within-file ranges and caps procedures are adopted as Planner B's D1 note words them**
+   (§1.1: the unmappable case stays in the 20, plus a fixed "K of 19 without it" line per tool, corrections only before
+   the tag; §1.2: a target's range in a file is the span of the overlapping verified ranges of that defect, a
+   non-overlapping variant becomes its own alternate, the description stays the label of record's and the order of
+   record is named per labeller; §1.3: the job-start ledger value is written to the job's file, one paid process at a time
+   across all jobs, and L2's three-way verdict PASS / FAIL / INCOMPLETE with missing draws, round-robin draw order). This
+   answers premortem G20.
+2. **U1 (completion):** a review is completed if the tool's bot posted any review object, inline comment or issue comment
+   on the PR after the trigger, except a rate-limit or error message. The collector reads issue comments **for
+   completion only**; counted comments stay inline only.
+3. **U2 (re-trigger):** a PR is re-triggered only if it has no completed review 24 h after its own trigger. A completed
+   review with zero comments is never re-triggered.
+4. **U3 (registered pairs):** TraceHound vs CodeRabbit and TraceHound vs Greptile, each two-sided at 0.05, uncorrected,
+   exact p-values reported, the two tests named in the limits. CodeRabbit vs Greptile: counts only.
+5. **U4–U11:** Planner B's proposed wording stands unless codex disagrees; codex sends Sunny only those.
+6. **G10:** a pair with fewer than 15 of 20 bug cases reviewed by both tools is reported as counts, with no test sentence.
+7. **G3:** the hand-check sheet gets a guess column (which tool wrote this); the report gives Sunny's hit rate in one line.
+8. **G1:** S1 also triggers Greptile on one clean dev case (1 credit, $0 Nebius) to see a review with no findings. S1 and
+   P1 report, per tool, the object that marks a zero-comment completion.
+
+**Premortem**
+9. codex confirms premortem rows 4, 7 and 11 against the code first. If confirmed, before S1: bunny adds a re-trigger mode
+   to `open-prs.ts` (records `retriggered:<tool>`, refuses a third) and runs the `invalid-binding` fixture through the
+   scorer; codex makes the tag worktree use the main ledger, the same `.env` and the hard stop.
+10. grok re-derives the F1 hashes, the record check and the final score summary independently before the H2 commit
+    (row 6), and does the ancestry count (row 14a) before F1.
+11. The hourly triggers run from a detached scheduler with its own log, not from an agent's session (row 3). codex
+    rehearses 8 slots on a dev case without `--execute`.
+12. **Firewall, from the window's start (T0) until the lift:** artu1 and bunny make no `gh` or browser read of pulls,
+    issues or notifications on the four forks.
+13. The other checks in premortem §4 go to the lanes as Planner B lists them.
+
+**Team process**
+14. All ten changes in `docs/plan/team-process.md` are accepted (one brief one session with a claim file; one ownership
+    table in AGENTS.md; every ruling lists its Touches; a GO names a full sha and the branch stops there; cite symbols or
+    commits; a stuck lane has a deadline and a stand-in; nothing over 90 minutes lives in a session; the orchestrator
+    hands over in writing; the firewall in every instruction file and unknown scripts read before they run; one brain
+    review per day). Applied to `AGENTS.md`, `CLAUDE.md`, `.agents/STATE.md`, `run/briefs/_common.md`; the brief template
+    is used from now on.
+
+**Earlier items recorded with this decision**
+15. Planner A's three choices are approved: "shrank" as defined in `docs/specs/P1.md`; the $0.03-per-case replay threshold
+    in `docs/specs/R2.md`; the `gh` re-trigger lines in `docs/runbooks/H1-window.md`, which stand only until bunny's re-trigger
+    mode merges (item 9).
+16. PR #72 (Planner B's premortem and team process) is merged (`d959f9b`); 076b got its "Touches" list after the fact,
+    checked against `run/comms/planner.a.gaps.md`.
+Also recorded: `b2-followup` stays on main as the three linear commits `73ddf5c`, `ffd3eed`, `be3e8fc` (no force-push); their
+files match codex's GO at `45b48df` and the gates passed, so the GO stands.
+
+**Touches** (every file that states an old rule; owner; a file leaves STATE's list when its owner's commit is on main):
+- codex: `docs/eval/ts-protocol.md` (§13 → operative, U1–U11, G10, G3, G1, firewall; items 1–8, 12); `labels/dev/multifile.jsonl`
+  and the held-out overlay (span rule, item 1); tag-worktree ledger/`.env` mechanism (item 9);
+- Planner A: `docs/specs/E1.md` (L2 verdict, job-start file, U7; items 1, 5), `docs/specs/S1.md` (G1 clean Greptile case; item 8),
+  `docs/specs/P1.md` (zero-comment object, re-trigger lines; items 3, 8, 15), `docs/specs/B2.md` (U1 "left to Planner B"; item 2),
+  `docs/specs/R1.md` and `R2.md` (one paid process at a time; item 1), `docs/runbooks/H1-window.md` (§3 status rule, re-trigger
+  mode, detached scheduler, fork firewall; items 2, 3, 9, 11, 12), `docs/runbooks/H2-scoring.md` (pairs, guess column, U9,
+  U10; items 4, 5, 7), `docs/runbooks/F1-freeze.md` (G1 stop, G10 number 15, U10 hash list, tag worktree; items 5, 6, 8, 9),
+  `docs/runbooks/W1-writeup.md` (two tests in the limits, G10 counts sentence, guess hit rate; items 4, 6, 7),
+  `docs/plan/2026-11-11-plan-v2.md` (open points and "Planner B" hand-offs; items 1–8);
+- Planner B: `docs/plan/premortem.md` (gaps now ruled; items 1, 6–12);
+- bunny: `scripts/testset/collect-tool-reviews.ts` (issue comments for completion; item 2), `scripts/testset/handcheck-sheet.ts`
+  (guess column; item 7), `scripts/testset/score-testset.ts` (registered pairs, G10 floor, `invalid-binding` fixture; items
+  4, 6, 9), `tracehound-testset/scripts/open-prs.ts` (re-trigger mode; item 9), the L2 redraw tool when built (three-way
+  verdict; item 1);
+- artu1: `AGENTS.md`, `CLAUDE.md`, `.agents/STATE.md`, `tracehound-testset/run/briefs/_common.md` (items 12, 14), `docs/budget.md`
+  (one paid process at a time, job-start file; item 1), `docs/live-setup.md` (re-trigger and Greptile smoke text; items 3, 8).
+**Rejected:** dropping or replacing the unmappable held-out case; the label of record's range alone; re-triggering
+completed zero-comment reviews; a familywise correction across the two registered tests.

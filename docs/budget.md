@@ -48,6 +48,11 @@ Nebius-key-capable CI run in the 48 h (`run/out/codex.leak.md` § 48 h) and grok
   error; at most 3 tries, ≥ 30 min apart, **$0.40 in total from the reserve**; if all 3 fail, stop and tell Sunny.
   (5) An adopted A1 or A2 is run by the unchanged runner and extracted by replay; the write-up reports the cost paid per
   PR and, beside it, the adopted arm's own calls from the ledger.
+- **076c (Sunny, 2026-11-12), caps procedures (Planner B's D1 note §1.3):** (a) before a job's first call the operator
+  writes the ledger total and the UTC time to the job's file; every process of that job computes
+  `TRACEHOUND_BUDGET_TOTAL_USD` from that file, never from a re-read of the ledger or a shell variable; (b) **one paid
+  process at a time, across all jobs**; (c) L2: a draw that never returned a reply is missing; draw order round-robin;
+  verdict PASS / FAIL / INCOMPLETE with missing draws (076c item 1). The S1 Greptile clean case is 1 credit, $0 Nebius.
 - **Caps check (bunny, 2026-11-11, `tracehound-testset/run/out/bunny.caps-check.md`; estimates, TS costs unmeasured):**
   at the estimate ($0.0934 per case) every job completes, but R1/R2 have 3% headroom and H1 5%. Under a realistic
   per-case spread, the batch rule as written runs every case with P ≈ 0.29 (R1, R2) and ≈ 0.40 (H1): one expensive case
@@ -179,3 +184,4 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 | 2026-11-11 | S0 rulings and decision 076: new split ($18.31 usable: S1 0.45, R1 4.15, L1 0.40, L2 0.80, L4 0.10, R2 4.15, H1 3.15, H2 0.40, reserve 3.00, unallocated 1.71; L3 step 2 cut); freeze stays | — | $0 | **$19.31** |
 | 2026-11-11 | caps ruling (076a): R1 $4.68, unallocated $1.18; rolling batch rule; R2/H1 recomputed in 077 from R1's measured costs; judge-only env caps; L4 concurrency 1 | — | $0 | **$19.31** |
 | 2026-11-11 | 076b: R1/R2 judging inside the job cap; re-trigger slots; CodeRabbit rate check; canary ≤ $0.40 from the reserve; adopted-arm cost reporting | — | $0 | **$19.31** |
+| 2026-11-12 | 076c: caps procedures (job-start file, one paid process at a time, L2 three-way verdict); protocol, premortem, team process ruled | — | $0 | **$19.31** |

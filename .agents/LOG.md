@@ -172,3 +172,14 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   force-push). D1 rev 4 (076b 2 + 4) and rev 5 (076b 3) pushed (`d62343c`). Brain 076b note: codex NO-GO (canary clause
   too short), fixed, GO, pushed `89a76d3`. grok's 076b check: H1 runbook differs → relayed to Planner A. Planner B wrote
   the D1 review note, a premortem (22 risks, 20 gaps) and a team-process proposal (10 changes). $0.
+
+## 2026-11-12 (Thu): 076c
+- **b2-followup note (Sunny):** stays on main as the three linear commits `73ddf5c`, `ffd3eed`, `be3e8fc` (artu1's merge
+  commit was flattened by a `pull --rebase`); no force-push. Their files match codex's GO at `45b48df` and the gates passed,
+  so the GO stands.
+- **Changed:** Sunny's items 1–16 recorded as decision 076c (Planner B's protocol proposals adopted; U1–U3, G1, G3, G10
+  ruled; premortem rows 3, 4, 6, 7, 11, 12, 14a assigned; firewall on the forks from T0; all ten team-process changes
+  accepted; Planner A's three choices approved; 076b's Touches list). artu1 applied its Touches: AGENTS.md (ownership
+  table, Process, firewall), CLAUDE.md (pointer), STATE (rewritten), `_common.md` (rewritten), budget.md (caps
+  procedures), live-setup.md (Greptile credits, re-triggers). Briefs in the new template to codex, bunny, grok; note to
+  Planner A with 076c's item numbers. $0.

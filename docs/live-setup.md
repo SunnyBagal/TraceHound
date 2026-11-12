@@ -49,8 +49,9 @@ Click steps:
 ## 2. Greptile (Starter) and Cursor Bugbot (excluded)
 Trigger facts: `grok.triggers.md`, summary in §2.1. `open-prs.ts --trigger` knows all three strings; **don't pass
 `bugbot`** unless Sunny lifts the exclusion.
-**Greptile budget (Starter, 50 credits/month, 1 credit per base review):** 1 smoke-test review (one dev case) + 29
-held-out = 30 credits, 20 spare for a retry; **no dev runs**. Check the credit balance in the dashboard before the
+**Greptile budget (Starter, 50 credits/month, 1 credit per base review):** S1's 2 reviews (the smoke dev case, plus one
+clean dev case to see a review with no findings, decision 076c item 8) + 29 held-out = 31 credits, plus up to 29
+re-triggers in the worst case (076c item 3: only PRs with no completed review 24 h after their trigger); **no other dev runs**. Check the credit balance in the dashboard before the
 held-out window; a review that doesn't complete costs nothing ("Only completed reviews spend credits"). Use base
 reviews only (Plus = 3, Apex = 10 credits). If the smoke test and the held-out window fall in different calendar months,
 each month has its own 50.
@@ -102,7 +103,7 @@ https://cursor.com/blog/may-2026-bugbot-changes. Full quotes: `tracehound-testse
 **Dev cases only until the freeze tag.** Actions is off (§3), so pushes run nothing. Always dry run first, then
 `--execute`: `node scripts/open-prs.ts --manifest cases/dev/manifest.json --clone repos/F --fork SunnyBagal/F --ids case-0NN`.
 Batches are capped at 10 with a delay; the resume file prevents duplicates. `--trigger coderabbit[,greptile,bugbot]`
-posts the tools' trigger comments on opened PRs, ≤ 10 per hour per tool and per (tool, fork) (codex GO 2026-11-10). Never pass `bugbot` (excluded); greptile only for the smoke test and held-out.
+posts the tools' trigger comments on opened PRs, ≤ 10 per hour per tool and per (tool, fork) (codex GO 2026-11-10). Never pass `bugbot` (excluded); greptile only for the smoke test and held-out. **Re-triggers** (076c items 3, 9): only a PR with no completed review 24 h after its own trigger, in the first free hourly slot (076b); by bunny's re-trigger mode of `open-prs.ts` (records `retriggered:<tool>`, refuses a third) once it merges, by the `gh` lines in `docs/runbooks/H1-window.md` until then (076c item 15). The hourly triggers run from a detached scheduler (076c item 11).
 
 ## 5. Smoke test: one dev PR (after the freeze is lifted and codex GO on the runner)
 1. Pick one small dev case in one fork (artu1 names it in `docs/budget.md` with the spend line).
