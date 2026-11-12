@@ -28,8 +28,20 @@ that is not one of these templates, or a placeholder filled from anything but th
    CodeRabbit** and **TraceHound vs Greptile**. For each: bug cases reviewed by both (m), paired n, caught only by the
    first, only by the second, exact two-sided sign-test p, and one sentence from §3.2. **CodeRabbit vs Greptile: counts
    only** (m, n, only-first, only-second); no p-value, no sentence, no word about which did better.
+3b. **Exposed and unexposed catches, reported separately (decision 076d item 1d).** One small table, three rows
+   (TraceHound, CodeRabbit, Greptile), two column groups: on the E exposed bug cases, caught K and reviews completed;
+   on the 20 − E unexposed bug cases, the same. The numbers are the two `exposure` lines per tool of
+   `ts-heldout.summary.json`. Above the table, these sentences and no others: "A bug case is called exposed if, at
+   the time CodeRabbit or Greptile reviewed it, the commit that later fixed the bug could be reached from another
+   case's branch on the same fork. E of the 20 bug cases were exposed. At each case's first review the number was 0;
+   the E cases became exposed through a re-trigger or a late review. No test was made on either group." With E = 0
+   the table's exposed columns read "0 of 0 (no exposed bug cases)" and the second and third sentences become "No bug
+   case was exposed at any review." Counts only: never a rate or a percentage on either group, never a comparison of the two
+   groups in words, and never "the tools did not use the fix": the run cannot show what a tool read.
 4. **What was run.** Tag `review-freeze-3`, candidate arm and attempts, model, the command shape, window start and end
-   (UTC), triggers, re-triggers used, who operated.
+   (UTC), the push order in one sentence (one case per hour, by base date, each pushed only at its own first trigger;
+   decision 076d), triggers, first triggers that needed their second try or failed both, re-triggers used, who
+   operated (a detached scheduler; the operator typed no trigger).
 5. **How it was scored.** One golden per bug case (alternates as OR-targets), counted comments, two judges, the blind
    hand-check and what was on the sheet, the policy file.
 6. **Judges versus hand-check.** Per tool: K by judge v1, by judge x1, by hand; items the hand-check rejected and added.
@@ -131,12 +143,34 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
    CodeRabbit reviewed payload's cases under payload's own configuration file, which is part of that code.
    CodeRabbit was left at its defaults, under which web search is "Enabled unless explicitly disabled" and pull-request
    context "Uses past PRs for context" (https://docs.coderabbit.ai/knowledge-base); what it looked up is not known.
-   All 29 case branches sit in four forks; grok's ancestry count before the freeze says how many case branches carry
-   another case's later fix (`run/out/grok.ancestry.md`, 2026-11-12: the starting fix of 11 of the 20 held-out bugs
-   is an ancestor of another case's base on the same fork, so it was present on the fork in another branch; 5 of the
-   29 held-out bases contain another case's fix). The number is restated from the file at write-up time, with Sunny's
-   ruling on it (`F1-freeze.md` §1 row 16) (premortem gap G16).
-7. CodeRabbit and Greptile ran on free plans, triggered by hand, within their rate and credit limits; a tool that
+   **Other case branches on the same fork (premortem gap G16; decision 076d item 1 with its correction, and
+   addendum e).** The page states all of this, with the numbers restated from the files at write-up time:
+   - *Before anything was done:* the commit that later fixed the bug was an ancestor of another case's base on the
+     same fork for 11 of the 20 held-out bugs (`run/out/grok.ancestry.md`, 2026-11-12). Of the 11, 6 could be reached
+     only from a dev case's branch, 2 only from another held-out case's branch, 3 from both (`run/out/grok.076d.md`;
+     correction to decision 076d item 1).
+   - A second, different count: 5 of the 29 held-out bases contained another case's fix (3 of them a held-out fix, 2
+     only a dev fix). The 11 counts fixes and the 5 counts bases; a fix can sit in several bases and a base can hold
+     several fixes. **The two are not the same set, are not two views of one number, and are never added or set
+     equal on the page.**
+   - *What was done:* every dev case branch was deleted from the forks after the dev reviews were collected and
+     before the window (item 1b), and the held-out branches were pushed one case at a time, in the order of their base
+     commits' dates, each only at the hour of its own first trigger (item 1c). **Under that order, exposure at first
+     review was 0 of 20**: counted by codex and by grok independently, and again by grok on the actual case list before
+     the first push (`H1-window.md` §1 item 3).
+   - *What remains.* Exposure is judged per review at the time the review was actually made, from the scheduler's log
+     of the fork's branches before every trigger, not from the planned order (addendum e). A re-trigger comes 24 hours
+     or more after a pull request's own trigger, when later branches are already on the fork, and a review that
+     arrives late can see them too. E of the 20 bug cases were exposed in this way for at least one tool's review; at
+     most 5 could be (the 2 + 3 fixes that reach a held-out branch). Section 3b shows every tool's catches on the
+     exposed and on the unexposed cases separately; no case was left out.
+   - *What deleting does not undo.* The dev pull requests were open on the forks for the days of the dev runs. A tool
+     that indexed a fork then may keep what it read; the closed pull requests stay public, and GitHub keeps a
+     read-only `refs/pull/<n>/head` ref for each (the count is in P1's report, `docs/specs/P1.md` §4 item 9). So "0 of
+     20 at first review" is a statement about the branches on the forks, not about what a tool remembers.
+   - TraceHound read no fork: it ran locally on each case's own commits.
+7. CodeRabbit and Greptile ran on free plans, triggered by a comment posted from a scheduler, one pull request per
+   hour, within their rate and credit limits; a tool that
    delivered no review after one re-trigger is left out of its pairs, with n stated.
 8. No row for Augment, Cursor Bugbot or Copilot. TypeScript only; the repositories named; these dates.
 9. Costs: TraceHound's is the ledger figure for this run; the console-to-ledger ratio is stated.
