@@ -395,7 +395,7 @@ describe("collect-tool-reviews", () => {
     writeFileSync(path.join(dev, "gh.log"), "");
     json(path.join(dev, "manifest.json"), [{ id: "c1", title: "P1", base_sha: BASE, case_head_sha: HEAD }, { id: "c2", title: "P2", base_sha: BASE, case_head_sha: HEAD }]);
     json(path.join(dev, "prmap.json"), { c1: 11, c2: 12 });
-    json(path.join(dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"] } } });
+    json(path.join(dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"], notCompletion: ["rate limit exceeded", "^Failed\\b.*retry"] } } });
     const args = (out: string, ...extra: string[]) => ["--side", "dev", "--tool", "coderabbit", "--config", path.join(dev, "tools.json"), "--repo", "SunnyBagal/twenty",
       "--manifest", path.join(dev, "manifest.json"), "--pr-map", path.join(dev, "prmap.json"), "--window-start", START, "--window-end", END,
       "--out", out, "--gh-bin", path.join(dev, "gh"), ...extra];
@@ -427,7 +427,8 @@ describe("collect-tool-reviews", () => {
     expect(lines[0]).toBe("coderabbit: 2 case(s): completed 1, no-review 0, invalid-binding 1, read-failed 0; 122 counted comment(s); excluded: other author 1, reply 1, outside window 1, other commit 1, duplicate 1");
     const calls = f.log();
     expect(calls.map((c: { argv: string[] }) => c.argv[3])).toEqual(["repos/SunnyBagal/twenty/pulls/11", "repos/SunnyBagal/twenty/pulls/11/comments?per_page=100&page=1",
-      "repos/SunnyBagal/twenty/pulls/11/comments?per_page=100&page=2", "repos/SunnyBagal/twenty/pulls/11/reviews?per_page=100&page=1", "repos/SunnyBagal/twenty/pulls/12"]);
+      "repos/SunnyBagal/twenty/pulls/11/comments?per_page=100&page=2", "repos/SunnyBagal/twenty/pulls/11/reviews?per_page=100&page=1",
+      "repos/SunnyBagal/twenty/issues/11/comments?per_page=100&page=1", "repos/SunnyBagal/twenty/pulls/12"]);
     for (const c of calls) {
       expect(c.argv.slice(0, 3)).toEqual(["api", "--method", "GET"]);
       expect(c.envKeys).not.toContain("NEBIUS_API_KEY");
@@ -457,6 +458,77 @@ describe("collect-tool-reviews", () => {
     expect(() => assertGhRead(["api", "--method", "POST", "repos/SunnyBagal/twenty/pulls/1"], "SunnyBagal/twenty")).toThrow();
     expect(() => assertGhRead(["api", "--method", "GET", "repos/twentyhq/twenty/pulls/1"], "SunnyBagal/twenty")).toThrow();
     expect(() => assertGhRead(["api", "--method", "GET", "repos/SunnyBagal/twenty/pulls/1/comments?per_page=100&page=1"], "SunnyBagal/twenty")).not.toThrow();
+    expect(() => assertGhRead(["api", "--method", "GET", "repos/SunnyBagal/twenty/issues/1/comments?per_page=100&page=1"], "SunnyBagal/twenty")).not.toThrow();
+    expect(() => assertGhRead(["api", "--method", "GET", "repos/SunnyBagal/twenty/issues/1"], "SunnyBagal/twenty")).toThrow();
+    expect(() => assertGhRead(["api", "--method", "GET", "repos/twentyhq/twenty/issues/1/comments?per_page=100&page=1"], "SunnyBagal/twenty")).toThrow();
+  });
+
+  // decision 076c item 2 (Planner B's U1): issue comments make a case completed, never counted
+  const issue = (id: number, over: Record<string, unknown> = {}) => ({ id, user: bot, created_at: "2026-11-21T00:00:00Z", body: "Summary: no issues found.", ...over });
+  const pr = { base: { sha: BASE }, head: { sha: HEAD } };
+
+  it("completion: a zero-inline review completed by an issue comment; a rate-limit or failure message is not completion", () => {
+    const f = collectorFixture({
+      11: { pr, comments: [], reviews: [], issueComments: [issue(1)] },
+      12: { pr, comments: [], reviews: [{ id: 2, user: bot, submitted_at: "2026-11-21T00:00:00Z", commit_id: HEAD, body: "Rate limit exceeded: wait 40 minutes" }],
+        issueComments: [issue(3, { body: "## Rate Limit Exceeded\nPlease wait" }), issue(4, { body: "Failed 😕 Tag the bot to retry." }), issue(5, { user: { login: "sunny" }, body: "ok" })] },
+    });
+    const out = path.join(f.dev, "c");
+    const lines: string[] = [];
+    expect(collectMain(f.args(out), { log: (l) => lines.push(l) })).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(out, "coderabbit.status.json"), "utf8"))).toEqual({ c1: "completed", c2: "no-review" });
+    // completed with zero counted comments: the review file exists and is empty; the issue comment is not a comment
+    expect(JSON.parse(readFileSync(path.join(out, "coderabbit", "c1.json"), "utf8")).comments).toEqual([]);
+    expect(lines[0]).toContain("completed 1, no-review 1");
+    expect(lines[0]).toContain("0 counted comment(s)");
+    expect(lines[1]).toBe("coderabbit: completion objects after the window start: review 0, inline 0, issue comment 1; not completion (pattern) 3");
+    const coll = JSON.parse(readFileSync(path.join(out, "coderabbit.collection.json"), "utf8"));
+    expect(coll.notCompletion).toEqual(["rate limit exceeded", "^Failed\\b.*retry"]);
+    expect(coll.completionFrom).toBe("window start");
+    expect(JSON.parse(readFileSync(path.join(out, "raw", "coderabbit", "c2.json"), "utf8")).issueComments).toHaveLength(3);
+    // the patterns are required (an explicit [] is allowed) and must compile
+    json(path.join(f.dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"] } } });
+    const l2: string[] = [];
+    expect(collectMain(f.args(path.join(f.dev, "c2")), { log: (l) => l2.push(l) })).toBe(2);
+    expect(l2[0]).toMatch(/no notCompletion list for coderabbit/);
+    json(path.join(f.dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"], notCompletion: ["("] } } });
+    const l3: string[] = [];
+    expect(collectMain(f.args(path.join(f.dev, "c3")), { log: (l) => l3.push(l) })).toBe(2);
+    expect(l3[0]).toMatch(/is not a regular expression/);
+    json(path.join(f.dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"], notCompletion: [] } } });
+    expect(collectMain(f.args(path.join(f.dev, "c4")), { log: () => {} })).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(f.dev, "c4", "coderabbit.status.json"), "utf8"))).toEqual({ c1: "completed", c2: "completed" });
+  });
+
+  it("completion counts only objects after the case's first trigger (--resume-file); a case with no trigger record refuses", () => {
+    const f = collectorFixture({
+      11: { pr, comments: [], reviews: [], issueComments: [issue(1, { created_at: "2026-11-20T10:00:00Z" })] }, // before c1's trigger
+      12: { pr, comments: [], reviews: [], issueComments: [issue(2, { created_at: "2026-11-20T13:00:00Z" })] }, // after c2's trigger
+    });
+    const resume = path.join(f.dev, "twenty.resume.jsonl");
+    const rec = (id: string, step: string, at: string) => JSON.stringify({ v: 1, fork: "SunnyBagal/twenty", id, step, at });
+    writeFileSync(resume, [rec("c1", "pr-created", "2026-11-19T00:00:00Z"), rec("c1", "triggered:coderabbit", "2026-11-20T11:00:00Z"),
+      rec("c2", "triggered:coderabbit", "2026-11-20T12:00:00Z"), rec("c2", "triggered:greptile", "2026-11-20T14:00:00Z")].join("\n") + "\n");
+    const out = path.join(f.dev, "t");
+    const lines: string[] = [];
+    expect(collectMain(f.args(out, "--resume-file", resume), { log: (l) => lines.push(l) })).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(out, "coderabbit.status.json"), "utf8"))).toEqual({ c1: "no-review", c2: "completed" });
+    expect(lines[1]).toContain("after the first trigger: review 0, inline 0, issue comment 1");
+    expect(JSON.parse(readFileSync(path.join(out, "coderabbit.collection.json"), "utf8")).completionFrom).toBe("first trigger (--resume-file)");
+    // without the resume file, c1's comment is inside the window and completes it
+    expect(collectMain(f.args(path.join(f.dev, "t2")), { log: () => {} })).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(f.dev, "t2", "coderabbit.status.json"), "utf8"))).toEqual({ c1: "completed", c2: "completed" });
+    // a case without a trigger record for this tool refuses before any read
+    writeFileSync(resume, rec("c1", "triggered:coderabbit", "2026-11-20T11:00:00Z") + "\n");
+    const l3: string[] = [];
+    expect(collectMain(f.args(path.join(f.dev, "t3"), "--resume-file", resume), { log: (l) => l3.push(l) })).toBe(2);
+    expect(l3[0]).toMatch(/c2 has no triggered:coderabbit record in --resume-file/);
+    expect(existsSync(path.join(f.dev, "t3"))).toBe(false);
+    // a resume file for another fork refuses
+    writeFileSync(resume, JSON.stringify({ v: 1, fork: "SunnyBagal/medusa", id: "c1", step: "triggered:coderabbit", at: "2026-11-20T11:00:00Z" }) + "\n");
+    const l4: string[] = [];
+    expect(collectMain(f.args(path.join(f.dev, "t4"), "--resume-file", resume), { log: (l) => l4.push(l) })).toBe(2);
+    expect(l4[0]).toMatch(/is for SunnyBagal\/medusa/);
   });
 });
 
@@ -667,7 +739,7 @@ describe("spec B2 §7 pinned values", () => {
 });
 
 describe("spec B2 §7 collector row", () => {
-  it("one valid comment counted; reply, other account, 1 s after the window and an older commit excluded by reason; review bodies and issue comments are never read", () => {
+  it("one valid comment counted; reply, other account, 1 s after the window and an older commit excluded by reason; review bodies and issue comments are never counted", () => {
     const HEAD = "a".repeat(40), BASE = "b".repeat(40), END = "2026-11-23T00:00:00Z";
     const d = tmp(); const dev = path.join(d, "dev"); mkdirSync(dev, { recursive: true });
     copyFileSync(path.join(import.meta.dirname, "fixtures", "collector-fake-gh.mjs"), path.join(dev, "gh.mjs"));
@@ -678,12 +750,12 @@ describe("spec B2 §7 collector row", () => {
       path: "x.ts", line: 5, body: `comment ${id}`, ...over });
     json(path.join(dev, "gh.json"), { pulls: { 11: { pr: { base: { sha: BASE }, head: { sha: HEAD } },
       reviews: [{ id: 1, user: bot, submitted_at: "2026-11-21T00:00:00Z", commit_id: HEAD, body: "REVIEW BODY SUMMARY" }],
-      issue_comments: [{ id: 99, user: bot, body: "ISSUE COMMENT WALKTHROUGH" }],
+      issueComments: [{ id: 99, user: bot, created_at: "2026-11-21T00:00:00Z", body: "ISSUE COMMENT WALKTHROUGH" }],
       comments: [c(1), c(2, { in_reply_to_id: 1 }), c(3, { user: { login: "other[bot]", type: "Bot" } }), c(4, { created_at: "2026-11-23T00:00:01Z" }),
         c(5, { commit_id: "c".repeat(40), original_commit_id: "c".repeat(40) })] } } });
     json(path.join(dev, "manifest.json"), [{ id: "c1", title: "P1", base_sha: BASE, case_head_sha: HEAD }]);
     json(path.join(dev, "prmap.json"), { c1: 11 });
-    json(path.join(dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"] } } });
+    json(path.join(dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"], notCompletion: ["rate limit exceeded", "^Failed\\b.*retry"] } } });
     const out = path.join(dev, "o");
     const lines: string[] = [];
     expect(collectMain(["--side", "dev", "--tool", "coderabbit", "--config", path.join(dev, "tools.json"), "--repo", "SunnyBagal/twenty",
@@ -692,7 +764,8 @@ describe("spec B2 §7 collector row", () => {
     expect(JSON.parse(readFileSync(path.join(out, "coderabbit", "c1.json"), "utf8")).comments).toEqual([{ path: "x.ts", line: 5, body: "comment 1" }]);
     expect(lines[0]).toContain("1 counted comment(s); excluded: other author 1, reply 1, outside window 1, other commit 1, duplicate 0");
     const calls = readFileSync(path.join(dev, "gh.log"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).argv[3]);
-    expect(calls.some((p: string) => p.includes("/issues/"))).toBe(false); // issue comments are never requested
+    // decision 076c item 2: issue comments are read for completion only, never counted
+    expect(calls.filter((p: string) => p.includes("/issues/"))).toEqual(["repos/SunnyBagal/twenty/issues/11/comments?per_page=100&page=1"]);
     expect(readFileSync(path.join(out, "coderabbit", "c1.json"), "utf8")).not.toMatch(/REVIEW BODY|ISSUE COMMENT/);
   });
 });
