@@ -167,3 +167,8 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   window, canary ≤ $0.40 from the reserve, adopted-arm cost reporting, budget.md firewall order fixed. Item g closed.
   Lanes: bunny (policy file + R1 spec env lines, note to Planner A), codex (b2-followup review, D1 rev 4), grok (076b check
   of protocol + H1 runbook). $0.
+- **Then (2026-11-11 late / 11-12):** codex: b2-followup GO at `45b48df`; artu1 merged it, but a `git pull --rebase` after
+  the local merge flattened it into linear commits on main (`73ddf5c..be3e8fc`, content identical; not rewritten, no
+  force-push). D1 rev 4 (076b 2 + 4) and rev 5 (076b 3) pushed (`d62343c`). Brain 076b note: codex NO-GO (canary clause
+  too short), fixed, GO, pushed `89a76d3`. grok's 076b check: H1 runbook differs → relayed to Planner A. Planner B wrote
+  the D1 review note, a premortem (22 risks, 20 gaps) and a team-process proposal (10 changes). $0.

@@ -1,5 +1,5 @@
 # .agents/STATE.md: read first; rewrite (never append) at the end of every session; ≤ 60 lines
-HEAD: `main` `c379055` (B1 + B2 merged, 2026-11-11 evening, bunny as temp orchestrator while artu1 resets) and the STATE commit after it. If HEAD has moved further, trust code and docs/decisions.md over this file.
+HEAD: `main` after the 2026-11-12 STATE commit (b2-followup on main as `73ddf5c..be3e8fc`). If HEAD has moved further, trust code and docs/decisions.md over this file.
 
 ## Goal
 Show, on fresh held-out TypeScript PRs (twenty, medusa, payload, bullmq), whether TraceHound's reviewer (pool-verify-v1) catches real bugs that later fixes repaired.
@@ -45,14 +45,11 @@ Coordination: `~/Projects/tracehound-testset/run/{briefs,out,comms}`; `.done` ma
 
 ## OPEN TASKS (in order)
 a. Spend freeze until Sunny reports the Nebius console check.
-b. **Done 2026-11-11 evening (bunny, temp orchestrator):** codex C1 re-review **GO** B1 `bec2ead` + B2 `251d6e5` (incl. the 076a policy file; `run/out/codex.c1-rereview.md`) → both merged with merge commits (`4b70033`, `c379055`), gates on main green (action 335, analyzer 1027 +6 skipped, viewer 215, typecheck), **pushed**. Brain review 4 **GO** → the six files, checked byte-equal against codex's recorded SHA-256s, committed and **pushed** (brain `a4fc2e7`). D1 rev 3 done (`c64e77d`: 076a §13 items 1–8 operative, 3 proposals pending in §13) → branch `codex/ts-protocol` **pushed** for Planner B. grok's re-check (`run/out/grok.d1-review3.md`): **8/8 §13 rulings, 6/6 caps rulings applied, 0 differences**; 1 new undecided item = the +24 h re-trigger / CodeRabbit rate-limit collision (plan v2 R-1, marked in D1 §12). Small doc note for artu1: `docs/budget.md:29-30` still has 076's firewall sentence (076a amended the order; D1 follows 076a).
-c. **B2 follow-up** (`docs/specs/B2.md` §5.1/§5.2/§7): branch `b2-followup` @ `3668819` (policy renamed to `scripts/testset/policy.076a.json`, the path `docs/specs/S1.md` uses; one rerun max; §7 values pinned; gates green, action 340). **Not merged:** needs codex review (`run/briefs/codex-b2-followup.md`, send after its current queue). Until it merges, S1's precondition (`policy.076a.json` exists) fails on main.
-d. **codex (t14) is blocked on a permission prompt** (seen 2026-11-11 ~16:30): Sunny must answer it; agents never answer another's dialog. Its queue: part 4 of `codex-076a.md` (plan v2 audit), then `codex-b2-followup.md`.
-e. **Plan v2** (`docs/plan/2026-11-11-plan-v2.md`, Planner A, supersedes v1): artu1 confirmed its runner findings on main (one repo per invocation, `run-tracehound.ts:215`; manifest order, `--ids` filters only; defaults case cap $0.25, fixes/contracts on → every command needs `--fixes off --contracts off --max-usd-per-case 0.40`). Under the rolling rule the caps re-check's completion figures do not depend on batch layout. Open points R-1 (re-trigger collision), R-2 (P1 rate → H1 schedule), R-3 (Planner B's proposals).
-f. Branch heads: B1/B2 merged; `b2-followup` `3668819` (review pending); D1 `codex/ts-protocol` `c64e77d` (pushed; not merged until Sunny rules on Planner B's note).
-g. **Closed by 076b (2026-11-11):** R1/R2 judging runs with TOTAL = ledger at job start + job cap, RUN = job cap − runner spend, `--concurrency 1`.
-h. Sunny: rule on Planner B's D1 note; confirm window dates; answer codex's permission prompt.
-i. Bump the Action pins and create the `tracehound-review` label in the four repos.
+b. **Done 2026-11-11/12:** B1, B2 merged (`4b70033`, `c379055`); **b2-followup** on codex GO at `45b48df` landed on main as linear commits `73ddf5c`, `ffd3eed`, `be3e8fc` (a `pull --rebase` flattened artu1's merge commit; content byte-identical to `45b48df`; gates green: action 340, analyzer 1027 +6 skipped, viewer 215). Brain `89a76d3` (076b; codex GO after one NO-GO on the canary wording). codex plan-v2 audit: 55 verified / 2 contradicted (P2-1 closed by 076b).
+c. **D1** `codex/ts-protocol` `d62343c` (rev 4: 076b 2 + 4; rev 5: 076b 3), pushed; **not merged until Sunny rules on Planner B's note** (`run/comms/planner.b.d1-review.md`: §1.1 unmappable target, §1.2 within-file span rule, §1.3 caps procedures, U1–U3 need Sunny, U4–U11 "codex may word"). grok's 076b check: protocol had 2 + 4 (3 added in rev 5); H1 runbook differs on 2 and 4 and lacks 3 → relayed to Planner A (`run/comms/artu1-to-planner-a.076b-runbook.md`; bunny's `bunny-to-planner-a.076b.md` lists 4 more).
+d. **Planner B also wrote** `docs/plan/premortem.md` (22 risks, 20 gaps G1–G20; G1/G3/G10 need Sunny; G17 is a firewall line for artu1 on the forks' PRs/issues/notifications from T0) and `docs/plan/team-process.md` (10 process changes for Sunny's yes/no), on branch `planner-b` (PR to main; planner files, not merged by artu1). Each asks for a codex audit (lanes listed in `run/comms/planner.b.{premortem,team-process}.md`).
+e. Sunny: rule on Planner B's D1 note, premortem gaps G1/G3/G10, the 10 process changes; confirm window dates.
+f. Bump the Action pins and create the `tracehound-review` label in the four repos.
 
 ## Where things are
 Decisions `docs/decisions.md` · budget `docs/budget.md` · plan + audit `docs/plan/` · live plan `docs/live-setup.md` · results `docs/bench/results.md` · history `.agents/LOG.md` · herdr `docs/herdr.md` · test set `~/Projects/tracehound-testset` · brain `~/Projects/tracehound-brain`.
