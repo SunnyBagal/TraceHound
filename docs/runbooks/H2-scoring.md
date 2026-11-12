@@ -29,7 +29,8 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
    from `$HO/th`. A case with no record stays absent (it is a miss by policy `unstarted_case: miss`).
 2. `node scripts/testset/replay-arms.ts --records $S/official --out $S/arms` → exit 0. Exit 1 (A0 differs from the
    posted comments): stop and tell Sunny; do not score.
-3. External tools: merge the per-repository collections of H1 §6 into one directory and one status file per tool:
+3. External tools: merge the per-repository collections of H1 §6 (for each repository the last complete one, and
+   the `-untriggered` directory if H1 made one) into one directory and one status file per tool:
    `mkdir -p $S/coderabbit $S/greptile; cp $HO/tools-*/coderabbit/*.json $S/coderabbit/; jq -s add $HO/tools-*/coderabbit.status.json > $S/coderabbit.status.json`
    (and the same for greptile).
 4. Rows. **Primary (these three make the claim):** `tracehound` = `$S/arms/$ARM`, `coderabbit`, `greptile`.
@@ -154,6 +155,8 @@ items, 3 tools; uniform chance 1/3; always naming the commonest tool: M of N)". 
 | failure | rule |
 |---|---|
 | A detail file does not cover a completed bug case | `score-testset.ts` refuses (exit 2). Re-judge that row once; never mark the case a miss by hand. |
+| A status file holds `read-failed` | `score-testset.ts` refuses (exit 2, no output; `main` → `toStatus` at `6fd4568`). It is not a result: H1 §6's repeat collection was skipped. Go back to it (window end unchanged), hash the new directory, then score. Never edit a status file. |
+| A status file holds `invalid-binding` | Nothing to do by hand: the scorer counts the case as `no-review` for that tool, leaves it out of that tool's pairs and prints "no-review N (invalid-binding k)". The count goes into the report. |
 | Sunny cannot finish in one sitting | He stops, the partial file is hashed and kept, and he finishes in a second sitting without seeing anything else in between; the report says "two sittings". |
 | Sunny's file hash does not match | Use his file; hash again together; never the operator's copy. |
 | Sunny wants to change a decision after unblinding | Not allowed. It is recorded as a note next to the result. |

@@ -73,7 +73,9 @@ two tools need one on it).
   is **T0 + 30:00**, then one per hour.
 - At each slot from T0 + 30:00: take the lowest position that is due and not yet handled, and check it **now** (not at
   its due time: a review may have arrived since). Run the collector for that case, once per tool (`--ids <id>`,
-  `--window-start T0 --window-end now`, `--out $HO/check/<k>-<tool>`), and read the status:
+  `--window-start T0 --window-end now`, `--resume-file $HO/open-prs/$R.resume.jsonl`, `--out $HO/check/<k>-<tool>`), and
+  read the status. With `--resume-file` the completion bound is that case's own first `triggered:<tool>` record
+  (`triggerTimes` in `scripts/testset/collect-tool-reviews.ts` as of `4db9abe`):
   - `completed` → nothing for that tool, ever (076c item 3). A review that completed with zero inline comments is
     `completed`: the bot left a review object or an issue comment that is not a rate-limit or error message.
   - `no-review` (nothing arrived, or only messages that match the tool's frozen `notCompletion` patterns: a CodeRabbit
@@ -184,13 +186,25 @@ After each batch: exit code, status per case, `review.chunksFailed`, `usage.ledg
 ```sh
 cd $TH && for T in coderabbit greptile; do for R in medusa payload twenty bullmq; do
   node scripts/testset/collect-tool-reviews.ts --side heldout --heldout-ok --tool $T --config scripts/testset/tools.json \
-    --repo SunnyBagal/$R --manifest $MAN --pr-map $HO/pr-map.$R.json --window-start <T0> --window-end <T0 + 72 h> --out $HO/tools-$R
+    --repo SunnyBagal/$R --manifest $MAN --pr-map $HO/pr-map.$R.json --window-start <T0> --window-end <T0 + 72 h> \
+    --resume-file $HO/open-prs/$R.resume.jsonl --out $HO/tools-$R
 done; done
 ( cd $HO && find th tools-* open-prs check -type f | sort | xargs shasum -a 256 > hashes.window.txt && shasum -a 256 hashes.window.txt )
 ```
 (`pr-map.$R.json` from the resume file as in `docs/specs/S1.md` step 8. If the collector refuses a second tool in the
 same `--out`, use `$HO/tools-$R-$T`.) Start the collection at T0 + 72:00, not earlier and not later than T0 + 73:00;
 `--window-end` is T0 + 72 h exactly, so a late start does not let late comments in. Nothing collected is edited.
+- **A case with no `triggered:<tool>` record** (failure 1: its PR never opened; failure 2: the tool reviewed before its
+  trigger and was therefore not triggered) makes the collector refuse the whole run when `--resume-file` is given
+  (`main` in `collect-tool-reviews.ts` as of `4db9abe`). Collect in two runs then: the triggered cases with `--ids` and
+  `--resume-file`; the untriggered ones with `--ids`, **without** `--resume-file` (bound = the window start), into
+  `$HO/tools-$R-untriggered`. `<tool>.collection.json` records which bound applied (`completionFrom`). Report the count
+  of such cases as a deviation.
+- **`read-failed`** (the collector exits 1): not a result. Repeat that repository's collection into a new directory
+  (`$HO/tools-$R.b`) until it reads; the last complete collection is official; every attempt is kept and hashed. The
+  window end stays T0 + 72 h, so a repeat gives no tool more time (question U6, decision 076c item 5).
+- **`invalid-binding`** stays in the status file as it is; the scorer treats it as `no-review` for that tool
+  (`score-testset.ts` as of `6fd4568`).
 
 **Comments from logins on nobody's list (gap G6), before any judging.** A comment by a login that is not in
 `tools.json` is dropped as `otherAuthor` without a signal (`collectCase` in `scripts/testset/collect-tool-reviews.ts`),
