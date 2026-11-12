@@ -351,7 +351,13 @@ describe("handcheck-sheet", () => {
     // resolve
     const decisions = JSON.parse(readFileSync(path.join(a, "decisions.json"), "utf8")) as { item: string; decision: string | null }[];
     const thC1 = mapping.items.find((i: { tool: string; case: string }) => i.tool === "th" && i.case === "c1").item;
-    const filled = decisions.map((d) => ({ ...d, decision: d.item === thC1 ? "same-bug" : "not", reason: "r" }));
+    expect(decisions.every((d) => (d as { guess?: unknown }).guess === null)).toBe(true); // the guess column, blank
+    expect(sheet).toContain("write in `guess` which tool you think wrote each comment");
+    expect(mapping.tools).toEqual(["th", "cr"]);
+    // guesses (076c item 7): th/c1 right (case and spaces ignored), cr/c3 unsure, th/c2 wrong, th/c3 right
+    const item = (tool: string, c: string) => mapping.items.find((i: { tool: string; case: string }) => i.tool === tool && i.case === c).item;
+    const guesses: Record<string, string> = { [item("th", "c1")]: " TH ", [item("cr", "c3")]: "unsure", [item("th", "c2")]: "cr", [item("th", "c3")]: "th" };
+    const filled = decisions.map((d) => ({ ...d, decision: d.item === thC1 ? "same-bug" : "not", guess: guesses[d.item], reason: "r" }));
     const dec = f.dir("decided.json");
     json(dec, filled);
     const r = run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(a, "mapping.json"), "--decisions", dec, "--out", f.dir("hc.json")]);
@@ -361,6 +367,16 @@ describe("handcheck-sheet", () => {
       .toEqual([{ tool: "th", case: "c1", caught: true }]);
     expect(hc.decisions.every((d: { review_sha256: string }) => /^[0-9a-f]{64}$/.test(d.review_sha256))).toBe(true);
     expect(hc.reviewed.length).toBe(5); // th c1-c3, cr c1 and c3
+    expect(hc.guess).toEqual({ items: 4, guessed: 3, unsure: 1, right: 2, tools: 2, commonestToolItems: 3 });
+    // a guess left blank, or a name that is not a --tool of this sheet: exit 2, no output
+    for (const [name, g] of [["guess-null", null], ["guess-other", "greptile"]] as const) {
+      json(dec, filled.map((d) => (d.item === thC1 ? { ...d, guess: g } : d)));
+      const outFile = f.dir(`hc-${name}.json`);
+      const rg = run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(a, "mapping.json"), "--decisions", dec, "--out", outFile]);
+      expect(rg.code).toBe(2);
+      expect(rg.out).toContain(`${thC1} has no guess (one of th, cr, unsure)`);
+      expect(existsSync(outFile)).toBe(false);
+    }
     json(dec, filled.slice(1));
     expect(run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(a, "mapping.json"), "--decisions", dec, "--out", f.dir("hc2.json")]).out).toMatch(/has no decision/);
     // a decision present but left null (as build writes it) or blank: exit 2, no output (§7)
@@ -624,13 +640,21 @@ describe("hand-check evidence completeness (codex 076a re-review 2)", () => {
       "--judge", `th=${f.dir("th.detail.json")}`, "--judge", `cr=${f.dir("cr.detail.json")}`, "--seed", "5", "--out", sheetDir, "--policy", f.policy()]).code).toBe(0);
     const mapping = JSON.parse(readFileSync(path.join(sheetDir, "mapping.json"), "utf8"));
     const decided = f.dir("decided.json");
-    json(decided, mapping.items.map((i: { item: string; tool: string; case: string }) => ({ item: i.item, decision: i.tool === "cr" && i.case === "c3" ? "same-bug" : "not", reason: "r" })));
+    json(decided, mapping.items.map((i: { item: string; tool: string; case: string }) => ({ item: i.item, decision: i.tool === "cr" && i.case === "c3" ? "same-bug" : "not",
+      guess: i.case === "c3" ? i.tool : "unsure", reason: "r" })));
     const hc = f.dir("hc.json");
     expect(run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(sheetDir, "mapping.json"), "--decisions", decided, "--out", hc]).code).toBe(0);
     const args = (out: string) => ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`, "--handcheck", hc, "--out", out];
-    expect(run(scoreMain, args(f.dir("h1.json"))).code).toBe(0);
+    const r1 = run(scoreMain, args(f.dir("h1.json")));
+    expect(r1.code).toBe(0);
     const s1 = JSON.parse(readFileSync(f.dir("h1.json"), "utf8"));
     expect([s1.tools.th.caught, s1.tools.cr.caught]).toEqual([0, 1]);
+    // the guess hit rate: one line, counts only (076c item 7)
+    const c3 = mapping.items.filter((i: { case: string }) => i.case === "c3").length, n = mapping.items.length;
+    const commonest = Math.max(...["th", "cr"].map((t) => mapping.items.filter((i: { tool: string }) => i.tool === t).length));
+    const guessLines = r1.out.split("\n").filter((l) => l.startsWith("hand-check guess:"));
+    expect(guessLines).toEqual([`hand-check guess: right ${c3} of ${c3} guessed (${n - c3} unsure, ${n} items, 2 tools; uniform chance 1/2; always naming the commonest tool: ${commonest} of ${n})`]);
+    expect(s1.handcheckGuess).toEqual({ items: n, guessed: c3, unsure: n - c3, right: c3, tools: 2, commonestToolItems: commonest });
     // a review that changed after the hand-check refuses
     const r = JSON.parse(readFileSync(f.dir("cr/c3.json"), "utf8"));
     r.comments.push({ path: "w.ts", line: 9, body: "added later" });

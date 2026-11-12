@@ -34,7 +34,9 @@ import { checkSide, locationHit, mean, median, pairs, readGoldens, readJson, rea
   type GoldenCase, type Policy, type Review } from "./kit.ts";
 
 export type Status = "completed" | "no-review" | "miss";
-export interface HandCheck { decisions: { tool: string; case: string; caught: boolean; review_sha256?: string }[]; reviewed: { tool: string; case: string; review_sha256: string }[] }
+export interface HandCheck { decisions: { tool: string; case: string; caught: boolean; review_sha256?: string }[]; reviewed: { tool: string; case: string; review_sha256: string }[];
+  /** resolve's guess counts (decision 076c item 7) */
+  guess?: { items: number; guessed: number; unsure: number; right: number; tools: number; commonestToolItems: number } }
 type JudgeEntry = { verdict: boolean | "judge-failed"; comments: { path: string; line: number | null; body: string }[] };
 interface Detail { detail?: { prTitle: string; status: string; comments: { path: string; line: number | null; body: string; matched: string | null }[] }[] }
 
@@ -233,7 +235,8 @@ export function main(argv: string[], log: (line: string) => void = console.log):
       log("refused: judge evidence is incomplete; nothing written (an absent judgement is never a scored miss)");
       return 2;
     }
-    writeNew(values.out, JSON.stringify({ v: 1, side, policy, policySha256: sha256(fs.readFileSync(values.policy!)), tools: r.tools, pairs: r.pairs }, null, 1) + "\n");
+    writeNew(values.out, JSON.stringify({ v: 1, side, policy, policySha256: sha256(fs.readFileSync(values.policy!)), tools: r.tools, pairs: r.pairs,
+      ...(hc?.guess ? { handcheckGuess: hc.guess } : {}) }, null, 1) + "\n");
     for (const [t, s] of Object.entries(r.tools)) {
       log(`${t}: caught ${s.caught}/${s.bugCases} (Wilson ${pct(s.caughtWilson)})${s.handchecked ? " [hand-checked]" : ""} · completed bug ${s.completedBug}/${s.bugCases}, clean ${s.completedClean}/${s.cleanCases}`
         + ` · caught of completed ${s.caughtOfCompleted} · no-review ${s.noReview} · miss ${s.misses} · judge-failed ${s.judgeFailed}${s.caughtX1 === null ? "" : ` · x1 caught ${s.caughtX1}`}`);
@@ -242,6 +245,10 @@ export function main(argv: string[], log: (line: string) => void = console.log):
         + ` · location hits ${s.locationHits}/${s.bugCases}${s.costUSD ? ` · cost $${s.costUSD.total.toFixed(4)} (mean $${num(s.costUSD.perAttemptedMean, 4)}, median $${num(s.costUSD.median, 4)}, max $${num(s.costUSD.max, 4)})` : ""}`);
     }
     for (const p of r.pairs) log(`pair ${p.a} vs ${p.b}: paired n ${p.n} · ${p.a} only ${p.onlyA} · ${p.b} only ${p.onlyB} · exact two-sided p ${p.p.toFixed(4)}`);
+    if (hc?.guess) {
+      const g = hc.guess;
+      log(`hand-check guess: right ${g.right} of ${g.guessed} guessed (${g.unsure} unsure, ${g.items} items, ${g.tools} tools; uniform chance 1/${g.tools}; always naming the commonest tool: ${g.commonestToolItems} of ${g.items})`);
+    }
     log(`policy: approved by ${policy.approved.by} on ${policy.approved.on} (${policy.approved.ref})`);
     return 0;
   } catch (e) {

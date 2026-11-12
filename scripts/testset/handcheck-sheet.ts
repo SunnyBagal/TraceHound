@@ -17,6 +17,10 @@
  * reasons; never shown to the checker), hashes.json (sha256 of all three and the recipe: seed and strip patterns).
  * resolve: a case is caught by a tool when the checker marked any of that tool's items for that case `same-bug`; every
  * decision must be filled. Output {decisions: [{tool, case, caught}]} for score-testset.ts --handcheck.
+ * Guess column (decision 076c item 7, premortem row 2 ii): every item also takes `guess`, the checker's guess of which
+ * tool wrote the comment (a --tool name as the runbook gives it, or `unsure`), written at the end of the sitting, before
+ * anything is unblinded. resolve requires it like the decision and adds counts only: {items, guessed, unsure, right,
+ * tools, commonestToolItems}; score-testset.ts prints them in one line.
  * stdout: counts only. Never overwrites.
  */
 import * as fs from "node:fs";
@@ -64,7 +68,7 @@ export function buildSheet(o: {
   v1: Map<string, Map<string, Set<number> | "failed">>; x1: Map<string, Map<string, Set<number> | "failed">>; seed: number; strip: RegExp[];
   /** policy sheet_judge_cues (ts-protocol §13, pending): "shown" adds whether a judge proposed a match; "hidden" does not */
   judgeCues: "hidden" | "shown";
-}): { sheet: string; decisions: { item: string; decision: null; reason: string }[]; mapping: Item[]; reviewed: Reviewed[] } {
+}): { sheet: string; decisions: { item: string; decision: null; guess: null; reason: string }[]; mapping: Item[]; reviewed: Reviewed[] } {
   const raw: Omit<Item, "item">[] = [];
   const reviewed: Reviewed[] = [];
   // a JUDGE_FAILED case has no judge evidence, so every comment of it goes on the sheet
@@ -92,7 +96,8 @@ export function buildSheet(o: {
   const clean = (body: string) => o.strip.reduce((b, re) => b.replace(re, ""), body.replace(/<!--[\s\S]*?-->/g, "")).trim();
   const parts = ["# Hand-check sheet (blind)", "",
     "For each item: is the comment about the labelled bug? Write `same-bug` or `not` and a short reason in decisions.json.",
-    "Which tool wrote a comment, and why an item is listed, are hidden on purpose.", ""];
+    "Which tool wrote a comment, and why an item is listed, are hidden on purpose.",
+    "At the end of the sitting, before anything is unblinded, write in `guess` which tool you think wrote each comment (its name as the runbook gives it), or `unsure`.", ""];
   for (const m of mapping) {
     const g = golden.get(m.case)!;
     const cm = o.reviews.get(m.tool)!.get(m.case)!.comments[m.comment]!;
@@ -101,23 +106,35 @@ export function buildSheet(o: {
       `**Comment at** \`${cm.path}:${cm.line ?? "(no line)"}\`:`, "", "```text", clean(cm.body), "```", "",
       ...(o.judgeCues === "shown" ? [`**A judge proposed a match:** ${m.reasons.some((x) => x === "judge-v1" || x === "judge-x1") ? "yes" : "no"}`, ""] : []));
   }
-  return { sheet: parts.join("\n") + "\n", decisions: mapping.map((m) => ({ item: m.item, decision: null, reason: "" })), mapping, reviewed };
+  return { sheet: parts.join("\n") + "\n", decisions: mapping.map((m) => ({ item: m.item, decision: null, guess: null, reason: "" })), mapping, reviewed };
 }
 
-export function resolve(mapping: Item[], decisions: { item: string; decision: unknown; reason?: unknown }[]): { tool: string; case: string; caught: boolean; review_sha256: string }[] {
+/** Counts only: how often the checker's guess named the tool that wrote the item (decision 076c item 7). */
+export interface GuessCounts { items: number; guessed: number; unsure: number; right: number; tools: number; commonestToolItems: number }
+
+export function resolve(mapping: Item[], decisions: { item: string; decision: unknown; guess?: unknown; reason?: unknown }[], tools: string[]):
+  { decided: { tool: string; case: string; caught: boolean; review_sha256: string }[]; guess: GuessCounts } {
   const byItem = new Map(decisions.map((d) => [d.item, d]));
   if (byItem.size !== decisions.length) throw new RefusalError("decisions name an item twice");
   const out = new Map<string, { tool: string; case: string; caught: boolean; review_sha256: string }>();
+  const guess: GuessCounts = { items: mapping.length, guessed: 0, unsure: 0, right: 0, tools: tools.length, commonestToolItems: 0 };
+  const perTool = new Map<string, number>();
   for (const m of mapping) {
     const d = byItem.get(m.item);
     if (!d || (d.decision !== "same-bug" && d.decision !== "not")) throw new RefusalError(`${m.item} has no decision (same-bug or not)`);
+    const g = typeof d.guess === "string" ? d.guess.trim().toLowerCase() : "";
+    if (g !== "unsure" && !tools.includes(g)) throw new RefusalError(`${m.item} has no guess (one of ${[...tools, "unsure"].join(", ")})`);
+    if (g === "unsure") guess.unsure++;
+    else { guess.guessed++; if (g === m.tool) guess.right++; }
+    perTool.set(m.tool, (perTool.get(m.tool) ?? 0) + 1);
     if (typeof m.review_sha256 !== "string") throw new RefusalError(`${m.item}: the mapping does not bind its review file`);
     const key = `${m.tool}\0${m.case}`;
     const prev = out.get(key);
     out.set(key, { tool: m.tool, case: m.case, caught: (prev?.caught ?? false) || d.decision === "same-bug", review_sha256: m.review_sha256 });
   }
   if (decisions.some((d) => !mapping.some((m) => m.item === d.item))) throw new RefusalError("decisions name an item the mapping does not have");
-  return [...out.values()];
+  guess.commonestToolItems = Math.max(0, ...perTool.values());
+  return { decided: [...out.values()], guess };
 }
 
 export function main(argv: string[], log: (line: string) => void = console.log): number {
@@ -134,11 +151,12 @@ export function main(argv: string[], log: (line: string) => void = console.log):
       checkSide(values.side, values["heldout-ok"]!, [values.mapping, values.decisions, values.out]);
       if (!values.mapping || !values.decisions || !values.out) throw new RefusalError("usage: handcheck-sheet.ts resolve --side dev --mapping <f> --decisions <f> --out <f>");
       if (fs.existsSync(values.out)) throw new RefusalError(`${values.out} exists; never overwritten`);
-      const mapFile = readJson(values.mapping) as { items: Item[]; reviewed?: Reviewed[] };
+      const mapFile = readJson(values.mapping) as { items: Item[]; reviewed?: Reviewed[]; tools?: unknown };
       if (!Array.isArray(mapFile.reviewed)) throw new RefusalError("the mapping has no reviewed list (rebuild the sheet)");
+      if (!Array.isArray(mapFile.tools) || mapFile.tools.some((t) => typeof t !== "string")) throw new RefusalError("the mapping has no tools list (rebuild the sheet)");
       const mapping = mapFile.items;
-      const decided = resolve(mapping, readJson(values.decisions) as { item: string; decision: unknown }[]);
-      writeNew(values.out, JSON.stringify({ v: 1, decisions: decided, reviewed: mapFile.reviewed,
+      const { decided, guess } = resolve(mapping, readJson(values.decisions) as { item: string; decision: unknown }[], mapFile.tools as string[]);
+      writeNew(values.out, JSON.stringify({ v: 1, decisions: decided, reviewed: mapFile.reviewed, guess,
         inputs: { mapping: sha256(fs.readFileSync(values.mapping)), decisions: sha256(fs.readFileSync(values.decisions)) } }, null, 1) + "\n");
       log(`resolved ${mapping.length} item(s) into ${decided.length} (tool, case) decision(s), ${decided.filter((d) => d.caught).length} caught -> ${values.out}`);
       return 0;
@@ -166,7 +184,7 @@ export function main(argv: string[], log: (line: string) => void = console.log):
       v1: new Map([...v1].map(([t, f]) => [t, judgeMatches(f, g.cases, reviews.get(t)!)])),
       x1: new Map([...x1].map(([t, f]) => [t, judgeMatches(f, g.cases, reviews.get(t)!)])) });
     const sheet = built.sheet, decisions = JSON.stringify(built.decisions, null, 1) + "\n";
-    const mapping = JSON.stringify({ v: 1, side, seed, strip: stripSrc, policy, reviewed: built.reviewed, items: built.mapping }, null, 1) + "\n";
+    const mapping = JSON.stringify({ v: 1, side, seed, strip: stripSrc, policy, tools: [...tools.keys()], reviewed: built.reviewed, items: built.mapping }, null, 1) + "\n";
     writeNew(path.join(values.out, "sheet.md"), sheet);
     writeNew(path.join(values.out, "decisions.json"), decisions);
     writeNew(path.join(values.out, "mapping.json"), mapping);
