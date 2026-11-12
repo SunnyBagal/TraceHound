@@ -3949,3 +3949,18 @@ plan v2 open point R-1, the H1 runbook's canary (`docs/runbooks/H1-window.md`).
    firewall lifts).
 **Rejected:** judging R1/R2 under the $1 per-process default; re-triggers interleaved with first triggers at a fixed
 +24 h; an open-ended canary.
+**Touches** (added 2026-11-12, after the fact; checked against `tracehound-testset/run/comms/planner.a.gaps.md` "Decision 076b:
+what I changed", and `git grep 076b` on main and on `codex/ts-protocol`):
+- item 1 (R1/R2 judging): `docs/budget.md` (S0 section), `docs/specs/R1.md` §3, `docs/specs/R2.md` §3, `docs/plan/2026-11-11-plan-v2.md`
+  §3, `scripts/testset/policy.076a.json` + `.md`;
+- item 2 (re-trigger slots): `docs/eval/ts-protocol.md` (rev 4, branch `codex/ts-protocol`), `docs/runbooks/H1-window.md`
+  (header, §3, failures 3–4), plan v2 (F-g, §8), `docs/budget.md` (window sentence);
+- item 3 (CodeRabbit allowance): `docs/eval/ts-protocol.md` (rev 5), `docs/specs/P1.md` §2 rule 5 and §4 item 7,
+  `docs/runbooks/F1-freeze.md` §1 row 7b, `H1-window.md` §1.3, plan v2 (F-f, §8);
+- item 4 (canary): `docs/budget.md` (reserve row), `docs/eval/ts-protocol.md` (rev 4), `scripts/testset/policy.076a.json` + `.md`,
+  `H1-window.md` failure 9, `F1-freeze.md` §1 row 10, plan v2 §3 reserve row;
+- item 5 (adopted arm): `docs/specs/E1.md` §1, `docs/runbooks/W1-writeup.md` §2 item 12 and §3.3;
+- item 6 (firewall order): `docs/budget.md`; `docs/runbooks/H2-scoring.md` already followed 076a (no change);
+- record: `docs/decisions.md`, `.agents/STATE.md`, `.agents/LOG.md`, brain `decisions/digest.md` (076b).
+Planner A's list covers its own files and matches the planner rows above; the rows it doesn't list are the files of other
+owners (budget.md beyond item 6, the policy file, the protocol), which artu1, bunny and codex changed.
