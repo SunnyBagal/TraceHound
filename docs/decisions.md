@@ -4100,3 +4100,10 @@ it (`min(window end, collectedAt)`).
 - artu1: `docs/decisions.md`, `docs/budget.md` (the correction above), `.agents/STATE.md`.
 **Rejected:** excluding the 11 exposed cases now (only if 1f's re-count is above 0); rebuilding the case branches; keeping
 the collector's window-start fallback implicit.
+**Addendum (e), 2026-11-13, Sunny:** a failed first trigger is retried before any later branch is pushed; two failed tries
+mark the case `failed-first-trigger`. Exposure is judged per review at its actual time, from the scheduler's branch log
+(the fork's branches logged before every trigger), not from the planned slot order. Built in the scheduler at `0fdacf4`
+(in `b5-window-scheduler` @ `2c51913`, codex GO). **Touches (e):** Planner A `docs/runbooks/H1-window.md` (a failed first
+trigger can push later slots back, so `retriggerFromSlot` and `lastSlot` need room; `run/out/bunny.076d-r2.md`),
+`docs/runbooks/H2-scoring.md` and `W1-writeup.md` (exposure per review from the branch log); codex
+`docs/eval/ts-protocol.md` (same); grok's re-count (1f) reads the branch log's rule.
