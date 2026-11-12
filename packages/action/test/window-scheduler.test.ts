@@ -47,12 +47,23 @@ function fixture(n: number, o: { plan?: Record<string, unknown>; sim?: Record<st
   const said: string[] = [];
   /** the process table of the test: process group → command lines; `immortal` groups survive a kill */
   const groups = new Map<number, string[]>(), killed: number[] = [], immortal = new Set<number>();
+  /** the scheduler's own gh reads (the fork's branches): paths asked for, and how many of the next reads fail */
+  const reads: string[] = [], readFails = { n: 0 };
   let boot = 0, execs = 0;
   /** `die`: the scheduler process is killed at the first command for which it returns "before" (nothing ran) or "after" (the command ran, its end was never logged). */
   const io = (die: (argv: string[]) => "before" | "after" | null = () => null, seconds: (argv: string[]) => number = () => 5): Io => {
     const pid = 5000 + ++boot;
     return { now: () => clock.t, sleep: async (ms) => { clock.t += ms; }, busy: () => false, alive: () => false, ident: () => ({ pid, ppid: 1, pgid: pid }), say: (l) => { said.push(l); },
       group: (g) => groups.get(g) ?? [], killGroup: (g) => { killed.push(g); if (!immortal.has(g)) groups.delete(g); },
+      // the fork as the stand-in has it: main, and the two refs of every case pushed to that fork so far
+      read: (_bin, a) => {
+        reads.push(a.join(" "));
+        if (readFails.n > 0) { readFails.n--; return { exit: 1, stdout: "" }; }
+        const fork = /^repos\/(SunnyBagal\/[^/]+)\/branches\?per_page=100&page=1$/.exec(a[3]!)![1];
+        const pushed: string[] = JSON.parse(readFileSync(f("sim.json"), "utf8")).pushed;
+        const names = [...pushed.filter((id) => cases.find((c) => c.id === id)!.fork === fork).flatMap((id) => [`cases/${id}-base`, `cases/${id}`]), "main"];
+        return { exit: 0, stdout: JSON.stringify(names.map((name) => ({ name, commit: { sha: "0".repeat(40) } }))) };
+      },
       exec: async (a, { outFile, onPid }) => {
         const how = die(a);
         if (how === "before") throw new Killed();
@@ -82,7 +93,7 @@ function fixture(n: number, o: { plan?: Record<string, unknown>; sim?: Record<st
   const posts = (tool: string) => ["twenty", "medusa", "payload"].flatMap((n) => { const file = path.join(f("resume"), `${n}.resume.jsonl`);
     return existsSync(file) ? readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []; })
     .filter((r) => (r.step === `triggered:${tool}` || r.step === `retriggered:${tool}`) && r.existing !== true).map((r) => Date.parse(r.at)).sort((a, b) => a - b);
-  return { dir, f, json, cases, argv, pin, io, run, log, calls, sim, state, slots, said, clock, opts, groups, killed, immortal, posts };
+  return { dir, f, json, cases, argv, pin, io, run, log, calls, sim, state, slots, said, clock, opts, groups, killed, immortal, posts, reads, readFails };
 }
 const sha = (p: string) => spawnSync("shasum", ["-a", "256", p], { encoding: "utf8" }).stdout.slice(0, 64);
 const at = (hours: number, seconds = 0) => new Date(Date.parse(T0) + hours * H + seconds * 1000).toISOString();
@@ -95,6 +106,8 @@ describe("window-scheduler: slots, order and the log", () => {
       "open:case-903:false", "trigger:case-903:false"]);
     expect(t.sim()).toMatchObject({ pushed: [], prs: {}, comments: {} });
     expect(existsSync(t.f("resume"))).toBe(false);
+    expect(t.reads).toEqual([]); // a dry run makes no gh call of its own
+    expect(t.log().some((r) => r.event === "fork-branches")).toBe(false);
     const starts = t.log().filter((r) => r.event === "slot-start");
     expect(starts.map((r) => [r.slot, r.plannedAt, r.at, r.action, r.position, r.delaySeconds])).toEqual([[1, at(1), at(1), "first", 1, 0], [2, at(2), at(2), "first", 2, 0], [3, at(3), at(3), "first", 3, 0]]);
     // a dry run writes no trigger record, so it ends after the first triggers
@@ -150,6 +163,27 @@ describe("window-scheduler: slots, order and the log", () => {
       "2:coderabbit:completed", "2:greptile:completed", "3:coderabbit:invalid-binding", "3:greptile:re-triggered"]);
     expect(t.state().positions.map((p: { firstTrigger: string }) => p.firstTrigger)).toEqual(["done", "done", "done"]);
     expect(t.said.join("\n")).not.toMatch(/title|body/i);
+    // addendum item 3: the fork's branches are logged right before every trigger and re-trigger command
+    const twenty1 = ["cases/case-901", "cases/case-901-base", "main"], twenty2 = ["cases/case-901", "cases/case-901-base", "cases/case-903", "cases/case-903-base", "main"];
+    const all = t.log();
+    const listed = all.filter((r) => r.event === "fork-branches");
+    expect(listed.map((r) => [r.slot, r.position, r.fork, r.before, (r.branches as { name: string }[]).map((b) => b.name)])).toEqual([
+      [1, 1, "SunnyBagal/twenty", "trigger", twenty1],
+      [2, 2, "SunnyBagal/medusa", "trigger", ["cases/case-902", "cases/case-902-base", "main"]],
+      [3, 3, "SunnyBagal/twenty", "trigger", twenty2],
+      [30, 1, "SunnyBagal/twenty", "retrigger:coderabbit", twenty2],
+      [31, 3, "SunnyBagal/twenty", "retrigger:greptile", twenty2]]);
+    for (const r of listed) {
+      expect(r.count).toBe((r.branches as unknown[]).length);
+      expect((r.branches as { sha: string }[]).every((b) => /^[0-9a-f]{40}$/.test(b.sha))).toBe(true);
+      // the very next command in the log is the trigger it was listed for
+      const next = all.find((x) => x.event === "step-start" && x.n === r.nextStep)!;
+      expect([next.step, next.position]).toEqual([r.before, r.position]);
+      expect(all.indexOf(next)).toBe(all.indexOf(r) + 1);
+    }
+    const posted = t.log().filter((r) => r.event === "step-start" && (r.step === "trigger" || String(r.step).startsWith("retrigger:")));
+    expect(posted).toHaveLength(listed.length); // no trigger command without its list
+    expect(t.reads.every((x) => /^api --method GET repos\/SunnyBagal\/(twenty|medusa)\/branches\?per_page=100&page=1$/.test(x))).toBe(true);
   });
 
   it("a collection that cannot be read is tried once more; failing twice, the slot passes and the same PR is first at the next slot", async () => {
@@ -211,17 +245,21 @@ describe("window-scheduler: restart, missed slots and failures", () => {
     expect(t.slots()).toEqual(["1:done", "2:done", "3:done"]);
   });
 
-  it("a cut trigger command that is not run again in its slot still bounds the next PR: the hour counts from when its processes were seen gone", async () => {
-    // case-901's trigger command posts after 180 s and the scheduler is killed before logging its end; it is back 40
-    // minutes later, past slot 1's grace, so that command is not run again before case-902's slot
-    const t = fixture(2, { execute: true, plan: firstOnly(2, 1) });
+  it("a cut trigger command that is never run again still bounds the next PR: the hour counts from when its processes were seen gone", async () => {
+    // case-901's first try fails; in its second try the trigger command posts after 180 s and the scheduler is killed
+    // before logging its end. It is back 40 minutes later, past the slot's grace: both tries are used, so the command is
+    // not run again and case-902 follows.
+    const t = fixture(2, { execute: true, plan: firstOnly(2, 1), sim: { fail: { "trigger:case-901": 1 } } });
     const seconds = (a: string[]) => (a.includes("--trigger") && a.includes("case-901") ? 180 : 5);
-    expect(await t.run(t.io((a) => (a.includes("--trigger") && a.includes("case-901") ? "after" : null), seconds))).toBe("killed");
+    let n = 0;
+    expect(await t.run(t.io((a) => (a.includes("--trigger") && a.includes("case-901") && ++n === 2 ? "after" : null), seconds))).toBe("killed");
     t.clock.t += 40 * 60_000;
     const back = t.clock.t;
     expect(await t.run(t.io(() => null, seconds))).toBe(0);
-    expect(t.slots()).toEqual(["1:interrupted-late", "2:done", "3:done"]);
+    expect(t.slots()).toEqual(["1:failed:trigger", "2:interrupted-late", "3:done"]);
     expect(t.log().filter((r) => r.event === "step-cleared").map((r) => [r.step, r.position, Date.parse(r.at)])).toEqual([["trigger", 1, back]]);
+    // the scheduler has no confirmed success for case-901, so it is failed-first-trigger; the resume file shows what was posted
+    expect(t.state().positions.map((p: { firstTrigger: string }) => p.firstTrigger)).toEqual(["failed-first-trigger", "done"]);
     const [first, second] = t.posts("coderabbit");
     expect(second! - first!).toBeGreaterThanOrEqual(H);
     // case-902's trigger command started an hour after the cut command was seen gone, not at its own slot
@@ -284,35 +322,56 @@ describe("window-scheduler: restart, missed slots and failures", () => {
     expect(k.log().filter((r) => r.event === "step-cleared").map((r) => [r.pid, r.killed])).toEqual([[8002, true]]);
   });
 
-  it("a slot that comes up more than the grace late is not fired late; its case takes the next free slot, one first trigger per slot", async () => {
+  it("a slot that comes up more than the grace late is not fired late; its case takes the next slot, before any later case is pushed", async () => {
     // the scheduler is down from before slot 1 until 31 minutes after it
     const t = fixture(3, { execute: true, plan: firstOnly(3, 1), startAt: Date.parse(T0) + H + 31 * 60_000 });
     expect(await t.run()).toBe(0);
     expect(t.slots().slice(0, 4)).toEqual(["1:missed", "2:done", "3:done", "4:done"]);
-    expect(t.log().filter((r) => r.event === "slot-start").slice(0, 3).map((r) => [r.slot, r.position])).toEqual([[2, 2], [3, 3], [4, 1]]);
-    expect(t.calls().filter((c) => c.kind === "open").map((c) => [c.id, c.at])).toEqual([["case-902", at(2, 5)], ["case-903", at(3, 5)], ["case-901", at(4, 5)]]);
+    // the missed slot was no try: case-901 is first in slot 2, and the later cases move back one slot each
+    expect(t.log().filter((r) => r.event === "slot-start").slice(0, 3).map((r) => [r.slot, r.position])).toEqual([[2, 1], [3, 2], [4, 3]]);
+    expect(t.calls().filter((c) => c.kind === "open").map((c) => [c.id, c.at, c.pushed])).toEqual([["case-901", at(2, 5), 0], ["case-902", at(3, 5), 1], ["case-903", at(4, 5), 2]]);
     expect(t.state()).toMatchObject({ missed: 1 });
-    // killed mid-slot and back after the grace: the slot is closed as interrupted, the case is finished in a free slot
+    expect(t.state().positions.map((p: { attempts: number }) => p.attempts)).toEqual([1, 1, 1]);
+    // killed mid-slot and back after the grace: the slot is closed as interrupted, and the case's second try is the next
+    // slot, before case-902 is pushed
     const k = fixture(2, { execute: true, plan: firstOnly(2, 1) });
     expect(await k.run(k.io((a) => (a.includes("--trigger") && a.includes("case-901") ? "before" : null)))).toBe("killed");
     k.clock.t += 40 * 60_000;
     expect(await k.run()).toBe(0);
     expect(k.slots().slice(0, 3)).toEqual(["1:interrupted-late", "2:done", "3:done"]);
-    expect(k.calls().map((c) => `${c.kind}:${c.id}`)).toEqual(["open:case-901", "open:case-902", "trigger:case-902", "trigger:case-901"]);
+    expect(k.calls().map((c) => `${c.kind}:${c.id}:${c.pushed}`)).toEqual(["open:case-901:0", "trigger:case-901:1", "open:case-902:1", "trigger:case-902:2"]);
     expect(k.state().positions[0]).toMatchObject({ firstTrigger: "done", attempts: 2 });
   });
 
-  it("a failed step ends the slot (no trigger after a failed push); one more slot is tried, then the case is given up and the window goes on", async () => {
+  it("a failed first trigger is tried again in the next slot before any later case is pushed; after two failed tries the case is failed-first-trigger and the next follows", async () => {
     const t = fixture(3, { execute: true, plan: firstOnly(3, 1), sim: { fail: { "open:case-902": 1 } } });
     expect(await t.run()).toBe(0);
     expect(t.slots().slice(0, 4)).toEqual(["1:done", "2:failed:open", "3:done", "4:done"]);
-    expect(t.calls().slice(0, 7).map((c) => `${c.kind}:${c.id}`)).toEqual(["open:case-901", "trigger:case-901", "open:case-902", "open:case-903", "trigger:case-903", "open:case-902", "trigger:case-902"]);
+    // case-903 is not pushed until case-902's first trigger has succeeded (pushed = branches on the forks at each call)
+    expect(t.calls().slice(0, 7).map((c) => `${c.kind}:${c.id}:${c.pushed}`)).toEqual(["open:case-901:0", "trigger:case-901:1", "open:case-902:1", "open:case-902:1", "trigger:case-902:2",
+      "open:case-903:2", "trigger:case-903:3"]);
+    expect(t.log().filter((r) => r.event === "slot-start").map((r) => [r.slot, r.position])).toEqual([[1, 1], [2, 2], [3, 2], [4, 3]]);
+    expect(t.log().some((r) => r.event === "failed-first-trigger")).toBe(false);
     const g = fixture(2, { execute: true, plan: firstOnly(2, 2), sim: { fail: { "open:case-901": 5 } } });
     expect(await g.run()).toBe(0);
-    expect(g.slots().slice(0, 4)).toEqual(["1:failed:open", "2:done", "3:failed:open", "4:nothing-to-do"]);
-    expect(g.calls().filter((c) => c.id === "case-901")).toHaveLength(2);
-    expect(g.state().positions.map((p: { firstTrigger: string }) => p.firstTrigger)).toEqual(["gave-up", "done"]);
+    expect(g.slots().slice(0, 4)).toEqual(["1:failed:open", "2:failed:open", "3:done", "4:nothing-to-do"]);
+    expect(g.calls().map((c) => `${c.kind}:${c.id}`)).toEqual(["open:case-901", "open:case-901", "open:case-902", "trigger:case-902"]);
+    expect(g.state().positions.map((p: { firstTrigger: string; attempts: number }) => [p.firstTrigger, p.attempts])).toEqual([["failed-first-trigger", 2], ["done", 1]]);
     expect(g.sim().pushed).toEqual(["case-902"]);
+    // recorded once, after the second failed slot and before case-902's slot starts
+    const failed = g.log().filter((r) => r.event === "failed-first-trigger");
+    expect(failed.map((r) => [r.position, r.id, r.tries])).toEqual([[1, "case-901", 2]]);
+    expect(g.log().indexOf(failed[0]!)).toBeLessThan(g.log().findIndex((r) => r.event === "slot-start" && r.slot === 3));
+    expect(g.said.join("\n")).toMatch(/position 1 \| case-901 \| first trigger \| failed-first-trigger after 2 tries/);
+    // the branch list is part of the first trigger: unreadable twice, nothing is posted and the try is spent
+    const b = fixture(1, { execute: true, plan: firstOnly(1, 1) });
+    b.readFails.n = 2;
+    expect(await b.run()).toBe(0);
+    expect(b.slots()).toEqual(["1:failed:branches", "2:done"]);
+    expect(b.calls().map((c) => `${c.kind}:${c.id}`)).toEqual(["open:case-901", "trigger:case-901"]);
+    expect(b.log().filter((r) => r.event === "fork-branches-failed").map((r) => [r.slot, r.attempt])).toEqual([[1, 1], [1, 2]]);
+    expect(b.log().filter((r) => r.event === "fork-branches").map((r) => r.slot)).toEqual([2]);
+    expect(Date.parse(b.calls()[1]!.at)).toBeGreaterThanOrEqual(Date.parse(at(2)));
   });
 
   it("a pinned file that changes stops the scheduler before the next slot; a held lock and another run's state dir refuse", async () => {
@@ -385,6 +444,7 @@ describe("window-scheduler: inputs and the held-out guard", () => {
     expect((await withPlan({ extra: 1 })).out).toMatch(/unknown field extra/);
     expect((await withPlan({ graceSeconds: 3600 })).out).toMatch(/graceSeconds must be shorter than a slot/);
     expect((await withPlan({ timeoutSeconds: { open: 1 } })).out).toMatch(/timeoutSeconds must be/);
+    for (const n of [1, 3]) expect((await withPlan({ firstTriggerAttempts: n })).out).toMatch(/firstTriggerAttempts must be 2 \(Sunny's addendum to 076d/);
     // short slots are for a dry run only
     expect((await withPlan({ slotSeconds: 60, graceSeconds: 30, minTriggerSpacingSeconds: 60 }, "--list")).code).toBe(0);
     for (const [over, want] of [[{ slotSeconds: 60, graceSeconds: 30 }, /slotSeconds 60 is under 3600/], [{ minTriggerSpacingSeconds: 1800 }, /minTriggerSpacingSeconds 1800 is under 3600/],
@@ -436,8 +496,10 @@ setTimeout(() => {}, 60000);
     const t0 = new Date(Date.now() - H + 2000).toISOString();
     const t = fixture(1, { execute: true, plan: { t0, retriggerFromSlot: 2, lastSlot: 1 }, sim: { sleepMs: { "trigger:case-901": 2500 } } });
     t.pin();
+    // the scheduler's own read of the fork's branches goes to this stand-in, never to a real gh
+    writeFileSync(t.f("gh"), `#!/bin/sh\necho "$@" >> "$(dirname "$0")/gh-calls.txt"\nprintf '%s' '[{"name":"cases/case-901","commit":{"sha":"${"1".repeat(40)}"}},{"name":"main","commit":{"sha":"${"2".repeat(40)}"}}]'\n`, { mode: 0o755 });
     const launchers: number[] = [process.pid];
-    const start = () => { const r = spawnSync(process.execPath, [SCRIPT, ...t.argv(), "--detach"], { encoding: "utf8", env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR } });
+    const start = () => { const r = spawnSync(process.execPath, [SCRIPT, ...t.argv("--gh-bin", t.f("gh")), "--detach"], { encoding: "utf8", env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR } });
       expect(r.status, r.stdout + r.stderr).toBe(0); launchers.push(r.pid); return Number(/started detached: pid (\d+)/.exec(r.stdout)![1]); };
     const until = async (what: string, ok: () => boolean, ms = 20_000) => { const end = Date.now() + ms; while (!ok()) { if (Date.now() > end) throw new Error(`timed out waiting for ${what}`); await new Promise((r) => setTimeout(r, 50)); } };
     const logOr = (): Rec[] => (existsSync(path.join(t.f("state"), "scheduler.log.jsonl")) ? t.log() : []);
@@ -467,6 +529,9 @@ setTimeout(() => {}, 60000);
     expect(log.filter((r) => r.event === "slot-end").map((r) => r.outcome)).toEqual(["done"]);
     expect(t.calls().map((c) => c.kind)).toEqual(["open", "trigger", "trigger"]);
     expect(t.sim()).toMatchObject({ pushed: ["case-901"], prs: { "case-901": 1 }, comments: { "case-901": { coderabbit: 1, greptile: 1 } } });
+    // the branches were read (GET only) and logged before the trigger command, each time it was started
+    expect(log.filter((r) => r.event === "fork-branches").map((r) => [r.before, (r.branches as { name: string }[]).map((b) => b.name)])).toEqual([["trigger", ["cases/case-901", "main"]], ["trigger", ["cases/case-901", "main"]]]);
+    expect(readFileSync(t.f("gh-calls.txt"), "utf8").trim().split("\n")).toEqual(Array(2).fill("api --method GET repos/SunnyBagal/twenty/branches?per_page=100&page=1"));
     expect(existsSync(path.join(t.f("state"), "scheduler.lock"))).toBe(false);
     expect(readFileSync(path.join(t.f("state"), "scheduler.out"), "utf8")).toMatch(/\| slot 1 \| position 1 \| case-901 \| slot \| resumed: first/);
   }, 60_000);

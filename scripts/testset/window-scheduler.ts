@@ -12,8 +12,9 @@
  *     [--pins <json>] [--execute] [--detach] [--list | --status | --print-pins] [--gh-bin gh] [--git-bin git] [--heldout-ok]
  *
  * Inputs, all passed at run time:
- * - --cases: the ordered case list, `[{position: 1.., id, fork: "SunnyBagal/<name>"}]`. Position p owns slot
- *   firstSlot + p − 1; the order is whatever the list says (076d 1c: base-date order), the scheduler never reorders.
+ * - --cases: the ordered case list, `[{position: 1.., id, fork: "SunnyBagal/<name>"}]`. The order is whatever the list
+ *   says (076d 1c: base-date order); the scheduler never reorders and never skips ahead. With no failure, position p
+ *   is served in slot firstSlot + p − 1.
  * - --plan: `{v: 1, t0: "<UTC instant>", slotSeconds, firstSlot, retriggerFromSlot, lastSlot, retriggerDueSeconds,
  *   graceSeconds, minTriggerSpacingSeconds, firstTriggerAttempts, timeoutSeconds: {open, trigger, collect, retrigger}}`.
  *   Every field is required. Slot k is planned at t0 + k × slotSeconds: absolute times from one start time, never "an
@@ -21,17 +22,23 @@
  * - --tools: the collector's tools.json; its tool names, in file order, are the tools triggered.
  *
  * A slot does one thing (the first that applies):
- * 1. the first trigger of the position that owns the slot: `open-prs.ts --ids <id>` (push the two case refs, open the
- *    PR), then `open-prs.ts --trigger <tools> --ids <id>`;
- * 2. the first trigger of the lowest position whose own slot was missed or failed (H1 failures 1 and 7: "the next free
- *    slot"), at most plan.firstTriggerAttempts slots per position;
- * 3. from plan.retriggerFromSlot, and only when no first trigger is pending: the re-trigger check of the lowest due
+ * 1. the first trigger of the lowest position that has neither succeeded nor used its two tries (Sunny's addendum to
+ *    076d): `open-prs.ts --ids <id>` (push the two case refs, open the PR), then `open-prs.ts --trigger <tools> --ids
+ *    <id>`. A first trigger that failed, or whose slot was missed, is tried again in the next slot, before any later
+ *    case's branch is pushed: the push order never advances past it. A try is a slot that started for the case (a slot
+ *    missed while the scheduler was down is not a try). After two failed tries the case is recorded as
+ *    `failed-first-trigger` and the next case follows. plan.firstTriggerAttempts must be 2.
+ * 2. from plan.retriggerFromSlot, and only when no first trigger is pending: the re-trigger check of the lowest due
  *    position (every triggered tool's first `triggered:<tool>` record is retriggerDueSeconds old). Per tool: collect
  *    (`--window-start t0 --window-end now --resume-file …`, into <state>/check/), then `completed` and
  *    `invalid-binding` end that tool for the PR, `no-review` posts `open-prs.ts --retrigger <tool> --status …`. A
  *    collection that cannot be read is tried once more; if it fails again the slot passes and the PR is first at the
  *    next slot. If no tool needed a re-trigger the same slot goes on to the next due position.
  * A slot starts only within graceSeconds of its planned time; later it is `missed` and nothing is fired late.
+ * Branches on the fork (addendum item 3): with --execute, right before every trigger and every re-trigger command, the
+ * fork's branches are read (`gh api --method GET repos/<fork>/branches`, the scheduler's only own gh call) and logged
+ * with their tips (`fork-branches`), so each review can be marked exposed or unexposed at its own time. If the list
+ * cannot be read (two attempts), no trigger is posted: the first trigger's slot fails, a re-trigger slot passes.
  * Spacing: a command that posts a tool's trigger on a PR is never started sooner than minTriggerSpacingSeconds after
  * the END of the last such command on another PR (its logged end; for a command that was cut, the moment its processes
  * were seen gone). A post lies between a command's start and its end, so two posts of one tool on two PRs are at least
@@ -59,6 +66,7 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -70,6 +78,9 @@ const TOOL_RE = /^[a-z0-9-]+$/;
 /** H1: a slot late by more than 30 minutes is failure 7; CodeRabbit is planned at one review per hour (076 S0.4). */
 export const EXECUTE_MIN = { slotSeconds: 3600, minTriggerSpacingSeconds: 3600, retriggerDueSeconds: 86_400 };
 export const EXECUTE_MAX_GRACE_SECONDS = 1800;
+/** Sunny's addendum to 076d: a first trigger gets two tries, then the case is failed-first-trigger. */
+export const FIRST_TRIGGER_TRIES = 2;
+const BRANCHES_PATH_RE = /^repos\/SunnyBagal\/[A-Za-z0-9._-]+\/branches\?per_page=100&page=\d+$/;
 const ENV_ALLOW = ["PATH", "HOME", "TMPDIR", "LANG", "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "GH_TOKEN", "GITHUB_TOKEN", "GH_CONFIG_DIR", "XDG_CONFIG_HOME"];
 
 export interface CaseRow { position: number; id: string; fork: string }
@@ -94,6 +105,8 @@ export interface Io {
   exec(argv: string[], o: { outFile: string; timeoutMs: number; onPid: (pid: number) => void }): Promise<StepResult>;
   /** true while a process whose command line holds every needle is running (a command cut off by a kill may still run) */
   busy(needles: string[]): boolean;
+  /** One read-only gh call (the fork's branches); stdout only, its stderr is never shown. */
+  read(bin: string, argv: string[], timeoutMs: number): { exit: number | null; stdout: string };
   /** command lines of the live processes in a process group */
   group(pgid: number): string[];
   killGroup(pgid: number): void;
@@ -142,6 +155,7 @@ export function readPlan(file: string, nCases: number, execute: boolean): Plan {
   if (!t || typeof t !== "object" || Object.keys(t).sort().join() !== "collect,open,retrigger,trigger" || !Object.values(t).every((x) => isInt(x, 1))) {
     bad("timeoutSeconds must be {open, trigger, collect, retrigger}, whole seconds ≥ 1");
   }
+  if (p.firstTriggerAttempts !== FIRST_TRIGGER_TRIES) bad(`firstTriggerAttempts must be ${FIRST_TRIGGER_TRIES} (Sunny's addendum to 076d: two tries, then failed-first-trigger)`);
   const lastOwn = p.firstSlot + nCases - 1;
   if (p.retriggerFromSlot <= lastOwn) bad(`retriggerFromSlot ${p.retriggerFromSlot} must be after the last first-trigger slot ${lastOwn} (first triggers go before re-triggers, 076b item 2)`);
   if (p.lastSlot < lastOwn) bad(`lastSlot ${p.lastSlot} is before the last first-trigger slot ${lastOwn}`);
@@ -234,11 +248,13 @@ export interface State {
   /** a command with a start and no confirmed end: cut by a kill, or timed out without its group confirmed gone */
   cut: { n: number; slot: number; position: number; step: string; at: string; timeoutSeconds: number; needles: string[]; pid: number | null } | null;
   resumeSha: Map<string, string>;
+  /** positions recorded as failed-first-trigger */
+  failedFirst: Set<number>;
   steps: number; ended: boolean; stopped: string | null;
 }
 
 export function replay(recs: Rec[], tools: string[]): State {
-  const s: State = { boots: [], binding: null, slots: new Map(), first: new Map(), handled: new Map(), triggerEnd: new Map(), cut: null, resumeSha: new Map(), steps: 0, ended: false, stopped: null };
+  const s: State = { boots: [], binding: null, slots: new Map(), first: new Map(), handled: new Map(), triggerEnd: new Map(), cut: null, resumeSha: new Map(), failedFirst: new Set(), steps: 0, ended: false, stopped: null };
   const first = (p: number) => { if (!s.first.has(p)) s.first.set(p, { attempts: 0, openDone: false, triggerDone: false }); return s.first.get(p)!; };
   for (const r of recs) {
     if (r.event === "boot") { s.boots.push({ at: r.at, pid: r.pid as number, ppid: r.ppid as number, pgid: r.pgid as number | null }); s.binding ??= r.binding as Record<string, unknown>; s.stopped = null; }
@@ -271,6 +287,7 @@ export function replay(recs: Rec[], tools: string[]): State {
       if (!s.handled.has(r.position as number)) s.handled.set(r.position as number, new Map());
       s.handled.get(r.position as number)!.set(r.tool as string, r.why as string);
     } else if (r.event === "resume-changed-outside") s.resumeSha.set(r.fork as string, r.now as string);
+    else if (r.event === "failed-first-trigger") s.failedFirst.add(r.position as number);
     else if (r.event === "stop") s.stopped = r.reason as string;
     else if (r.event === "end") s.ended = true;
   }
@@ -319,6 +336,7 @@ const slotTime = (plan: Plan, k: number) => Date.parse(plan.t0) + k * plan.slotS
 export function slotTable(o: Opts): { slot: number; plannedAt: string; what: string }[] {
   const out: { slot: number; plannedAt: string; what: string }[] = [];
   for (let k = o.plan.firstSlot; k <= o.plan.lastSlot; k++) {
+    // the table with no failure: a failed or missed first trigger takes the next slot and every later position moves back
     const own = o.cases[k - o.plan.firstSlot];
     out.push({ slot: k, plannedAt: iso(slotTime(o.plan, k)), what: own ? `first trigger: position ${own.position} ${own.id} ${own.fork} (push, open the PR, trigger ${o.tools.join(",")})`
       : k >= o.plan.retriggerFromSlot ? "re-trigger check (or a first trigger still owed)" : "free (a first trigger still owed, else nothing)" });
@@ -355,13 +373,22 @@ export async function runScheduler(o: Opts, io: Io): Promise<number> {
       io.say(`${iso(io.now())} | slot ${slot} | ${c ? `position ${c.position} | ${c.id}` : "- | -"} | ${step} | ${result}`);
     const writeState = () => writeAtomic(stateFile, JSON.stringify({ v: 1, updatedAt: iso(io.now()), execute: o.execute, side: o.side, t0: plan.t0, boots: st.boots,
       slots: [...st.slots].map(([slot, s]) => ({ slot, ...s })),
-      positions: o.cases.map((c) => ({ position: c.position, id: c.id, firstTrigger: firstDone(c) ? "done" : (st.first.get(c.position)?.attempts ?? 0) >= plan.firstTriggerAttempts ? "gave-up" : "pending",
+      positions: o.cases.map((c) => ({ position: c.position, id: c.id, firstTrigger: firstDone(c) ? "done" : st.failedFirst.has(c.position) ? "failed-first-trigger" : "pending",
         attempts: st.first.get(c.position)?.attempts ?? 0, tools: Object.fromEntries(st.handled.get(c.position) ?? []) })),
       slotsLateOver30Min: [...st.slots.values()].filter((s) => s.delaySeconds > 1800).length, missed: [...st.slots.values()].filter((s) => s.outcome === "missed" || s.outcome === "interrupted-late").length,
       stopped: st.stopped, ended: st.ended }, null, 1) + "\n");
     const firstDone = (c: CaseRow) => { const f = st.first.get(c.position); return !!f && f.openDone && f.triggerDone; };
-    const pending = (c: CaseRow) => !firstDone(c) && (st.first.get(c.position)?.attempts ?? 0) < plan.firstTriggerAttempts;
-    const ownSlot = (c: CaseRow) => plan.firstSlot + c.position - 1;
+    const tries = (c: CaseRow) => st.first.get(c.position)?.attempts ?? 0;
+    const pending = (c: CaseRow) => !firstDone(c) && tries(c) < FIRST_TRIGGER_TRIES;
+    /** After a slot has ended: a case with both tries used and no success is recorded once, and the queue moves on. */
+    const noteFailedFirst = () => {
+      for (const c of o.cases) {
+        if (firstDone(c) || tries(c) < FIRST_TRIGGER_TRIES || st.failedFirst.has(c.position)) continue;
+        log("failed-first-trigger", { position: c.position, id: c.id, fork: c.fork, tries: tries(c) });
+        refresh();
+        io.say(`${iso(io.now())} | - | position ${c.position} | ${c.id} | first trigger | failed-first-trigger after ${FIRST_TRIGGER_TRIES} tries; the next case follows`);
+      }
+    };
     const refresh = () => { st = replay(readLog(logFile), o.tools); };
     const bins = [...(o.ghBin ? ["--gh-bin", o.ghBin] : [])];
     const exec = o.execute ? ["--execute"] : [];
@@ -425,6 +452,37 @@ export async function runScheduler(o: Opts, io: Io): Promise<number> {
         while (io.now() < last + plan.minTriggerSpacingSeconds * 1000) await io.sleep(Math.min(30_000, last + plan.minTriggerSpacingSeconds * 1000 - io.now()));
       }
     };
+    /** The fork's branches with their tips, read from GitHub now (GET only); null if they could not be read. */
+    const listBranches = (fork: string): { name: string; sha: string }[] | null => {
+      const all: { name: string; sha: string }[] = [];
+      for (let page = 1; page <= 50; page++) {
+        const r = io.read(o.ghBin ?? "gh", ["api", "--method", "GET", `repos/${fork}/branches?per_page=100&page=${page}`], 60_000);
+        if (r.exit !== 0) return null;
+        let j: unknown;
+        try { j = JSON.parse(r.stdout); } catch { return null; }
+        if (!Array.isArray(j)) return null;
+        for (const b of j as { name?: unknown; commit?: { sha?: unknown } }[]) {
+          if (typeof b?.name !== "string" || typeof b.commit?.sha !== "string") return null;
+          all.push({ name: b.name, sha: b.commit.sha });
+        }
+        if (j.length < 100) return all.sort((x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0));
+      }
+      return null; // more than 5,000 branches: refuse rather than truncate
+    };
+    /** Logged right before a trigger or re-trigger command (addendum item 3). False: not listed, so nothing may be posted. */
+    const recordBranches = (slot: number, c: CaseRow, before: string): boolean => {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const branches = listBranches(c.fork);
+        if (branches) {
+          log("fork-branches", { slot, position: c.position, id: c.id, fork: c.fork, before, nextStep: seq + 1, count: branches.length, branches });
+          say(slot, c, `branches before ${before}`, `${branches.length} on the fork, logged`);
+          return true;
+        }
+        log("fork-branches-failed", { slot, position: c.position, fork: c.fork, before, attempt });
+      }
+      say(slot, c, `branches before ${before}`, "could not be read twice: nothing is posted");
+      return false;
+    };
     const openPrs = (c: CaseRow, more: string[]) => [o.node, o.files.openPrs, "--manifest", o.files.manifest, "--fork", c.fork, "--resume-file", resumeFile(o, c.fork), ...more, "--ids", c.id, ...bins];
     const openNeedles = (c: CaseRow) => [o.files.openPrs, resumeFile(o, c.fork)];
 
@@ -435,6 +493,7 @@ export async function runScheduler(o: Opts, io: Io): Promise<number> {
       }
       if (!st.first.get(c.position)?.triggerDone) {
         await spacing(slot, c, o.tools);
+        if (o.execute && !recordBranches(slot, c, "trigger")) return "failed:branches";
         const r = await step(slot, c, "trigger", [...openPrs(c, ["--trigger", o.tools.join(",")]), ...exec], plan.timeoutSeconds.trigger, openNeedles(c));
         if (r.exit !== 0) return "failed:trigger";
       }
@@ -491,6 +550,7 @@ export async function runScheduler(o: Opts, io: Io): Promise<number> {
           if (status === "completed") { handle(c, tool, "completed: never re-triggered", slot); continue; }
           if (status === "invalid-binding") { handle(c, tool, "invalid-binding: no re-trigger", slot); continue; }
           if (status !== "no-review") return "passed:unknown-status";
+          if (!recordBranches(slot, c, `retrigger:${tool}`)) return "passed:branches-not-listed";
           const r = await step(slot, c, `retrigger:${tool}`, [...openPrs(c, ["--retrigger", tool, "--status", path.join(dir, `${tool}.status.json`)]), "--execute"], plan.timeoutSeconds.retrigger, openNeedles(c));
           if (r.exit !== 0) return "passed:retrigger-failed";
           if (!readResume(resumeFile(o, c.fork)).get(c.id)?.retriggered.has(tool)) return "passed:retrigger-not-recorded";
@@ -550,7 +610,7 @@ export async function runScheduler(o: Opts, io: Io): Promise<number> {
       if (io.now() - planned > plan.graceSeconds * 1000) {
         // H1 failure 7: never fired late; the position, if any, takes the next free slot
         log("slot-end", { slot: k, plannedAt: iso(planned), delaySeconds, outcome: was ? "interrupted-late" : "missed" });
-        refresh(); writeState();
+        refresh(); noteFailedFirst(); writeState();
         say(k, null, "slot", `${was ? "interrupted and " : ""}late by ${delaySeconds} s (over ${plan.graceSeconds} s): not fired`);
         continue;
       }
@@ -558,17 +618,17 @@ export async function runScheduler(o: Opts, io: Io): Promise<number> {
       let action: SlotState["action"], c: CaseRow | null = null;
       if (was) { action = was.action; c = o.cases.find((x) => x.position === was.position) ?? null; log("slot-resume", { slot: k, action, position: c?.position ?? null, delaySeconds }); }
       else {
-        const own = o.cases.find((x) => ownSlot(x) === k);
-        const owed = own && pending(own) ? own : o.cases.find((x) => pending(x) && ownSlot(x) < k);
-        if (owed) { action = "first"; c = owed; }
-        else action = k >= plan.retriggerFromSlot && !o.cases.some(pending) ? "retrigger" : "idle";
+        // the queue: the lowest position that has neither succeeded nor used its two tries; never a later one before it
+        const head = o.cases.find(pending);
+        if (head) { action = "first"; c = head; }
+        else action = k >= plan.retriggerFromSlot ? "retrigger" : "idle";
         log("slot-start", { slot: k, plannedAt: iso(planned), delaySeconds, action, position: c?.position ?? null, id: c?.id ?? null });
       }
       refresh();
       say(k, c, "slot", `${was ? "resumed" : "started"}: ${action}, planned ${iso(planned)}, delay ${delaySeconds} s`);
       const outcome = action === "first" ? await runFirst(k, c!) : action === "retrigger" ? await runRetrigger(k) : "nothing-to-do";
       log("slot-end", { slot: k, plannedAt: iso(planned), delaySeconds, outcome });
-      refresh(); writeState();
+      refresh(); noteFailedFirst(); writeState();
       say(k, c, "slot", `ended: ${outcome}`);
     }
     log("end", { slots: st.slots.size });
@@ -628,6 +688,12 @@ export const realIo: Io = {
     return r.stdout.split("\n").some((l) => { const m = /^\s*(\d+)\s+(.*)$/.exec(l); return !!m && Number(m[1]) !== process.pid && needles.every((n) => m[2]!.includes(n)); });
   },
   alive: (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return (e as { code?: string }).code === "EPERM"; } },
+  read: (bin, argv, timeoutMs) => {
+    if (argv.length !== 4 || argv[0] !== "api" || argv[1] !== "--method" || argv[2] !== "GET" || !BRANCHES_PATH_RE.test(argv[3] ?? "")) throw new RefusalError("internal: a gh call outside the scheduler's one read was refused");
+    const env = { ...Object.fromEntries(ENV_ALLOW.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])), GH_HOST: "github.com", GH_PROMPT_DISABLED: "1", LC_ALL: "C" };
+    const r = spawnSync(bin, argv, { cwd: os.tmpdir(), env, encoding: "utf8", timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
+    return { exit: r.error ? null : r.status, stdout: r.stdout ?? "" };
+  },
   group: (pgid) => {
     const r = spawnSync("ps", ["-axo", "pgid=,command="], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
     if (r.status !== 0) return groupAlive(pgid) ? ["(process list unavailable; the group is alive)"] : [];
