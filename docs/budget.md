@@ -3,8 +3,10 @@
 **Money left: $19.13** (the owner's console reading, 2026-11-09; first written here as $19.31, a typo corrected 2026-11-13; it was $23.39 on 2026-11-08). That is all the money the
 project has. Every model call from here on has a line below, or it does not happen.
 
-**FREEZE: no paid job runs until Sunny confirms in the Nebius console** (hourly usage, 2026-11-08 → 09): about $3.36
-at 09:00–10:00 UTC on 8 Nov, nothing overnight, no running sandboxes. Sunny revoked the old API key on 2026-11-09; the
+**Freeze lifted 2026-11-13 by Sunny, as his decision without the console check** (once 076d and its merges were on main).
+The remaining guard is S1: compare the Nebius console with the ledger at least 2 h after S1 ends; if console ÷ ledger is
+above **1.08**, stop and tell Sunny. (The freeze had waited on a console check of hourly usage, 2026-11-08 → 09: about $3.36
+at 09:00–10:00 UTC on 8 Nov, nothing overnight, no running sandboxes; that check was not made.) Sunny revoked the old API key on 2026-11-09; the
 new key is only in local `.env`.
 
 **Likely explanation: billing lag, not a leak.** Job 074 ran 2026-11-08T08:43:04Z–09:39:08Z and cost **$3.36463**
@@ -16,7 +18,7 @@ Nebius-key-capable CI run in the 48 h (`run/out/codex.leak.md` § 48 h) and grok
 
 ## S0 rulings (Sunny, 2026-11-11; decision 076)
 - The plan (`docs/plan/2026-11-10-plan.md`) runs only as corrected by its audit (`docs/plan/2026-11-10-plan-audit.md`);
-  corrections 1, 2, 5–9 accepted as written, 3 and 4 as below. **The freeze above stays** until the console check.
+  corrections 1, 2, 5–9 accepted as written, 3 and 4 as below. The freeze stayed until 2026-11-13 (lifted without the console check; see the top).
 - **Caps:** the table below. L3 step 2 is cut (L3 step 1 is $0 and still runs). Batch run caps: see the caps ruling below
   (it replaced "min(batch estimate + $0.40, …)"). Re-plan if console ÷ ledger > **1.08**. Cut order: L2, then R2 becomes a
   cache replay. H1, H2 and the reserve are never cut.
@@ -133,7 +135,7 @@ spend so far; unstarted ids roll into the next batch** (this replaced "min(batch
 
 | line | what | cap | basis (estimate unless marked) | status |
 |---|---|---|---|---|
-| S1 smoke | one dev case end to end, all three tools | **$0.45** | one case at the $0.40 case cap + judging | blocked by the freeze |
+| S1 smoke | one dev case end to end, all three tools | **$0.45** | one case at the $0.40 case cap + judging | not started (freeze lifted 2026-11-13; Sunny sends S1) |
 | R1 dev run 1 | pool-verify-v1, fresh, 40 dev cases, judge v1, batches | **$4.68** | 95% completion under bunny's spread model (caps check), incl. ≈ $0.05 judging; was $4.15 | not started |
 | L1 arm scoring | replay of run 1's lineage, 3 arms, judge v1 | **$0.40** | 3 × 40 × $0.0012 ≈ $0.15, + CodeRabbit's dev row | not started |
 | L2 redraw test | 2 fresh redraws per `CHUNK_FAILED` chunk of run 1, cache bypassed | **$0.80** | ≈ 8 chunks × 2 × $0.035 (TS count unmeasured) | not started; first to cut |
@@ -186,3 +188,4 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 | 2026-11-11 | 076b: R1/R2 judging inside the job cap; re-trigger slots; CodeRabbit rate check; canary ≤ $0.40 from the reserve; adopted-arm cost reporting | — | $0 | **$19.31** |
 | 2026-11-12 | 076c: caps procedures (job-start file, one paid process at a time, L2 three-way verdict); protocol, premortem, team process ruled | — | $0 | **$19.31** |
 | 2026-11-13 | balance correction (Sunny): the 2026-11-09 console reading was **$19.13**, not $19.31 (typo). Usable $18.13; unallocated $1.18 → $1.00; billing-lag unexplained $0.22 → $0.40; `.env` hard stop 63.33547 → 63.15547; job caps unchanged (decision 076c correction) | — | $0 | **$19.13** |
+| 2026-11-13 | spend freeze lifted by Sunny without the console check, after 076d and its merges (`4b99fb4`); guard: S1 console ÷ ledger ≥ 2 h after S1, above 1.08 → stop and tell Sunny | — | $0 | **$19.13** |

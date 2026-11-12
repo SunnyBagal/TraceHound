@@ -4107,3 +4107,10 @@ mark the case `failed-first-trigger`. Exposure is judged per review at its actua
 trigger can push later slots back, so `retriggerFromSlot` and `lastSlot` need room; `run/out/bunny.076d-r2.md`),
 `docs/runbooks/H2-scoring.md` and `W1-writeup.md` (exposure per review from the branch log); codex
 `docs/eval/ts-protocol.md` (same); grok's re-count (1f) reads the branch log's rule.
+**Correction to 076d item 1 (2026-11-13, from codex's and grok's held-out reconciliation, counts only):** the sentence "the
+11 of 20 and the 5 of 29 are the same exposure counted from its two ends" is wrong. They are different sets: the 11
+reachable held-out fixes split 6 reaching only a dev base, 2 only a held-out base, 3 both; of the 5 held-out bases that
+contain another case's fix, 3 contain a held-out fix and 2 only a dev fix. The rules in 1a–1f and (e) are unchanged.
+Exposure at first review under 1b–1c: **0 of 20** (codex, grok independently), so 1f needs no new ruling.
+**Spend freeze lifted (2026-11-13, Sunny):** without the console check, after 076d and its merges (`4b99fb4`). Guard: S1's
+console ÷ ledger check at least 2 h after S1; above 1.08, stop and tell Sunny (`docs/budget.md`).
