@@ -102,7 +102,7 @@ gh pr comment <n> --repo SunnyBagal/$R --body "@greptileai"
 ```
 Guard, before each: the number of comments by `SunnyBagal` on that PR whose whole body is that trigger text must be
 exactly **1** (`gh api --method GET repos/SunnyBagal/$R/issues/<n>/comments --paginate --jq '[.[]|select(.user.login=="SunnyBagal")|.body|gsub("^\\s+|\\s+$";"")]|map(select(.=="<trigger text>"))|length'`).
-`0` means the first trigger never happened (failure 1); `2` means the re-trigger is already spent: post nothing. After
+(`--paginate` prints one number per page of comments; add them if there are several.) `0` means the first trigger never happened (failure 1); `2` means the re-trigger is already spent: post nothing. After
 posting, the same line prints `2`; log `retriggered:<tool>` with the position in `$HO/window.log`. These lines are part
 of this file, whose sha256 is in `ts-freeze.md` (gap G9); nothing else is ever typed into a held-out PR. If a later
 decision adds a re-trigger mode to the script before the freeze, that mode replaces these lines and this paragraph.
