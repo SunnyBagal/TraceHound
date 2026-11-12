@@ -17,6 +17,14 @@ SEED=<the hand-check seed in docs/bench/ts-freeze.md>
 Every kit command below carries `--side heldout --heldout-ok` (written once here, omitted in the lines for length).
 
 ## 1. Assemble the rows (no model call)
+0. **Nothing changed since the freeze (premortem gap G9).** From the directory where F1 wrote it:
+   `shasum -a 256 -c $HO/hashes.freeze.txt` prints `OK` for the manifest, the label files, the overlay and every file
+   of `$HO/goldens`. `shasum -a 256 docs/runbooks/H1-window.md docs/runbooks/H2-scoring.md` in `$TH` equals the two
+   values in `docs/bench/ts-freeze.md`. Any `FAILED` or difference: stop and tell Sunny; do not score.
+   **The records are the frozen run (gap G8):** H1 §4's record check printed one line equal to the freeze, by codex and
+   by grok. **No unlisted Bot login (gap G6):** H1 §6's count is zero, or Sunny's ruling on it is recorded. Otherwise stop.
+   **The ledger H2 judges against is the main one:** `ledger` prints the main checkout's total including H1's spend
+   (if the worktree used a copy, it is merged back first, `F1-freeze.md` §4.2).
 1. Official TraceHound records: `mkdir $S/official`; per case copy `<id>.r2.json` where a rerun exists, else `<id>.json`,
    from `$HO/th`. A case with no record stays absent (it is a miss by policy `unstarted_case: miss`).
 2. `node scripts/testset/replay-arms.ts --records $S/official --out $S/arms` → exit 0. Exit 1 (A0 differs from the
@@ -28,7 +36,10 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
    **Secondary (report only, judges only, not hand-checked):** the two TraceHound arms that are not the candidate.
 
 ## 2. Judging (the only paid step)
-`L0=$(ledger)`. For each of the five rows, first bench-judge-v1, then bench-judge-x1, one process after the other:
+`L0=$(ledger); echo "H2 L0=$L0 $(date -u +%FT%TZ)" >> $S/job.md` (the job-start value lives in the job file and is
+read back from it if the shell is lost; gap G19). **Order (gap G13): the three primary rows first** (tracehound,
+coderabbit, greptile), each with bench-judge-v1 and then bench-judge-x1; **then** the two secondary rows the same way.
+One process after the other:
 ```sh
 E="TRACEHOUND_BUDGET_RUN_USD=0.40 TRACEHOUND_BUDGET_TOTAL_USD=$(echo "$L0 + 0.40" | bc)"
 env $E node $TH/packages/analyzer/src/bin.ts bench score --golden $G/bench-golden.json --reviews <row dir> --detail $S/judge/<row>.v1.json --concurrency 1
@@ -38,7 +49,8 @@ env $E node $TH/packages/analyzer/src/bin.ts bench score --golden $G/bench-golde
 At most 5 rows × 20 bug cases × 2 judges = 200 calls (a clean case or an empty review makes none,
 `packages/analyzer/src/bench/score.ts:125-126`). A refused call (cap) or a `JUDGE_FAILED` entry: note the count; rerun
 that one process once into a new detail file name (`…v1.b.json`) if money is left under the $0.40; never edit a detail
-file. If the cap is reached with rows unjudged, the secondary rows are the ones left unjudged, and the report says so.
+file. **When a row has two detail files for one judge, the later one is the official one** and is the one passed to
+`score-testset.ts` and `handcheck-sheet.ts`; the earlier one is kept and hashed (gap G13). If the cap is reached with rows unjudged, the secondary rows are the ones left unjudged, and the report says so.
 
 ## 3. Pre-check tables (private; nobody but codex reads them)
 ```sh
@@ -73,7 +85,9 @@ For each item the sheet shows the labelled bug (description and locations) and o
 - **`not`** if it is about something else in the same file or nearby, is too vague to tell which defect it means, or
   only restates what the code does. When unsure, write `not` and the reason "unsure".
 - A reason of a few words for every item.
-Rules: decide every item (the resolve step refuses a blank). Do not look up the PR, the fix or any tool's page. Do not
+Rules: decide every item (the resolve step refuses a blank). Do not look up the PR, the fix or any tool's page. Since
+T0 Sunny has opened no vendor dashboard, no fork PR and no GitHub mail from the four forks (`F1-freeze.md` §1 row 13,
+gap G2); if he did, he says so before the sitting and it is written into the report. Do not
 go back and change earlier items after seeing later ones, except for a slip noticed at once. Note the start and end time.
 When done, Sunny sends `decisions.json` back and says "final".
 
@@ -85,6 +99,10 @@ When done, Sunny sends `decisions.json` back and says "final".
 4. Secondary rows: one more `score-testset.ts` run with the two other arms, their v1 and x1 details, no `--handcheck`,
    `--out $S/summary.secondary.json`.
 5. `( cd $S && find . -type f | sort | xargs shasum -a 256 > ../hashes.score.txt ); shasum -a 256 $HO/hashes.score.txt`
+5b. **A second run of the final score (gap G7).** grok, from the same hashed inputs and the same command line, runs
+   step 3's `score-testset.ts` into its own directory (`$HO/score-grok/summary.final.json`). `cmp` of the two
+   `summary.final.json` files prints nothing. A difference: stop; nothing is committed until codex and grok have found
+   it and Sunny has been told.
 6. codex checks `summary.final.json` and `summary.secondary.json` contain **no case id, title, path or comment text**
    (`grep -c 'ho-[0-9]' …` prints 0; the kit writes counts only). If they do, strip nothing by hand: report it and stop.
 7. codex commits to `TraceHound/docs/bench/`: `ts-heldout.summary.json` (a copy of `summary.final.json`),

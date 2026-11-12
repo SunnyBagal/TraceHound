@@ -72,6 +72,10 @@ and pairs use only the pull requests both tools reviewed."
 > tools' catches are independent (more often if both catch the same easy bugs; that was not measured).
 
 - If the observed gap is 6 or more but p ≥ 0.05 (for example 9–3), it is outcome C; add "the observed gap of G bugs is
+- **Too few paired cases (premortem gap G10).** Decision 078 holds Sunny's number N_min, the smallest paired n for
+  which a pair gets a test sentence (`F1-freeze.md` §5 field 7). If a pair's n is below N_min, none of A, B, C is used
+  for it. The sentence is: "Only n of the 20 bugs were reviewed by both TraceHound and X; TraceHound caught a that X
+  missed and X caught b that TraceHound missed. That is too few to compare." The table still shows the counts and p.
   not distinguishable from chance here".
 - If a + b = 0: "the two tools caught the same bugs" is allowed as a description of the 20 cases; it is still outcome C.
 - CodeRabbit against Greptile gets the same three templates, in the table only, not in the summary.
@@ -110,11 +114,18 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
 6. What the other tools could see: each fork's default branch was set to the last upstream commit before 2026-07-01;
    neither vendor documents which ref its repository context is built from (`run/out/grok.tool-facts.md` rows 7, 11).
    CodeRabbit reviewed payload's cases under payload's own configuration file, which is part of that code.
+   CodeRabbit was left at its defaults, under which web search is "Enabled unless explicitly disabled" and pull-request
+   context "Uses past PRs for context" (https://docs.coderabbit.ai/knowledge-base); what it looked up is not known.
+   All 29 case branches sit in four forks; grok's ancestry count before the freeze says how many case branches carry
+   another case's later fix (`run/out/grok.ho-ancestry.md`; the number goes here) (premortem gap G16).
 7. CodeRabbit and Greptile ran on free plans, triggered by hand, within their rate and credit limits; a tool that
    delivered no review after one re-trigger is left out of its pairs, with n stated.
 8. No row for Augment, Cursor Bugbot or Copilot. TypeScript only; the repositories named; these dates.
 9. Costs: TraceHound's is the ledger figure for this run; the console-to-ledger ratio is stated.
-10. Every deviation from the protocol during the window, by its failure number.
+10. TraceHound's comments were never posted to the pull requests. They are scored from the frozen runner's local
+    output, capped at 15 per pull request, with one rerun allowed for a failed case; the other tools posted on GitHub
+    under their rate and credit limits, with one re-trigger allowed for a failed review (premortem gap G18).
+11. Every deviation from the protocol during the window, by its failure number.
 
 ## 5. Checks before merge
 1. codex: every number in `ts-heldout.md`, `results.md`, the viewer and the README equals `ts-heldout.summary.json` (or

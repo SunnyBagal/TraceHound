@@ -26,8 +26,15 @@ twenty, bullmq; manifest order inside each).
 
 ## 1. The day before (T0 − 24 h to T0)
 1. `git -C $TH describe --tags --exact-match` prints `review-freeze-3`; `git -C $TH status` is clean.
+   **The worktree is ready to run (premortem gap G8; `F1-freeze.md` §4.2):** `git -C $TH status --porcelain` prints
+   nothing after the install; `shasum -a 256 $TH/.env ~/Projects/TraceHound/.env` shows two equal hashes; `ledger`
+   (run from `$TH`, the function above) prints the **same total** as `node ~/Projects/TraceHound/packages/analyzer/src/spend.ts`.
+   An empty or different ledger: stop. The hard stop would not hold and artu1 would not see H1's spend.
+   **Models still served (gap G11):** the models-list read of `F1-freeze.md` §1 row 15 again: the three frozen ids are
+   present. One missing: the window does not open.
 2. Decision 078 is pushed: predictions, T0, Sunny's "go". If "go" is missing, stop.
-3. Greptile dashboard (Sunny): credits ≥ 35; reset date after T0 + 72 h. Otherwise stop.
+3. Greptile dashboard (Sunny): credits ≥ 35; reset date after T0 + 72 h. Otherwise stop. This is Sunny's **last** look
+   at any vendor dashboard or fork PR page until his filled sheet is hashed (`F1-freeze.md` §1 row 13, gap G2).
    CodeRabbit (decision 076b item 3): P1's report says the hourly rate at P1's end was not below the rate at its start,
    **or** T0 is at least 7 days after P1's last review. Otherwise stop.
 4. `for f in medusa twenty payload bullmq; do gh api repos/SunnyBagal/$f/actions/permissions; done` → four `"enabled":false`.
@@ -80,8 +87,25 @@ two tools need one on it).
 | 30:00 – 58:00 | one re-trigger slot per hour: the lowest due position that still needs one, checked at the slot |
 | 58:00 – 72:00 | no trigger of any kind (earlier, if the queue emptied earlier) |
 
-The hourly cadence outlives a 2-hour session: each trigger is its own short command; the operator schedules the next
-one and logs it. A slot missed by more than 30 minutes is failure 7.
+**Who keeps the clock (gap G4).** Each trigger is its own short command. The slots are fired by the mechanism that
+passed the 8-slot rehearsal (`F1-freeze.md` §1 row 14) and is named in `docs/bench/ts-freeze.md`; a live agent session
+alone is not that mechanism, because a background process here dies after 2 hours (`docs/bench/results.md:232-233`).
+Every slot is logged with its planned and its actual time. A slot late by more than 30 minutes is failure 7.
+
+**The re-trigger command (gap G5).** `open-prs.ts --trigger` cannot post it: `runTriggers` skips a case the resume
+file marks `triggered:<tool>`, and `alreadyTriggered` skips a PR that already carries the trigger text from the
+SunnyBagal user (`tracehound-testset/scripts/open-prs.ts`). The re-trigger is exactly one of these lines, with the
+script's own trigger texts (`TRIGGERS` in the same file), posted as the SunnyBagal user:
+```sh
+gh pr comment <n> --repo SunnyBagal/$R --body "@coderabbitai full review"
+gh pr comment <n> --repo SunnyBagal/$R --body "@greptileai"
+```
+Guard, before each: the number of comments by `SunnyBagal` on that PR whose whole body is that trigger text must be
+exactly **1** (`gh api --method GET repos/SunnyBagal/$R/issues/<n>/comments --paginate --jq '[.[]|select(.user.login=="SunnyBagal")|.body|gsub("^\\s+|\\s+$";"")]|map(select(.=="<trigger text>"))|length'`).
+`0` means the first trigger never happened (failure 1); `2` means the re-trigger is already spent: post nothing. After
+posting, the same line prints `2`; log `retriggered:<tool>` with the position in `$HO/window.log`. These lines are part
+of this file, whose sha256 is in `ts-freeze.md` (gap G9); nothing else is ever typed into a held-out PR. If a later
+decision adds a re-trigger mode to the script before the freeze, that mode replaces these lines and this paragraph.
 
 ## 4. T0 + 2:00 onward: TraceHound, locally, from the tag
 Runs do not depend on the triggers; they start once the PRs are open and finish the same day (estimate from R2's
@@ -99,6 +123,12 @@ cd $TH && node scripts/run-tracehound.ts --manifest $MAN --clone $CL/$R --ids $I
 | 4 | bullmq | 1 |
 
 After each batch: exit code, status per case, `review.chunksFailed`, `usage.ledger.costUSD` (counts into `$HO/job.md`).
+- **Record check, after every batch and again on all records when the last one is done (gap G8):**
+  `for f in $HO/th/*.json; do jq -r '[.tracehound.sha,.tracehound.dirty,.settings.fixes,.settings.contracts,.settings.cache,.settings.maxUsdPerCase,.prompts["review-diff-v1"],.prompts["review-ctx-v1"],.prompts["verify-ctx-v1"]]|@tsv' $f; done | sort | uniq -c`
+  prints **one** line: the tag's commit, `false`, `off`, `off`, `off`, `0.4`, and the three prompt hashes of
+  `ts-freeze.md` (the record holds all of these: `tracehoundHead()` and the `settings` and `prompts` fields in
+  `scripts/run-tracehound.ts`). Two lines, or any other value: stop, tell Sunny, do not score. grok repeats this check
+  on its own after the last batch and reports "one line, equal to the freeze: yes / no" (gap G7).
 - Exit 3 (stopped before a case): the unstarted ids go to the front of the next invocation of the same repository.
 - When `RUNCAP` < $0.40: the remaining unstarted cases run **from the reserve** in one more invocation per repository
   with `--max-usd-run` = $0.40 × (number of those cases); the amount is logged as reserve spend.
@@ -112,13 +142,13 @@ After each batch: exit code, status per case, `review.chunksFailed`, `usage.ledg
 | # | failure | rule |
 |---|---|---|
 | 1 | `open-prs.ts` fails for a case | Run it again (the resume file prevents duplicates). A PR not open by its own slot keeps its position; its triggers are posted when it opens, in the next free slot. Not open by T0 + 29:00: both tools are `no-review` for it; TraceHound still runs it locally. |
-| 2 | A tool reviews a PR before its trigger (auto-review) | Log it. That review stands as the tool's review; do not trigger that tool on that PR. Reported as a deviation. If Greptile does this on several PRs, tell Sunny at once (credits). |
+| 2 | A tool reviews a PR before its trigger (auto-review) | Log it. That review stands as the tool's review; do not trigger that tool on that PR. Reported as a deviation. If Greptile does this on several PRs, tell Sunny at once in words only (credits); he does not open the dashboard or the PRs (gap G2). |
 | 3 | CodeRabbit posts a rate-limit comment | No review ran (https://docs.coderabbit.ai/management/rate-limits). It is found as `no-review` at that PR's re-trigger slot (§3) and gets the one re-trigger. Do not re-trigger earlier. |
 | 4 | Greptile shows "Failed" | Same: the one re-trigger, at that PR's re-trigger slot (§3). |
 | 5 | A PR's base or head no longer equals the case pair | The attempt is invalid (`invalid-binding`); nothing is pushed or repaired; that case is `no-review` for the external tools. Find out who pushed, after the window. |
 | 6 | A tool still has no review after its re-trigger | `no-review`: no catch in K of 20, left out of that tool's pairs, n reported (076a §13.4). |
 | 7 | A trigger slot is missed (operator down, GitHub down) | Post it at the next free slot and log the delay. Do not post two CodeRabbit triggers in one hour to catch up. |
-| 8 | Greptile runs out of credits | Remaining PRs are `no-review` for Greptile. Nothing is bought. |
+| 8 | Greptile runs out of credits | Seen only through Greptile's own message on a PR; nobody opens the dashboard during the window (gap G2). Remaining PRs are `no-review` for Greptile. Nothing is bought. |
 | 9 | TraceHound cases end `failed` | One rerun each, after the last batch and at least 2 hours after the failure. **Canary (decision 076b item 4), only when two held-out cases in a row failed with a provider or transport error:** stop the batch (the cases without a record are unstarted and roll forward). Run S1's dev case fresh from `$TH` as a canary: `--manifest $TS/cases/dev/manifest.json --clone $TS/repos/<its repo> --ids <S1's case> --out-dir $HO/canary/<try> --fixes off --contracts off --cache off`, with `--max-usd-per-case` and `--max-usd-run` both set to $0.40 minus what earlier canary tries spent. At most **3 tries, at least 30 minutes apart, $0.40 in total, charged to the reserve**. A canary that ends `ok`: continue the batch and, later, the reruns. **All 3 fail: stop everything on the TraceHound side and tell Sunny**; no rerun is spent while the provider is down. Triggers and the snapshot go on. |
 | 10 | A case hits its $0.40 cap (`cap`) | One rerun, same rule. A second `cap` is a miss. |
 | 11 | The operator's process is killed mid-batch | Records are written per case and never overwritten. Start the same batch again with the ids that have no record; spend already made counts in `ledger − L0`. |
@@ -138,10 +168,22 @@ done; done
 same `--out`, use `$HO/tools-$R-$T`.) Start the collection at T0 + 72:00, not earlier and not later than T0 + 73:00;
 `--window-end` is T0 + 72 h exactly, so a late start does not let late comments in. Nothing collected is edited.
 
+**Comments from logins on nobody's list (gap G6), before any judging.** A comment by a login that is not in
+`tools.json` is dropped as `otherAuthor` without a signal (`collectCase` in `scripts/testset/collect-tool-reviews.ts`),
+and that counter also holds the *other* tool's comments. So count the logins directly from the raw objects:
+```sh
+ALLOWED=$(jq -c '[.tools[].logins[]|ascii_downcase]' $TH/scripts/testset/tools.json)
+cat $HO/tools-*/raw/coderabbit/*.json | jq -r --argjson a "$ALLOWED" '.comments[]? | select(.in_reply_to_id==null) | select((.user.login|ascii_downcase) as $l | $a|index($l)|not) | [.user.login,.user.type]|@tsv' | sort | uniq -c
+```
+(one tool's raw files are enough: both tools' raw files hold every review comment of the PR.) Report the number of
+such comments and of distinct `Bot` logins behind them. **Not zero for a Bot login: stop before H2's judging; Sunny
+rules, on counts and login names only, whether that login belongs to a tool** (question U5 of
+`run/comms/planner.b.d1-review.md`). `tools.json` is frozen and is not edited without that ruling.
+
 ## 7. Report: `run/out/codex.ho-run.md` (counts and spend only; no case id, title, path or text)
 PRs opened of 29; per tool: triggered, completed, no-review, re-triggers used, auto-reviews, rate-limit comments;
 TraceHound: ok / failed / cap / unstarted, reruns, misses by rule, chunks failed, empty reviews; spend: job, reserve,
-canary; console ratio; every deviation with its failure number; the single sha256 of `hashes.window.txt`. Then the
+canary; console ratio; every deviation with its failure number; the single sha256 of `hashes.window.txt`; trigger slots: fired, late by more than 30 minutes; re-triggers posted per tool; comments by unlisted logins and distinct unlisted Bot logins (gap G6); the record check's one line as "equal to the freeze: yes / no", from codex and from grok (gaps G7, G8); the ledger total before T0 in the worktree and in the main checkout; `invalid-binding` and `read-failed` counts per tool. Then the
 `.done` marker. artu1 writes STATE, LOG, the budget log row and the brain entry from this file alone.
 
 ## 8. The three most likely ways to get this wrong
