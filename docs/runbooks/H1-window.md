@@ -6,11 +6,12 @@ Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-pr
 runbook; report any difference). Budget line: **H1**, cap from decision 077 ($3.15 until then); unstarted cases at the
 cap run from the reserve (decision 076a "Caps" item 4).
 
-**Two things in this runbook are assumptions until ruled** (plan-v2 §8):
-- **R-1, the CodeRabbit queue (§3).** Written for 1 CodeRabbit review per hour (the ruled planning rate, S0.4). A
-  re-trigger that is due while first triggers are still running waits for the next free hourly slot.
-- **The canary before reruns (§5, failure 9).** A paid dev case from the reserve; artu1 pre-approves it at F1 or strikes it.
-If the frozen schedule in `docs/bench/ts-freeze.md` differs from §3, the frozen schedule is used and §3 is ignored.
+**Ruled since the first version (decision 076b, `docs/decisions.md:3931-3951`):** the re-trigger slots (item 2, §3 below),
+the CodeRabbit allowance condition (item 3, §1.3) and the canary with its limits (item 4, §5 failure 9). They are no
+longer assumptions. If the frozen schedule in `docs/bench/ts-freeze.md` differs from §3, the frozen schedule is used.
+**Still open (Sunny, questions U1 and U2 of `run/comms/planner.b.d1-review.md`):** what a completed review with no inline
+comment looks like for each tool, and whether every PR without a review gets the re-trigger. §3's status rule is
+written for the collector's present definition; the protocol's ruled wording replaces it, and F1 does not pass without it.
 
 ```sh
 TH=~/Projects/th-h1                       # worktree at the tag review-freeze-3 (F1 §4.2); never the main checkout
@@ -27,6 +28,8 @@ twenty, bullmq; manifest order inside each).
 1. `git -C $TH describe --tags --exact-match` prints `review-freeze-3`; `git -C $TH status` is clean.
 2. Decision 078 is pushed: predictions, T0, Sunny's "go". If "go" is missing, stop.
 3. Greptile dashboard (Sunny): credits ≥ 35; reset date after T0 + 72 h. Otherwise stop.
+   CodeRabbit (decision 076b item 3): P1's report says the hourly rate at P1's end was not below the rate at its start,
+   **or** T0 is at least 7 days after P1's last review. Otherwise stop.
 4. `for f in medusa twenty payload bullmq; do gh api repos/SunnyBagal/$f/actions/permissions; done` → four `"enabled":false`.
 5. `gh auth status` shows the SunnyBagal **user** (`open-prs.ts` requires it for triggers; see its header, `scripts/open-prs.ts:12-13`).
 6. Dry runs again from `$TH`: the runner per repository, `open-prs.ts` per repository (F1 §4.4–4.5). 29 cases, 0 refusals.
@@ -53,29 +56,29 @@ cd $TS && node scripts/open-prs.ts --manifest $MAN --fork SunnyBagal/$R --resume
 ```
 So position 1 is triggered at T0 + 1:00 and position 29 at T0 + 29:00.
 
-**Re-trigger check, 24 hours after each position's own trigger** (position k at T0 + 24 + k:00). Run the collector for
-that one case and tool (`--ids <id>`, `--window-start T0 --window-end now`, `--out $HO/check/<k>-<tool>`), and read its
-status:
-- `completed` → nothing to do for that tool on that PR.
-- `no-review` (nothing arrived, a CodeRabbit rate-limit comment, a Greptile "Failed" message, an explicit error) → **one
-  re-trigger** for that tool on that PR. Never a second.
-- `invalid-binding` → failure 5.
-A review that completed with zero inline comments is `completed`, not an error. Never re-trigger because a review looks
-thin or missed something.
-
-**Where the re-trigger goes:**
-- Greptile: immediately (no hourly limit is documented, `run/out/grok.tool-facts.md` row 15).
-- CodeRabbit (assumption R-1): one request per hourly slot in total. First triggers own slots 1–29. Re-triggers form
-  one queue in the order they became due and take the next free slot: the first re-trigger slot is T0 + 30:00, then
-  one per hour. With all 29 needing one, the last goes out at T0 + 58:00, 14 hours before the snapshot.
+**Re-triggers (decision 076b item 2).** First triggers always go before re-triggers. A re-trigger takes the first free
+hourly slot at or after 24 hours from that PR's own trigger, in PR order. This holds for **both** tools: no re-trigger of
+any kind is posted while first triggers are still running. One slot serves one PR (the re-trigger for whichever of the
+two tools need one on it).
+- Position k falls due at T0 + 24 + k:00. Slots up to T0 + 29:00 belong to first triggers, so the first re-trigger slot
+  is **T0 + 30:00**, then one per hour.
+- At each slot from T0 + 30:00: take the lowest position that is due and not yet handled, and check it **now** (not at
+  its due time: a review may have arrived since). Run the collector for that case, once per tool (`--ids <id>`,
+  `--window-start T0 --window-end now`, `--out $HO/check/<k>-<tool>`), and read the status:
+  - `completed` → nothing for that tool. A review that completed with zero inline comments is `completed`, not an error.
+  - `no-review` (nothing arrived, a CodeRabbit rate-limit comment, a Greptile "Failed" message, an explicit error) →
+    **one re-trigger** for that tool on that PR. Never a second.
+  - `invalid-binding` → failure 5.
+- If neither tool needs a re-trigger, the position is handled and the same slot goes to the next due position; repeat
+  until a re-trigger is posted or no position is due.
+- Never re-trigger because a review looks thin or missed something.
+- Worst case, every position needs one: positions 1–29 in slots T0 + 30:00 … T0 + 58:00, 14 hours before the snapshot.
 
 | T0 + | what happens |
 |---|---|
-| 1:00 – 24:00 | first triggers, positions 1–24 |
-| 25:00 – 29:00 | first triggers 25–29; re-trigger checks for positions 1–5 (Greptile re-triggers go out now; CodeRabbit's wait) |
-| 30:00 – 53:00 | re-trigger checks for positions 6–29 at their +24 h; CodeRabbit re-triggers from the queue, one per hour |
-| 54:00 – 58:00 | remaining queued CodeRabbit re-triggers, if any |
-| 58:00 – 72:00 | no trigger of any kind |
+| 1:00 – 29:00 | first triggers, positions 1–29, one per hour; **no re-trigger** |
+| 30:00 – 58:00 | one re-trigger slot per hour: the lowest due position that still needs one, checked at the slot |
+| 58:00 – 72:00 | no trigger of any kind (earlier, if the queue emptied earlier) |
 
 The hourly cadence outlives a 2-hour session: each trigger is its own short command; the operator schedules the next
 one and logs it. A slot missed by more than 30 minutes is failure 7.
@@ -110,13 +113,13 @@ After each batch: exit code, status per case, `review.chunksFailed`, `usage.ledg
 |---|---|---|
 | 1 | `open-prs.ts` fails for a case | Run it again (the resume file prevents duplicates). A PR not open by its own slot keeps its position; its triggers are posted when it opens, in the next free slot. Not open by T0 + 29:00: both tools are `no-review` for it; TraceHound still runs it locally. |
 | 2 | A tool reviews a PR before its trigger (auto-review) | Log it. That review stands as the tool's review; do not trigger that tool on that PR. Reported as a deviation. If Greptile does this on several PRs, tell Sunny at once (credits). |
-| 3 | CodeRabbit posts a rate-limit comment | No review ran (https://docs.coderabbit.ai/management/rate-limits). It is found as `no-review` at the +24 h check and gets the one re-trigger. Do not re-trigger earlier. |
-| 4 | Greptile shows "Failed" | Same: the one re-trigger at +24 h. |
+| 3 | CodeRabbit posts a rate-limit comment | No review ran (https://docs.coderabbit.ai/management/rate-limits). It is found as `no-review` at that PR's re-trigger slot (§3) and gets the one re-trigger. Do not re-trigger earlier. |
+| 4 | Greptile shows "Failed" | Same: the one re-trigger, at that PR's re-trigger slot (§3). |
 | 5 | A PR's base or head no longer equals the case pair | The attempt is invalid (`invalid-binding`); nothing is pushed or repaired; that case is `no-review` for the external tools. Find out who pushed, after the window. |
 | 6 | A tool still has no review after its re-trigger | `no-review`: no catch in K of 20, left out of that tool's pairs, n reported (076a §13.4). |
 | 7 | A trigger slot is missed (operator down, GitHub down) | Post it at the next free slot and log the delay. Do not post two CodeRabbit triggers in one hour to catch up. |
 | 8 | Greptile runs out of credits | Remaining PRs are `no-review` for Greptile. Nothing is bought. |
-| 9 | TraceHound cases end `failed` | One rerun each, after the last batch and at least 2 hours after the failure. If 3 or more cases of one batch failed with request errors (provider trouble), first run S1's dev case fresh as a canary from the reserve (`--max-usd-run 0.40`, out-dir `$HO/canary`); rerun only after a canary ends `ok`; repeat the canary every 2 hours, at most until T0 + 60:00, then rerun regardless. (Assumption; see top.) |
+| 9 | TraceHound cases end `failed` | One rerun each, after the last batch and at least 2 hours after the failure. **Canary (decision 076b item 4), only when two held-out cases in a row failed with a provider or transport error:** stop the batch (the cases without a record are unstarted and roll forward). Run S1's dev case fresh from `$TH` as a canary: `--manifest $TS/cases/dev/manifest.json --clone $TS/repos/<its repo> --ids <S1's case> --out-dir $HO/canary/<try> --fixes off --contracts off --cache off`, with `--max-usd-per-case` and `--max-usd-run` both set to $0.40 minus what earlier canary tries spent. At most **3 tries, at least 30 minutes apart, $0.40 in total, charged to the reserve**. A canary that ends `ok`: continue the batch and, later, the reruns. **All 3 fail: stop everything on the TraceHound side and tell Sunny**; no rerun is spent while the provider is down. Triggers and the snapshot go on. |
 | 10 | A case hits its $0.40 cap (`cap`) | One rerun, same rule. A second `cap` is a miss. |
 | 11 | The operator's process is killed mid-batch | Records are written per case and never overwritten. Start the same batch again with the ids that have no record; spend already made counts in `ledger − L0`. |
 | 12 | A case has no official record at T0 + 72:00 | A miss (076a §13.3). |

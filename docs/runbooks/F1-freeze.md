@@ -17,9 +17,10 @@ files are hashed. F1 is finished only when every box below is ticked; a box that
 | 5 | Sunny has confirmed the window dates and the hand-check sitting (S0.6) | written in `docs/decisions.md` 078 | Sunny |
 | 6 | `scripts/testset/tools.json` (from S1), `scripts/testset/strip.json` (from P1's dev comments), the 076a policy file exist on `main` | `ls scripts/testset` | artu1 |
 | 7 | Greptile: credits ≥ 29 + the number of re-triggers the schedule allows for (at least 35), all inside one credit period that covers the whole window | Sunny reads the dashboard; number and reset date written into 078 | Sunny |
+| 7b | CodeRabbit allowance (decision 076b item 3): P1's rate at its end is not below its rate at its start, **or** the window's T0 is at least 7 days after P1's last review | `run/out/artu1.dev-coderabbit.md` item 7; T0 in 078 | artu1 |
 | 8 | CodeRabbit and Greptile apps are installed on the four forks only; Greptile "Automatic reviews: Never"; Actions off on the four forks | `docs/live-setup.md` §1–3 commands | Sunny, artu1 |
 | 9 | Fork default branches are still the pre-2026-07-01 snapshot commits of `.agents/STATE.md` (medusa `5296f51`, twenty `1df0069`, payload `1734efc`, bullmq `c2c3d1d`) | `gh api repos/SunnyBagal/<f>/branches/<default> --jq .commit.sha` | artu1 |
-| 10 | Money: unspent ≥ H1 cap + $0.40 (H2) + $3.00 (reserve); last console ÷ ledger ratio ≤ 1.08 | `docs/budget.md` log | artu1 |
+| 10 | Money: unspent ≥ H1 cap + $0.40 (H2) + $3.00 (reserve, which also holds the canary's $0.40, 076b item 4); last console ÷ ledger ratio ≤ 1.08 | `docs/budget.md` log | artu1 |
 | 11 | No dev PR, dev comment or dev result is going to change: P1's collection is done and hashed | `run/out/artu1.dev-coderabbit.md` | artu1 |
 
 ## 2. The tag

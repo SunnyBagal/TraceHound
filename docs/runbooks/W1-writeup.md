@@ -37,7 +37,9 @@ that is not one of these templates, or a placeholder filled from anything but th
    sentence "the configuration was chosen on 40 dev cases before the held-out cases were opened".
 10. **Failures and deviations.** Every numbered failure of `H1-window.md` §5 that occurred, with counts.
 11. **Limits** (§4, all of them, unshortened).
-12. **Cost.** Ledger spend for H1 and H2, console ratio, cost per PR measured on this set.
+12. **Cost.** Ledger spend for H1 and H2, console ratio, cost per PR measured on this set. If the frozen candidate is
+    A1 or A2 it was run by the unchanged runner and extracted by replay, so two figures are given (decision 076b item 5):
+    the cost paid per PR, and beside it the cost of the adopted arm's own calls from the ledger.
 No case id, PR number, file path, label text or comment text from held-out appears on the page.
 
 ## 3. Claim wording
@@ -79,6 +81,9 @@ and pairs use only the pull requests both tools reviewed."
 > TraceHound posted C_T comments per pull request, CodeRabbit C_C and Greptile C_G; on the 9 pull requests with no
 > labelled bug they posted c_T, c_C and c_G comments in total. TraceHound ran on an open model (Nemotron 3.5 on Nebius)
 > at $D per pull request.
+
+`$D` is the cost **paid** per pull request. For an adopted A1 or A2 add: "($D_arm for the calls the reported
+configuration itself uses; the run also executed the verifier.)" (076b item 5).
 
 ### 3.4 Never written, whatever the numbers
 "beats", "outperforms", "wins", "best", a rank or "first/second/third", "matches", "as good as", "catches as many",
