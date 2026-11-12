@@ -5,7 +5,7 @@
  *   node scripts/testset/score-testset.ts --side dev --goldens <goldens.json> --policy <policy.json>
  *     --tool <name>=<reviews dir> … [--judge <name>=<bench score --detail file> …] [--judge-x1 <name>=<detail> …]
  *     [--status <name>=<json> …] [--records <name>=<run-tracehound out dir> …] [--handcheck <handcheck.json>]
- *     --out <summary.json> [--heldout-ok]
+ *     [--exposure <json {v: 1, exposed: [case id, …]}>] --out <summary.json> [--heldout-ok]
  *
  * Per tool (docs/eval/ts-protocol.md §4):
  * - bugs caught K of the N bug cases (Wilson 95%, no continuity correction), completed bug and clean reviews n and m,
@@ -22,8 +22,19 @@
  * review; otherwise refuse: no catch stands without the review that was scored.
  * The protocol's pending choices (§13) apply only through --policy (kit.ts POLICY_CHOICES, with who approved them):
  * official_attempt (first | last record of a rerun case), failed_case and unstarted_case (miss | no-review), and
- * no_review_in_pairs (exclude | not-caught). Status: --status (completed | no-review | miss) > --records > a review
- * file exists → completed, else no-review. A case with more than two runner records (one rerun, 076a §13.3) refuses. Pairs: every pair of tools, exact two-sided sign test p (no α, no verdict).
+ * no_review_in_pairs (exclude | not-caught). Status: --status (completed | no-review | miss | invalid-binding) > --records >
+ * a review file exists → completed, else no-review. The collector's `invalid-binding` is `no-review` for that tool (out
+ * of its pairs, counted and printed); its `read-failed` is not a result and refuses: the collection is repeated into a
+ * new directory until it reads, and the last complete collection is official (decision 076c item 5, Planner B's U6). A case with more than two runner records (one rerun, 076a §13.3) refuses.
+ * Pairs (decision 076c items 4 and 6): every pair of tools gets counts (paired n, reviewed by both, only-A, only-B, both,
+ * neither). A p-value (exact two-sided sign test on the discordant cases, uncorrected) is computed only for a pair the
+ * policy registers (`registered_tests.pairs`), and only when at least `registered_tests.min_reviewed_by_both` bug cases
+ * were reviewed by both tools (both statuses `completed`; a miss by rule stays in the paired n but is not a reviewed
+ * case). Every other pair, and every pair when the policy registers none, has `p: null`: the summary carries no other
+ * p. A registered tool that is not a --tool refuses. No verdict is printed.
+ * --exposure (decision 076d item 1d): a list of bug case ids whose fix can be reached from another case's branch on the
+ * fork; each tool then gets its catches on exposed and on unexposed bug cases as counts. The file is supplied by the
+ * held-out side; an id that is not a bug case of the goldens refuses.
  * stdout: counts only. --out: the same counts as JSON, with the policy. Never overwrites.
  */
 import * as fs from "node:fs";
@@ -34,7 +45,9 @@ import { checkSide, locationHit, mean, median, pairs, readGoldens, readJson, rea
   type GoldenCase, type Policy, type Review } from "./kit.ts";
 
 export type Status = "completed" | "no-review" | "miss";
-export interface HandCheck { decisions: { tool: string; case: string; caught: boolean; review_sha256?: string }[]; reviewed: { tool: string; case: string; review_sha256: string }[] }
+export interface HandCheck { decisions: { tool: string; case: string; caught: boolean; review_sha256?: string }[]; reviewed: { tool: string; case: string; review_sha256: string }[];
+  /** resolve's guess counts (decision 076c item 7) */
+  guess?: { items: number; guessed: number; unsure: number; right: number; tools: number; commonestToolItems: number } }
 type JudgeEntry = { verdict: boolean | "judge-failed"; comments: { path: string; line: number | null; body: string }[] };
 interface Detail { detail?: { prTitle: string; status: string; comments: { path: string; line: number | null; body: string; matched: string | null }[] }[] }
 
@@ -78,11 +91,27 @@ export interface ToolScore {
   attempted: number; bugCases: number; cleanCases: number;
   caught: number; caughtWilson: [number, number] | null;
   completedBug: number; completedClean: number; noReview: number; misses: number; judgeFailed: number;
+  /** cases of noReview that the collector marked invalid-binding (U6) */
+  invalidBinding: number;
   caughtOfCompleted: string; caughtOfCompletedWilson: [number, number] | null;
   caughtX1: number | null; handchecked: boolean;
   comments: { total: number; perAttempted: { mean: number | null; median: number | null }; perCompleted: { mean: number | null; median: number | null }; clean: number };
   locationHits: number;
   costUSD: { total: number; perAttemptedMean: number | null; median: number | null; max: number | null } | null;
+  /** with --exposure: the tool's counts on exposed and unexposed bug cases (076d 1d) */
+  exposure: { exposed: ExposureCounts; unexposed: ExposureCounts } | null;
+}
+
+export interface ExposureCounts { bugCases: number; completedBug: number; caught: number }
+export interface PairScore {
+  a: string; b: string; registered: boolean; n: number;
+  /** bug cases with a completed review by both tools */
+  reviewedByBoth: number;
+  onlyA: number; onlyB: number; both: number; neither: number;
+  /** exact two-sided sign test, only for a registered pair at or above the floor; otherwise null */
+  p: number | null;
+  /** a registered pair below the floor: why no test is reported */
+  noTest?: string;
 }
 
 const sameComments = (a: { path: string; line: number | null; body: string }[], b: { path: string; line: number | null; body: string }[]) =>
@@ -96,7 +125,11 @@ export function score(o: {
   handcheck: HandCheck | null;
   /** sha256 of each tool's review file, by case */
   reviewSha: Map<string, Map<string, string>>;
-}): { tools: Record<string, ToolScore>; pairs: { a: string; b: string; n: number; onlyA: number; onlyB: number; p: number }[]; incomplete: string[] } {
+  /** per tool, the case ids its --status file marked invalid-binding (scored as no-review) */
+  invalidBinding?: Map<string, Set<string>>;
+  /** bug case ids marked exposed (076d 1d); absent: no split */
+  exposed?: Set<string>;
+}): { tools: Record<string, ToolScore>; pairs: PairScore[]; incomplete: string[] } {
   const tools: Record<string, ToolScore> = {};
   const caughtBy = new Map<string, Map<string, boolean>>();
   const statuses = new Map<string, Map<string, Status>>();
@@ -161,6 +194,7 @@ export function score(o: {
       caught: K, caughtWilson: wilson(K, bug.length),
       completedBug: n, completedClean: completed.length - n,
       noReview: [...st.values()].filter((s) => s === "no-review").length, misses: [...st.values()].filter((s) => s === "miss").length,
+      invalidBinding: o.invalidBinding?.get(tool)?.size ?? 0,
       judgeFailed, caughtOfCompleted: `${K}/${n}`, caughtOfCompletedWilson: wilson(K, n),
       caughtX1: x1 ? completedBug.filter((c) => x1.get(c.case)?.verdict === true).length : null,
       handchecked: !!o.handcheck,
@@ -169,17 +203,31 @@ export function score(o: {
         clean: o.cases.filter((c) => c.label === "clean").reduce((s, c) => s + comments(c.case).length, 0) },
       locationHits: bug.filter((c) => locationHit(comments(c.case), c.targets)).length,
       costUSD: costs ? { total: costs.reduce((a, b) => a + b, 0), perAttemptedMean: mean(costs), median: median(costs), max: Math.max(...costs) } : null,
+      exposure: o.exposed ? (() => {
+        const part = (on: boolean): ExposureCounts => {
+          const cs = bug.filter((c) => o.exposed!.has(c.case) === on);
+          return { bugCases: cs.length, completedBug: cs.filter((c) => st.get(c.case) === "completed").length, caught: cs.filter((c) => caught.get(c.case)).length };
+        };
+        return { exposed: part(true), unexposed: part(false) };
+      })() : null,
     };
   }
   const names = [...o.reviews.keys()];
-  const out: { a: string; b: string; n: number; onlyA: number; onlyB: number; p: number }[] = [];
+  const reg = o.policy.registered_tests;
+  for (const pair of reg?.pairs ?? []) for (const t of pair) if (!names.includes(t)) throw new RefusalError(`registered pair ${pair[0]} vs ${pair[1]}: ${t} is not a --tool (a registered test is never dropped silently)`);
+  const out: PairScore[] = [];
   for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) {
     const [A, B] = [names[i]!, names[j]!];
     const paired = o.policy.no_review_in_pairs === "not-caught" ? bug
       : bug.filter((c) => statuses.get(A)!.get(c.case) !== "no-review" && statuses.get(B)!.get(c.case) !== "no-review");
-    const onlyA = paired.filter((c) => caughtBy.get(A)!.get(c.case) && !caughtBy.get(B)!.get(c.case)).length;
-    const onlyB = paired.filter((c) => caughtBy.get(B)!.get(c.case) && !caughtBy.get(A)!.get(c.case)).length;
-    out.push({ a: A, b: B, n: paired.length, onlyA, onlyB, p: signTest(onlyA, onlyB) });
+    const count = (a: boolean, b: boolean) => paired.filter((c) => !!caughtBy.get(A)!.get(c.case) === a && !!caughtBy.get(B)!.get(c.case) === b).length;
+    const onlyA = count(true, false), onlyB = count(false, true);
+    const reviewedByBoth = bug.filter((c) => statuses.get(A)!.get(c.case) === "completed" && statuses.get(B)!.get(c.case) === "completed").length;
+    const registered = !!reg?.pairs.some(([x, y]) => (x === A && y === B) || (x === B && y === A));
+    const tested = registered && reviewedByBoth >= reg!.min_reviewed_by_both;
+    out.push({ a: A, b: B, registered, n: paired.length, reviewedByBoth, onlyA, onlyB, both: count(true, true), neither: count(false, false),
+      p: tested ? signTest(onlyA, onlyB) : null,
+      ...(registered && !tested ? { noTest: `reviewed by both ${reviewedByBoth} < ${reg!.min_reviewed_by_both}` } : {}) });
   }
   return { tools, pairs: out, incomplete };
 }
@@ -193,10 +241,11 @@ export function main(argv: string[], log: (line: string) => void = console.log):
       side: { type: "string" }, "heldout-ok": { type: "boolean", default: false }, goldens: { type: "string" }, policy: { type: "string" },
       tool: { type: "string", multiple: true }, judge: { type: "string", multiple: true }, "judge-x1": { type: "string", multiple: true },
       status: { type: "string", multiple: true }, records: { type: "string", multiple: true }, handcheck: { type: "string" }, out: { type: "string" },
+      exposure: { type: "string" },
     } });
     const tools = pairs(values.tool, "--tool"), judge = pairs(values.judge, "--judge"), x1 = pairs(values["judge-x1"], "--judge-x1");
     const status = pairs(values.status, "--status"), records = pairs(values.records, "--records");
-    const side = checkSide(values.side, values["heldout-ok"]!, [values.goldens, values.policy, values.handcheck, values.out,
+    const side = checkSide(values.side, values["heldout-ok"]!, [values.goldens, values.policy, values.handcheck, values.out, values.exposure,
       ...tools.values(), ...judge.values(), ...x1.values(), ...status.values(), ...records.values()]);
     if (!values.goldens || !tools.size || !values.out) throw new RefusalError("usage: score-testset.ts --side dev --goldens <file> --policy <file> --tool name=dir … --out <file>");
     const policy = readPolicy(values.policy, ["no_review_in_pairs", ...(records.size ? ["official_attempt", "failed_case", "unstarted_case"] as const : [])]);
@@ -206,13 +255,28 @@ export function main(argv: string[], log: (line: string) => void = console.log):
     const g = readGoldens(values.goldens);
     if (g.side !== side) throw new RefusalError(`goldens are for side ${g.side}, not ${side}`);
     const ids = g.cases.map((c) => c.case);
-    const toStatus = (file: string) => {
+    const invalidBinding = new Map<string, Set<string>>();
+    const toStatus = (tool: string, file: string) => {
       const v = readJson(file) as Record<string, string>;
+      const bad = new Set<string>();
+      invalidBinding.set(tool, bad);
       return new Map(Object.entries(v).map(([k, s]) => {
+        if (s === "read-failed") throw new RefusalError(`${file}: ${k} is read-failed, which is not a result: repeat the collection into a new directory; the last complete collection is official (U6)`);
+        if (s === "invalid-binding") { bad.add(k); return [k, "no-review" as Status]; }
         if (!["completed", "no-review", "miss"].includes(s)) throw new RefusalError(`${file}: ${k} has status ${s}`);
         return [k, s as Status];
       }));
     };
+    let exposed: Set<string> | undefined;
+    if (values.exposure) {
+      const e = readJson(values.exposure) as { v?: unknown; exposed?: unknown };
+      if (e?.v !== 1 || !Array.isArray(e.exposed) || e.exposed.some((x) => typeof x !== "string")) throw new RefusalError("--exposure must be {v: 1, exposed: [case id, …]}");
+      exposed = new Set(e.exposed as string[]);
+      const bugIds = new Set(g.cases.filter((c) => c.label === "bug").map((c) => c.case));
+      const unknown = [...exposed].filter((id) => !bugIds.has(id)).length;
+      if (exposed.size !== e.exposed.length) throw new RefusalError("--exposure lists a case twice");
+      if (unknown) throw new RefusalError(`--exposure lists ${unknown} id(s) that are not bug cases of the goldens`);
+    }
     const hc = values.handcheck ? readJson(values.handcheck) as HandCheck : null;
     if (hc && (!Array.isArray(hc.decisions) || !Array.isArray(hc.reviewed))) {
       throw new RefusalError("--handcheck must be handcheck-sheet.ts resolve output ({decisions, reviewed}, bound to review sha256)");
@@ -224,7 +288,8 @@ export function main(argv: string[], log: (line: string) => void = console.log):
         .map((id) => [id, sha256(fs.readFileSync(path.join(d, `${id}.json`)))]))])),
       judge: new Map([...judge].map(([t, f]) => [t, judgeEntries(f, g.cases)])),
       judgeX1: new Map([...x1].map(([t, f]) => [t, judgeEntries(f, g.cases)])),
-      status: new Map([...status].map(([t, f]) => [t, toStatus(f)])),
+      status: new Map([...status].map(([t, f]) => [t, toStatus(t, f)])),
+      invalidBinding, exposed,
       records: new Map([...records].map(([t, d]) => [t, readRecords(d, ids, policy)])),
       handcheck: hc,
     });
@@ -233,15 +298,33 @@ export function main(argv: string[], log: (line: string) => void = console.log):
       log("refused: judge evidence is incomplete; nothing written (an absent judgement is never a scored miss)");
       return 2;
     }
-    writeNew(values.out, JSON.stringify({ v: 1, side, policy, policySha256: sha256(fs.readFileSync(values.policy!)), tools: r.tools, pairs: r.pairs }, null, 1) + "\n");
+    const reg = policy.registered_tests;
+    const nBug = g.cases.filter((c) => c.label === "bug").length;
+    writeNew(values.out, JSON.stringify({ v: 1, side, policy, policySha256: sha256(fs.readFileSync(values.policy!)), tools: r.tools, pairs: r.pairs,
+      registeredTests: reg ? { ...reg, test: "exact two-sided sign test on the discordant bug cases, uncorrected" } : null,
+      ...(exposed ? { exposure: { sha256: sha256(fs.readFileSync(values.exposure!)), exposedBugCases: exposed.size, unexposedBugCases: nBug - exposed.size } } : {}),
+      ...(hc?.guess ? { handcheckGuess: hc.guess } : {}) }, null, 1) + "\n");
     for (const [t, s] of Object.entries(r.tools)) {
       log(`${t}: caught ${s.caught}/${s.bugCases} (Wilson ${pct(s.caughtWilson)})${s.handchecked ? " [hand-checked]" : ""} · completed bug ${s.completedBug}/${s.bugCases}, clean ${s.completedClean}/${s.cleanCases}`
-        + ` · caught of completed ${s.caughtOfCompleted} · no-review ${s.noReview} · miss ${s.misses} · judge-failed ${s.judgeFailed}${s.caughtX1 === null ? "" : ` · x1 caught ${s.caughtX1}`}`);
+        + ` · caught of completed ${s.caughtOfCompleted} · no-review ${s.noReview}${s.invalidBinding ? ` (invalid-binding ${s.invalidBinding})` : ""} · miss ${s.misses} · judge-failed ${s.judgeFailed}${s.caughtX1 === null ? "" : ` · x1 caught ${s.caughtX1}`}`);
       log(`${t}: comments ${s.comments.total} · per attempted PR mean ${num(s.comments.perAttempted.mean)} median ${num(s.comments.perAttempted.median)}`
         + ` · per completed PR mean ${num(s.comments.perCompleted.mean)} median ${num(s.comments.perCompleted.median)} · on clean cases ${s.comments.clean}`
         + ` · location hits ${s.locationHits}/${s.bugCases}${s.costUSD ? ` · cost $${s.costUSD.total.toFixed(4)} (mean $${num(s.costUSD.perAttemptedMean, 4)}, median $${num(s.costUSD.median, 4)}, max $${num(s.costUSD.max, 4)})` : ""}`);
     }
-    for (const p of r.pairs) log(`pair ${p.a} vs ${p.b}: paired n ${p.n} · ${p.a} only ${p.onlyA} · ${p.b} only ${p.onlyB} · exact two-sided p ${p.p.toFixed(4)}`);
+    if (exposed) for (const [t, s] of Object.entries(r.tools)) {
+      const e = s.exposure!;
+      log(`${t}: exposed bug cases ${e.exposed.bugCases}: caught ${e.exposed.caught}, completed ${e.exposed.completedBug} · unexposed bug cases ${e.unexposed.bugCases}: caught ${e.unexposed.caught}, completed ${e.unexposed.completedBug}`);
+    }
+    for (const p of r.pairs) {
+      log(`pair ${p.a} vs ${p.b}${p.registered ? " [registered]" : ""}: paired n ${p.n} · reviewed by both ${p.reviewedByBoth} · ${p.a} only ${p.onlyA} · ${p.b} only ${p.onlyB} · both ${p.both} · neither ${p.neither}`
+        + (p.p !== null ? ` · exact two-sided sign test p ${Number(p.p.toPrecision(10))} (level ${reg!.alpha}, uncorrected for ${reg!.pairs.length} registered test(s))`
+          : p.registered ? ` · no test: ${p.noTest} (counts only)` : " · counts only (not a registered pair)"));
+    }
+    if (!reg) log("pairs: counts only (the policy registers no tests)");
+    if (hc?.guess) {
+      const g = hc.guess;
+      log(`hand-check guess: right ${g.right} of ${g.guessed} guessed (${g.unsure} unsure, ${g.items} items, ${g.tools} tools; uniform chance 1/${g.tools}; always naming the commonest tool: ${g.commonestToolItems} of ${g.items})`);
+    }
     log(`policy: approved by ${policy.approved.by} on ${policy.approved.on} (${policy.approved.ref})`);
     return 0;
   } catch (e) {

@@ -1,0 +1,18 @@
+{
+ "v": 1,
+ "approved": {
+  "by": "Sunny",
+  "on": "2026-11-12",
+  "ref": "TraceHound docs/decisions.md 076a (protocol section 13 items 3-5: official_attempt, failed_case, unstarted_case, no_review_in_pairs, sheet_judge_cues, as in policy.076a.json, 2026-11-11) and 076c (2026-11-12) item 4: the registered pairs are TraceHound vs CodeRabbit and TraceHound vs Greptile, each an exact two-sided sign test at 0.05 (076a section 13 item 1), uncorrected, exact p reported; CodeRabbit vs Greptile counts only; item 6: a pair with fewer than 15 bug cases reviewed by both tools is reported as counts with no test. The pair names are the --tool names of the held-out scoring command (docs/runbooks/H2-scoring.md)."
+ },
+ "official_attempt": "last",
+ "failed_case": "miss",
+ "unstarted_case": "miss",
+ "no_review_in_pairs": "exclude",
+ "sheet_judge_cues": "hidden",
+ "registered_tests": {
+  "pairs": [["tracehound", "coderabbit"], ["tracehound", "greptile"]],
+  "alpha": 0.05,
+  "min_reviewed_by_both": 15
+ }
+}

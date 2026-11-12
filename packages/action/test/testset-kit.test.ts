@@ -2,7 +2,7 @@
 // build-goldens (multi-file primary by git order, preflight), score-testset, the blind hand-check sheet, and the
 // read-only tool-comment collector against a fake gh. Synthetic fixtures only; no model, no network.
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -10,7 +10,7 @@ import { symlinkSync } from "node:fs";
 import { afterAll, describe, expect, it } from "vitest";
 import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
 import { GoldenFile } from "../../analyzer/src/bench/types.ts";
-import { checkSide, commentHits, locationHit, RefusalError, shuffled, signTest, wilson, type Target } from "../../../scripts/testset/kit.ts";
+import { checkSide, commentHits, locationHit, readPolicy, RefusalError, shuffled, signTest, wilson, type Target } from "../../../scripts/testset/kit.ts";
 import { main as buildMain } from "../../../scripts/testset/build-goldens.ts";
 import { main as scoreMain } from "../../../scripts/testset/score-testset.ts";
 import { main as sheetMain } from "../../../scripts/testset/handcheck-sheet.ts";
@@ -215,7 +215,7 @@ function scoringFixture() {
     json(path.join(d, "dev", "th-records", `${id}.json`), { case: id, status, usage: { ledger: { costUSD: cost } } });
   }
   json(path.join(d, "dev", "th-records", "c3.r2.json"), { case: "c3", status: "failed", usage: { ledger: { costUSD: 0.03 } } });
-  const policy = (over: Record<string, string> = {}, name = "policy.json") => {
+  const policy = (over: Record<string, unknown> = {}, name = "policy.json") => {
     const file = path.join(d, "dev", name);
     json(file, { v: 1, approved: { by: "synthetic test", on: "2026-11-11", ref: "test fixture" }, official_attempt: "last", failed_case: "miss",
       unstarted_case: "miss", no_review_in_pairs: "exclude", sheet_judge_cues: "hidden", ...over });
@@ -245,10 +245,14 @@ describe("score-testset", () => {
     // cr: c2 has no review file → no-review; c3 caught
     expect(s.tools.cr).toMatchObject({ caught: 1, completedBug: 2, noReview: 1, misses: 0, locationHits: 1 });
     // pair: c2 is out (cr no-review); c1 th only, c3 cr only (th's miss counts as not caught)
-    expect(s.pairs).toEqual([{ a: "th", b: "cr", n: 2, onlyA: 1, onlyB: 1, p: 1 }]);
+    // no registered test in this policy: counts only, no p (decision 076c item 4); reviewed by both: c1 only
+    expect(s.pairs).toEqual([{ a: "th", b: "cr", registered: false, n: 2, reviewedByBoth: 1, onlyA: 1, onlyB: 1, both: 0, neither: 0, p: null }]);
+    expect(s.registeredTests).toBeNull();
     expect(r.out).not.toMatch(/finds bug|noise|alt-file/);
     expect(r.out).toContain("th: caught 2/3");
-    expect(r.out).toContain("pair th vs cr: paired n 2 · th only 1 · cr only 1 · exact two-sided p 1.0000");
+    expect(r.out).toContain("pair th vs cr: paired n 2 · reviewed by both 1 · th only 1 · cr only 1 · both 0 · neither 0 · counts only (not a registered pair)");
+    expect(r.out).toContain("pairs: counts only (the policy registers no tests)");
+    expect(r.out).not.toMatch(/sign test p/);
     expect(r.out).toContain("policy: approved by synthetic test on 2026-11-11 (test fixture)");
     expect(s.policy.no_review_in_pairs).toBe("exclude");
   });
@@ -351,7 +355,13 @@ describe("handcheck-sheet", () => {
     // resolve
     const decisions = JSON.parse(readFileSync(path.join(a, "decisions.json"), "utf8")) as { item: string; decision: string | null }[];
     const thC1 = mapping.items.find((i: { tool: string; case: string }) => i.tool === "th" && i.case === "c1").item;
-    const filled = decisions.map((d) => ({ ...d, decision: d.item === thC1 ? "same-bug" : "not", reason: "r" }));
+    expect(decisions.every((d) => (d as { guess?: unknown }).guess === null)).toBe(true); // the guess column, blank
+    expect(sheet).toContain("write in `guess` which tool you think wrote each comment");
+    expect(mapping.tools).toEqual(["th", "cr"]);
+    // guesses (076c item 7): th/c1 right (case and spaces ignored), cr/c3 unsure, th/c2 wrong, th/c3 right
+    const item = (tool: string, c: string) => mapping.items.find((i: { tool: string; case: string }) => i.tool === tool && i.case === c).item;
+    const guesses: Record<string, string> = { [item("th", "c1")]: " TH ", [item("cr", "c3")]: "unsure", [item("th", "c2")]: "cr", [item("th", "c3")]: "th" };
+    const filled = decisions.map((d) => ({ ...d, decision: d.item === thC1 ? "same-bug" : "not", guess: guesses[d.item], reason: "r" }));
     const dec = f.dir("decided.json");
     json(dec, filled);
     const r = run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(a, "mapping.json"), "--decisions", dec, "--out", f.dir("hc.json")]);
@@ -361,6 +371,16 @@ describe("handcheck-sheet", () => {
       .toEqual([{ tool: "th", case: "c1", caught: true }]);
     expect(hc.decisions.every((d: { review_sha256: string }) => /^[0-9a-f]{64}$/.test(d.review_sha256))).toBe(true);
     expect(hc.reviewed.length).toBe(5); // th c1-c3, cr c1 and c3
+    expect(hc.guess).toEqual({ items: 4, guessed: 3, unsure: 1, right: 2, tools: 2, commonestToolItems: 3 });
+    // a guess left blank, or a name that is not a --tool of this sheet: exit 2, no output
+    for (const [name, g] of [["guess-null", null], ["guess-other", "greptile"]] as const) {
+      json(dec, filled.map((d) => (d.item === thC1 ? { ...d, guess: g } : d)));
+      const outFile = f.dir(`hc-${name}.json`);
+      const rg = run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(a, "mapping.json"), "--decisions", dec, "--out", outFile]);
+      expect(rg.code).toBe(2);
+      expect(rg.out).toContain(`${thC1} has no guess (one of th, cr, unsure)`);
+      expect(existsSync(outFile)).toBe(false);
+    }
     json(dec, filled.slice(1));
     expect(run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(a, "mapping.json"), "--decisions", dec, "--out", f.dir("hc2.json")]).out).toMatch(/has no decision/);
     // a decision present but left null (as build writes it) or blank: exit 2, no output (§7)
@@ -395,12 +415,14 @@ describe("collect-tool-reviews", () => {
     writeFileSync(path.join(dev, "gh.log"), "");
     json(path.join(dev, "manifest.json"), [{ id: "c1", title: "P1", base_sha: BASE, case_head_sha: HEAD }, { id: "c2", title: "P2", base_sha: BASE, case_head_sha: HEAD }]);
     json(path.join(dev, "prmap.json"), { c1: 11, c2: 12 });
-    json(path.join(dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"] } } });
+    json(path.join(dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"], notCompletion: ["rate limit exceeded", "^Failed\\b.*retry"] } } });
     const args = (out: string, ...extra: string[]) => ["--side", "dev", "--tool", "coderabbit", "--config", path.join(dev, "tools.json"), "--repo", "SunnyBagal/twenty",
       "--manifest", path.join(dev, "manifest.json"), "--pr-map", path.join(dev, "prmap.json"), "--window-start", START, "--window-end", END,
       "--out", out, "--gh-bin", path.join(dev, "gh"), ...extra];
     return { d, dev, args, log: () => readFileSync(path.join(dev, "gh.log"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) };
   }
+  // the completion bound is always named (codex 076c review P2-1): these collections have no trigger records
+  const WS = ["--bound", "window-start"];
   const bot = { login: "CodeRabbitAI[bot]", type: "Bot" };
   const comment = (id: number, over: Record<string, unknown> = {}) => ({ id, user: bot, created_at: "2026-11-21T00:00:00Z", commit_id: HEAD,
     original_commit_id: HEAD, path: "x.ts", line: id, original_line: id, body: `finding ${id}`, ...over });
@@ -416,7 +438,7 @@ describe("collect-tool-reviews", () => {
     });
     const out = path.join(f.dev, "collected");
     const lines: string[] = [];
-    const code = collectMain(f.args(out), { log: (l) => lines.push(l), env: { ...process.env, NEBIUS_API_KEY: "sk-fake-key-do-not-leak", GH_TOKEN: "ghp_fake" } });
+    const code = collectMain(f.args(out, ...WS), { log: (l) => lines.push(l), env: { ...process.env, NEBIUS_API_KEY: "sk-fake-key-do-not-leak", GH_TOKEN: "ghp_fake" } });
     expect(code).toBe(0);
     const review = JSON.parse(readFileSync(path.join(out, "coderabbit", "c1.json"), "utf8"));
     expect(review.pr_title).toBe("P1");
@@ -427,7 +449,8 @@ describe("collect-tool-reviews", () => {
     expect(lines[0]).toBe("coderabbit: 2 case(s): completed 1, no-review 0, invalid-binding 1, read-failed 0; 122 counted comment(s); excluded: other author 1, reply 1, outside window 1, other commit 1, duplicate 1");
     const calls = f.log();
     expect(calls.map((c: { argv: string[] }) => c.argv[3])).toEqual(["repos/SunnyBagal/twenty/pulls/11", "repos/SunnyBagal/twenty/pulls/11/comments?per_page=100&page=1",
-      "repos/SunnyBagal/twenty/pulls/11/comments?per_page=100&page=2", "repos/SunnyBagal/twenty/pulls/11/reviews?per_page=100&page=1", "repos/SunnyBagal/twenty/pulls/12"]);
+      "repos/SunnyBagal/twenty/pulls/11/comments?per_page=100&page=2", "repos/SunnyBagal/twenty/pulls/11/reviews?per_page=100&page=1",
+      "repos/SunnyBagal/twenty/issues/11/comments?per_page=100&page=1", "repos/SunnyBagal/twenty/pulls/12"]);
     for (const c of calls) {
       expect(c.argv.slice(0, 3)).toEqual(["api", "--method", "GET"]);
       expect(c.envKeys).not.toContain("NEBIUS_API_KEY");
@@ -436,27 +459,128 @@ describe("collect-tool-reviews", () => {
     const coll = JSON.parse(readFileSync(path.join(out, "coderabbit.collection.json"), "utf8"));
     expect(Object.keys(coll.files).sort()).toEqual(["coderabbit.status.json", "coderabbit/c1.json", "raw/coderabbit/c1.json", "raw/coderabbit/c2.json"]);
     // never overwrites
-    expect(collectMain(f.args(out), { log: () => {} })).toBe(2);
+    expect(collectMain(f.args(out, ...WS), { log: () => {} })).toBe(2);
   });
 
   it("no-review without a review or a counted comment; a failing gh is never echoed; refusals", () => {
     const f = collectorFixture({ 11: { pr: { base: { sha: BASE }, head: { sha: HEAD } }, comments: [comment(1, { user: { login: "other[bot]" } })], reviews: [] } });
     const lines: string[] = [];
-    expect(collectMain(f.args(path.join(f.dev, "o1"), "--ids", "c1"), { log: (l) => lines.push(l) })).toBe(0);
+    expect(collectMain(f.args(path.join(f.dev, "o1"), "--ids", "c1", ...WS), { log: (l) => lines.push(l) })).toBe(0);
     expect(JSON.parse(readFileSync(path.join(f.dev, "o1", "coderabbit.status.json"), "utf8"))).toEqual({ c1: "no-review" });
     json(path.join(f.dev, "gh.json"), { fail: true, pulls: {} });
     const l2: string[] = [];
-    expect(collectMain(f.args(path.join(f.dev, "o2"), "--ids", "c1"), { log: (l) => l2.push(l) })).toBe(1);
+    expect(collectMain(f.args(path.join(f.dev, "o2"), "--ids", "c1", ...WS), { log: (l) => l2.push(l) })).toBe(1);
     expect(l2.join("\n")).not.toMatch(/secret-ish|404/);
     expect(l2[0]).toContain("read-failed 1");
     const refuse = (...a: string[]) => { const l: string[] = []; collectMain(a, { log: (x) => l.push(x) }); return l.join("\n"); };
-    expect(refuse(...f.args(path.join(f.dev, "o3")).map((x) => (x === "SunnyBagal/twenty" ? "twentyhq/twenty" : x)))).toMatch(/must be SunnyBagal/);
-    expect(refuse(...f.args(path.join(f.dev, "o4")).map((x) => (x === START ? "2026-11-20T00:00:00+05:30" : x)))).toMatch(/UTC ISO/);
+    expect(refuse(...f.args(path.join(f.dev, "o3"), ...WS).map((x) => (x === "SunnyBagal/twenty" ? "twentyhq/twenty" : x)))).toMatch(/must be SunnyBagal/);
+    expect(refuse(...f.args(path.join(f.dev, "o4"), ...WS).map((x) => (x === START ? "2026-11-20T00:00:00+05:30" : x)))).toMatch(/UTC ISO/);
     json(path.join(f.dev, "tools.json"), { v: 1, tools: {} });
-    expect(refuse(...f.args(path.join(f.dev, "o5")))).toMatch(/no login list for coderabbit/);
+    expect(refuse(...f.args(path.join(f.dev, "o5"), ...WS))).toMatch(/no login list for coderabbit/);
     expect(() => assertGhRead(["api", "--method", "POST", "repos/SunnyBagal/twenty/pulls/1"], "SunnyBagal/twenty")).toThrow();
     expect(() => assertGhRead(["api", "--method", "GET", "repos/twentyhq/twenty/pulls/1"], "SunnyBagal/twenty")).toThrow();
     expect(() => assertGhRead(["api", "--method", "GET", "repos/SunnyBagal/twenty/pulls/1/comments?per_page=100&page=1"], "SunnyBagal/twenty")).not.toThrow();
+    expect(() => assertGhRead(["api", "--method", "GET", "repos/SunnyBagal/twenty/issues/1/comments?per_page=100&page=1"], "SunnyBagal/twenty")).not.toThrow();
+    expect(() => assertGhRead(["api", "--method", "GET", "repos/SunnyBagal/twenty/issues/1"], "SunnyBagal/twenty")).toThrow();
+    expect(() => assertGhRead(["api", "--method", "GET", "repos/twentyhq/twenty/issues/1/comments?per_page=100&page=1"], "SunnyBagal/twenty")).toThrow();
+  });
+
+  // decision 076c item 2 (Planner B's U1): issue comments make a case completed, never counted
+  const issue = (id: number, over: Record<string, unknown> = {}) => ({ id, user: bot, created_at: "2026-11-21T00:00:00Z", body: "Summary: no issues found.", ...over });
+  const pr = { base: { sha: BASE }, head: { sha: HEAD } };
+
+  it("completion: a zero-inline review completed by an issue comment; a rate-limit or failure message is not completion", () => {
+    const f = collectorFixture({
+      11: { pr, comments: [], reviews: [], issueComments: [issue(1)] },
+      12: { pr, comments: [], reviews: [{ id: 2, user: bot, submitted_at: "2026-11-21T00:00:00Z", commit_id: HEAD, body: "Rate limit exceeded: wait 40 minutes" }],
+        issueComments: [issue(3, { body: "## Rate Limit Exceeded\nPlease wait" }), issue(4, { body: "Failed 😕 Tag the bot to retry." }), issue(5, { user: { login: "sunny" }, body: "ok" })] },
+    });
+    const out = path.join(f.dev, "c");
+    const lines: string[] = [];
+    expect(collectMain(f.args(out, ...WS), { log: (l) => lines.push(l) })).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(out, "coderabbit.status.json"), "utf8"))).toEqual({ c1: "completed", c2: "no-review" });
+    // completed with zero counted comments: the review file exists and is empty; the issue comment is not a comment
+    expect(JSON.parse(readFileSync(path.join(out, "coderabbit", "c1.json"), "utf8")).comments).toEqual([]);
+    expect(lines[0]).toContain("completed 1, no-review 1");
+    expect(lines[0]).toContain("0 counted comment(s)");
+    expect(lines[1]).toBe("coderabbit: completion objects after the window start (--bound window-start: a deviation, never drives a re-trigger): review 0, inline 0, issue comment 1; not completion (pattern) 3");
+    const coll = JSON.parse(readFileSync(path.join(out, "coderabbit.collection.json"), "utf8"));
+    expect(coll.notCompletion).toEqual(["rate limit exceeded", "^Failed\\b.*retry"]);
+    expect(coll.completionFrom).toBe("window start (--bound window-start)");
+    expect(JSON.parse(readFileSync(path.join(out, "raw", "coderabbit", "c2.json"), "utf8")).issueComments).toHaveLength(3);
+    // the patterns are required (an explicit [] is allowed) and must compile
+    json(path.join(f.dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"] } } });
+    const l2: string[] = [];
+    expect(collectMain(f.args(path.join(f.dev, "c2"), ...WS), { log: (l) => l2.push(l) })).toBe(2);
+    expect(l2[0]).toMatch(/no notCompletion list for coderabbit/);
+    json(path.join(f.dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"], notCompletion: ["("] } } });
+    const l3: string[] = [];
+    expect(collectMain(f.args(path.join(f.dev, "c3"), ...WS), { log: (l) => l3.push(l) })).toBe(2);
+    expect(l3[0]).toMatch(/is not a regular expression/);
+    json(path.join(f.dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"], notCompletion: [] } } });
+    expect(collectMain(f.args(path.join(f.dev, "c4"), ...WS), { log: () => {} })).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(f.dev, "c4", "coderabbit.status.json"), "utf8"))).toEqual({ c1: "completed", c2: "completed" });
+  });
+
+  it("completion counts only objects after the case's first trigger (--resume-file); a case with no trigger record refuses", () => {
+    const f = collectorFixture({
+      11: { pr, comments: [], reviews: [], issueComments: [issue(1, { created_at: "2026-11-20T10:00:00Z" })] }, // before c1's trigger
+      12: { pr, comments: [], reviews: [], issueComments: [issue(2, { created_at: "2026-11-20T13:00:00Z" })] }, // after c2's trigger
+    });
+    const resume = path.join(f.dev, "twenty.resume.jsonl");
+    const rec = (id: string, step: string, at: string) => JSON.stringify({ v: 1, fork: "SunnyBagal/twenty", id, step, at });
+    writeFileSync(resume, [rec("c1", "pr-created", "2026-11-19T00:00:00Z"), rec("c1", "triggered:coderabbit", "2026-11-20T11:00:00Z"),
+      rec("c2", "triggered:coderabbit", "2026-11-20T12:00:00Z"), rec("c2", "triggered:greptile", "2026-11-20T14:00:00Z")].join("\n") + "\n");
+    const out = path.join(f.dev, "t");
+    const lines: string[] = [];
+    expect(collectMain(f.args(out, "--resume-file", resume), { log: (l) => lines.push(l) })).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(out, "coderabbit.status.json"), "utf8"))).toEqual({ c1: "no-review", c2: "completed" });
+    expect(lines[1]).toContain("after the first trigger: review 0, inline 0, issue comment 1");
+    expect(JSON.parse(readFileSync(path.join(out, "coderabbit.collection.json"), "utf8")).completionFrom).toBe("first trigger (--resume-file)");
+    // with the explicit window-start bound, c1's comment is inside the window and completes it
+    expect(collectMain(f.args(path.join(f.dev, "t2"), ...WS), { log: () => {} })).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(f.dev, "t2", "coderabbit.status.json"), "utf8"))).toEqual({ c1: "completed", c2: "completed" });
+    expect(JSON.parse(readFileSync(path.join(f.dev, "t2", "coderabbit.collection.json"), "utf8")).completionFrom).toBe("window start (--bound window-start)");
+    // a case without a trigger record for this tool refuses before any read
+    writeFileSync(resume, rec("c1", "triggered:coderabbit", "2026-11-20T11:00:00Z") + "\n");
+    const l3: string[] = [];
+    expect(collectMain(f.args(path.join(f.dev, "t3"), "--resume-file", resume), { log: (l) => l3.push(l) })).toBe(2);
+    expect(l3[0]).toMatch(/c2 has no triggered:coderabbit record in --resume-file/);
+    expect(existsSync(path.join(f.dev, "t3"))).toBe(false);
+    // a resume file for another fork refuses
+    writeFileSync(resume, JSON.stringify({ v: 1, fork: "SunnyBagal/medusa", id: "c1", step: "triggered:coderabbit", at: "2026-11-20T11:00:00Z" }) + "\n");
+    const l4: string[] = [];
+    expect(collectMain(f.args(path.join(f.dev, "t4"), "--resume-file", resume), { log: (l) => l4.push(l) })).toBe(2);
+    expect(l4[0]).toMatch(/is for SunnyBagal\/medusa/);
+  });
+
+  // codex 076c review P2-1 (decision 076d item 4): the bound is never implicit
+  it("refuses with neither --resume-file nor --bound window-start, with both, and with another --bound; nothing is read or written", () => {
+    // codex's probe: window start 72 h before the end, a bot issue comment 30 h and the actual first trigger 25 h before it
+    const f = collectorFixture({ 11: { pr, comments: [], reviews: [], issueComments: [issue(1, { created_at: "2026-11-21T18:00:00Z" })] } });
+    const resume = path.join(f.dev, "twenty.resume.jsonl");
+    writeFileSync(resume, JSON.stringify({ v: 1, fork: "SunnyBagal/twenty", id: "c1", step: "triggered:coderabbit", at: "2026-11-21T23:00:00Z" }) + "\n");
+    const refused = (dir: string, ...extra: string[]) => {
+      const l: string[] = [];
+      const code = collectMain(f.args(path.join(f.dev, dir), "--ids", "c1", ...extra), { log: (x) => l.push(x) });
+      expect(existsSync(path.join(f.dev, dir))).toBe(false);
+      return { code, out: l.join("\n") };
+    };
+    const neither = refused("n1");
+    expect(neither.code).toBe(2);
+    expect(neither.out).toMatch(/refused: the completion bound must be named: --resume-file .* or --bound window-start for cases with no trigger record/);
+    const both = refused("n2", "--resume-file", resume, ...WS);
+    expect(both.code).toBe(2);
+    expect(both.out).toMatch(/--resume-file and --bound window-start are separate collections/);
+    const other = refused("n3", "--bound", "trigger");
+    expect(other.code).toBe(2);
+    expect(other.out).toMatch(/--bound takes one value: window-start/);
+    expect(f.log()).toEqual([]); // no gh call in any refusal
+    // the probe's two bounds, each named: the trigger bound gives no-review (U1), the window-start bound completed
+    expect(collectMain(f.args(path.join(f.dev, "n4"), "--ids", "c1", "--resume-file", resume), { log: () => {} })).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(f.dev, "n4", "coderabbit.status.json"), "utf8"))).toEqual({ c1: "no-review" });
+    expect(collectMain(f.args(path.join(f.dev, "n5"), "--ids", "c1", ...WS), { log: () => {} })).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(f.dev, "n5", "coderabbit.status.json"), "utf8"))).toEqual({ c1: "completed" });
   });
 });
 
@@ -552,13 +676,21 @@ describe("hand-check evidence completeness (codex 076a re-review 2)", () => {
       "--judge", `th=${f.dir("th.detail.json")}`, "--judge", `cr=${f.dir("cr.detail.json")}`, "--seed", "5", "--out", sheetDir, "--policy", f.policy()]).code).toBe(0);
     const mapping = JSON.parse(readFileSync(path.join(sheetDir, "mapping.json"), "utf8"));
     const decided = f.dir("decided.json");
-    json(decided, mapping.items.map((i: { item: string; tool: string; case: string }) => ({ item: i.item, decision: i.tool === "cr" && i.case === "c3" ? "same-bug" : "not", reason: "r" })));
+    json(decided, mapping.items.map((i: { item: string; tool: string; case: string }) => ({ item: i.item, decision: i.tool === "cr" && i.case === "c3" ? "same-bug" : "not",
+      guess: i.case === "c3" ? i.tool : "unsure", reason: "r" })));
     const hc = f.dir("hc.json");
     expect(run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(sheetDir, "mapping.json"), "--decisions", decided, "--out", hc]).code).toBe(0);
     const args = (out: string) => ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`, "--handcheck", hc, "--out", out];
-    expect(run(scoreMain, args(f.dir("h1.json"))).code).toBe(0);
+    const r1 = run(scoreMain, args(f.dir("h1.json")));
+    expect(r1.code).toBe(0);
     const s1 = JSON.parse(readFileSync(f.dir("h1.json"), "utf8"));
     expect([s1.tools.th.caught, s1.tools.cr.caught]).toEqual([0, 1]);
+    // the guess hit rate: one line, counts only (076c item 7)
+    const c3 = mapping.items.filter((i: { case: string }) => i.case === "c3").length, n = mapping.items.length;
+    const commonest = Math.max(...["th", "cr"].map((t) => mapping.items.filter((i: { tool: string }) => i.tool === t).length));
+    const guessLines = r1.out.split("\n").filter((l) => l.startsWith("hand-check guess:"));
+    expect(guessLines).toEqual([`hand-check guess: right ${c3} of ${c3} guessed (${n - c3} unsure, ${n} items, 2 tools; uniform chance 1/2; always naming the commonest tool: ${commonest} of ${n})`]);
+    expect(s1.handcheckGuess).toEqual({ items: n, guessed: c3, unsure: n - c3, right: c3, tools: 2, commonestToolItems: commonest });
     // a review that changed after the hand-check refuses
     const r = JSON.parse(readFileSync(f.dir("cr/c3.json"), "utf8"));
     r.comments.push({ path: "w.ts", line: 9, body: "added later" });
@@ -604,8 +736,11 @@ describe("spec B2 §7 pinned values", () => {
       const r = JSON.parse(readFileSync(dir(`${tool}/c${i}.json`), "utf8"));
       return { prTitle: `P${i}`, status: "SCORED", comments: r.comments.map((c: object) => ({ ...c, matched: caught.includes(i) ? "G1" : null })) };
     }) });
-    json(dir("policy.json"), { v: 1, approved: { by: "synthetic", on: "2026-11-11", ref: "spec B2 §7" }, official_attempt: "last", failed_case: "miss",
-      unstarted_case: "miss", no_review_in_pairs: "exclude", sheet_judge_cues: "hidden" });
+    const base = { v: 1, approved: { by: "synthetic", on: "2026-11-11", ref: "spec B2 §7" }, official_attempt: "last", failed_case: "miss",
+      unstarted_case: "miss", no_review_in_pairs: "exclude", sheet_judge_cues: "hidden" };
+    json(dir("policy.json"), base);
+    // the pair registered (named in the other order) with a floor of 3 or 4 reviewed-by-both cases
+    for (const floor of [3, 4]) json(dir(`policy-floor${floor}.json`), { ...base, registered_tests: { pairs: [["B", "A"]], alpha: 0.05, min_reviewed_by_both: floor } });
     return { d, dir, write, detail };
   }
 
@@ -613,13 +748,20 @@ describe("spec B2 §7 pinned values", () => {
     const f = specFixture();
     f.write("A", [1, 2, 3, 4, 5]); f.write("B", [2, 3, 4, 5]);
     f.detail("A", [1, 2, 3, 4, 5], [1, 2]); f.detail("B", [2, 3, 4, 5], [2, 3, 4]);
-    const args = (out: string, aDetail = "A.detail.json") => ["--side", "dev", "--goldens", f.dir("goldens.json"), "--policy", f.dir("policy.json"),
+    // the pair is registered with a floor of 3, so §7's p is reported
+    const args = (out: string, aDetail = "A.detail.json") => ["--side", "dev", "--goldens", f.dir("goldens.json"), "--policy", f.dir("policy-floor3.json"),
       "--tool", `A=${f.dir("A")}`, "--tool", `B=${f.dir("B")}`, "--judge", `A=${f.dir(aDetail)}`, "--judge", `B=${f.dir("B.detail.json")}`, "--out", out];
     expect(run(scoreMain, args(f.dir("s1.json"))).code).toBe(0);
     const s = JSON.parse(readFileSync(f.dir("s1.json"), "utf8"));
     expect([s.tools.A.caught, s.tools.A.bugCases, s.tools.A.caughtWilson.map((x: number) => +x.toFixed(3))]).toEqual([2, 4, [0.15, 0.85]]);
     expect([s.tools.B.caught, s.tools.B.caughtOfCompleted]).toEqual([3, "3/3"]);
-    expect(s.pairs).toEqual([{ a: "A", b: "B", n: 3, onlyA: 0, onlyB: 2, p: 0.5 }]);
+    expect(s.pairs).toEqual([{ a: "A", b: "B", registered: true, n: 3, reviewedByBoth: 3, onlyA: 0, onlyB: 2, both: 1, neither: 0, p: 0.5 }]);
+    // one case under the floor: the same counts, no p, no test line (decision 076c item 6)
+    const low = run(scoreMain, args(f.dir("s1-floor.json")).map((a) => (a === f.dir("policy-floor3.json") ? f.dir("policy-floor4.json") : a)));
+    expect(low.code).toBe(0);
+    expect(JSON.parse(readFileSync(f.dir("s1-floor.json"), "utf8")).pairs).toEqual([{ a: "A", b: "B", registered: true, n: 3, reviewedByBoth: 3, onlyA: 0, onlyB: 2, both: 1, neither: 0, p: null, noTest: "reviewed by both 3 < 4" }]);
+    expect(low.out).toContain("pair A vs B [registered]: paired n 3 · reviewed by both 3 · A only 0 · B only 2 · both 1 · neither 0 · no test: reviewed by both 3 < 4 (counts only)");
+    expect(low.out).not.toMatch(/sign test p/);
     // a second comment on c2 that also matches: A still 2 of 4
     f.write("A", [2], { 2: 1 });
     f.detail("A", [1, 2, 3, 4, 5], [1, 2], "A2.detail.json");
@@ -667,7 +809,7 @@ describe("spec B2 §7 pinned values", () => {
 });
 
 describe("spec B2 §7 collector row", () => {
-  it("one valid comment counted; reply, other account, 1 s after the window and an older commit excluded by reason; review bodies and issue comments are never read", () => {
+  it("one valid comment counted; reply, other account, 1 s after the window and an older commit excluded by reason; review bodies and issue comments are never counted", () => {
     const HEAD = "a".repeat(40), BASE = "b".repeat(40), END = "2026-11-23T00:00:00Z";
     const d = tmp(); const dev = path.join(d, "dev"); mkdirSync(dev, { recursive: true });
     copyFileSync(path.join(import.meta.dirname, "fixtures", "collector-fake-gh.mjs"), path.join(dev, "gh.mjs"));
@@ -678,21 +820,153 @@ describe("spec B2 §7 collector row", () => {
       path: "x.ts", line: 5, body: `comment ${id}`, ...over });
     json(path.join(dev, "gh.json"), { pulls: { 11: { pr: { base: { sha: BASE }, head: { sha: HEAD } },
       reviews: [{ id: 1, user: bot, submitted_at: "2026-11-21T00:00:00Z", commit_id: HEAD, body: "REVIEW BODY SUMMARY" }],
-      issue_comments: [{ id: 99, user: bot, body: "ISSUE COMMENT WALKTHROUGH" }],
+      issueComments: [{ id: 99, user: bot, created_at: "2026-11-21T00:00:00Z", body: "ISSUE COMMENT WALKTHROUGH" }],
       comments: [c(1), c(2, { in_reply_to_id: 1 }), c(3, { user: { login: "other[bot]", type: "Bot" } }), c(4, { created_at: "2026-11-23T00:00:01Z" }),
         c(5, { commit_id: "c".repeat(40), original_commit_id: "c".repeat(40) })] } } });
     json(path.join(dev, "manifest.json"), [{ id: "c1", title: "P1", base_sha: BASE, case_head_sha: HEAD }]);
     json(path.join(dev, "prmap.json"), { c1: 11 });
-    json(path.join(dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"] } } });
+    json(path.join(dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"], notCompletion: ["rate limit exceeded", "^Failed\\b.*retry"] } } });
     const out = path.join(dev, "o");
     const lines: string[] = [];
     expect(collectMain(["--side", "dev", "--tool", "coderabbit", "--config", path.join(dev, "tools.json"), "--repo", "SunnyBagal/twenty",
       "--manifest", path.join(dev, "manifest.json"), "--pr-map", path.join(dev, "prmap.json"), "--window-start", "2026-11-20T00:00:00Z", "--window-end", END,
-      "--out", out, "--gh-bin", path.join(dev, "gh")], { log: (l) => lines.push(l) })).toBe(0);
+      "--out", out, "--gh-bin", path.join(dev, "gh"), "--bound", "window-start"], { log: (l) => lines.push(l) })).toBe(0);
     expect(JSON.parse(readFileSync(path.join(out, "coderabbit", "c1.json"), "utf8")).comments).toEqual([{ path: "x.ts", line: 5, body: "comment 1" }]);
     expect(lines[0]).toContain("1 counted comment(s); excluded: other author 1, reply 1, outside window 1, other commit 1, duplicate 0");
     const calls = readFileSync(path.join(dev, "gh.log"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).argv[3]);
-    expect(calls.some((p: string) => p.includes("/issues/"))).toBe(false); // issue comments are never requested
+    // decision 076c item 2: issue comments are read for completion only, never counted
+    expect(calls.filter((p: string) => p.includes("/issues/"))).toEqual(["repos/SunnyBagal/twenty/issues/11/comments?per_page=100&page=1"]);
     expect(readFileSync(path.join(out, "coderabbit", "c1.json"), "utf8")).not.toMatch(/REVIEW BODY|ISSUE COMMENT/);
+  });
+});
+
+// decision 076c item 9 / premortem row 11 / Planner B's U6: the collector's statuses through the scorer
+describe("collector statuses in score-testset (076c, U6)", () => {
+  it("invalid-binding is no-review for that tool (out of its pairs, counted); read-failed is not a result and refuses", () => {
+    const f = scoringFixture();
+    const st = f.dir("cr.status.json");
+    json(st, { c1: "invalid-binding", c2: "no-review", c3: "completed", c4: "completed" });
+    const args = (out: string) => ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`,
+      "--judge", `th=${f.dir("th.detail.json")}`, "--judge", `cr=${f.dir("cr.detail.json")}`, "--status", `cr=${st}`, "--out", out];
+    const r = run(scoreMain, args(f.dir("u6.json")));
+    expect(r.code).toBe(0);
+    const s = JSON.parse(readFileSync(f.dir("u6.json"), "utf8"));
+    expect([s.tools.cr.noReview, s.tools.cr.invalidBinding, s.tools.cr.completedBug, s.tools.cr.caught]).toEqual([2, 1, 1, 1]);
+    expect(s.tools.th.invalidBinding).toBe(0);
+    expect(r.out).toContain("cr: caught 1/3");
+    expect(r.out).toContain("no-review 2 (invalid-binding 1)");
+    // c1 (invalid-binding) and c2 (no-review) leave the pair; c3 is caught by both
+    expect(s.pairs).toEqual([{ a: "th", b: "cr", registered: false, n: 1, reviewedByBoth: 1, onlyA: 0, onlyB: 0, both: 1, neither: 0, p: null }]);
+    // read-failed: exit 2, the reason, no output
+    json(st, { c1: "read-failed", c2: "no-review", c3: "completed", c4: "completed" });
+    const rf = run(scoreMain, args(f.dir("u6-rf.json")));
+    expect(rf.code).toBe(2);
+    expect(rf.out).toContain("c1 is read-failed, which is not a result: repeat the collection into a new directory");
+    expect(existsSync(f.dir("u6-rf.json"))).toBe(false);
+    // any other status still refuses
+    json(st, { c1: "pending", c2: "no-review", c3: "completed", c4: "completed" });
+    expect(run(scoreMain, args(f.dir("u6-x.json"))).out).toMatch(/c1 has status pending/);
+  });
+});
+
+// decision 076c items 4 and 6 (registered pairs, the floor of 15) and 076d item 1d (exposed / unexposed bug cases)
+describe("score-testset: registered pairs, the reviewed-by-both floor, the exposure split", () => {
+  const REG = (floor: number, pairs: string[][] = [["th", "cr"], ["th", "gr"]]) => ({ registered_tests: { pairs, alpha: 0.05, min_reviewed_by_both: floor } });
+  /** th, cr and gr (gr is a copy of cr): judge only, no runner records, so th completed c1-c3 and caught all three. */
+  function three() {
+    const f = scoringFixture();
+    cpSync(f.dir("cr"), f.dir("gr"), { recursive: true });
+    copyFileSync(f.dir("cr.detail.json"), f.dir("gr.detail.json"));
+    const args = (out: string, policy: string, tools = ["th", "cr", "gr"], ...extra: string[]) => ["--side", "dev", "--goldens", f.goldens, "--policy", policy,
+      ...tools.flatMap((t) => ["--tool", `${t}=${f.dir(t)}`, "--judge", `${t}=${f.dir(`${t}.detail.json`)}`]), "--out", out, ...extra];
+    return { f, args };
+  }
+
+  it("a p-value only for the registered pairs; any other pair is counts only; the summary carries no other p", () => {
+    const { f, args } = three();
+    const r = run(scoreMain, args(f.dir("r1.json"), f.policy(REG(1), "reg1.json")));
+    expect(r.code).toBe(0);
+    const s = JSON.parse(readFileSync(f.dir("r1.json"), "utf8"));
+    // th caught c1, c2, c3; cr and gr: c1 completed and missed, c2 no-review, c3 caught. Pairs with th: c2 is out.
+    const withTh = { registered: true, n: 2, reviewedByBoth: 2, onlyA: 1, onlyB: 0, both: 1, neither: 0, p: 1 };
+    expect(s.pairs).toEqual([{ a: "th", b: "cr", ...withTh }, { a: "th", b: "gr", ...withTh },
+      { a: "cr", b: "gr", registered: false, n: 2, reviewedByBoth: 2, onlyA: 0, onlyB: 0, both: 1, neither: 1, p: null }]);
+    expect(s.pairs.filter((p: { p: number | null }) => p.p !== null).map((p: { a: string; b: string }) => `${p.a}-${p.b}`)).toEqual(["th-cr", "th-gr"]);
+    expect(s.registeredTests).toEqual({ pairs: [["th", "cr"], ["th", "gr"]], alpha: 0.05, min_reviewed_by_both: 1, test: "exact two-sided sign test on the discordant bug cases, uncorrected" });
+    expect(r.out).toContain("pair th vs cr [registered]: paired n 2 · reviewed by both 2 · th only 1 · cr only 0 · both 1 · neither 0 · exact two-sided sign test p 1 (level 0.05, uncorrected for 2 registered test(s))");
+    expect(r.out).toContain("pair cr vs gr: paired n 2 · reviewed by both 2 · cr only 0 · gr only 0 · both 1 · neither 1 · counts only (not a registered pair)");
+    expect(r.out.match(/sign test p/g)).toHaveLength(2);
+    expect(r.out).not.toMatch(/significant|reject/i); // no verdict
+  });
+
+  it("under the floor a registered pair is counts only, with the reason; exactly at the floor it is tested", () => {
+    const { f, args } = three();
+    const low = run(scoreMain, args(f.dir("f15.json"), f.policy(REG(15), "reg15.json")));
+    expect(low.code).toBe(0);
+    const s = JSON.parse(readFileSync(f.dir("f15.json"), "utf8"));
+    expect(s.pairs.map((p: { p: number | null; noTest?: string }) => [p.p, p.noTest])).toEqual([[null, "reviewed by both 2 < 15"], [null, "reviewed by both 2 < 15"], [null, undefined]]);
+    expect(low.out).not.toMatch(/sign test p/);
+    expect(low.out.match(/no test: reviewed by both 2 < 15 \(counts only\)/g)).toHaveLength(2);
+    expect(run(scoreMain, args(f.dir("f2.json"), f.policy(REG(2), "reg2.json"))).code).toBe(0);
+    expect(JSON.parse(readFileSync(f.dir("f2.json"), "utf8")).pairs.map((p: { p: number | null }) => p.p)).toEqual([1, 1, null]);
+    expect(run(scoreMain, args(f.dir("f3.json"), f.policy(REG(3), "reg3.json"))).code).toBe(0);
+    expect(JSON.parse(readFileSync(f.dir("f3.json"), "utf8")).pairs.map((p: { p: number | null }) => p.p)).toEqual([null, null, null]);
+    // a registered tool that is not scored: refused, never dropped
+    const absent = run(scoreMain, args(f.dir("m.json"), f.policy(REG(2), "regm.json"), ["th", "cr"]));
+    expect(absent.code).toBe(2);
+    expect(absent.out).toMatch(/registered pair th vs gr: gr is not a --tool/);
+    expect(existsSync(f.dir("m.json"))).toBe(false);
+    // a miss by rule stays in the paired n but is not a reviewed case: th's c3 failed twice (--records)
+    const one = run(scoreMain, [...args(f.dir("m1.json"), f.policy(REG(2, [["th", "cr"]]), "regm1.json"), ["th", "cr"]), "--records", `th=${f.dir("th-records")}`]);
+    expect(one.code).toBe(0);
+    expect(JSON.parse(readFileSync(f.dir("m1.json"), "utf8")).pairs).toEqual([{ a: "th", b: "cr", registered: true, n: 2, reviewedByBoth: 1, onlyA: 1, onlyB: 1, both: 0, neither: 0, p: null, noTest: "reviewed by both 1 < 2" }]);
+  });
+
+  it("the policy's registered_tests are checked; the committed 076c policy registers the two pairs at 0.05 with the floor of 15", () => {
+    const { f, args } = three();
+    for (const [bad, want] of [[{ pairs: [["th", "th"]], alpha: 0.05, min_reviewed_by_both: 15 }, /pairs must be a list of \[tool, other tool\]/],
+      [{ pairs: [["th", "cr"], ["cr", "th"]], alpha: 0.05, min_reviewed_by_both: 15 }, /names a pair twice/],
+      [{ pairs: [["th", "cr"]], alpha: 5, min_reviewed_by_both: 15 }, /alpha must be a number between 0 and 1/],
+      [{ pairs: [["th", "cr"]], alpha: 0.05, min_reviewed_by_both: 1.5 }, /min_reviewed_by_both must be a whole number/],
+      [{ pairs: [["th", "cr"]], alpha: 0.05 }, /must be exactly \{pairs, alpha, min_reviewed_by_both\}/]] as const) {
+      const r = run(scoreMain, args(f.dir("bad.json"), f.policy({ registered_tests: bad }, "bad-policy.json")));
+      expect(r.code).toBe(2);
+      expect(r.out).toMatch(want);
+      expect(existsSync(f.dir("bad.json"))).toBe(false);
+    }
+    const committed = path.resolve(import.meta.dirname, "../../../scripts/testset/policy.076c.json");
+    const p = readPolicy(committed, ["official_attempt", "failed_case", "unstarted_case", "no_review_in_pairs", "sheet_judge_cues"]);
+    expect(p.registered_tests).toEqual({ pairs: [["tracehound", "coderabbit"], ["tracehound", "greptile"]], alpha: 0.05, min_reviewed_by_both: 15 });
+    const a = JSON.parse(readFileSync(path.resolve(import.meta.dirname, "../../../scripts/testset/policy.076a.json"), "utf8"));
+    for (const k of ["official_attempt", "failed_case", "unstarted_case", "no_review_in_pairs", "sheet_judge_cues"] as const) expect(p[k]).toBe(a[k]);
+  });
+
+  it("--exposure: each tool's catches on exposed and unexposed bug cases, as counts; ids that are not bug cases refuse", () => {
+    const { f, args } = three();
+    const exposure = f.dir("exposure.json");
+    json(exposure, { v: 1, exposed: ["c1", "c3"] });
+    const r = run(scoreMain, args(f.dir("x.json"), f.policy(), ["th", "cr"], "--exposure", exposure));
+    expect(r.code).toBe(0);
+    const s = JSON.parse(readFileSync(f.dir("x.json"), "utf8"));
+    expect(s.tools.th.exposure).toEqual({ exposed: { bugCases: 2, completedBug: 2, caught: 2 }, unexposed: { bugCases: 1, completedBug: 1, caught: 1 } });
+    expect(s.tools.cr.exposure).toEqual({ exposed: { bugCases: 2, completedBug: 2, caught: 1 }, unexposed: { bugCases: 1, completedBug: 0, caught: 0 } });
+    expect(s.exposure).toEqual({ sha256: createHash("sha256").update(readFileSync(exposure)).digest("hex"), exposedBugCases: 2, unexposedBugCases: 1 });
+    expect(r.out).toContain("th: exposed bug cases 2: caught 2, completed 2 · unexposed bug cases 1: caught 1, completed 1");
+    expect(r.out).toContain("cr: exposed bug cases 2: caught 1, completed 2 · unexposed bug cases 1: caught 0, completed 0");
+    // the two parts add up to the tool's line
+    for (const t of ["th", "cr"]) expect(s.tools[t].exposure.exposed.caught + s.tools[t].exposure.unexposed.caught).toBe(s.tools[t].caught);
+    // without the flag there is no split
+    expect(run(scoreMain, args(f.dir("x0.json"), f.policy(), ["th", "cr"])).out).not.toMatch(/exposed/);
+    expect(JSON.parse(readFileSync(f.dir("x0.json"), "utf8")).tools.th.exposure).toBeNull();
+    const refuse = (v: unknown, name: string) => { json(f.dir(name), v); return run(scoreMain, args(f.dir(`${name}.out`), f.policy(), ["th", "cr"], "--exposure", f.dir(name))); };
+    expect(refuse({ v: 1, exposed: ["c1", "c4"] }, "e-clean.json").out).toMatch(/--exposure lists 1 id\(s\) that are not bug cases of the goldens/);
+    expect(refuse({ v: 1, exposed: ["zz"] }, "e-unknown.json").out).toMatch(/lists 1 id\(s\) that are not bug cases/);
+    expect(refuse({ v: 1, exposed: ["c1", "c1"] }, "e-twice.json").out).toMatch(/lists a case twice/);
+    expect(refuse({ exposed: ["c1"] }, "e-shape.json").out).toMatch(/--exposure must be \{v: 1, exposed/);
+    for (const n of ["e-clean.json", "e-unknown.json", "e-twice.json", "e-shape.json"]) expect(existsSync(f.dir(`${n}.out`))).toBe(false);
+    // the dev side refuses an exposure file under a held-out path
+    mkdirSync(f.dir("heldout"), { recursive: true });
+    json(f.dir("heldout/exposure.json"), { v: 1, exposed: ["c1"] });
+    expect(run(scoreMain, args(f.dir("xh.json"), f.policy(), ["th", "cr"], "--exposure", f.dir("heldout/exposure.json"))).out).toMatch(/--side dev refuses a held-out path/);
   });
 });
