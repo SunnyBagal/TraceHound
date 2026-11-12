@@ -4,7 +4,7 @@
  * the scheduler in-process on a fake clock; the last one starts it detached as a real process, kills it in the middle
  * of a slot and starts it again.
  */
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -45,8 +45,8 @@ function fixture(n: number, o: { plan?: Record<string, unknown>; sim?: Record<st
   if (o.execute) pin();
   const clock = { t: o.startAt ?? Date.parse(T0) };
   const said: string[] = [];
-  /** the process table of the test: process group → command lines; `immortal` groups survive a kill */
-  const groups = new Map<number, string[]>(), killed: number[] = [], immortal = new Set<number>();
+  /** the process table of the test: process group → its processes; `immortal` groups survive a kill; `unlisted`: the process list cannot be read */
+  const groups = new Map<number, { pid: number; cmd: string }[]>(), killed: number[] = [], immortal = new Set<number>(), unlisted = { on: false };
   /** the scheduler's own gh reads (the fork's branches): paths asked for, and how many of the next reads fail */
   const reads: string[] = [], readFails = { n: 0 };
   let boot = 0, execs = 0;
@@ -54,7 +54,8 @@ function fixture(n: number, o: { plan?: Record<string, unknown>; sim?: Record<st
   const io = (die: (argv: string[]) => "before" | "after" | null = () => null, seconds: (argv: string[]) => number = () => 5): Io => {
     const pid = 5000 + ++boot;
     return { now: () => clock.t, sleep: async (ms) => { clock.t += ms; }, busy: () => false, alive: () => false, ident: () => ({ pid, ppid: 1, pgid: pid }), say: (l) => { said.push(l); },
-      group: (g) => groups.get(g) ?? [], killGroup: (g) => { killed.push(g); if (!immortal.has(g)) groups.delete(g); },
+      groupAlive: (g) => (groups.get(g)?.length ?? 0) > 0, group: (g) => (unlisted.on ? null : groups.get(g) ?? []),
+      killGroup: (g) => { killed.push(g); if (!immortal.has(g)) groups.delete(g); },
       // the fork as the stand-in has it: main, and the two refs of every case pushed to that fork so far
       read: (_bin, a) => {
         reads.push(a.join(" "));
@@ -93,7 +94,7 @@ function fixture(n: number, o: { plan?: Record<string, unknown>; sim?: Record<st
   const posts = (tool: string) => ["twenty", "medusa", "payload"].flatMap((n) => { const file = path.join(f("resume"), `${n}.resume.jsonl`);
     return existsSync(file) ? readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []; })
     .filter((r) => (r.step === `triggered:${tool}` || r.step === `retriggered:${tool}`) && r.existing !== true).map((r) => Date.parse(r.at)).sort((a, b) => a - b);
-  return { dir, f, json, cases, argv, pin, io, run, log, calls, sim, state, slots, said, clock, opts, groups, killed, immortal, posts, reads, readFails };
+  return { dir, f, json, cases, argv, pin, io, run, log, calls, sim, state, slots, said, clock, opts, groups, killed, immortal, unlisted, posts, reads, readFails };
 }
 const sha = (p: string) => spawnSync("shasum", ["-a", "256", p], { encoding: "utf8" }).stdout.slice(0, 64);
 const at = (hours: number, seconds = 0) => new Date(Date.parse(T0) + hours * H + seconds * 1000).toISOString();
@@ -293,7 +294,8 @@ describe("window-scheduler: restart, missed slots and failures", () => {
     const stuck: Io["exec"] = async (a, o) => {
       if (!(a.includes("--trigger") && a.includes("case-901"))) return t.io().exec(a, o);
       o.onPid(8001);
-      t.groups.set(8001, [`${process.execPath} ${t.f("open-prs.ts")} --trigger`, "/usr/local/bin/gh pr comment 1 --repo SunnyBagal/twenty --body-file -"]);
+      t.groups.set(8001, [{ pid: 8001, cmd: `${process.execPath} ${t.f("open-prs.ts")} --resume-file ${path.join(t.f("resume"), "twenty.resume.jsonl")} --trigger coderabbit,greptile` },
+        { pid: 8101, cmd: "/usr/local/bin/gh pr comment 1 --repo SunnyBagal/twenty --body-file -" }]);
       t.immortal.add(8001);
       t.clock.t += 300_000;
       return { exit: null, signal: "SIGKILL", timedOut: true, cleaned: false };
@@ -307,8 +309,25 @@ describe("window-scheduler: restart, missed slots and failures", () => {
     expect(t.killed).toEqual([8001]);
     expect(t.log().at(-1)).toMatchObject({ event: "stop", reason: "a cut command's processes could not be confirmed ended", pid: 8001 });
     expect(t.calls()).toHaveLength(1);
-    // the group id now belongs to an unrelated program: that is not this command, so the step is cleared and the run goes on
-    t.groups.set(8001, ["/Applications/Notes.app/Contents/MacOS/Notes"]);
+    // codex 076d-r2, P2-R1: the group is alive but the process list cannot be read: unknown is not "gone".
+    // Not cleared, nothing started, and nothing killed either (it is not known to be this command)
+    t.unlisted.on = true;
+    expect(await t.run()).toBe(3);
+    expect(t.log().at(-1)).toMatchObject({ event: "stop", reason: "a cut command's process group is alive and its processes cannot be listed or identified", pid: 8001, evidence: "unknown", killed: false });
+    expect(t.killed).toEqual([8001]);
+    expect(t.calls()).toHaveLength(1);
+    expect(t.log().some((r) => r.event === "step-cleared")).toBe(false);
+    // listed again, but only a process nobody can attribute, and no group leader: still unknown, still stopped
+    t.unlisted.on = false;
+    t.groups.set(8001, [{ pid: 8300, cmd: "/usr/libexec/some-helper --serve" }]);
+    expect(await t.run()).toBe(3);
+    expect(t.log().at(-1)).toMatchObject({ event: "stop", evidence: "unknown", killed: false });
+    expect(t.killed).toEqual([8001]);
+    expect(t.calls()).toHaveLength(1);
+    expect(t.log().some((r) => r.event === "step-cleared")).toBe(false);
+    // the group id now belongs to another program (its leader is not this command): a process id is not reused while its
+    // group has a member, so the command's group had ended; the step is cleared without a kill and the run goes on
+    t.groups.set(8001, [{ pid: 8001, cmd: "/Applications/Notes.app/Contents/MacOS/Notes" }]);
     expect(await t.run()).toBe(0);
     expect(t.killed).toEqual([8001]);
     expect(t.log().filter((r) => r.event === "step-cleared").map((r) => [r.step, r.pid, r.killed])).toEqual([["trigger", 8001, false]]);
@@ -316,7 +335,7 @@ describe("window-scheduler: restart, missed slots and failures", () => {
     // a cut command that is still running past its own timeout is killed as a group, and the run goes on once it is gone
     const k = fixture(1, { execute: true, plan: firstOnly(1) });
     const cutRun = k.io((a) => (a.includes("--trigger") ? "before" : null));
-    expect(await k.run({ ...cutRun, exec: async (a, o) => { if (a.includes("--trigger")) { o.onPid(8002); k.groups.set(8002, ["git push"]); } return cutRun.exec(a, o); } })).toBe("killed");
+    expect(await k.run({ ...cutRun, exec: async (a, o) => { if (a.includes("--trigger")) { o.onPid(8002); k.groups.set(8002, [{ pid: 8050, cmd: "/usr/bin/git -C /clone push --atomic https://github.com/SunnyBagal/twenty.git" }]); } return cutRun.exec(a, o); } })).toBe("killed");
     expect(await k.run()).toBe(0);
     expect(k.killed).toEqual([8002]);
     expect(k.log().filter((r) => r.event === "step-cleared").map((r) => [r.pid, r.killed])).toEqual([[8002, true]]);
@@ -470,6 +489,49 @@ describe("window-scheduler: inputs and the held-out guard", () => {
 });
 
 describe("window-scheduler as a real detached process", () => {
+  // codex 076d-r2, P2-R1, through the real fallback: a live process group and a `ps` that fails
+  it("recovery with a live command group and an unavailable process list stops (exit 3): nothing cleared, nothing started, nothing killed, until the group is gone", async () => {
+    const t = fixture(2, { execute: true, plan: firstOnly(2) });
+    // a real process group standing for the cut trigger command (its own session, like every command the scheduler starts)
+    const live = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], { detached: true, stdio: "ignore" });
+    const pgid = live.pid!;
+    const exited = new Promise((res) => live.on("exit", res));
+    const cutRun = t.io((a) => (a.includes("--trigger") && a.includes("case-901") ? "before" : null));
+    expect(await t.run({ ...cutRun, exec: async (a, o) => { if (a.includes("--trigger")) o.onPid(pgid); return cutRun.exec(a, o); } })).toBe("killed");
+    // a ps that exits 1, first on PATH: realIo.group and realIo.busy cannot list processes
+    const bin = t.f("bin");
+    mkdirSync(bin);
+    writeFileSync(path.join(bin, "ps"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+    const PATH = process.env.PATH;
+    const real = (): Io => ({ ...t.io(), groupAlive: realIo.groupAlive, group: realIo.group, busy: realIo.busy, killGroup: realIo.killGroup });
+    try {
+      process.env.PATH = `${bin}${path.delimiter}${PATH}`;
+      expect(realIo.group(pgid)).toBeNull();
+      expect(realIo.busy(["anything"])).toBeNull();
+      expect(realIo.groupAlive(pgid)).toBe(true);
+      const before = t.calls().length;
+      expect(await t.run(real())).toBe(3);
+      expect(t.log().at(-1)).toMatchObject({ event: "stop", reason: "a cut command's process group is alive and its processes cannot be listed or identified", pid: pgid, evidence: "unknown", killed: false });
+      expect(t.log().some((r) => r.event === "step-cleared")).toBe(false);
+      expect(t.log().filter((r) => r.event === "step-start")).toHaveLength(2); // open and the cut trigger; none after
+      expect(t.calls()).toHaveLength(before);
+      expect(t.sim().comments).toEqual({});
+      expect(realIo.groupAlive(pgid)).toBe(true); // and it was not killed
+      // a second start changes nothing while the evidence is still missing
+      expect(await t.run(real())).toBe(3);
+      expect(t.calls()).toHaveLength(before);
+    } finally {
+      process.env.PATH = PATH;
+    }
+    // the operator looks, the process ends, the process list is back: the group is gone, so the step is cleared and the run goes on
+    process.kill(-pgid, "SIGKILL");
+    await exited;
+    expect(realIo.groupAlive(pgid)).toBe(false);
+    expect(await t.run(real())).toBe(0);
+    expect(t.log().filter((r) => r.event === "step-cleared").map((r) => [r.step, r.pid, r.killed])).toEqual([["trigger", pgid, false]]);
+    expect(t.calls().map((c) => `${c.kind}:${c.id}`)).toEqual(["open:case-901", "trigger:case-901", "open:case-902", "trigger:case-902"]);
+  }, 30_000);
+
   // codex 076d review, P2-S3: the timeout ends the whole command, not only the script
   it("a command's timeout kills its whole process group: a grandchild started by the command writes nothing afterwards", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "window-sched-timeout-"));
@@ -483,6 +545,7 @@ setTimeout(() => {}, 60000);
     const r = await realIo.exec([process.execPath, script], { outFile: path.join(dir, "out.txt"), timeoutMs: 400, onPid: (p) => { pid = p; } });
     expect(r).toMatchObject({ timedOut: true, cleaned: true, signal: "SIGKILL" });
     expect(pid).toBeGreaterThan(0);
+    expect(realIo.groupAlive(pid)).toBe(false);
     expect(realIo.group(pid)).toEqual([]);
     await new Promise((res) => setTimeout(res, 2500));
     expect(existsSync(marker)).toBe(false);
@@ -521,8 +584,13 @@ setTimeout(() => {}, 60000);
       expect(launchers).not.toContain(r.ppid);
       if (process.platform === "darwin") expect(r.ppid).toBe(1);
     }
-    // the cut trigger command was left to finish before the step ran again
-    expect(log.some((r) => r.event === "step-wait" && r.step === "trigger")).toBe(true);
+    // the cut trigger command had ended before the step ran again: its last record is older than the second trigger call
+    // (under load it may already be gone when the restart looks, so a step-wait record is not required)
+    const lastPost = Math.max(...readFileSync(path.join(t.f("resume"), "twenty.resume.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((r) => String(r.step).startsWith("triggered:")).map((r) => Date.parse(r.at)));
+    expect(Date.parse(t.calls()[2]!.at)).toBeGreaterThanOrEqual(lastPost);
+    expect(log.filter((r) => r.event === "step-cleared").map((r) => [r.step, r.killed])).toEqual([["trigger", false]]);
+    const waited = log.findIndex((r) => r.event === "step-wait" && r.step === "trigger");
+    if (waited >= 0) expect(waited).toBeLessThan(log.findIndex((r) => r.event === "step-cleared"));
     expect(log.filter((r) => r.event === "step-start").map((r) => r.step)).toEqual(["open", "trigger", "trigger"]);
     expect(log.filter((r) => r.event === "step-end").map((r) => [r.step, r.exit])).toEqual([["open", 0], ["trigger", 0]]);
     expect(log.filter((r) => r.event === "slot-start")).toHaveLength(1);

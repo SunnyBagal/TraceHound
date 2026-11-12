@@ -54,7 +54,10 @@
  * Every command runs in its own process group, whose id is logged; "no process left" means that whole group (the script
  * and every gh or git it started). A command that reaches its timeout has its whole group killed, and the scheduler
  * goes on only once the group is seen gone; if that cannot be established it stops (exit 3) rather than risk a retry
- * that overlaps a late write;
+ * that overlaps a late write. The same holds at a restart for a command left without a confirmed end: it is cleared
+ * only on evidence (its group is gone, or the group id now belongs to another program), waited for and then killed only
+ * when its processes are identified as this command's, and when the group is alive but its processes cannot be listed
+ * or identified the scheduler stops without clearing, retrying or killing anything;
  * before every slot the sha256 of every pinned file (--pins; required with --execute) is compared and a difference
  * stops the scheduler; every command has a timeout; the state file is rewritten after every slot.
  * Held-out: `--side heldout` needs --heldout-ok (never passed by tuning agents). On `--side dev` any path that names
@@ -103,12 +106,14 @@ export interface Io {
   sleep(ms: number): Promise<void>;
   /** Runs one command in its own process group (`onPid` gets the group's id); at the timeout the whole group is killed. */
   exec(argv: string[], o: { outFile: string; timeoutMs: number; onPid: (pid: number) => void }): Promise<StepResult>;
-  /** true while a process whose command line holds every needle is running (a command cut off by a kill may still run) */
-  busy(needles: string[]): boolean;
+  /** true while a process whose command line holds every needle is running (a command cut off by a kill may still run); null: the process list could not be read */
+  busy(needles: string[]): boolean | null;
   /** One read-only gh call (the fork's branches); stdout only, its stderr is never shown. */
   read(bin: string, argv: string[], timeoutMs: number): { exit: number | null; stdout: string };
-  /** command lines of the live processes in a process group */
-  group(pgid: number): string[];
+  /** signal 0 to the group: true while any process of it exists (needs no process list) */
+  groupAlive(pgid: number): boolean;
+  /** the live processes of a process group; null: the process list could not be read (unknown, never "empty") */
+  group(pgid: number): { pid: number; cmd: string }[] | null;
   killGroup(pgid: number): void;
   alive(pid: number): boolean;
   ident(): { pid: number; ppid: number; pgid: number | null };
@@ -413,8 +418,9 @@ export async function runScheduler(o: Opts, io: Io): Promise<number> {
     const step = async (slot: number, c: CaseRow, name: string, argv: string[], timeoutSeconds: number, needles: string[]): Promise<StepResult> => {
       const deadline = io.now() + timeoutSeconds * 1000;
       let waited = false;
-      while (io.busy(needles)) {
-        if (!waited) { log("step-wait", { slot, position: c.position, step: name, why: "a process of this command is still running" }); waited = true; }
+      // an unreadable process list is not "nothing is running": wait as if busy
+      for (let b = io.busy(needles); b !== false; b = io.busy(needles)) {
+        if (!waited) { log("step-wait", { slot, position: c.position, step: name, why: b === null ? "the process list could not be read" : "a process of this command is still running" }); waited = true; }
         if (io.now() >= deadline) { log("step-not-started", { slot, position: c.position, step: name, why: "a process of this command was still running at the timeout" }); refresh(); return { exit: null, signal: null, timedOut: true, cleaned: true }; }
         await io.sleep(1000);
       }
@@ -569,29 +575,44 @@ export async function runScheduler(o: Opts, io: Io): Promise<number> {
       return !o.cases.some((c) => o.tools.some((t) => resume.get(c.fork)?.get(c.id)?.triggered.has(t) && !st.handled.get(c.position)?.has(t)));
     };
 
-    // a command the last scheduler left without a confirmed end: its whole process group must be gone before anything runs
+    // a command the last scheduler left without a confirmed end: nothing runs until there is evidence that it is gone
     if (st.cut) {
       const cut = st.cut;
       const marks = [...cut.needles, ...(o.ghBin ? [o.ghBin] : []), ...(o.gitBin ? [o.gitBin] : [])];
-      // the group id could have been reused by an unrelated program: only processes that look like this command count
       const ours = (cmd: string) => marks.some((m) => cmd.includes(m)) || /(^|\/)(gh|git)(\s|$)/.test(cmd);
-      const left = () => (cut.pid !== null && io.group(cut.pid).some(ours)) || (cut.needles.length > 0 && io.busy(cut.needles));
+      /**
+       * "gone": the group no longer exists, or its id now belongs to another program. A process id is not reused while
+       * its process group still has a member, so a group leader that is not this command proves the command's group
+       * had ended. "ours": processes of this command are still there. "unknown": the group is alive and its processes
+       * cannot be listed or identified; unknown is never treated as gone (codex 076d-r2, P2-R1).
+       */
+      const evidence = (): "gone" | "ours" | "unknown" => {
+        if (cut.pid === null) { const b = io.busy(cut.needles); return b === null ? "unknown" : b ? "ours" : "gone"; }
+        if (!io.groupAlive(cut.pid)) return "gone";
+        const members = io.group(cut.pid);
+        if (members === null || !members.length) return "unknown";
+        const leader = members.find((m) => m.pid === cut.pid);
+        if (leader && !cut.needles.every((n) => leader.cmd.includes(n))) return "gone";
+        return members.some((m) => ours(m.cmd)) ? "ours" : "unknown";
+      };
       const deadline = Date.parse(cut.at) + cut.timeoutSeconds * 1000;
-      let killed = false;
-      if (left()) {
-        log("step-wait", { slot: cut.slot, position: cut.position, step: cut.step, pid: cut.pid, why: "the command cut by the last stop is still running" });
-        io.say(`${iso(io.now())} | slot ${cut.slot} | position ${cut.position} | ${cut.step} | waiting for the cut command to end`);
-        while (left() && io.now() < deadline) await io.sleep(1000);
-        if (left()) {
-          // past its own timeout with nobody supervising it: kill the whole group, then confirm
-          if (cut.pid !== null) io.killGroup(cut.pid);
+      let killed = false, ev = evidence();
+      if (ev !== "gone") {
+        log("step-wait", { slot: cut.slot, position: cut.position, step: cut.step, pid: cut.pid, evidence: ev, why: "the command cut by the last stop is not confirmed ended" });
+        io.say(`${iso(io.now())} | slot ${cut.slot} | position ${cut.position} | ${cut.step} | waiting for the cut command to end (${ev})`);
+        while ((ev = evidence()) !== "gone" && io.now() < deadline) await io.sleep(1000);
+        if (ev === "ours" && cut.pid !== null) {
+          // identified as this command, past its own timeout, with nobody supervising it: kill the whole group, then confirm
+          io.killGroup(cut.pid);
           killed = true;
-          for (let i = 0; i < 10 && left(); i++) await io.sleep(1000);
-          if (left()) {
-            log("stop", { reason: "a cut command's processes could not be confirmed ended", slot: cut.slot, position: cut.position, step: cut.step, pid: cut.pid });
-            refresh(); writeState();
-            throw new Stop(`the processes of the cut command (${cut.step}, slot ${cut.slot}) could not be confirmed ended`);
-          }
+          for (let i = 0; i < 10 && (ev = evidence()) !== "gone"; i++) await io.sleep(1000);
+        }
+        if (ev !== "gone") {
+          // fail closed: not cleared, not retried; a group that could not be identified is not killed either
+          const reason = ev === "unknown" ? "a cut command's process group is alive and its processes cannot be listed or identified" : "a cut command's processes could not be confirmed ended";
+          log("stop", { reason, slot: cut.slot, position: cut.position, step: cut.step, pid: cut.pid, evidence: ev, killed });
+          refresh(); writeState();
+          throw new Stop(`${reason} (${cut.step}, slot ${cut.slot}, process group ${cut.pid ?? "unknown"}); look at it, then start again`);
         }
       }
       log("step-cleared", { n: cut.n, slot: cut.slot, position: cut.position, step: cut.step, pid: cut.pid, killed });
@@ -683,8 +704,8 @@ export const realIo: Io = {
     });
   }),
   busy: (needles) => {
-    const r = spawnSync("ps", ["-axo", "pid=,command="], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
-    if (r.status !== 0) return false;
+    const r = spawnSync("ps", ["-axwwo", "pid=,command="], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+    if (r.status !== 0) return null; // unknown, not "nothing is running"
     return r.stdout.split("\n").some((l) => { const m = /^\s*(\d+)\s+(.*)$/.exec(l); return !!m && Number(m[1]) !== process.pid && needles.every((n) => m[2]!.includes(n)); });
   },
   alive: (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return (e as { code?: string }).code === "EPERM"; } },
@@ -694,10 +715,11 @@ export const realIo: Io = {
     const r = spawnSync(bin, argv, { cwd: os.tmpdir(), env, encoding: "utf8", timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
     return { exit: r.error ? null : r.status, stdout: r.stdout ?? "" };
   },
+  groupAlive: (pgid) => groupAlive(pgid),
   group: (pgid) => {
-    const r = spawnSync("ps", ["-axo", "pgid=,command="], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
-    if (r.status !== 0) return groupAlive(pgid) ? ["(process list unavailable; the group is alive)"] : [];
-    return r.stdout.split("\n").flatMap((l) => { const m = /^\s*(\d+)\s+(.*)$/.exec(l); return m && Number(m[1]) === pgid ? [m[2]!] : []; });
+    const r = spawnSync("ps", ["-axwwo", "pgid=,pid=,command="], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+    if (r.status !== 0) return null; // unknown: the caller must not read this as an empty group
+    return r.stdout.split("\n").flatMap((l) => { const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l); return m && Number(m[1]) === pgid ? [{ pid: Number(m[2]), cmd: m[3]! }] : []; });
   },
   killGroup: (pgid) => killGroup(pgid),
   ident: () => {
