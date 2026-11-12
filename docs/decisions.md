@@ -4040,3 +4040,63 @@ files match codex's GO at `45b48df` and the gates passed, so the GO stands.
   (one paid process at a time, job-start file; item 1), `docs/live-setup.md` (re-trigger and Greptile smoke text; items 3, 8).
 **Rejected:** dropping or replacing the unmappable held-out case; the label of record's range alone; re-triggering
 completed zero-comment reviews; a familywise correction across the two registered tests.
+**Correction (2026-11-13, Sunny):** the 2026-11-09 console reading was **$19.13**, not $19.31 (a typo carried into 076,
+076a–c and `docs/budget.md`). Usable $18.13; unallocated $1.18 → $1.00; billing-lag unexplained $0.22 → $0.40; the global
+hard stop in `.env` 63.33547 → 63.15547. No job cap changes.
+
+## 076d — Ancestry exposure, not-completion messages, scheduler lane, untriggered cases (2026-11-13)
+
+**Status: ruled by Sunny; nothing run.** Amends 076c items 2, 10 and 11, F1 row 16's open ruling, and H1 §6's second
+collector run. Sources: grok's ancestry count (`tracehound-testset/run/out/grok.ancestry.md`, 2026-11-12); codex's NO-GO on
+`b4-076c` `6fd4568` and on the re-trigger patch (sha256 `135374bf…`), findings P2-1 and P2-2
+(`run/out/codex.076c-review.md`); bunny's two fixes for them, approved by Sunny
+(`run/comms/codex-to-bunny.076c-review-1.answer.md`). **The spend freeze stays.**
+
+**1. Ancestry (F1 row 16; premortem row 14a).** Counts: 11 of the 20 held-out starting fixes are an ancestor of another
+case's base on the same fork; 5 of 29 held-out bases and 7 of 40 dev bases carry another case's fix; bullmq 0. The 11 of 20
+and the 5 of 29 are the same exposure counted from its two ends; grok reconciles them in its report. The run goes ahead,
+with no case excluded, under these rules:
+   a. grok splits the 11 by where the fix sits (a dev base, a held-out base, both); counts only.
+   b. **Every dev case branch** (`cases/<id>`, `cases/<id>-base`) is deleted from the four forks after P1's collection and
+      before T0.
+   c. **Held-out case branches are pushed one at a time, in base-date order, each only at its own first-trigger slot.** No
+      held-out branch is on a fork before its slot.
+   d. The report gives each tool's catches on **exposed and unexposed bug cases separately** (exposed: grok's set after
+      a–c, held on the held-out side; the report gets counts).
+   e. W1 states what remains (for example a re-trigger, which comes after later branches are pushed) as a limitation
+      (§4 limit 6).
+   f. grok re-counts exposure **at first review** under b and c. If it can't reach 0, grok reports how many remain and
+      Sunny rules again before F1. Excluding cases is needed only if that re-count is above 0.
+
+**2. Not-completion messages (amends 076c item 2, U1).** A bot message saying "in progress", "review skipped", "paused" or
+similar is not a completed review; such messages go into each tool's `notCompletion` list in
+`scripts/testset/tools.json`, beside the rate-limit and error messages. S1 and P1 record their exact text; the lists
+freeze after P1 (`docs/specs/P1.md`).
+
+**3. The window scheduler moves from codex to bunny (amends 076c item 11; H1 "Who keeps the clock").** bunny builds it
+from the rehearsal script with H1's properties and 1c's push order; codex reviews it; the 8-slot rehearsal is re-run on
+the built scheduler. codex's current rehearsal stands as evidence for the rehearsal script only.
+
+**4. Cases with no trigger (replaces H1 §6's second run without `--resume-file`).** The collector gets an explicit flag for
+cases with no `triggered:<tool>` record (bunny's `--bound window-start`, P2-1). With neither `--resume-file` nor the flag it
+refuses. A flagged collection is reported as a deviation and never drives a re-trigger. With it, codex's P2-2 is fixed as
+bunny proposed: a re-trigger needs the collection's window to start at or before the first trigger and to cover 24 h after
+it (`min(window end, collectedAt)`).
+
+**Touches** (owner; a file leaves STATE's list when its owner's commit is on main):
+- grok: `run/out/grok.ancestry-076d.md` (split of the 11; reconciliation with 5 of 29; re-count at first review; 1a, 1f).
+- codex: `docs/eval/ts-protocol.md` (1b–1e, 2, 4); the exposed set on the held-out side for scoring (1d); review of the
+  scheduler and the 8-slot rehearsal re-run on it (3); review of bunny's P2-1 / P2-2 fixes.
+- Planner A: `docs/runbooks/F1-freeze.md` (row 14 owner and rehearsal; row 16 → 1f's re-count), `docs/runbooks/H1-window.md`
+  (push order, scheduler owner, §6 flag), `docs/specs/P1.md` (dev branch deletion after collection; exact
+  not-completion text), `docs/specs/S1.md` (exact text), `docs/specs/B2.md` (§5.3 not-completion kinds),
+  `docs/runbooks/H2-scoring.md` (exposed / unexposed split), `docs/runbooks/W1-writeup.md` (§4 limit 6),
+  `docs/plan/2026-11-11-plan-v2.md` (R-6, scheduler owner).
+- Planner B: `docs/plan/premortem.md` (row 3 owner, row 14a).
+- bunny: `scripts/testset/collect-tool-reviews.ts` (flag and refusal; 4), `tracehound-testset/scripts/open-prs.ts` (P2-2;
+  one held-out push per slot; 1c), the window scheduler (new; 3), `scripts/testset/score-testset.ts` (exposed / unexposed
+  counts; 1d), `scripts/testset/tools.json` (not-completion entries after S1 and P1; 2), the dev-branch deletion step if
+  P1 makes it a script (1b).
+- artu1: `docs/decisions.md`, `docs/budget.md` (the correction above), `.agents/STATE.md`.
+**Rejected:** excluding the 11 exposed cases now (only if 1f's re-count is above 0); rebuilding the case branches; keeping
+the collector's window-start fallback implicit.

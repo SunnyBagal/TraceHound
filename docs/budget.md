@@ -1,6 +1,6 @@
 # Budget (2026-11-09; split replaced 2026-11-11, decision 076)
 
-**Money left: $19.31** (the owner's console reading, 2026-11-09; it was $23.39 on 2026-11-08). That is all the money the
+**Money left: $19.13** (the owner's console reading, 2026-11-09; first written here as $19.31, a typo corrected 2026-11-13; it was $23.39 on 2026-11-08). That is all the money the
 project has. Every model call from here on has a line below, or it does not happen.
 
 **FREEZE: no paid job runs until Sunny confirms in the Nebius console** (hourly usage, 2026-11-08 → 09): about $3.36
@@ -9,8 +9,8 @@ new key is only in local `.env`.
 
 **Likely explanation: billing lag, not a leak.** Job 074 ran 2026-11-08T08:43:04Z–09:39:08Z and cost **$3.36463**
 (ledger, 147 calls; `docs/bench/hard-chunks.md:52`). Sunny's $23.39 reading came about 1 minute after 074 finished
-(owner), so it did not yet include 074. Then 23.39 − 3.36463 (074) − 0.49090 (075) = **$19.53** expected vs **$19.31**
-real: $0.22 unexplained (≈ 6% of the two jobs' $3.86, within a price-estimate error; not proven). codex found no
+(owner), so it did not yet include 074. Then 23.39 − 3.36463 (074) − 0.49090 (075) = **$19.53** expected vs **$19.13**
+real: $0.40 unexplained (≈ 10% of the two jobs' $3.86; not proven). codex found no
 Nebius-key-capable CI run in the 48 h (`run/out/codex.leak.md` § 48 h) and grok no committed key in 53 public repos
 (`run/out/grok.secrets.md`). The "≈ $3.59 off-ledger overnight" in the log below is superseded by this.
 
@@ -69,8 +69,8 @@ Nebius-key-capable CI run in the 48 h (`run/out/codex.leak.md` § 48 h) and grok
 1. **No experiment without a line in this file** (job, cap, status). A job's cap is enforced in its own runner as well.
 2. **Replay the response cache unless reliability is the thing under test.** Reliability tests (failure rates, retries,
    parsing) bypass the cache for the requests under test (standing rule, decisions.md top, from 073a).
-3. **Global hard stop:** `TRACEHOUND_BUDGET_TOTAL_USD = 63.33547` in `.env` (gitignored) = ledger total when set
-   ($45.02547 on 2026-11-09) + $19.31 − $1.00 safety margin (it was 66.92462 on 2026-11-08). Every client call is refused
+3. **Global hard stop:** `TRACEHOUND_BUDGET_TOTAL_USD = 63.15547` in `.env` (gitignored) = ledger total when set
+   ($45.02547 on 2026-11-09) + $19.13 − $1.00 safety margin (it was 63.33547 until the 2026-11-13 balance correction, 66.92462 on 2026-11-08). Every client call is refused
    once the local ledger would pass it (`packages/analyzer/src/llm/budget.ts`). Scripts load `.env` only when
    `NEBIUS_API_KEY` is not already in the environment: if you export the key yourself, export this variable too.
 4. **The local ledger does not see every charge** (next section). Calls from the GitHub Action, CI, other machines or the
@@ -126,7 +126,7 @@ $19.40. Audit cost: $0; only console usage can reconcile the actual charges.
 | judging per PR: v1 only / v1 + x1 | $0.0012 / $0.0014 | same |
 | cache-replay run, per PR (073r arm A) | ≈ $0.0073 incl. both judges (8 of 96 first attempts plus misses went live) | recovery-ab.md |
 
-## The split of $19.31 (2026-11-11, decision 076; replaces the 2026-11-09 split, which is in git history)
+## The split of $19.13 (2026-11-11, decision 076; balance corrected 2026-11-13, decision 076c correction; replaces the 2026-11-09 split, which is in git history)
 Bases are **estimates** from the unit costs above (measured on non-TS repos) plus 25% for TS diffs (an assumption).
 Job caps are Sunny's (S0, amended 2026-11-11 after the caps check). **Every runner job's batch `--max-usd-run` = job cap − job
 spend so far; unstarted ids roll into the next batch** (this replaced "min(batch estimate + $0.40, …)").
@@ -143,10 +143,10 @@ spend so far; unstarted ids roll into the next batch** (this replaced "min(batch
 | H1 held-out run | 29 cases, from the freeze tag | **$3.15** until decision 077 | recomputed once from R1's measured costs (95% completion), funded from unallocated first; an unstarted held-out case at the cap runs from the reserve | never cut |
 | H2 scoring | 3 tools + 2 secondary rows × 29 × v1 + x1 | **$0.40** | ≈ $0.20 | never cut |
 | reserve | infrastructure reruns (held-out first), a console-check correction, unstarted held-out cases (076a), the canary (≤ $0.40, 076b) | **$3.00** | owner | held; never cut |
-| unallocated | needs a new line here before use | **$1.18** | $1.71 − $0.53 to R1 (2026-11-11 ruling) | held; funds the 077 recompute (H1 first, then R2) |
+| unallocated | needs a new line here before use | **$1.00** | $1.71 − $0.53 to R1 (2026-11-11 ruling) − $0.18 (balance correction, 2026-11-13) | held; funds the 077 recompute (H1 first, then R2) |
 | CI review runs | manual Action runs | **$0.00** | none planned; each needs a line first | none since 2026-11-01 |
 | safety margin | never spent (outside the global hard stop) | $1.00 | rule 3 | — |
-| **total** | | **$19.31** | $18.31 usable + $1.00 margin | |
+| **total** | | **$19.13** | $18.13 usable + $1.00 margin | |
 
 Done before this split: 075 ($0.49090, ledger; INCONCLUSIVE).
 
@@ -185,3 +185,4 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 | 2026-11-11 | caps ruling (076a): R1 $4.68, unallocated $1.18; rolling batch rule; R2/H1 recomputed in 077 from R1's measured costs; judge-only env caps; L4 concurrency 1 | — | $0 | **$19.31** |
 | 2026-11-11 | 076b: R1/R2 judging inside the job cap; re-trigger slots; CodeRabbit rate check; canary ≤ $0.40 from the reserve; adopted-arm cost reporting | — | $0 | **$19.31** |
 | 2026-11-12 | 076c: caps procedures (job-start file, one paid process at a time, L2 three-way verdict); protocol, premortem, team process ruled | — | $0 | **$19.31** |
+| 2026-11-13 | balance correction (Sunny): the 2026-11-09 console reading was **$19.13**, not $19.31 (typo). Usable $18.13; unallocated $1.18 → $1.00; billing-lag unexplained $0.22 → $0.40; `.env` hard stop 63.33547 → 63.15547; job caps unchanged (decision 076c correction) | — | $0 | **$19.13** |
