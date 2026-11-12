@@ -3,7 +3,7 @@
 **Money left: $19.13** (the owner's console reading, 2026-11-09; first written here as $19.31, a typo corrected 2026-11-13; it was $23.39 on 2026-11-08). That is all the money the
 project has. Every model call from here on has a line below, or it does not happen.
 
-**Freeze lifted 2026-11-13 by Sunny, as his decision without the console check** (once 076d and its merges were on main).
+**Freeze lifted 2026-11-13: Sunny's decision, made without the console check** (once 076d and its merges were on main).
 The remaining guard is S1: compare the Nebius console with the ledger at least 2 h after S1 ends; if console ÷ ledger is
 above **1.08**, stop and tell Sunny. (The freeze had waited on a console check of hourly usage, 2026-11-08 → 09: about $3.36
 at 09:00–10:00 UTC on 8 Nov, nothing overnight, no running sandboxes; that check was not made.) Sunny revoked the old API key on 2026-11-09; the
