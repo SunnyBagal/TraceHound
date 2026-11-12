@@ -60,7 +60,10 @@ export function simulate(argv: string[], { dir, now, sleep = () => {} }: { dir: 
     const prMap = JSON.parse(fs.readFileSync(val("--pr-map")!, "utf8"));
     if (prMap[id] !== st.prs[id]) return 2;
     fs.mkdirSync(out, { recursive: true });
-    fs.writeFileSync(path.join(out, `${tool}.status.json`), JSON.stringify({ [id]: st.review?.[id]?.[tool] ?? "no-review" }));
+    // a status, or {completedAt}: no-review until that instant, completed from it on (a review that arrives late)
+    const rv = st.review?.[id]?.[tool] ?? "no-review";
+    const status = typeof rv === "string" ? rv : now() >= Date.parse(rv.completedAt) ? "completed" : "no-review";
+    fs.writeFileSync(path.join(out, `${tool}.status.json`), JSON.stringify({ [id]: status }));
     fs.writeFileSync(path.join(out, `${tool}.collection.json`), JSON.stringify({ v: 1, tool, repo: fork, window: { start: val("--window-start"), end: val("--window-end") } }));
     return 0;
   }

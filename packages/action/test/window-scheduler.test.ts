@@ -9,7 +9,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFi
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { guardSide, main, parseCli, pinnedPaths, runScheduler, type Io, type Opts } from "../../../scripts/testset/window-scheduler.ts";
+import { guardSide, main, parseCli, pinnedPaths, realIo, runScheduler, type Io, type Opts } from "../../../scripts/testset/window-scheduler.ts";
 import { simulate } from "./fixtures/scheduler-sim.ts";
 
 const SCRIPT = path.resolve(import.meta.dirname, "../../../scripts/testset/window-scheduler.ts");
@@ -45,19 +45,23 @@ function fixture(n: number, o: { plan?: Record<string, unknown>; sim?: Record<st
   if (o.execute) pin();
   const clock = { t: o.startAt ?? Date.parse(T0) };
   const said: string[] = [];
-  let boot = 0;
+  /** the process table of the test: process group → command lines; `immortal` groups survive a kill */
+  const groups = new Map<number, string[]>(), killed: number[] = [], immortal = new Set<number>();
+  let boot = 0, execs = 0;
   /** `die`: the scheduler process is killed at the first command for which it returns "before" (nothing ran) or "after" (the command ran, its end was never logged). */
   const io = (die: (argv: string[]) => "before" | "after" | null = () => null, seconds: (argv: string[]) => number = () => 5): Io => {
     const pid = 5000 + ++boot;
     return { now: () => clock.t, sleep: async (ms) => { clock.t += ms; }, busy: () => false, alive: () => false, ident: () => ({ pid, ppid: 1, pgid: pid }), say: (l) => { said.push(l); },
-      exec: async (a, { outFile }) => {
+      group: (g) => groups.get(g) ?? [], killGroup: (g) => { killed.push(g); if (!immortal.has(g)) groups.delete(g); },
+      exec: async (a, { outFile, onPid }) => {
         const how = die(a);
         if (how === "before") throw new Killed();
+        onPid(7000 + ++execs);
         clock.t += seconds(a) * 1000;
         const exit = simulate(a.slice(2), { dir, now: () => clock.t });
         writeFileSync(outFile, "");
         if (how === "after") throw new Killed();
-        return { exit, signal: null, timedOut: false };
+        return { exit, signal: null, timedOut: false, cleaned: true };
       } };
   };
   const opts = (): Opts => parseCli(argv()).o;
@@ -74,7 +78,11 @@ function fixture(n: number, o: { plan?: Record<string, unknown>; sim?: Record<st
   const sim = () => JSON.parse(readFileSync(f("sim.json"), "utf8"));
   const state = () => JSON.parse(readFileSync(path.join(f("state"), "scheduler.state.json"), "utf8"));
   const slots = () => log().filter((r) => r.event === "slot-end").map((r) => `${r.slot}:${r.outcome}`);
-  return { dir, f, json, cases, argv, pin, io, run, log, calls, sim, state, slots, said, clock, opts };
+  /** when each trigger or re-trigger of a tool was posted (the stand-in posts at the end of its command), in time order */
+  const posts = (tool: string) => ["twenty", "medusa", "payload"].flatMap((n) => { const file = path.join(f("resume"), `${n}.resume.jsonl`);
+    return existsSync(file) ? readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []; })
+    .filter((r) => (r.step === `triggered:${tool}` || r.step === `retriggered:${tool}`) && r.existing !== true).map((r) => Date.parse(r.at)).sort((a, b) => a - b);
+  return { dir, f, json, cases, argv, pin, io, run, log, calls, sim, state, slots, said, clock, opts, groups, killed, immortal, posts };
 }
 const sha = (p: string) => spawnSync("shasum", ["-a", "256", p], { encoding: "utf8" }).stdout.slice(0, 64);
 const at = (hours: number, seconds = 0) => new Date(Date.parse(T0) + hours * H + seconds * 1000).toISOString();
@@ -116,10 +124,15 @@ describe("window-scheduler: slots, order and the log", () => {
       "--clone", path.join(t.f("clones"), "twenty"), "--ids", "case-901", "--execute"]);
     expect(first[3]!.argv).toEqual(["--manifest", t.f("manifest.json"), "--fork", "SunnyBagal/medusa", "--resume-file", path.join(t.f("resume"), "medusa.resume.jsonl"),
       "--trigger", "coderabbit,greptile", "--ids", "case-902", "--execute"]);
-    // never two triggers of a tool inside one hour
-    const trig = t.log().filter((r) => r.event === "step-start" && (r.step === "trigger" || String(r.step).startsWith("retrigger:coderabbit"))).map((r) => Date.parse(r.at));
-    for (let i = 1; i < trig.length; i++) expect(trig[i]! - trig[i - 1]!).toBeGreaterThanOrEqual(H);
-    expect(t.log().filter((r) => r.event === "spacing-wait").map((r) => [r.slot, r.seconds])).toEqual([[2, 15], [3, 15]]);
+    // never two posts of a tool inside one hour: each trigger command starts an hour after the last one ENDED
+    for (const tool of ["coderabbit", "greptile"]) {
+      const posts = t.posts(tool);
+      expect(posts.length).toBe(4);
+      for (let i = 1; i < posts.length; i++) expect(posts[i]! - posts[i - 1]!).toBeGreaterThanOrEqual(H);
+    }
+    // slot 1's trigger ended at +25 s, so slot 2's starts at +25 s (20 s wait) and ends at +30 s; slot 3's waits 25 s
+    // (slot 31's check of position 3 also waits, before its collection: slot 30's re-trigger command ended at 30:00:10)
+    expect(t.log().filter((r) => r.event === "spacing-wait").map((r) => [r.slot, r.seconds])).toEqual([[2, 20], [3, 25], [31, 10]]);
     // slots 4..29 hold no first trigger and come before the re-trigger slots: nothing happens in them
     expect(t.slots().slice(0, 29)).toEqual(["1:done", "2:done", "3:done", ...Array.from({ length: 26 }, (_, i) => `${i + 4}:nothing-to-do`)]);
     // slot 30: position 1 (coderabbit no-review → re-triggered, greptile completed); slot 31: position 2 needs nothing, so
@@ -165,17 +178,110 @@ describe("window-scheduler: restart, missed slots and failures", () => {
     expect(t.state().boots).toHaveLength(2);
   });
 
-  it("killed in the middle of a step that had already posted: the step runs again, and nothing is pushed, opened or posted twice", async () => {
-    const t = fixture(1, { execute: true, plan: firstOnly(1) });
-    expect(await t.run(t.io((a) => (a.includes("--trigger") ? "after" : null)))).toBe("killed");
+  it("killed in the middle of a step that had already posted: the step runs again, nothing is pushed, opened or posted twice, and the next PR still waits its hour", async () => {
+    const t = fixture(2, { execute: true, plan: firstOnly(2) });
+    expect(await t.run(t.io((a) => (a.includes("--trigger") && a.includes("case-901") ? "after" : null)))).toBe("killed");
     expect(t.sim().comments).toEqual({ "case-901": { coderabbit: 1, greptile: 1 } });
     expect(t.log().filter((r) => r.event === "step-start" && r.step === "trigger")).toHaveLength(1);
     expect(t.log().filter((r) => r.event === "step-end" && r.step === "trigger")).toHaveLength(0);
+    t.clock.t += 20 * 60_000; // the scheduler is down for 20 minutes
     expect(await t.run()).toBe(0);
-    expect(t.calls().map((c) => c.kind)).toEqual(["open", "trigger", "trigger"]);
-    expect(t.sim()).toMatchObject({ pushed: ["case-901"], prs: { "case-901": 1 }, comments: { "case-901": { coderabbit: 1, greptile: 1 } } });
+    expect(t.calls().map((c) => `${c.kind}:${c.id}`)).toEqual(["open:case-901", "trigger:case-901", "trigger:case-901", "open:case-902", "trigger:case-902"]);
+    expect(t.sim()).toMatchObject({ pushed: ["case-901", "case-902"], prs: { "case-901": 1 }, comments: { "case-901": { coderabbit: 1, greptile: 1 }, "case-902": { coderabbit: 1, greptile: 1 } } });
     const records = readFileSync(path.join(t.f("resume"), "twenty.resume.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).step);
     expect(records).toEqual(["pushed", "pr-created", "triggered:coderabbit", "triggered:greptile"]);
+    // the cut command is closed in the log when its processes are seen gone, and that moment bounds its post
+    expect(t.log().filter((r) => r.event === "step-cleared").map((r) => [r.step, r.position, r.killed])).toEqual([["trigger", 1, false]]);
+    for (const tool of ["coderabbit", "greptile"]) { const [a, b] = t.posts(tool); expect(b! - a!).toBeGreaterThanOrEqual(H); }
+    // case-902's trigger waited an hour from the end of case-901's last command, 20 minutes past its own slot
+    expect(Date.parse(t.calls()[4]!.at)).toBeGreaterThanOrEqual(Date.parse(at(2)) + 20 * 60_000);
+  });
+
+  // codex 076d review, P2-S1: the hour is between posts, not between command starts
+  it("unequal command durations: a slow trigger command (180 s of checks before its post) still leaves an hour to the next PR's post", async () => {
+    const t = fixture(3, { execute: true, plan: firstOnly(3) });
+    expect(await t.run(t.io(() => null, (a) => (a.includes("--trigger") && a.includes("case-901") ? 180 : 5)))).toBe(0);
+    for (const tool of ["coderabbit", "greptile"]) {
+      const posts = t.posts(tool);
+      expect(posts).toHaveLength(3);
+      for (let i = 1; i < posts.length; i++) expect(posts[i]! - posts[i - 1]!).toBeGreaterThanOrEqual(H);
+    }
+    // case-901's post is at 01:03:05; case-902's command may not start before 02:03:05
+    expect(t.posts("coderabbit").map((x) => new Date(x).toISOString())).toEqual([at(1, 185), at(2, 190), at(3, 195)]);
+    expect(t.slots()).toEqual(["1:done", "2:done", "3:done"]);
+  });
+
+  it("a cut trigger command that is not run again in its slot still bounds the next PR: the hour counts from when its processes were seen gone", async () => {
+    // case-901's trigger command posts after 180 s and the scheduler is killed before logging its end; it is back 40
+    // minutes later, past slot 1's grace, so that command is not run again before case-902's slot
+    const t = fixture(2, { execute: true, plan: firstOnly(2, 1) });
+    const seconds = (a: string[]) => (a.includes("--trigger") && a.includes("case-901") ? 180 : 5);
+    expect(await t.run(t.io((a) => (a.includes("--trigger") && a.includes("case-901") ? "after" : null), seconds))).toBe("killed");
+    t.clock.t += 40 * 60_000;
+    const back = t.clock.t;
+    expect(await t.run(t.io(() => null, seconds))).toBe(0);
+    expect(t.slots()).toEqual(["1:interrupted-late", "2:done", "3:done"]);
+    expect(t.log().filter((r) => r.event === "step-cleared").map((r) => [r.step, r.position, Date.parse(r.at)])).toEqual([["trigger", 1, back]]);
+    const [first, second] = t.posts("coderabbit");
+    expect(second! - first!).toBeGreaterThanOrEqual(H);
+    // case-902's trigger command started an hour after the cut command was seen gone, not at its own slot
+    const start = t.log().find((r) => r.event === "step-start" && r.step === "trigger" && r.position === 2)!;
+    expect(Date.parse(start.at)).toBe(back + H);
+    expect(t.sim().comments).toEqual({ "case-901": { coderabbit: 1, greptile: 1 }, "case-902": { coderabbit: 1, greptile: 1 } });
+  });
+
+  // codex 076d review, P2-S2: the verdict a re-trigger is posted from is collected after the spacing wait
+  it("a review that completes while the scheduler waits out the spacing is seen: the collection comes after the wait and nothing is posted", async () => {
+    const review = { "case-901": { coderabbit: "no-review", greptile: "completed" }, "case-902": { coderabbit: { completedAt: at(31, 8) }, greptile: "completed" } };
+    const t = fixture(2, { execute: true, sim: { review } });
+    expect(await t.run()).toBe(0);
+    // slot 30 re-triggers case-901 (its command ends at 30:00:10); slot 31 must wait until 31:00:10 before it may post
+    expect(t.slots().slice(-2)).toEqual(["30:retriggered", "31:nothing-needed"]);
+    const wait = t.log().findIndex((r) => r.event === "spacing-wait" && r.slot === 31);
+    const collect = t.log().findIndex((r) => r.event === "step-start" && r.slot === 31 && r.step === "collect:coderabbit");
+    expect(wait).toBeGreaterThan(-1);
+    expect(collect).toBeGreaterThan(wait);
+    const collects = t.calls().filter((c) => c.kind === "collect" && c.id === "case-902" && c.argv.includes("coderabbit"));
+    expect(collects).toHaveLength(1);
+    expect(Date.parse(collects[0]!.at)).toBeGreaterThanOrEqual(Date.parse(at(31, 10)));
+    expect(t.calls().filter((c) => c.kind === "retrigger").map((c) => c.id)).toEqual(["case-901"]);
+    expect(t.sim().comments["case-902"]).toEqual({ coderabbit: 1, greptile: 1 });
+    expect(t.log().filter((r) => r.event === "tool-handled" && r.position === 2).map((r) => String(r.why).split(":")[0])).toEqual(["completed", "completed"]);
+  });
+
+  // codex 076d review, P2-S3: fail closed while a command's processes may still write
+  it("a timed-out command whose processes cannot be confirmed ended stops the scheduler; a restart goes on only once they are gone", async () => {
+    const t = fixture(2, { execute: true, plan: firstOnly(2) });
+    const stuck: Io["exec"] = async (a, o) => {
+      if (!(a.includes("--trigger") && a.includes("case-901"))) return t.io().exec(a, o);
+      o.onPid(8001);
+      t.groups.set(8001, [`${process.execPath} ${t.f("open-prs.ts")} --trigger`, "/usr/local/bin/gh pr comment 1 --repo SunnyBagal/twenty --body-file -"]);
+      t.immortal.add(8001);
+      t.clock.t += 300_000;
+      return { exit: null, signal: "SIGKILL", timedOut: true, cleaned: false };
+    };
+    expect(await t.run({ ...t.io(), exec: stuck })).toBe(3);
+    expect(t.log().at(-1)).toMatchObject({ event: "stop", reason: "a timed-out command's processes could not be confirmed ended", step: "trigger", pid: 8001 });
+    expect(t.calls().map((c) => `${c.kind}:${c.id}`)).toEqual(["open:case-901"]);
+    expect(t.state()).toMatchObject({ stopped: "a timed-out command's processes could not be confirmed ended", ended: false });
+    // started again while the gh process is still there: the group is killed, cannot be confirmed gone, and it stops again
+    expect(await t.run()).toBe(3);
+    expect(t.killed).toEqual([8001]);
+    expect(t.log().at(-1)).toMatchObject({ event: "stop", reason: "a cut command's processes could not be confirmed ended", pid: 8001 });
+    expect(t.calls()).toHaveLength(1);
+    // the group id now belongs to an unrelated program: that is not this command, so the step is cleared and the run goes on
+    t.groups.set(8001, ["/Applications/Notes.app/Contents/MacOS/Notes"]);
+    expect(await t.run()).toBe(0);
+    expect(t.killed).toEqual([8001]);
+    expect(t.log().filter((r) => r.event === "step-cleared").map((r) => [r.step, r.pid, r.killed])).toEqual([["trigger", 8001, false]]);
+    expect(t.calls().map((c) => `${c.kind}:${c.id}`)).toEqual(["open:case-901", "trigger:case-901", "open:case-902", "trigger:case-902"]);
+    // a cut command that is still running past its own timeout is killed as a group, and the run goes on once it is gone
+    const k = fixture(1, { execute: true, plan: firstOnly(1) });
+    const cutRun = k.io((a) => (a.includes("--trigger") ? "before" : null));
+    expect(await k.run({ ...cutRun, exec: async (a, o) => { if (a.includes("--trigger")) { o.onPid(8002); k.groups.set(8002, ["git push"]); } return cutRun.exec(a, o); } })).toBe("killed");
+    expect(await k.run()).toBe(0);
+    expect(k.killed).toEqual([8002]);
+    expect(k.log().filter((r) => r.event === "step-cleared").map((r) => [r.pid, r.killed])).toEqual([[8002, true]]);
   });
 
   it("a slot that comes up more than the grace late is not fired late; its case takes the next free slot, one first trigger per slot", async () => {
@@ -304,6 +410,27 @@ describe("window-scheduler: inputs and the held-out guard", () => {
 });
 
 describe("window-scheduler as a real detached process", () => {
+  // codex 076d review, P2-S3: the timeout ends the whole command, not only the script
+  it("a command's timeout kills its whole process group: a grandchild started by the command writes nothing afterwards", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "window-sched-timeout-"));
+    const marker = path.join(dir, "late-write"), script = path.join(dir, "command.mjs");
+    // the command starts a child of its own (as open-prs.ts starts gh) that would write 1.5 s later, and hangs
+    writeFileSync(script, `import { spawn } from "node:child_process";
+spawn(process.execPath, ["-e", 'setTimeout(() => require("node:fs").writeFileSync(process.argv[1], "late"), 1500)', ${JSON.stringify(marker)}], { stdio: "ignore" });
+setTimeout(() => {}, 60000);
+`);
+    let pid = 0;
+    const r = await realIo.exec([process.execPath, script], { outFile: path.join(dir, "out.txt"), timeoutMs: 400, onPid: (p) => { pid = p; } });
+    expect(r).toMatchObject({ timedOut: true, cleaned: true, signal: "SIGKILL" });
+    expect(pid).toBeGreaterThan(0);
+    expect(realIo.group(pid)).toEqual([]);
+    await new Promise((res) => setTimeout(res, 2500));
+    expect(existsSync(marker)).toBe(false);
+    // a command that ends by itself is not touched
+    writeFileSync(script, "process.exitCode = 7;\n");
+    expect(await realIo.exec([process.execPath, script], { outFile: path.join(dir, "out2.txt"), timeoutMs: 10_000, onPid: () => {} })).toEqual({ exit: 7, signal: null, timedOut: false, cleaned: true });
+  }, 30_000);
+
   it("SIGKILL in the middle of a slot, then a restart: the cut command is left to finish, nothing is repeated, the slot completes", async () => {
     // slot 1 is 2 s away; the stand-in's trigger takes 2.5 s to post, and the scheduler is killed while it runs
     const t0 = new Date(Date.now() - H + 2000).toISOString();

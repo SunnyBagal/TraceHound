@@ -31,20 +31,29 @@
  *    `invalid-binding` end that tool for the PR, `no-review` posts `open-prs.ts --retrigger <tool> --status …`. A
  *    collection that cannot be read is tried once more; if it fails again the slot passes and the PR is first at the
  *    next slot. If no tool needed a re-trigger the same slot goes on to the next due position.
- * A slot starts only within graceSeconds of its planned time; later it is `missed` and nothing is fired late. A trigger
- * for a tool is never started sooner than minTriggerSpacingSeconds after the previous one for that tool.
+ * A slot starts only within graceSeconds of its planned time; later it is `missed` and nothing is fired late.
+ * Spacing: a command that posts a tool's trigger on a PR is never started sooner than minTriggerSpacingSeconds after
+ * the END of the last such command on another PR (its logged end; for a command that was cut, the moment its processes
+ * were seen gone). A post lies between a command's start and its end, so two posts of one tool on two PRs are at least
+ * that far apart, whatever each command spends on its checks first. In a re-trigger check the wait comes before the
+ * collection, so the verdict a re-trigger is posted from is never older than the collection and the post themselves.
  *
  * Properties (H1): dry run by default (open-prs.ts is called without --execute; the re-trigger check is listed, not
  * run); `--detach` restarts the scheduler as a session leader detached from the caller, and every start writes pid,
  * parent pid and process group to the log and the state file; a lock file allows one copy per state dir; the log
  * (<state>/scheduler.log.jsonl, one fsynced JSON line per action with its UTC time, planned time and delay) is the
  * source of truth, and a restarted scheduler replays it: a step that ended with exit 0 is never run again, a step that
- * was cut is run again only after no process of it is left (open-prs.ts itself never pushes, opens or triggers twice);
+ * was cut is run again only after no process of it is left (open-prs.ts itself never pushes, opens or triggers twice).
+ * Every command runs in its own process group, whose id is logged; "no process left" means that whole group (the script
+ * and every gh or git it started). A command that reaches its timeout has its whole group killed, and the scheduler
+ * goes on only once the group is seen gone; if that cannot be established it stops (exit 3) rather than risk a retry
+ * that overlaps a late write;
  * before every slot the sha256 of every pinned file (--pins; required with --execute) is compared and a difference
  * stops the scheduler; every command has a timeout; the state file is rewritten after every slot.
  * Held-out: `--side heldout` needs --heldout-ok (never passed by tuning agents). On `--side dev` any path that names
  * held-out and any `ho-` case id is refused before anything is read.
- * Exit codes: 0 finished (or listed), 2 refused, 3 stopped (a pinned file changed).
+ * Exit codes: 0 finished (or listed), 2 refused, 3 stopped (a pinned file changed, or a command's processes could not be
+ * confirmed ended).
  * stdout: one line per action (UTC time, slot, position, case id, step, result); never a title or a comment text. The
  * commands' own output goes to <state>/steps/.
  */
@@ -75,14 +84,19 @@ export interface Opts {
   files: { cases: string; plan: string; tools: string; manifest: string; openPrs: string; collector: string; pins: string | null };
   clones: string; resumeDir: string; stateDir: string; node: string; ghBin: string | null; gitBin: string | null;
 }
-export interface StepResult { exit: number | null; signal: string | null; timedOut: boolean }
+/** `cleaned` is false only when a timed-out command's process group could not be confirmed ended. */
+export interface StepResult { exit: number | null; signal: string | null; timedOut: boolean; cleaned: boolean }
 /** Effects, replaced in tests: the clock, the commands, and what the process table says. */
 export interface Io {
   now(): number;
   sleep(ms: number): Promise<void>;
-  exec(argv: string[], o: { outFile: string; timeoutMs: number }): Promise<StepResult>;
+  /** Runs one command in its own process group (`onPid` gets the group's id); at the timeout the whole group is killed. */
+  exec(argv: string[], o: { outFile: string; timeoutMs: number; onPid: (pid: number) => void }): Promise<StepResult>;
   /** true while a process whose command line holds every needle is running (a command cut off by a kill may still run) */
   busy(needles: string[]): boolean;
+  /** command lines of the live processes in a process group */
+  group(pgid: number): string[];
+  killGroup(pgid: number): void;
   alive(pid: number): boolean;
   ident(): { pid: number; ppid: number; pgid: number | null };
   say(line: string): void;
@@ -215,14 +229,16 @@ export interface State {
   slots: Map<number, SlotState>;
   first: Map<number, FirstState>;
   handled: Map<number, Map<string, string>>;
-  /** per tool, per position: when its last trigger or re-trigger command started */
-  triggerAt: Map<string, Map<number, number>>;
+  /** per tool, per position: when its last trigger or re-trigger command ended (logged end, or seen gone after a cut) */
+  triggerEnd: Map<string, Map<number, number>>;
+  /** a command with a start and no confirmed end: cut by a kill, or timed out without its group confirmed gone */
+  cut: { n: number; slot: number; position: number; step: string; at: string; timeoutSeconds: number; needles: string[]; pid: number | null } | null;
   resumeSha: Map<string, string>;
   steps: number; ended: boolean; stopped: string | null;
 }
 
 export function replay(recs: Rec[], tools: string[]): State {
-  const s: State = { boots: [], binding: null, slots: new Map(), first: new Map(), handled: new Map(), triggerAt: new Map(), resumeSha: new Map(), steps: 0, ended: false, stopped: null };
+  const s: State = { boots: [], binding: null, slots: new Map(), first: new Map(), handled: new Map(), triggerEnd: new Map(), cut: null, resumeSha: new Map(), steps: 0, ended: false, stopped: null };
   const first = (p: number) => { if (!s.first.has(p)) s.first.set(p, { attempts: 0, openDone: false, triggerDone: false }); return s.first.get(p)!; };
   for (const r of recs) {
     if (r.event === "boot") { s.boots.push({ at: r.at, pid: r.pid as number, ppid: r.ppid as number, pgid: r.pgid as number | null }); s.binding ??= r.binding as Record<string, unknown>; s.stopped = null; }
@@ -235,11 +251,19 @@ export function replay(recs: Rec[], tools: string[]): State {
       s.slots.set(r.slot as number, slot);
     } else if (r.event === "step-start") {
       s.steps++;
+      s.cut = { n: r.n as number, slot: r.slot as number, position: r.position as number, step: r.step as string, at: r.at, timeoutSeconds: r.timeoutSeconds as number,
+        needles: (r.needles as string[] | undefined) ?? [], pid: null };
+    } else if (r.event === "step-pid") { if (s.cut && s.cut.n === r.n) s.cut.pid = r.pid as number; }
+    else if (r.event === "step-end" || r.event === "step-cleared") {
+      // a post lies before the command's end: the end bounds it from above, whatever the exit code was
       const step = r.step as string, at = Date.parse(r.at);
-      const mark = (t: string) => { if (!s.triggerAt.has(t)) s.triggerAt.set(t, new Map()); s.triggerAt.get(t)!.set(r.position as number, at); };
+      const mark = (t: string) => { if (!s.triggerEnd.has(t)) s.triggerEnd.set(t, new Map()); s.triggerEnd.get(t)!.set(r.position as number, at); };
       if (step === "trigger") for (const t of tools) mark(t);
       else if (step.startsWith("retrigger:")) mark(step.slice("retrigger:".length));
-    } else if (r.event === "step-end") {
+      // a timed-out command whose group was not confirmed gone stays open until a later start clears it
+      if (r.event === "step-end" && r.timedOut === true && r.cleaned === false) { if (s.cut && typeof r.pid === "number") s.cut.pid = r.pid; }
+      else s.cut = null;
+      if (r.event === "step-cleared") continue;
       if (r.exit === 0 && r.step === "open") first(r.position as number).openDone = true;
       if (r.exit === 0 && r.step === "trigger") first(r.position as number).triggerDone = true;
       if (typeof r.resumeSha === "string") s.resumeSha.set(r.fork as string, r.resumeSha);
@@ -364,26 +388,36 @@ export async function runScheduler(o: Opts, io: Io): Promise<number> {
       let waited = false;
       while (io.busy(needles)) {
         if (!waited) { log("step-wait", { slot, position: c.position, step: name, why: "a process of this command is still running" }); waited = true; }
-        if (io.now() >= deadline) { log("step-end", { slot, position: c.position, step: name, exit: null, signal: null, timedOut: true, why: "still busy at the timeout" }); refresh(); return { exit: null, signal: null, timedOut: true }; }
+        if (io.now() >= deadline) { log("step-not-started", { slot, position: c.position, step: name, why: "a process of this command was still running at the timeout" }); refresh(); return { exit: null, signal: null, timedOut: true, cleaned: true }; }
         await io.sleep(1000);
       }
-      const outFile = path.join(o.stateDir, "steps", `s${slot}-p${c.position}-${name.replace(/[^a-z0-9-]+/g, "-")}.${++seq}.txt`);
+      const n = ++seq;
+      const outFile = path.join(o.stateDir, "steps", `s${slot}-p${c.position}-${name.replace(/[^a-z0-9-]+/g, "-")}.${n}.txt`);
       const started = io.now();
-      log("step-start", { slot, position: c.position, id: c.id, fork: c.fork, step: name, dry: !o.execute, argv, outFile: path.basename(outFile), timeoutSeconds, ppid: io.ident().ppid });
-      const r = await io.exec(argv, { outFile, timeoutMs: timeoutSeconds * 1000 });
+      let pid: number | null = null;
+      log("step-start", { n, slot, position: c.position, id: c.id, fork: c.fork, step: name, dry: !o.execute, argv, outFile: path.basename(outFile), timeoutSeconds, needles, ppid: io.ident().ppid });
+      const r = await io.exec(argv, { outFile, timeoutMs: timeoutSeconds * 1000, onPid: (p) => { pid = p; log("step-pid", { n, slot, position: c.position, step: name, pid: p }); } });
       const f = resumeFile(o, c.fork);
-      log("step-end", { slot, position: c.position, id: c.id, fork: c.fork, step: name, dry: !o.execute, exit: r.exit, signal: r.signal, timedOut: r.timedOut,
+      log("step-end", { n, slot, position: c.position, id: c.id, fork: c.fork, step: name, dry: !o.execute, exit: r.exit, signal: r.signal, timedOut: r.timedOut, cleaned: r.cleaned, pid,
         seconds: Math.round((io.now() - started) / 1000), resumeSha: fs.existsSync(f) ? fileSha(f) : "absent" });
       refresh();
-      say(slot, c, name, r.timedOut ? `timeout after ${timeoutSeconds} s` : `exit ${r.exit}${r.signal ? ` (${r.signal})` : ""}${o.execute ? "" : " (dry run)"}`);
+      say(slot, c, name, r.timedOut ? `timeout after ${timeoutSeconds} s${r.cleaned ? "; its process group is gone" : ""}` : `exit ${r.exit}${r.signal ? ` (${r.signal})` : ""}${o.execute ? "" : " (dry run)"}`);
+      if (r.timedOut && !r.cleaned) {
+        // fail closed: a process of this command may still write; nothing else runs until a later start sees it gone
+        log("stop", { reason: "a timed-out command's processes could not be confirmed ended", slot, position: c.position, step: name, pid });
+        refresh(); writeState();
+        throw new Stop(`the processes of a timed-out command (${name}, slot ${slot}) could not be confirmed ended`);
+      }
       return r;
     };
     /**
-     * Waits until minTriggerSpacingSeconds have passed since the last trigger command of these tools on another PR. A
-     * command of this PR that was cut and runs again is not counted against itself (open-prs.ts posts nothing twice).
+     * Waits until minTriggerSpacingSeconds have passed since the END of the last trigger command of these tools on
+     * another PR: that command's post happened before its end, and this command's post comes after its start, so the
+     * two posts are at least that far apart. A command of this PR that was cut and runs again is not counted against
+     * itself (open-prs.ts posts nothing twice).
      */
     const spacing = async (slot: number, c: CaseRow, tools: string[]) => {
-      const last = Math.max(-Infinity, ...tools.flatMap((t) => [...(st.triggerAt.get(t) ?? [])].filter(([p]) => p !== c.position).map(([, at]) => at)));
+      const last = Math.max(-Infinity, ...tools.flatMap((t) => [...(st.triggerEnd.get(t) ?? [])].filter(([p]) => p !== c.position).map(([, at]) => at)));
       const wait = last + plan.minTriggerSpacingSeconds * 1000 - io.now();
       if (wait > 0) {
         log("spacing-wait", { slot, position: c.position, seconds: Math.ceil(wait / 1000), tools });
@@ -437,6 +471,9 @@ export async function runScheduler(o: Opts, io: Io): Promise<number> {
           if (!info?.triggered.has(tool)) continue; // never triggered: no re-trigger (open-prs.ts refuses it too)
           if (info.retriggered.has(tool)) { handle(c, tool, "already re-triggered (resume file)", slot); continue; }
           if (info.pr === null) return "passed:no-pr-record";
+          // the spacing wait comes first: the collection is made after it, so a review that completes during the wait
+          // is seen, and a re-trigger is posted straight from a fresh verdict (H1 §3: checked now, not at its due time)
+          await spacing(slot, c, [tool]);
           let status: string | null = null, dir = "";
           for (let attempt = 1; attempt <= 2 && status === null; attempt++) {
             let n = 1;
@@ -454,7 +491,6 @@ export async function runScheduler(o: Opts, io: Io): Promise<number> {
           if (status === "completed") { handle(c, tool, "completed: never re-triggered", slot); continue; }
           if (status === "invalid-binding") { handle(c, tool, "invalid-binding: no re-trigger", slot); continue; }
           if (status !== "no-review") return "passed:unknown-status";
-          await spacing(slot, c, [tool]);
           const r = await step(slot, c, `retrigger:${tool}`, [...openPrs(c, ["--retrigger", tool, "--status", path.join(dir, `${tool}.status.json`)]), "--execute"], plan.timeoutSeconds.retrigger, openNeedles(c));
           if (r.exit !== 0) return "passed:retrigger-failed";
           if (!readResume(resumeFile(o, c.fork)).get(c.id)?.retriggered.has(tool)) return "passed:retrigger-not-recorded";
@@ -473,6 +509,34 @@ export async function runScheduler(o: Opts, io: Io): Promise<number> {
       return !o.cases.some((c) => o.tools.some((t) => resume.get(c.fork)?.get(c.id)?.triggered.has(t) && !st.handled.get(c.position)?.has(t)));
     };
 
+    // a command the last scheduler left without a confirmed end: its whole process group must be gone before anything runs
+    if (st.cut) {
+      const cut = st.cut;
+      const marks = [...cut.needles, ...(o.ghBin ? [o.ghBin] : []), ...(o.gitBin ? [o.gitBin] : [])];
+      // the group id could have been reused by an unrelated program: only processes that look like this command count
+      const ours = (cmd: string) => marks.some((m) => cmd.includes(m)) || /(^|\/)(gh|git)(\s|$)/.test(cmd);
+      const left = () => (cut.pid !== null && io.group(cut.pid).some(ours)) || (cut.needles.length > 0 && io.busy(cut.needles));
+      const deadline = Date.parse(cut.at) + cut.timeoutSeconds * 1000;
+      let killed = false;
+      if (left()) {
+        log("step-wait", { slot: cut.slot, position: cut.position, step: cut.step, pid: cut.pid, why: "the command cut by the last stop is still running" });
+        io.say(`${iso(io.now())} | slot ${cut.slot} | position ${cut.position} | ${cut.step} | waiting for the cut command to end`);
+        while (left() && io.now() < deadline) await io.sleep(1000);
+        if (left()) {
+          // past its own timeout with nobody supervising it: kill the whole group, then confirm
+          if (cut.pid !== null) io.killGroup(cut.pid);
+          killed = true;
+          for (let i = 0; i < 10 && left(); i++) await io.sleep(1000);
+          if (left()) {
+            log("stop", { reason: "a cut command's processes could not be confirmed ended", slot: cut.slot, position: cut.position, step: cut.step, pid: cut.pid });
+            refresh(); writeState();
+            throw new Stop(`the processes of the cut command (${cut.step}, slot ${cut.slot}) could not be confirmed ended`);
+          }
+        }
+      }
+      log("step-cleared", { n: cut.n, slot: cut.slot, position: cut.position, step: cut.step, pid: cut.pid, killed });
+      refresh();
+    }
     checkPins();
     writeState();
     for (let k = plan.firstSlot; k <= plan.lastSlot; k++) {
@@ -522,19 +586,41 @@ export async function runScheduler(o: Opts, io: Io): Promise<number> {
 
 // ---- command line ------------------------------------------------------------------------------------------------------
 
+/** Signal 0 to a process group: true while any process of it exists. */
+function groupAlive(pgid: number): boolean {
+  try { process.kill(-pgid, 0); return true; } catch (e) { return (e as { code?: string }).code === "EPERM"; }
+}
+function killGroup(pgid: number): void {
+  try { process.kill(-pgid, "SIGKILL"); } catch { /* already gone */ }
+}
+
 export const realIo: Io = {
   now: () => Date.now(),
   sleep: (ms) => new Promise((res) => setTimeout(res, ms)),
-  exec: (argv, { outFile, timeoutMs }) => new Promise((res) => {
+  exec: (argv, { outFile, timeoutMs, onPid }) => new Promise((res) => {
     const fd = fs.openSync(outFile, "a");
     // an allowlisted env: no model key and no GIT_* variable reaches a command
     const env = Object.fromEntries(ENV_ALLOW.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
-    const child = spawn(argv[0]!, argv.slice(1), { stdio: ["ignore", fd, fd], env });
+    // its own process group: the script and every gh or git it starts can be ended, and seen ended, together
+    const child = spawn(argv[0]!, argv.slice(1), { stdio: ["ignore", fd, fd], env, detached: true });
+    const pgid = child.pid ?? null;
+    if (pgid !== null) onPid(pgid);
     let timedOut = false, done = false;
-    const finish = (exit: number | null, signal: string | null) => { if (done) return; done = true; clearTimeout(timer); fs.closeSync(fd); res({ exit, signal, timedOut }); };
-    const timer = setTimeout(() => { timedOut = true; child.kill("SIGKILL"); }, timeoutMs);
-    child.on("error", () => finish(null, null));
-    child.on("close", (code, signal) => finish(code, signal));
+    const finish = (exit: number | null, signal: string | null, cleaned: boolean) => { if (done) return; done = true; clearTimeout(timer); fs.closeSync(fd); res({ exit, signal, timedOut, cleaned }); };
+    const timer = setTimeout(() => { timedOut = true; if (pgid !== null) killGroup(pgid); else child.kill("SIGKILL"); }, timeoutMs);
+    child.on("error", () => finish(null, null, true));
+    child.on("close", (code, signal) => {
+      if (!timedOut || pgid === null) return finish(code, signal, true);
+      // the script is dead; a gh or git it started may not be: kill the group until nothing of it is left (10 s at most)
+      let tries = 0;
+      const check = () => {
+        if (!groupAlive(pgid)) return finish(code, signal, true);
+        if (++tries > 100) return finish(code, signal, false);
+        killGroup(pgid);
+        setTimeout(check, 100);
+      };
+      check();
+    });
   }),
   busy: (needles) => {
     const r = spawnSync("ps", ["-axo", "pid=,command="], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
@@ -542,6 +628,12 @@ export const realIo: Io = {
     return r.stdout.split("\n").some((l) => { const m = /^\s*(\d+)\s+(.*)$/.exec(l); return !!m && Number(m[1]) !== process.pid && needles.every((n) => m[2]!.includes(n)); });
   },
   alive: (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return (e as { code?: string }).code === "EPERM"; } },
+  group: (pgid) => {
+    const r = spawnSync("ps", ["-axo", "pgid=,command="], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+    if (r.status !== 0) return groupAlive(pgid) ? ["(process list unavailable; the group is alive)"] : [];
+    return r.stdout.split("\n").flatMap((l) => { const m = /^\s*(\d+)\s+(.*)$/.exec(l); return m && Number(m[1]) === pgid ? [m[2]!] : []; });
+  },
+  killGroup: (pgid) => killGroup(pgid),
   ident: () => {
     const r = spawnSync("ps", ["-o", "pgid=", "-p", String(process.pid)], { encoding: "utf8" });
     const pgid = r.status === 0 && /^\s*\d+\s*$/.test(r.stdout) ? Number(r.stdout.trim()) : null;
