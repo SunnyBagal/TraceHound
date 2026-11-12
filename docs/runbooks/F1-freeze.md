@@ -25,9 +25,9 @@ files are hashed. F1 is finished only when every box below is ticked; a box that
 | 11 | No dev PR, dev comment or dev result is going to change: P1's collection is done and hashed | `run/out/artu1.dev-coderabbit.md` | artu1 |
 | 12 | **Zero-comment reviews (premortem gap G1; decision 076c items 2, 3, 8).** The rule is fixed: a review is completed if the tool's bot posted any review object, inline comment or issue comment after the trigger, except a rate-limit or error message; such a PR is never re-triggered. To pass: (a) S1's report has Greptile's line from the clean dev case and P1's report has CodeRabbit's line from the clean dev cases, each naming the object that marks a zero-comment completion; (b) the dev collection made with the frozen `tools.json` shows those same cases as `completed`; (c) every kind of bot issue comment that does not mean "a review ran" and is neither a rate-limit nor an error message (placeholder, "skipped" notice) is either absent from both reports or covered by a recorded ruling of Sunny's. **Stop** if a tool's clean-case review left no object at all (a zero-comment review would then look like no review), or if (c) is open | `run/out/artu1.smoke.md`, `run/out/artu1.dev-coderabbit.md` items 5 and 2; the dev `<tool>.status.json` and `<tool>.collection.json`; `docs/decisions.md` | artu1 |
 | 13 | **The hand-checker's inbox and dashboards (gap G2).** Before T0 Sunny unsubscribes from the four forks (Unwatch → Ignore on each) and filters GitHub mail from them; the PRs and trigger comments are made from his login (`OWNER` in `tracehound-testset/scripts/open-prs.ts`), and GitHub subscribes a user to conversations they opened or commented on (https://docs.github.com/en/subscriptions-and-notifications/concepts/about-notifications). He opens no CodeRabbit or Greptile dashboard and no fork PR page from T0 until his filled sheet is hashed (`H2-scoring.md` §6.1). The Greptile credit reading of row 7 is therefore taken **before T0 only** | both sentences written into decision 078, with the time he unsubscribed | Sunny |
-| 14 | **The hourly clock (gap G4).** Rehearsal by the operator who will run H1: `open-prs.ts --trigger coderabbit --ids <S1's dev case>` **without `--execute`**, once an hour for 8 hours, across at least one restart of the operator's session; each slot's delay is logged. More than one slot late by over 30 minutes: stop, until the hourly clock does not depend on a live agent session. The mechanism that passed (a scheduler, a human, a wake-up loop) is named in `ts-freeze.md` | `run/out/codex.clock-rehearsal.md` (8 rows: planned time, actual time, delay) | codex |
+| 14 | **The hourly clock (gap G4; decision 076c item 11).** The hourly triggers run from a detached scheduler with its own log, not from an agent's session. Rehearsal (codex, running since 2026-11-12): 8 real hourly slots of `open-prs.ts --trigger coderabbit --ids <one dev case>` **without `--execute`**, fired by `run/out/codex.rehearsal.py` (sha256 `59b7fa8f…88e2`; started with parent pid 1 and its own session id). Pass = `run/out/codex.rehearsal.result.json` says `"pass": true` (function `verdict`: all 8 slots, each exit 0 with one trigger planned, at most one slot late by 1,800 s or more) **and** codex shows separately that its agent session was restarted during the 8 hours while the scheduler kept firing (the result file sets `operator_agent_restart_verified` to false by itself). Then the **window's** scheduler (the rehearsal script cannot be it: its `command` refuses `--execute` and `targets` is 8 fixed slots) is written by codex to `H1-window.md` §3 "Who keeps the clock", read by grok, and dry-run over the whole slot table without `--execute`. More than one slot late by 30 minutes, no restart evidence, or no reviewed window scheduler: stop | `run/out/codex.rehearsal.{md,result.json,state.json,log,done}`, `run/out/codex.premortem-checks.md` row 3; the window scheduler's path and sha256 in `ts-freeze.md`. State on 2026-11-12 18:29 UTC: 3 of 8 slots fired, largest delay 43 s, no `.done` yet | codex |
 | 15 | **Models still served (gap G11).** A models-list read (`TokenFactoryClient.listModels()` in `packages/analyzer/src/llm/client.ts`, "GET /models — free", through the same client configuration the runner uses) shows the three frozen ids: `nvidia/Nemotron-3.5-Super-VL`, `nvidia/nemotron-3-super-120b-a12b` (`SUPER_MODEL` in `packages/analyzer/src/bench/judge.ts`), `Qwen/Qwen3-235B-A22B-Instruct-2507`. Repeated at T0 − 24 h (`H1-window.md` §1). One missing: the tag is not made, or the window does not open | three "present" lines in codex's freeze report; no key printed | codex |
-| 16 | **Case branches do not carry another case's fix (gap G16 a).** For every held-out bug case: its starting fix is not an ancestor of any other case's base or head that is or will be pushed to the same fork, dev or held-out (`git merge-base --is-ancestor <fix> <commit>` per pair). Count of pairs where it is: 0, or Sunny rules blind on the affected cases before the tag | `run/out/grok.ho-ancestry.md` (counts only) | grok |
+| 16 | **Case branches that carry another case's fix (gap G16 a; decision 076c item 10).** grok's count exists: `run/out/grok.ancestry.md` (2026-11-12; `git merge-base --is-ancestor <fix> <base or head>`, 2,310 calls, same fork only). **It is not zero:** 11 of the 20 held-out starting fixes are an ancestor of another case's base on the same fork (9 of them reach a dev base, 5 a held-out base); 5 of the 29 held-out bases have another case's fix as an ancestor; 18 of the 31 dev fixes reach another case's base; bullmq 0. So a tool that reads other branches of the fork could find the fix of 11 held-out bugs there. This row passes only with **Sunny's recorded ruling**, made on these counts alone (blind: no case is named to him), on whether the run goes ahead with the number stated as a limit (`W1-writeup.md` §4 limit 6) or the case branches are rebuilt first. No ruling: stop | `run/out/grok.ancestry.md` (counts); `docs/decisions.md` | grok, Sunny |
 | 17 | **Nothing ruled is still unbuilt (decision 076c, "Touches").** `.agents/STATE.md`'s open list of 076b and 076c Touches is empty: every file that stated an old rule has its owner's commit on `main`. In particular: bunny's `b4-076c` (`4db9abe` collector, `595707f` guess column, `6fd4568` scorer statuses) is on `main` with codex's GO on its full sha; the scorer gives a p-value only for the two registered pairs and prints the reviewed-by-both count (076c items 4, 6); the re-trigger mode of `open-prs.ts` is committed in the testset repo and the temporary `gh` lines are gone from `H1-window.md` and `P1.md`; `docs/eval/ts-protocol.md` on `main` is the revision that carries 076c; `tools.json` has its final `notCompletion` lists (`docs/specs/B2.md` §5.3). One of these open: stop | `.agents/STATE.md`; `git merge-base --is-ancestor 6fd4568 HEAD`; `git -C ~/Projects/tracehound-testset status --short scripts` prints nothing | artu1, codex |
 
 ## 2. The tag
@@ -48,8 +48,8 @@ files are hashed. F1 is finished only when every box below is ticked; a box that
 | prompt sha256: review-diff-v1, review-ctx-v1, verify-ctx-v1 | the `prompts` field of any R2 record (`scripts/run-tracehound.ts:484-485`) |
 | the exact runner line | `docs/specs/R2.md` §2, with `<manifest> <clone> <ids> <out-dir> <run cap>` left as the only placeholders |
 | case cap $0.40; H1 job cap; the rolling batch rule; the reserve rule for unstarted cases | decisions 076a, 077 |
-| sha256 of `docs/runbooks/H1-window.md` and `docs/runbooks/H2-scoring.md` (they hold the trigger and re-trigger rules, the re-trigger command and the hand-check's definition of "same bug"), and the `tracehound-testset` commit that holds `scripts/open-prs.ts` (premortem gap G9) | `shasum -a 256`; `git -C ~/Projects/tracehound-testset rev-parse HEAD` |
-| the ledger mechanism of the tag worktree and the clock mechanism that passed the rehearsal | §4.2; §1 row 14 |
+| sha256 of `docs/runbooks/H1-window.md` and `docs/runbooks/H2-scoring.md` (they hold the trigger and re-trigger rules, the re-trigger command and the hand-check's definition of "same bug"; question U10, decision 076c item 5), and the `tracehound-testset` commit that holds `scripts/open-prs.ts` with its re-trigger mode (premortem gap G9) | `shasum -a 256`; `git -C ~/Projects/tracehound-testset rev-parse HEAD` |
+| the tag worktree's binding to the main spend state: the commit of `docs/eval/tag-worktree.md` used (`ffb615b` until it merges), the verifier's output line (ledger total, hard stop, `envSha256`), the list of the worktree's untracked links; and the window scheduler's path and sha256 with the rehearsal's result | §4.2; §1 row 14 |
 | sha256 of: `scripts/run-tracehound.ts`, every file in `scripts/testset/`, `tools.json`, `strip.json`, the policy file, `docs/eval/ts-protocol.md`, `config/prices.json`, `pnpm-lock.yaml` | `shasum -a 256 <files>` |
 | the hand-check seed (an integer chosen now: the tag date as `YYYYMMDD`) | this runbook |
 | the frozen PR order: repositories medusa, payload, twenty, bullmq; manifest order inside each; positions 1–29 | plan-v2 F-b |
@@ -59,20 +59,39 @@ files are hashed. F1 is finished only when every box below is ticked; a box that
 ## 4. Held-out side (codex only; artu1 and bunny do not see these files)
 1. Private directory: `HO=~/Projects/tracehound-ho-window` (created by codex; artu1 adds it to the firewall list in
    `.agents/STATE.md` and `AGENTS.md` before F1).
-2. `git -C ~/Projects/TraceHound worktree add ~/Projects/th-h1 review-freeze-3` (detached at the tag). H1 and H2 run
-   from this worktree only. **A new worktree is not ready to run (premortem gap G8):** it has no dependencies, no `.env`,
-   and its own empty ledger, because the runner and `pnpm spend` take the ledger and `.env` from the checkout's root
-   (`defaultDeps()` in `scripts/run-tracehound.ts`: `ROOT/.tracehound/spend.jsonl`, `ROOT/.env`; `packages/analyzer/src/spend.ts`).
-   Against an empty ledger the hard stop `TRACEHOUND_BUDGET_TOTAL_USD` (set from the main ledger's total,
-   `docs/budget.md` rule 3) stops nothing, and H1's spend would never reach the ledger artu1 reads. So, before the tag
-   is used:
-   - `cd ~/Projects/th-h1 && pnpm install --frozen-lockfile`, then `git status --porcelain` prints nothing;
-   - the worktree gets the main checkout's `.env`: `shasum -a 256` of the two files is equal (the value is not written
-     anywhere);
-   - the worktree uses the **main checkout's ledger**. How (one shared file, or a copy in before T0 and a merge back
-     before H2's judging) is codex's choice, written into `ts-freeze.md`. Either way this must hold: `node packages/analyzer/src/spend.ts`
-     run in the worktree prints the same "Total est. spend" as in the main checkout, at this step and again at
-     T0 − 24 h (`H1-window.md` §1).
+2. **The worktree at the tag, bound to the main checkout's spend state (premortem gap G8; decision 076c item 9).**
+   H1 and H2 run from this worktree only. The mechanism is codex's command set, `docs/eval/tag-worktree.md` at
+   `ffb615b` (branch `codex/tag-worktree`: that one file; "READY FOR REVIEW", not a GO, not pushed and not on `main`
+   when this was written; dry run reported in `run/out/codex.tag-worktree.md`). F1 runs the file as merged and writes
+   its commit into `ts-freeze.md`.
+   ```sh
+   git -C ~/Projects/TraceHound worktree add --detach ~/Projects/th-h1 review-freeze-3
+   export TH_MAIN=~/Projects/TraceHound TH_TAG=~/Projects/th-h1
+   # then the two node blocks of docs/eval/tag-worktree.md, unchanged: the setup block once, the verifier block after it
+   ```
+   - **Setup block (once):** makes `.env` and `.tracehound/spend.jsonl` in the worktree symbolic links to the main
+     checkout's files, and the four `node_modules` directories links to the main installation. An existing destination
+     that points elsewhere refuses; nothing is overwritten. It prints "state and dependency links ready; no provider call".
+   - **Verifier block (now, at T0 − 24 h, and before every paid job of H1 and H2):** exits 0 and prints one JSON line
+     with `samePhysicalLedger: true`, `envSame: true`, `trackedClean: true`, the same `ledgerUSD` for `main` and
+     `worktree`, and a `hardStopUSD` in both equal to the `TRACEHOUND_BUDGET_TOTAL_USD` of the main `.env`. It refuses
+     when a stale budget value is inherited from the shell. Only money totals and the `.env` file's sha256 are printed.
+   - **This replaces the first version of this step:** no `pnpm install` in the worktree, no copy of `.env`, and no
+     copy-and-merge of the ledger. One physical ledger means H1's spend is in the ledger artu1 reads as it happens.
+   - **Commands from the worktree load the environment explicitly:** `node --env-file=.env scripts/run-tracehound.ts …`
+     and `node --env-file=.env packages/analyzer/src/spend.ts` (the spend entry point loads no `.env`, and the runner
+     loads its own only when no key is inherited; `docs/eval/tag-worktree.md`, last section). `H1-window.md` and
+     `H2-scoring.md` use these forms.
+   - **Untracked links are listed** in `ts-freeze.md` (`git -C $TH_TAG status --porcelain --untracked-files=all`): the
+     runner's `tracehound.dirty` flag looks at tracked files only (`tracehoundHead()` in `scripts/run-tracehound.ts`),
+     so a clean tracked tree does not show them.
+   - **Two things the command set leaves to this runbook (Planner A's additions; codex confirms or corrects):**
+     (i) the worktree's path is `~/Projects/th-h1`, not the document's example `/private/tmp/tracehound-h1-tag`: the
+     system may empty `/private/tmp` during a 72-hour window (estimate; not checked on this machine);
+     (ii) the worktree runs on the **main checkout's** installed dependencies, so from this step until H2's commit
+     nobody runs `pnpm install`, `pnpm add` or `pnpm update` in the main checkout, and
+     `git -C $TH_MAIN diff --quiet review-freeze-3 -- pnpm-lock.yaml` exits 0 here and at T0 − 24 h. The same holds for
+     the main `.env`: it is not edited while a held-out job runs.
 3. Goldens: `node scripts/testset/build-goldens.ts --side heldout --heldout-ok --manifest <held-out manifest> --labels <held-out label files, in the order of record> --overlay <held-out multifile overlay> --repos <held-out clones> --out $HO/goldens`.
    Expected counts: **29 cases, 20 bug, 9 clean, 1 alternate** (`run/out/codex.kit-review.md`). A preflight refusal
    stops the freeze; it is reported blind (count and kind, no case detail) and Sunny rules.

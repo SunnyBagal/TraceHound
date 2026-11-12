@@ -1,7 +1,10 @@
 # Runbook H1: the held-out window, hour by hour
 
 For codex (operator), grok (backup operator). artu1 and bunny do **not** open anything this runbook produces and never
-read the operator's pane; they get `run/out/codex.ho-run.md` (counts and spend only). Planner A, 2026-11-11.
+read the operator's pane; they get `run/out/codex.ho-run.md` (counts and spend only). **From T0 until the firewall
+lifts, artu1 and bunny also make no `gh` or browser read of pulls, issues or notifications on the four forks**
+(decision 076c item 12; `AGENTS.md` "Blindness"): the forks are public, and every tool comment on a held-out PR is
+there. Planner A, 2026-11-11; brought to decision 076c on 2026-11-12.
 Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md` §3, §7–§9 (it wins over this
 runbook; report any difference). Budget line: **H1**, cap from decision 077 ($3.15 until then); unstarted cases at the
 cap run from the reserve (decision 076a "Caps" item 4).
@@ -17,21 +20,29 @@ collector's verdict under that definition (`collectCase` in `scripts/testset/col
 
 ```sh
 TH=~/Projects/th-h1                       # worktree at the tag review-freeze-3 (F1 §4.2); never the main checkout
+export TH_MAIN=~/Projects/TraceHound TH_TAG=$TH      # names used by docs/eval/tag-worktree.md (codex, ffb615b)
 TS=~/Projects/tracehound-testset; HO=~/Projects/tracehound-ho-window
-ledger() { node $TH/packages/analyzer/src/spend.ts | sed -n 's/^Total est. spend: \$\([0-9.]*\).*/\1/p'; }
+ledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | sed -n 's/^Total est. spend: \$\([0-9.]*\).*/\1/p'; }
 CAP=<H1 cap from decision 077>
 MAN=<held-out manifest>; CL=<held-out clones dir>          # private paths; codex knows them
 ```
-All times are **T0 + hours**, T0 being the UTC instant written in decision 078. Keep `$HO/window.log`: one line per
+All times are **T0 + hours**. T0 is the instant the first held-out PR is opened (question "T0" of Planner B's D1
+note, adopted with 076c item 5); the operator opens it at the time planned in decision 078 and writes the actual
+instant into `$HO/job.md`, and the scheduler's slot times are counted from that instant. Keep `$HO/window.log`: one line per
 action (`UTC time | action | case position 1–29 | result`). Positions follow the frozen order (medusa, payload,
 twenty, bullmq; manifest order inside each).
 
 ## 1. The day before (T0 − 24 h to T0)
-1. `git -C $TH describe --tags --exact-match` prints `review-freeze-3`; `git -C $TH status` is clean.
-   **The worktree is ready to run (premortem gap G8; `F1-freeze.md` §4.2):** `git -C $TH status --porcelain` prints
-   nothing after the install; `shasum -a 256 $TH/.env ~/Projects/TraceHound/.env` shows two equal hashes; `ledger`
-   (run from `$TH`, the function above) prints the **same total** as `node ~/Projects/TraceHound/packages/analyzer/src/spend.ts`.
-   An empty or different ledger: stop. The hard stop would not hold and artu1 would not see H1's spend.
+1. `git -C $TH describe --tags --exact-match` prints `review-freeze-3`; `git -C $TH status --porcelain --untracked-files=no`
+   prints nothing.
+   **The worktree is bound to the main spend state (premortem gap G8; decision 076c item 9; `F1-freeze.md` §4.2):** run
+   the verifier block of `docs/eval/tag-worktree.md` (codex, `ffb615b`). It exits 0 and its JSON line shows
+   `samePhysicalLedger: true`, `envSame: true`, `trackedClean: true`, equal `ledgerUSD` in both checkouts and the main
+   `.env`'s hard stop in both; `envSha256` equals the value in `ts-freeze.md`. `git -C $TH_MAIN diff --quiet review-freeze-3 -- pnpm-lock.yaml`
+   exits 0. A refusal, or any difference: stop. **The same verifier is run again before every paid invocation of §4
+   and of H2** ("repeat the verification before every paid job", same document).
+   **The scheduler (decision 076c item 11):** the window scheduler named in `ts-freeze.md` has the sha256 recorded
+   there, and its dry run over the whole slot table (no `--execute`) lists 29 first-trigger slots with their UTC times.
    **Models still served (gap G11):** the models-list read of `F1-freeze.md` §1 row 15 again: the three frozen ids are
    present. One missing: the window does not open.
 2. Decision 078 is pushed: predictions, T0, Sunny's "go". If "go" is missing, stop.
@@ -54,7 +65,9 @@ done
 (10 per run with a 60 s delay; run again per repository until the dry run lists nothing. About 35 minutes, estimate.)
 - T0 + 0:45: **auto-review check.** For every PR: `gh api --method GET repos/SunnyBagal/$R/issues/<n>/comments --jq '.[].user.login'`
   and `…/pulls/<n>/reviews --jq '.[].user.login'` print nothing. A bot comment here is failure 2 (§5).
-- T0 + 0:50: `L0=$(ledger)`; write `L0`, T0 and the 29 positions → case → PR numbers into `$HO/job.md`.
+- T0 + 0:50: `L0=$(ledger); echo "L0=$L0 $(date -u +%FT%TZ)" >> $HO/job.md`; write T0 (the actual instant) and the 29
+  positions → case → PR numbers into `$HO/job.md` too. The scheduler is started now, detached, with T0 as its start
+  time; its first slot is T0 + 1:00.
 
 ## 3. T0 + 1:00 to T0 + 58:00: triggers
 One slot per hour, on the hour. **Slot k (k = 1 … 29) at T0 + k:00 is the first trigger of position k, for both tools
@@ -96,10 +109,36 @@ two tools need one on it).
 | 30:00 – 58:00 | one re-trigger slot per hour: the lowest due position that still needs one, checked at the slot |
 | 58:00 – 72:00 | no trigger of any kind (earlier, if the queue emptied earlier) |
 
-**Who keeps the clock (gap G4).** Each trigger is its own short command. The slots are fired by the mechanism that
-passed the 8-slot rehearsal (`F1-freeze.md` §1 row 14) and is named in `docs/bench/ts-freeze.md`; a live agent session
-alone is not that mechanism, because a background process here dies after 2 hours (`docs/bench/results.md:232-233`).
-Every slot is logged with its planned and its actual time. A slot late by more than 30 minutes is failure 7.
+**Who keeps the clock (gap G4; decision 076c item 11).** The hourly triggers run from a **detached scheduler with
+its own log, not from an agent's session**: a background process of a session here dies after 2 hours
+(`docs/bench/results.md`, "What went wrong"). "Detached" is what codex's rehearsal script does
+(`tracehound-testset/run/out/codex.rehearsal.py`, sha256 `59b7fa8f…88e2`, functions `run`, `targets`, `command`,
+`verdict`; no commit, it is a rehearsal artefact):
+- started so that its parent is pid 1 and it has its own session id, both written to the state file at every start;
+- a lock file, so two copies cannot run;
+- absolute UTC slot times computed once from one start time, never "an hour after the last slot";
+- a state file rewritten after every slot, so a restarted scheduler skips the slots already done;
+- before every slot, the sha256 of the script it calls, of the manifest and of the resume file are compared with the
+  pinned values, and a difference stops it;
+- one command per slot with a timeout, its output and its planned and actual time written to its own log.
+
+**The rehearsal script is not the window's scheduler:** its `command` refuses `--execute`, `targets` is 8 fixed
+slots, and it fires one fixed dev case. The window's scheduler is codex's to write from it, with the six properties
+above and this slot table, and nothing else:
+1. Slot k = T0 + k:00, k = 1 … 29: the first-trigger command above for position k, with `--execute`.
+2. Slot at T0 + 30:00 and every hour after it, while a position is due and not handled: the re-trigger procedure
+   above for the lowest such position: per tool, the collector check into `$HO/check/<k>-<tool>` and then
+   `open-prs.ts --retrigger <tool> --status … --ids <id> --execute` (the mode, below). If neither tool was
+   re-triggered, the same slot goes on to the next due position. The scheduler ends when no position is left or at
+   T0 + 58:00.
+3. It decides nothing that §3 does not state. A non-zero exit is logged and the scheduler goes on to the next slot
+   (failures 1 and 7 say what the operator does); it never fires two CodeRabbit triggers inside one hour.
+4. It runs as the SunnyBagal `gh` user (`open-prs.ts` requires it) and never reads or prints a held-out title or text
+   into a place artu1 or bunny read: its log stays in `$HO`.
+Its file and sha256 are in `ts-freeze.md`; grok reads it before the tag (`F1-freeze.md` §1 row 14). Every slot is
+logged with its planned and its actual time. A slot late by more than 30 minutes is failure 7. The operator's session
+may end and restart at any time; it only reads the scheduler's state and log (`$HO/scheduler.state.json`,
+`$HO/scheduler.log`) and steps in by hand only where §5 says so.
 
 **The re-trigger command (gap G5). TEMPORARY: the `gh` lines below stand only until bunny's re-trigger mode is on
 the testset repo's `main` (decision 076c items 9 and 15).** On 2026-11-12 the mode exists only as an uncommitted change
@@ -137,8 +176,10 @@ must not run on the temporary lines if the mode can be merged first: F1 §1 row 
 Runs do not depend on the triggers; they start once the PRs are open and finish the same day (estimate from R2's
 timing). One repository per invocation, in the frozen order; a batch has at most 10 ids.
 ```sh
+L0=$(sed -n 's/^L0=\([0-9.]*\) .*/\1/p' $HO/job.md | head -1)     # the job-start value is read from the file (076c item 1)
 RUNCAP=$(echo "$CAP - ($(ledger) - $L0)" | bc)
-cd $TH && node scripts/run-tracehound.ts --manifest $MAN --clone $CL/$R --ids $IDS --out-dir $HO/th \
+# the verifier block of docs/eval/tag-worktree.md first (exit 0), then:
+cd $TH && node --env-file=.env scripts/run-tracehound.ts --manifest $MAN --clone $CL/$R --ids $IDS --out-dir $HO/th \
   --fixes off --contracts off --cache off --max-usd-per-case 0.40 --max-usd-run $RUNCAP        # dry run, then --execute
 ```
 | batch | repository | cases |
@@ -221,7 +262,7 @@ rules, on counts and login names only, whether that login belongs to a tool** (q
 ## 7. Report: `run/out/codex.ho-run.md` (counts and spend only; no case id, title, path or text)
 PRs opened of 29; per tool: triggered, completed, no-review, re-triggers used, auto-reviews, rate-limit comments;
 TraceHound: ok / failed / cap / unstarted, reruns, misses by rule, chunks failed, empty reviews; spend: job, reserve,
-canary; console ratio; every deviation with its failure number; the single sha256 of `hashes.window.txt`; trigger slots: fired, late by more than 30 minutes; re-triggers posted per tool; comments by unlisted logins and distinct unlisted Bot logins (gap G6); the record check's one line as "equal to the freeze: yes / no", from codex and from grok (gaps G7, G8); the ledger total before T0 in the worktree and in the main checkout; `invalid-binding` and `read-failed` counts per tool. Then the
+canary; console ratio; every deviation with its failure number; the single sha256 of `hashes.window.txt`; trigger slots: fired, late by more than 30 minutes; scheduler starts (count) and whether the operator's session restarted while it ran; re-triggers posted per tool; comments by unlisted logins and distinct unlisted Bot logins (gap G6); the record check's one line as "equal to the freeze: yes / no", from codex and from grok (gaps G7, G8); the ledger total before T0 in the worktree and in the main checkout; `invalid-binding` and `read-failed` counts per tool. Then the
 `.done` marker. artu1 writes STATE, LOG, the budget log row and the brain entry from this file alone.
 
 ## 8. The three most likely ways to get this wrong
@@ -229,5 +270,7 @@ canary; console ratio; every deviation with its failure number; the single sha25
    or rerunning an `ok` TraceHound case for a better draw. Each one makes the comparison unequal and cannot be undone.
 2. **Leaking held-out.** Running from the main checkout, writing outside `$HO`, pasting a case title into the report,
    or letting artu1 read the pane. The report is counts; everything else stays in `$HO`.
-3. **Spending against the wrong cap.** `RUNCAP` is recomputed before every invocation from the ledger; a second paid
-   process (a judge run, a dev rerun) during a batch eats the cap and strands cases.
+3. **Spending against the wrong cap.** `RUNCAP` is recomputed before every invocation from the ledger and the
+   job-start value in `$HO/job.md`; a second paid process (a judge run, a dev rerun) during a batch eats the cap and
+   strands cases: one paid process at a time across all jobs (076c item 1). A worktree whose ledger or `.env` is a
+   copy instead of the main checkout's file has no hard stop at all; the verifier catches that only if it is run.

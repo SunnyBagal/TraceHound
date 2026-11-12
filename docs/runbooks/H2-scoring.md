@@ -9,7 +9,8 @@ Nothing in a later step may be seen before the earlier one is done.
 
 ```sh
 TH=~/Projects/th-h1; HO=~/Projects/tracehound-ho-window; S=$HO/score; mkdir -p $S
-ledger() { node $TH/packages/analyzer/src/spend.ts | sed -n 's/^Total est. spend: \$\([0-9.]*\).*/\1/p'; }
+export TH_MAIN=~/Projects/TraceHound TH_TAG=$TH      # names used by docs/eval/tag-worktree.md (codex, ffb615b)
+ledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | sed -n 's/^Total est. spend: \$\([0-9.]*\).*/\1/p'; }
 POLICY=$(ls $TH/scripts/testset/policy*076a.json); G=$HO/goldens          # goldens built and hashed at F1 §4.3
 ARM=<candidate arm directory name, from decision 077>
 SEED=<the hand-check seed in docs/bench/ts-freeze.md>
@@ -23,8 +24,10 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
    values in `docs/bench/ts-freeze.md`. Any `FAILED` or difference: stop and tell Sunny; do not score.
    **The records are the frozen run (gap G8):** H1 §4's record check printed one line equal to the freeze, by codex and
    by grok. **No unlisted Bot login (gap G6):** H1 §6's count is zero, or Sunny's ruling on it is recorded. Otherwise stop.
-   **The ledger H2 judges against is the main one:** `ledger` prints the main checkout's total including H1's spend
-   (if the worktree used a copy, it is merged back first, `F1-freeze.md` §4.2).
+   **The ledger H2 judges against is the main one (decision 076c item 9):** the verifier block of
+   `docs/eval/tag-worktree.md` (codex, `ffb615b`) exits 0 before the first judge process, with `samePhysicalLedger: true`
+   and equal totals. The worktree's ledger is the main checkout's file, so H1's spend is already in it; nothing is
+   copied or merged (`F1-freeze.md` §4.2). No other paid process runs during §2 (076c item 1).
 1. Official TraceHound records: `mkdir $S/official`; per case copy `<id>.r2.json` where a rerun exists, else `<id>.json`,
    from `$HO/th`. A case with no record stays absent (it is a miss by policy `unstarted_case: miss`).
 2. `node scripts/testset/replay-arms.ts --records $S/official --out $S/arms` → exit 0. Exit 1 (A0 differs from the
@@ -40,8 +43,9 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
    is never tested.
 
 ## 2. Judging (the only paid step)
-`L0=$(ledger); echo "H2 L0=$L0 $(date -u +%FT%TZ)" >> $S/job.md` (the job-start value lives in the job file and is
-read back from it if the shell is lost; gap G19). **Order (gap G13): the three primary rows first** (tracehound,
+`L0=$(ledger); echo "H2 L0=$L0 $(date -u +%FT%TZ)" >> $S/job.md` (the job-start value lives in the job file; every
+later judge process reads it back with `L0=$(sed -n 's/^H2 L0=\([0-9.]*\) .*/\1/p' $S/job.md | head -1)` and never
+measures it again; gap G19, decision 076c item 1). `$L0 + 0.40` must not exceed the main `.env`'s hard stop. **Order (gap G13): the three primary rows first** (tracehound,
 coderabbit, greptile), each with bench-judge-v1 and then bench-judge-x1; **then** the two secondary rows the same way.
 One process after the other:
 ```sh

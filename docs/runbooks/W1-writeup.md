@@ -132,7 +132,10 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
    CodeRabbit was left at its defaults, under which web search is "Enabled unless explicitly disabled" and pull-request
    context "Uses past PRs for context" (https://docs.coderabbit.ai/knowledge-base); what it looked up is not known.
    All 29 case branches sit in four forks; grok's ancestry count before the freeze says how many case branches carry
-   another case's later fix (`run/out/grok.ho-ancestry.md`; the number goes here) (premortem gap G16).
+   another case's later fix (`run/out/grok.ancestry.md`, 2026-11-12: the starting fix of 11 of the 20 held-out bugs
+   is an ancestor of another case's base on the same fork, so it was present on the fork in another branch; 5 of the
+   29 held-out bases contain another case's fix). The number is restated from the file at write-up time, with Sunny's
+   ruling on it (`F1-freeze.md` §1 row 16) (premortem gap G16).
 7. CodeRabbit and Greptile ran on free plans, triggered by hand, within their rate and credit limits; a tool that
    delivered no review after one re-trigger is left out of its pairs, with n stated.
 8. No row for Augment, Cursor Bugbot or Copilot. TypeScript only; the repositories named; these dates.
