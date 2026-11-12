@@ -584,6 +584,64 @@ describe("collect-tool-reviews", () => {
   });
 });
 
+// decision 076d item 4, second kind of case with no trigger: its PR never opened (H1 failure 1)
+describe("collect-tool-reviews --never-opened", () => {
+  it("a declared never-opened case is no-review without any gh call; a gap in the PR map is never read as never opened", () => {
+    const HEAD = "a".repeat(40), BASE = "b".repeat(40);
+    const d = tmp(); const dev = path.join(d, "dev"); mkdirSync(dev, { recursive: true });
+    copyFileSync(path.join(import.meta.dirname, "fixtures", "collector-fake-gh.mjs"), path.join(dev, "gh.mjs"));
+    writeFileSync(path.join(dev, "gh"), `#!/bin/sh\nexec "${process.execPath}" "$(dirname "$0")/gh.mjs" "$@"\n`, { mode: 0o755 });
+    writeFileSync(path.join(dev, "gh.log"), "");
+    const bot = { login: "coderabbitai[bot]", type: "Bot" };
+    // c1 was reviewed before any trigger (auto-review); c2's PR never opened
+    json(path.join(dev, "gh.json"), { pulls: { 11: { pr: { base: { sha: BASE }, head: { sha: HEAD } }, reviews: [], comments: [],
+      issueComments: [{ id: 1, user: bot, created_at: "2026-11-21T00:00:00Z", body: "Summary: nothing found." }] } } });
+    json(path.join(dev, "manifest.json"), [{ id: "c1", title: "P1", base_sha: BASE, case_head_sha: HEAD }, { id: "c2", title: "P2", base_sha: BASE, case_head_sha: HEAD }]);
+    json(path.join(dev, "prmap.json"), { c1: 11 });
+    json(path.join(dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"], notCompletion: [] } } });
+    const resume = path.join(dev, "twenty.resume.jsonl");
+    writeFileSync(resume, JSON.stringify({ v: 1, fork: "SunnyBagal/twenty", id: "c1", step: "triggered:coderabbit", at: "2026-11-20T11:00:00Z" }) + "\n");
+    const args = (out: string, ...extra: string[]) => ["--side", "dev", "--tool", "coderabbit", "--config", path.join(dev, "tools.json"), "--repo", "SunnyBagal/twenty",
+      "--manifest", path.join(dev, "manifest.json"), "--pr-map", path.join(dev, "prmap.json"), "--window-start", "2026-11-20T00:00:00Z", "--window-end", "2026-11-23T00:00:00Z",
+      "--out", path.join(dev, out), "--gh-bin", path.join(dev, "gh"), ...extra];
+    const go = (out: string, ...extra: string[]) => { const l: string[] = []; const code = collectMain(args(out, ...extra), { log: (x) => l.push(x) }); return { code, out: l.join("\n"), lines: l }; };
+    const calls = () => readFileSync(path.join(dev, "gh.log"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).argv[3] as string);
+    // refusals: no output directory, no gh call
+    for (const [label, extra, want] of [
+      ["a case with no PR number that is not declared", ["--bound", "window-start"], /c2 has no PR number in --pr-map/],
+      ["declared, but it has a PR", ["--bound", "window-start", "--never-opened", "c1,c2"], /--never-opened names c1, but --pr-map has a PR for it/],
+      ["not a case of the collection", ["--bound", "window-start", "--never-opened", "c2", "--ids", "c1"], /--never-opened names c2, which is not a case of this collection/],
+      ["named twice", ["--bound", "window-start", "--never-opened", "c2,c2"], /names a case twice/],
+      ["empty", ["--bound", "window-start", "--never-opened", ","], /--never-opened is empty/],
+      ["with the trigger bound", ["--resume-file", resume, "--never-opened", "c2"], /--never-opened is only for --bound window-start/],
+    ] as const) {
+      const r = go(`refused-${label.length}`, ...extra);
+      expect(r.code, label).toBe(2);
+      expect(r.out, label).toMatch(want);
+      expect(existsSync(path.join(dev, `refused-${label.length}`)), label).toBe(false);
+    }
+    expect(calls()).toEqual([]);
+    // the collection: c1 from its PR with the window-start bound, c2 declared
+    const r = go("o", "--bound", "window-start", "--never-opened", "c2");
+    expect(r.code).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(dev, "o", "coderabbit.status.json"), "utf8"))).toEqual({ c1: "completed", c2: "no-review" });
+    expect(r.lines[0]).toContain("2 case(s): completed 1, no-review 1, invalid-binding 0, read-failed 0");
+    expect(r.lines[2]).toBe("coderabbit: never opened (no PR, declared with --never-opened; no-review, nothing read): 1");
+    const coll = JSON.parse(readFileSync(path.join(dev, "o", "coderabbit.collection.json"), "utf8"));
+    expect(coll.neverOpened).toEqual(["c2"]);
+    expect(coll.completionFrom).toBe("window start (--bound window-start)");
+    expect(Object.keys(coll.files).sort()).toEqual(["coderabbit.status.json", "coderabbit/c1.json", "raw/coderabbit/c1.json"]);
+    expect(existsSync(path.join(dev, "o", "coderabbit", "c2.json"))).toBe(false);
+    // every gh call was for c1's PR
+    expect(calls().length).toBeGreaterThan(0);
+    expect(calls().every((p) => /\/(pulls|issues)\/11(\/|$|\?)/.test(p))).toBe(true);
+    // without the flag the collection file has no neverOpened field
+    json(path.join(dev, "prmap.json"), { c1: 11, c2: 11 });
+    expect(go("o2", "--bound", "window-start").code).toBe(0);
+    expect("neverOpened" in JSON.parse(readFileSync(path.join(dev, "o2", "coderabbit.collection.json"), "utf8"))).toBe(false);
+  });
+});
+
 describe("build-goldens with a rename between the case head and the fix", () => {
   it("follows the rename to place the head path in the fix's order; a single-row defect needs no fix lookup", () => {
     const f = goldensFixture({ rename: true });

@@ -4,7 +4,8 @@
  *
  *   node scripts/testset/collect-tool-reviews.ts --side dev --tool <name> --config <json> --repo SunnyBagal/<fork>
  *     --manifest <cases manifest> --pr-map <json {case: PR number}> --window-start <ISO> --window-end <ISO>
- *     --out <dir> (--resume-file <open-prs resume.jsonl> | --bound window-start) [--ids a,b] [--gh-bin gh] [--heldout-ok]
+ *     --out <dir> (--resume-file <open-prs resume.jsonl> | --bound window-start [--never-opened a,b]) [--ids a,b]
+ *     [--gh-bin gh] [--heldout-ok]
  *
  * Counting rule (docs/eval/ts-protocol.md §3, the rule of bench/convert.ts): top-level line-level review comments by
  * the tool's own accounts. The accounts are a config value (`{v: 1, tools: {<name>: {logins: [...]}}}`), never
@@ -21,7 +22,12 @@
  * be given, and with neither (or both) the collector refuses before any read. `--bound window-start` is only for cases
  * with no `triggered:<tool>` record (the PR's tool was never triggered); such a collection is a deviation to report, it
  * is not evidence of U1's "after the trigger", and open-prs.ts --retrigger refuses it. The collection file says which
- * bound applied (`completionFrom`). Issue comments are read for completion only: counted comments stay inline only.
+ * bound applied (`completionFrom`). The other kind of case with no trigger is one whose PR never opened (H1 failure 1):
+ * it has no PR number, and `--never-opened <ids>` (only with `--bound window-start`) names it. Such a case is written
+ * as `no-review` without any gh call, listed in the collection file (`neverOpened`) and counted on stdout; an id named
+ * there that has a PR number in --pr-map refuses, and a case with no PR number that is not named there still refuses,
+ * so a gap in the PR map is never read as "never opened". Issue comments are read for completion only: counted
+ * comments stay inline only.
  * Otherwise the case is `no-review`. A PR whose base or head is not the case's pair is `invalid-binding` (the attempt
  * is invalid; nothing is substituted).
  * Reads only, with exact `gh api --method GET repos/SunnyBagal/<fork>/pulls/<n>[/comments|/reviews]` and
@@ -153,7 +159,7 @@ export function main(argv: string[], deps: { log?: (l: string) => void; env?: No
       side: { type: "string" }, "heldout-ok": { type: "boolean", default: false }, tool: { type: "string" }, config: { type: "string" },
       repo: { type: "string" }, manifest: { type: "string" }, "pr-map": { type: "string" }, ids: { type: "string" },
       "window-start": { type: "string" }, "window-end": { type: "string" }, out: { type: "string" }, "gh-bin": { type: "string", default: "gh" },
-      "resume-file": { type: "string" }, bound: { type: "string" },
+      "resume-file": { type: "string" }, bound: { type: "string" }, "never-opened": { type: "string" },
     } });
     const side = checkSide(values.side, values["heldout-ok"]!, [values.config, values.manifest, values["pr-map"], values.out, values["resume-file"]]);
     if (!values.tool || !values.config || !values.repo || !values.manifest || !values["pr-map"] || !values.out || !values["window-start"] || !values["window-end"]) {
@@ -163,6 +169,9 @@ export function main(argv: string[], deps: { log?: (l: string) => void; env?: No
     if (values.bound !== undefined && values.bound !== "window-start") throw new RefusalError("--bound takes one value: window-start");
     if (values["resume-file"] && values.bound) {
       throw new RefusalError("--resume-file and --bound window-start are separate collections: triggered cases take --resume-file, cases with no trigger record take --bound window-start");
+    }
+    if (values["never-opened"] !== undefined && !values.bound) {
+      throw new RefusalError("--never-opened is only for --bound window-start: a case whose PR never opened has no trigger record");
     }
     if (!values["resume-file"] && !values.bound) {
       throw new RefusalError("the completion bound must be named: --resume-file <open-prs resume.jsonl> (after each case's first trigger), or --bound window-start for cases with no trigger record (a deviation; never drives a re-trigger)");
@@ -189,9 +198,16 @@ export function main(argv: string[], deps: { log?: (l: string) => void; env?: No
     const manifest = readJson(values.manifest) as ManifestCase[];
     const prMap = readJson(values["pr-map"]) as Record<string, number>;
     const ids = values.ids ? values.ids.split(",").filter(Boolean) : manifest.map((c) => c.id);
+    const neverOpened = values["never-opened"] === undefined ? [] : values["never-opened"].split(",").filter(Boolean);
+    if (values["never-opened"] !== undefined && !neverOpened.length) throw new RefusalError("--never-opened is empty");
+    if (new Set(neverOpened).size !== neverOpened.length) throw new RefusalError("--never-opened names a case twice");
+    for (const id of neverOpened) {
+      if (!ids.includes(id)) throw new RefusalError(`--never-opened names ${id}, which is not a case of this collection`);
+      if (prMap[id] !== undefined) throw new RefusalError(`--never-opened names ${id}, but --pr-map has a PR for it: a case with a PR is collected, not declared`);
+    }
     for (const id of ids) {
       if (!manifest.some((c) => c.id === id)) throw new RefusalError(`${id} is not in the manifest`);
-      if (!Number.isSafeInteger(prMap[id]) || prMap[id]! <= 0) throw new RefusalError(`${id} has no PR number in --pr-map`);
+      if (!neverOpened.includes(id) && (!Number.isSafeInteger(prMap[id]) || prMap[id]! <= 0)) throw new RefusalError(`${id} has no PR number in --pr-map`);
       if (triggers && !triggers.has(id)) throw new RefusalError(`${id} has no triggered:${values.tool} record in --resume-file`);
       for (const f of [path.join(values.out, values.tool, `${id}.json`), path.join(values.out, "raw", values.tool, `${id}.json`)]) {
         if (fs.existsSync(f)) throw new RefusalError(`${f} exists; never overwritten`);
@@ -214,6 +230,12 @@ export function main(argv: string[], deps: { log?: (l: string) => void; env?: No
       excluded: { otherAuthor: 0, reply: 0, outsideWindow: 0, otherCommit: 0, duplicate: 0 },
       completion: { review: 0, inline: 0, issueComment: 0, notCompletion: 0 } };
     for (const id of ids) {
+      if (neverOpened.includes(id)) {
+        // no PR, so nothing to read: the tool reviewed nothing (H1 failure 1); no raw file, no review file
+        status[id] = "no-review";
+        totals["no-review"]++;
+        continue;
+      }
       const c = manifest.find((x) => x.id === id)!;
       const from = Math.max(start, triggers?.get(id) ?? start);
       const r = collectCase(gh, values.repo, prMap[id]!, c, logins as string[], start, end, { from, notCompletion });
@@ -238,11 +260,13 @@ export function main(argv: string[], deps: { log?: (l: string) => void; env?: No
     writeNew(path.join(values.out, `${values.tool}.status.json`), statusText);
     writeNew(path.join(values.out, `${values.tool}.collection.json`), JSON.stringify({ v: 1, side, tool: values.tool, repo: values.repo,
       window: { start: values["window-start"], end: values["window-end"] }, logins, notCompletion: patterns,
-      completionFrom: triggers ? COMPLETION_FROM_TRIGGER : COMPLETION_FROM_WINDOW_START, collectedAt: new Date().toISOString(), totals,
+      completionFrom: triggers ? COMPLETION_FROM_TRIGGER : COMPLETION_FROM_WINDOW_START, ...(neverOpened.length ? { neverOpened } : {}),
+      collectedAt: new Date().toISOString(), totals,
       files: { ...hashes, [`${values.tool}.status.json`]: sha256(statusText) } }, null, 1) + "\n");
     log(`${values.tool}: ${ids.length} case(s): completed ${totals.completed}, no-review ${totals["no-review"]}, invalid-binding ${totals["invalid-binding"]}, read-failed ${totals["read-failed"]}; `
       + `${totals.comments} counted comment(s); excluded: other author ${totals.excluded.otherAuthor}, reply ${totals.excluded.reply}, outside window ${totals.excluded.outsideWindow}, other commit ${totals.excluded.otherCommit}, duplicate ${totals.excluded.duplicate}`);
     log(`${values.tool}: completion objects after ${triggers ? "the first trigger" : "the window start (--bound window-start: a deviation, never drives a re-trigger)"}: review ${totals.completion.review}, inline ${totals.completion.inline}, issue comment ${totals.completion.issueComment}; not completion (pattern) ${totals.completion.notCompletion}`);
+    if (neverOpened.length) log(`${values.tool}: never opened (no PR, declared with --never-opened; no-review, nothing read): ${neverOpened.length}`);
     return totals["read-failed"] ? 1 : 0;
   } catch (e) {
     log(`refused: ${e instanceof RefusalError || String((e as { code?: string }).code).startsWith("ERR_PARSE_ARGS") ? (e as Error).message : "an input could not be read"}`);
