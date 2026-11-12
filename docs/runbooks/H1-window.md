@@ -111,7 +111,7 @@ two tools need one on it).
 
 **Who keeps the clock (gap G4; decision 076c item 11).** The hourly triggers run from a **detached scheduler with
 its own log, not from an agent's session**: a background process of a session here dies after 2 hours
-(`docs/bench/results.md`, "What went wrong"). "Detached" is what codex's rehearsal script does
+(`docs/bench/results.md` §8 "Losses", "v1 dev run 2 was void"). "Detached" is what codex's rehearsal script does
 (`tracehound-testset/run/out/codex.rehearsal.py`, sha256 `59b7fa8f…88e2`, functions `run`, `targets`, `command`,
 `verdict`; no commit, it is a rehearsal artefact):
 - started so that its parent is pid 1 and it has its own session id, both written to the state file at every start;
