@@ -99,9 +99,26 @@ passed the 8-slot rehearsal (`F1-freeze.md` §1 row 14) and is named in `docs/be
 alone is not that mechanism, because a background process here dies after 2 hours (`docs/bench/results.md:232-233`).
 Every slot is logged with its planned and its actual time. A slot late by more than 30 minutes is failure 7.
 
-**The re-trigger command (gap G5).** `open-prs.ts --trigger` cannot post it: `runTriggers` skips a case the resume
+**The re-trigger command (gap G5). TEMPORARY: the `gh` lines below stand only until bunny's re-trigger mode is on
+the testset repo's `main` (decision 076c items 9 and 15).** On 2026-11-12 the mode exists only as an uncommitted change
+in the testset working tree (`run/out/bunny.076c.open-prs.patch`, sha256 `135374bf…0f10`, against testset `e0b2b8b`;
+functions `runRetriggers` and `readCollectorStatus` in `scripts/open-prs.ts`; codex's review and artu1's commit are
+open). **When it is committed, this is the re-trigger and the `gh` lines are deleted from this file before F1:**
+```sh
+cd $TS && node scripts/open-prs.ts --manifest $MAN --fork SunnyBagal/$R --resume-file $HO/open-prs/$R.resume.jsonl \
+  --retrigger <tool> --status $HO/check/<k>-<tool>/<tool>.status.json --ids <id of position k>     # dry run, then --execute
+```
+One tool per call; never together with `--trigger`. The mode takes the collector's verdict from the slot's check
+(§3 above), so there is no second definition of "no completed review": the status file must be the one its
+`<tool>.collection.json` hashed, for the same tool and fork, collected at or after 24 h from that case's first
+`triggered:<tool>` record. It re-triggers only `no-review`; it skips `completed`, `invalid-binding` and a case not yet
+due; it refuses `read-failed` or a missing status (collect again). It writes `retriggered:<tool>` to the resume file
+and never posts a third trigger (a PR that already carries two trigger comments is recorded and skipped; a PR with
+none is a failure and nothing is posted). All from bunny's report, `run/out/bunny.076c.md` step 4.
+
+**Until then (temporary lines).** `open-prs.ts --trigger` cannot post a re-trigger: `runTriggers` skips a case the resume
 file marks `triggered:<tool>`, and `alreadyTriggered` skips a PR that already carries the trigger text from the
-SunnyBagal user (`tracehound-testset/scripts/open-prs.ts`). The re-trigger is exactly one of these lines, with the
+SunnyBagal user (`tracehound-testset/scripts/open-prs.ts` at `e0b2b8b`). The re-trigger is exactly one of these lines, with the
 script's own trigger texts (`TRIGGERS` in the same file), posted as the SunnyBagal user:
 ```sh
 gh pr comment <n> --repo SunnyBagal/$R --body "@coderabbitai full review"
@@ -111,8 +128,8 @@ Guard, before each: the number of comments by `SunnyBagal` on that PR whose whol
 exactly **1** (`gh api --method GET repos/SunnyBagal/$R/issues/<n>/comments --paginate --jq '[.[]|select(.user.login=="SunnyBagal")|.body|gsub("^\\s+|\\s+$";"")]|map(select(.=="<trigger text>"))|length'`).
 (`--paginate` prints one number per page of comments; add them if there are several.) `0` means the first trigger never happened (failure 1); `2` means the re-trigger is already spent: post nothing. After
 posting, the same line prints `2`; log `retriggered:<tool>` with the position in `$HO/window.log`. These lines are part
-of this file, whose sha256 is in `ts-freeze.md` (gap G9); nothing else is ever typed into a held-out PR. If a later
-decision adds a re-trigger mode to the script before the freeze, that mode replaces these lines and this paragraph.
+of this file, whose sha256 is in `ts-freeze.md` (gap G9); nothing else is ever typed into a held-out PR. The window
+must not run on the temporary lines if the mode can be merged first: F1 §1 row 17 checks it.
 
 ## 4. T0 + 2:00 onward: TraceHound, locally, from the tag
 Runs do not depend on the triggers; they start once the PRs are open and finish the same day (estimate from R2's
