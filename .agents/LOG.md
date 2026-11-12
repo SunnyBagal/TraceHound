@@ -201,3 +201,12 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   already committed (`bd5ca83`, unchanged since). Nothing merged: no GO exists ($0).
 - **Who:** artu1; lanes pasted by Sunny directly to bunny (P2 fixes), codex, grok.
 - **Left:** GOs on the fixed `b4-076c`, the re-trigger patch and `ffb615b` (no reviewer assigned); grok's 076d count; brain GO.
+- **Then (2026-11-13, after 04:40 IST):** 076d addendum (e) recorded (`baa31b7`: failed first trigger retried before later
+  pushes, `failed-first-trigger` after two; exposure per review from the scheduler's branch log). Merged on codex GO, pull
+  first, `--no-ff`: `82b65e4` (scorer pairs + floor 15 + exposed/unexposed split, contains `b4-076c` `85ade2f`; merge
+  `2e971c5`), `b696231` (collector `--never-opened`; `a38d3c8`), `b5-window-scheduler` @ `2c51913` (`4b99fb4`); gates on the
+  merged tree: action 366, analyzer 1027 + 6 skipped, viewer 215, typecheck clean. Testset re-trigger patch committed
+  `060c644` (sha256 `32085be3…`, GO). codex's and grok's held-out reconciliation (counts): 076d's "same exposure" sentence
+  was wrong (6 dev-only / 2 held-out-only / 3 both), exposure at first review 0 of 20; correction and Sunny's freeze lift
+  (no console check; S1 ratio guard 1.08) recorded (`54b302b`, `47a8d03`). Planner A note revised (`329091b`); brain lines
+  updated, brief amendment 2 (`9997e02`) sent to codex for after the r3 rehearsal (09:56 IST). $0.
