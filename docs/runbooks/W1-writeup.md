@@ -24,8 +24,10 @@ that is not one of these templates, or a placeholder filled from anything but th
 2. **Headline table.** One row per tool (TraceHound, CodeRabbit, Greptile): reviews completed of 29; bugs caught of 20
    (hand-checked) with the Wilson 95% interval; comments per PR (mean, median); comments on the 9 clean cases; cost per
    PR (TraceHound only; "free tier" for the others).
-3. **Pairs.** For each of the three pairs: paired n, caught only by the first, only by the second, exact two-sided
-   sign-test p. One sentence per pair from §3.2.
+3. **Pairs.** Two pairs were registered before the run and are the only tests (decision 076c item 4): **TraceHound vs
+   CodeRabbit** and **TraceHound vs Greptile**. For each: bug cases reviewed by both (m), paired n, caught only by the
+   first, only by the second, exact two-sided sign-test p, and one sentence from §3.2. **CodeRabbit vs Greptile: counts
+   only** (m, n, only-first, only-second); no p-value, no sentence, no word about which did better.
 4. **What was run.** Tag `review-freeze-3`, candidate arm and attempts, model, the command shape, window start and end
    (UTC), triggers, re-triggers used, who operated.
 5. **How it was scored.** One golden per bug case (alternates as OR-targets), counted comments, two judges, the blind
@@ -35,7 +37,8 @@ that is not one of these templates, or a placeholder filled from anything but th
    `ts-heldout.summary.json` and nothing added: "After deciding every item, the checker guessed which tool had written
    each comment: right for R of the G items he guessed (U marked unsure, N items in all); naming the commonest tool
    every time would have been right for M of N.
-7. **Secondary rows** (the two other TraceHound arms; judges only, not hand-checked), marked report-only.
+7. **Secondary rows** (the two other TraceHound arms; judges only, not hand-checked), marked report-only. Counts
+   only; no test and no p-value on a secondary row, against anything.
 8. **Predictions.** The table of decision 078, each scored right / wrong / too vague to score.
 9. **Selection history.** Dev runs 1 and 2, the gates and their verdicts (link to `docs/bench/ts-dev.md`), and the
    sentence "the configuration was chosen on 40 dev cases before the held-out cases were opened".
@@ -60,7 +63,10 @@ mean comments per PR; `D` = TraceHound's measured cost per PR on this set.
 If a tool completed fewer than 29 reviews, add: "X reviewed N of the 29 pull requests; its count is over the 20 bugs,
 and pairs use only the pull requests both tools reviewed."
 
-### 3.2 Per pair (TraceHound against tool X; the test decides which template, not the size of the gap alone)
+### 3.2 Per registered pair (TraceHound against tool X; the test decides which template, not the size of the gap alone)
+X is CodeRabbit or Greptile. These are the two registered tests: each an exact two-sided sign test at 0.05, **not
+corrected for there being two**, exact p-values reported (decision 076c item 4). Order: the floor of 15 first (below),
+then the test.
 **Outcome A, the test rejects and TraceHound is ahead (p < 0.05, a > b; this needs at least 6 more bugs, e.g. 6–0, 8–1, 10–2):**
 > TraceHound caught a bugs that X missed, and X caught b that TraceHound missed (n pull requests with a bug reviewed by
 > both; exact sign test, p = P). On this set TraceHound caught more of the labelled bugs than X.
@@ -84,8 +90,10 @@ and pairs use only the pull requests both tools reviewed."
   that X missed and X caught b that TraceHound missed. That is too few for a test." The table shows m, n, a and b for
   that pair and a dash in the p column. The floor is checked before the p-value is looked at.
 - If a + b = 0: "the two tools caught the same bugs" is allowed as a description of the 20 cases; it is still outcome C.
-- CodeRabbit against Greptile gets the same three templates, in the table only, not in the summary.
-- Outcomes A and B always end with: "One run, 20 bugs, R only."
+- CodeRabbit against Greptile gets **no** template: its row in the pairs table shows counts and nothing else (076c
+  item 4). The same holds for the secondary arms.
+- Outcomes A and B always end with: "One run, 20 bugs, R only; one of two registered tests, each at 0.05 with no
+  correction for making two."
 
 ### 3.3 Always (volume and cost)
 > TraceHound posted C_T comments per pull request, CodeRabbit C_C and Greptile C_G; on the 9 pull requests with no
@@ -107,7 +115,7 @@ Sentence 3.1 shortened to the three counts with intervals; the pair sentence(s) 
 outcome's short form ("no detectable difference at this sample size" / "caught more of the labelled bugs than X on this
 set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the link.
 
-## 4. Limits (all go on the page)
+## 4. Limits (all 12 go on the page)
 1. 20 bugs and one run: intervals are wide, and only large differences can be detected (power in plan-v2 §2).
 2. The bugs are ones a later merged fix repaired, found by SZZ and labelled by two labellers; they are not all the bugs
    in those pull requests. A comment on a real defect that no later fix repaired counts as unmatched, so the share of
@@ -133,6 +141,11 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
     output, capped at 15 per pull request, with one rerun allowed for a failed case; the other tools posted on GitHub
     under their rate and credit limits, with one re-trigger allowed for a failed review (premortem gap G18).
 11. Every deviation from the protocol during the window, by its failure number.
+12. Two tests were registered before the run: TraceHound against CodeRabbit and TraceHound against Greptile, each an
+    exact two-sided sign test at 0.05. No correction was made for running two, so the chance that at least one rejects
+    when neither tool differs from TraceHound can be up to 0.10 (the sum of the two levels). CodeRabbit against
+    Greptile was not tested; its counts are shown. A pair with fewer than 15 of the 20 bugs reviewed by both tools gets
+    no test sentence (decision 076c items 4 and 6).
 
 ## 5. Checks before merge
 1. codex: every number in `ts-heldout.md`, `results.md`, the viewer and the README equals `ts-heldout.summary.json` (or

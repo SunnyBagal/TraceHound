@@ -1,8 +1,9 @@
 # Runbook F1: the freeze (`review-freeze-3`) and the predictions
 
 For artu1 (does it), codex (freeze check, held-out side), Sunny (go). Planner A, 2026-11-11.
-Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md` §11–§12 (Planner B's; where
-it and this runbook differ, the protocol wins and the difference is reported). Cost: $0.
+Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md` §11–§12 (codex's file,
+`AGENTS.md` "Who owns which files"; where it and this runbook differ, the protocol wins and the difference is
+reported). Cost: $0.
 
 After F1, artu1 and bunny change no reviewer code, no prompt, no flag and no scoring rule until the held-out score
 files are hashed. F1 is finished only when every box below is ticked; a box that cannot be ticked stops the freeze.
@@ -12,7 +13,7 @@ files are hashed. F1 is finished only when every box below is ticked; a box that
 |---|---|---|---|
 | 1 | R2's gate has a verdict (PASS, FAIL with the revert done, or NOT RUN as a replay) | `docs/bench/ts-dev.md`; `docs/specs/R2.md` §3 | artu1 |
 | 2 | Decision 077 names the candidate arm, attempts, K, and the H1 cap | `docs/decisions.md` 077 | artu1 |
-| 3 | `docs/eval/ts-protocol.md` is on `main` and every row of its §12 "pre-freeze slots" is filled: CodeRabbit's measured rate and the trigger schedule, the 72-hour window in UTC, the tool logins and the terminal-review evidence rule, the caps | read §12; no "FILL", "pending" or "proposed" remains outside the predictions table | artu1, Planner B |
+| 3 | `docs/eval/ts-protocol.md` is on `main` and every row of its §12 "pre-freeze slots" is filled: CodeRabbit's measured rate and the trigger schedule, the 72-hour window in UTC, the tool logins and the terminal-review evidence rule, the caps | read §12; no "FILL", "pending" or "proposed" remains outside the predictions table | artu1, codex |
 | 4 | The re-trigger collision (plan-v2 R-1) has a recorded ruling, and the schedule in `docs/runbooks/H1-window.md` §3 matches it | `docs/decisions.md`; if H1's runbook still says "assumption", it is not ruled | artu1 |
 | 5 | Sunny has confirmed the window dates and the hand-check sitting (S0.6) | written in `docs/decisions.md` 078 | Sunny |
 | 6 | `scripts/testset/tools.json` (from S1), `scripts/testset/strip.json` (from P1's dev comments), the 076a policy file exist on `main` | `ls scripts/testset` | artu1 |
@@ -91,10 +92,15 @@ files are hashed. F1 is finished only when every box below is ticked; a box that
 artu1 writes them, Sunny reads them. Each field gets a number or the words "no quantitative prediction"; nothing is
 filled in later. Fields (protocol §11):
 1. TraceHound bugs caught of 20, as a range.
-2. CodeRabbit's and Greptile's bugs caught of 20, as ranges; expected discordant counts for each pair.
+2. CodeRabbit's and Greptile's bugs caught of 20, as ranges; expected discordant counts for each of the two
+   registered pairs (TraceHound vs CodeRabbit, TraceHound vs Greptile; decision 076c item 4).
 3. Comments per PR for each tool; comments on the 9 clean cases; completion (reviews delivered of 29) per tool.
 4. TraceHound cost per PR and total; failed chunks; empty cases.
-5. Which pairs will reject at α = 0.05 (expected: none; say so if that is the prediction) and the assumption behind it.
+5. Which of the **two registered pairs** will reject (expected: none; say so if that is the prediction) and the
+   assumption behind it. 078 names the two tests in these words: "TraceHound vs CodeRabbit and TraceHound vs Greptile,
+   each an exact two-sided sign test at 0.05, uncorrected for two tests, exact p-values reported; CodeRabbit vs
+   Greptile: counts only" (076c item 4). No prediction is made, and no test is run, on CodeRabbit vs Greptile or on a
+   secondary arm.
 6. The size of the hand-check sheet: the number of items expected, from the dev sheet count of `docs/specs/E1.md` §1
    step 4 scaled to 20 bugs and three tools, and Sunny's minutes per item (gap G14). If items × minutes is over 3 hours,
    Sunny says before the tag whether he books a longer sitting; the window is not booked on an unknown sheet.

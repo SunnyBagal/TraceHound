@@ -34,6 +34,9 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
    (and the same for greptile).
 4. Rows. **Primary (these three make the claim):** `tracehound` = `$S/arms/$ARM`, `coderabbit`, `greptile`.
    **Secondary (report only, judges only, not hand-checked):** the two TraceHound arms that are not the candidate.
+   **Registered pairs (decision 076c item 4): TraceHound vs CodeRabbit and TraceHound vs Greptile**, each an exact
+   two-sided sign test at 0.05, uncorrected, exact p reported. CodeRabbit vs Greptile is counts only. A secondary row
+   is never tested.
 
 ## 2. Judging (the only paid step)
 `L0=$(ledger); echo "H2 L0=$L0 $(date -u +%FT%TZ)" >> $S/job.md` (the job-start value lives in the job file and is
@@ -49,7 +52,7 @@ env $E node $TH/packages/analyzer/src/bin.ts bench score --golden $G/bench-golde
 At most 5 rows × 20 bug cases × 2 judges = 200 calls (a clean case or an empty review makes none,
 `packages/analyzer/src/bench/score.ts:125-126`). A refused call (cap) or a `JUDGE_FAILED` entry: note the count; rerun
 that one process once into a new detail file name (`…v1.b.json`) if money is left under the $0.40; never edit a detail
-file. **When a row has two detail files for one judge, the later one is the official one** and is the one passed to
+file. At most one re-run per judge process (question U9 of `run/comms/planner.b.d1-review.md`, adopted by 076c item 5). **When a row has two detail files for one judge, the later one is the official one** and is the one passed to
 `score-testset.ts` and `handcheck-sheet.ts`; the earlier one is kept and hashed (gap G13). If the cap is reached with rows unjudged, the secondary rows are the ones left unjudged, and the report says so.
 
 ## 3. Pre-check tables (private; nobody but codex reads them)
@@ -83,6 +86,9 @@ shasum -a 256 $S/sheet/sheet.md $S/sheet/decisions.json $S/sheet/mapping.json $S
   allowed guesses are given in §5, not on the sheet.
 
 ## 5. Sunny's sitting (one sitting; nobody helps; no tool output open elsewhere)
+The two definitions below are the hand-check's rule for "same bug". They are frozen twice: this file's sha256 is in
+`docs/bench/ts-freeze.md`, and the protocol's §10 carries the same definitions (question U10, 076c item 5); if the two
+texts differ, the protocol's is used and the difference is reported before the sitting.
 For each item the sheet shows the labelled bug (description and locations) and one comment. Write in `decisions.json`:
 - **`same-bug`** if the comment points at the labelled defect: the same faulty behaviour, at the labelled place or at a
   place the label lists. Different words are fine. A correct fix suggestion is not required.
@@ -121,6 +127,10 @@ When done, Sunny sends `decisions.json` back and says "final".
    it and Sunny has been told.
 6. codex checks `summary.final.json` and `summary.secondary.json` contain **no case id, title, path or comment text**
    (`grep -c 'ho-[0-9]' …` prints 0; the kit writes counts only). If they do, strip nothing by hand: report it and stop.
+   Also (076c item 4): a p-value appears only for the two registered pairs. The kit at `main` `958171b` prints one for
+   every pair of `--tool` rows (`main` in `scripts/testset/score-testset.ts`); the change is bunny's, on 076c's Touches
+   list, and F1 §1 row 17 does not pass until it is on `main`. If a committed-to-be summary still carries a p-value
+   for CodeRabbit–Greptile or for a secondary arm: the same rule, report it and stop.
 7. codex commits to `TraceHound/docs/bench/`: `ts-heldout.summary.json` (a copy of `summary.final.json`),
    `ts-heldout.secondary.json`, and `ts-heldout.hashes.md` with the three single-line hashes (window, blank sheet +
    filled sheet, score) and the counts of §7. Push.
@@ -130,7 +140,8 @@ When done, Sunny sends `decisions.json` back and says "final".
 ## 7. Report: `run/out/codex.ho-score.md` (counts only)
 Per primary tool: completed of 29 (bug n, clean m); caught K of 20 by v1, by x1, by the hand-check; Wilson interval of
 the hand-check K; comments per attempted and per completed PR (mean, median); comments on clean cases; location hits.
-Pairs (TraceHound–CodeRabbit, TraceHound–Greptile, CodeRabbit–Greptile): paired n, only-A, only-B, exact p; and per
+Pairs: for the two registered pairs (TraceHound–CodeRabbit, TraceHound–Greptile) paired n, only-A, only-B and the
+exact p; for CodeRabbit–Greptile paired n, only-A, only-B and **no p** (076c item 4); and per
 pair **m = bug cases reviewed by both** (TraceHound's official record `status: "ok"` and the tool's collector status
 `completed`; for the CodeRabbit–Greptile pair, both `completed`). 076c item 6: below m = 15 the pair is counts only.
 Until `score-testset.ts` prints m (bunny's open change on 076c's Touches list), codex counts it from `$S/official` and
