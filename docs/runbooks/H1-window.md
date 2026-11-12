@@ -9,9 +9,11 @@ cap run from the reserve (decision 076a "Caps" item 4).
 **Ruled since the first version (decision 076b, `docs/decisions.md:3931-3951`):** the re-trigger slots (item 2, §3 below),
 the CodeRabbit allowance condition (item 3, §1.3) and the canary with its limits (item 4, §5 failure 9). They are no
 longer assumptions. If the frozen schedule in `docs/bench/ts-freeze.md` differs from §3, the frozen schedule is used.
-**Still open (Sunny, questions U1 and U2 of `run/comms/planner.b.d1-review.md`):** what a completed review with no inline
-comment looks like for each tool, and whether every PR without a review gets the re-trigger. §3's status rule is
-written for the collector's present definition; the protocol's ruled wording replaces it, and F1 does not pass without it.
+**Ruled in decision 076c (`docs/decisions.md`, "076c", items 2 and 3):** a review is completed if the tool's bot posted
+any review object, inline comment or issue comment on the PR after the trigger, except a rate-limit or error message
+(issue comments count for completion only, never as comments); a PR is re-triggered only if it has no completed review
+24 h after its own trigger, and a completed review with zero comments is never re-triggered. §3's status rule is the
+collector's verdict under that definition (`collectCase` in `scripts/testset/collect-tool-reviews.ts` as of `4db9abe`).
 
 ```sh
 TH=~/Projects/th-h1                       # worktree at the tag review-freeze-3 (F1 §4.2); never the main checkout
@@ -72,10 +74,15 @@ two tools need one on it).
 - At each slot from T0 + 30:00: take the lowest position that is due and not yet handled, and check it **now** (not at
   its due time: a review may have arrived since). Run the collector for that case, once per tool (`--ids <id>`,
   `--window-start T0 --window-end now`, `--out $HO/check/<k>-<tool>`), and read the status:
-  - `completed` → nothing for that tool. A review that completed with zero inline comments is `completed`, not an error.
-  - `no-review` (nothing arrived, a CodeRabbit rate-limit comment, a Greptile "Failed" message, an explicit error) →
-    **one re-trigger** for that tool on that PR. Never a second.
-  - `invalid-binding` → failure 5.
+  - `completed` → nothing for that tool, ever (076c item 3). A review that completed with zero inline comments is
+    `completed`: the bot left a review object or an issue comment that is not a rate-limit or error message.
+  - `no-review` (nothing arrived, or only messages that match the tool's frozen `notCompletion` patterns: a CodeRabbit
+    rate-limit comment, a Greptile "Failed" message, an explicit error) → **one re-trigger** for that tool on that PR.
+    Never a second.
+  - `invalid-binding` → failure 5; no re-trigger.
+  - `read-failed` → not a result: run the collector again into a new directory (`$HO/check/<k>-<tool>.b`) in the same
+    slot; if it still fails, the slot passes without a re-trigger for that PR and the PR is checked first at the next
+    slot (failure 7's logging).
 - If neither tool needs a re-trigger, the position is handled and the same slot goes to the next due position; repeat
   until a re-trigger is posted or no position is due.
 - Never re-trigger because a review looks thin or missed something.
@@ -143,10 +150,10 @@ After each batch: exit code, status per case, `review.chunksFailed`, `usage.ledg
 |---|---|---|
 | 1 | `open-prs.ts` fails for a case | Run it again (the resume file prevents duplicates). A PR not open by its own slot keeps its position; its triggers are posted when it opens, in the next free slot. Not open by T0 + 29:00: both tools are `no-review` for it; TraceHound still runs it locally. |
 | 2 | A tool reviews a PR before its trigger (auto-review) | Log it. That review stands as the tool's review; do not trigger that tool on that PR. Reported as a deviation. If Greptile does this on several PRs, tell Sunny at once in words only (credits); he does not open the dashboard or the PRs (gap G2). |
-| 3 | CodeRabbit posts a rate-limit comment | No review ran (https://docs.coderabbit.ai/management/rate-limits). It is found as `no-review` at that PR's re-trigger slot (§3) and gets the one re-trigger. Do not re-trigger earlier. |
+| 3 | CodeRabbit posts a rate-limit comment | No review ran (https://docs.coderabbit.ai/management/rate-limits). Its wording is a frozen `notCompletion` pattern, so the PR is `no-review` at its re-trigger slot (§3) and gets the one re-trigger. Do not re-trigger earlier than 24 h after the PR's own trigger (076c item 3). If the comment's wording does **not** match the frozen pattern, the collector says `completed`: do not re-trigger by hand; log it as a deviation and tell Sunny in counts only. |
 | 4 | Greptile shows "Failed" | Same: the one re-trigger, at that PR's re-trigger slot (§3). |
 | 5 | A PR's base or head no longer equals the case pair | The attempt is invalid (`invalid-binding`); nothing is pushed or repaired; that case is `no-review` for the external tools. Find out who pushed, after the window. |
-| 6 | A tool still has no review after its re-trigger | `no-review`: no catch in K of 20, left out of that tool's pairs, n reported (076a §13.4). |
+| 6 | A tool still has no completed review after its re-trigger | `no-review`: no catch in K of 20, left out of that tool's pairs, n reported (076a §13.4). |
 | 7 | A trigger slot is missed (operator down, GitHub down) | Post it at the next free slot and log the delay. Do not post two CodeRabbit triggers in one hour to catch up. |
 | 8 | Greptile runs out of credits | Seen only through Greptile's own message on a PR; nobody opens the dashboard during the window (gap G2). Remaining PRs are `no-review` for Greptile. Nothing is bought. |
 | 9 | TraceHound cases end `failed` | One rerun each, after the last batch and at least 2 hours after the failure. **Canary (decision 076b item 4), only when two held-out cases in a row failed with a provider or transport error:** stop the batch (the cases without a record are unstarted and roll forward). Run S1's dev case fresh from `$TH` as a canary: `--manifest $TS/cases/dev/manifest.json --clone $TS/repos/<its repo> --ids <S1's case> --out-dir $HO/canary/<try> --fixes off --contracts off --cache off`, with `--max-usd-per-case` and `--max-usd-run` both set to $0.40 minus what earlier canary tries spent. At most **3 tries, at least 30 minutes apart, $0.40 in total, charged to the reserve**. A canary that ends `ok`: continue the batch and, later, the reruns. **All 3 fail: stop everything on the TraceHound side and tell Sunny**; no rerun is spent while the provider is down. Triggers and the snapshot go on. |
