@@ -77,6 +77,10 @@ shasum -a 256 $S/sheet/sheet.md $S/sheet/decisions.json $S/sheet/mapping.json $S
 - If the `grep` prints anything but 0: do **not** edit `strip.json` (it is frozen). Tell Sunny the count; he decides
   whether to proceed with a known cue or to void the sheet. Record the decision.
 - codex gives Sunny `sheet.md` and `decisions.json` only. `mapping.json` never leaves `$HO`.
+- **The guess column (premortem gap G3; decision 076c item 7).** Every item of `decisions.json` has three fields to
+  fill: `decision`, `reason` and `guess` (`buildSheet` in `scripts/testset/handcheck-sheet.ts` as of `595707f`, branch
+  `b4-076c`; it writes `guess: null`). The sheet itself still names no tool, so the `grep` above stays at 0; the
+  allowed guesses are given in §5, not on the sheet.
 
 ## 5. Sunny's sitting (one sitting; nobody helps; no tool output open elsewhere)
 For each item the sheet shows the labelled bug (description and locations) and one comment. Write in `decisions.json`:
@@ -85,6 +89,11 @@ For each item the sheet shows the labelled bug (description and locations) and o
 - **`not`** if it is about something else in the same file or nearby, is too vague to tell which defect it means, or
   only restates what the code does. When unsure, write `not` and the reason "unsure".
 - A reason of a few words for every item.
+- **Then, as a second pass, the guess (gap G3):** when every decision is written, and before sending the file, go
+  through the items once more and write in `guess` which tool you think wrote the comment: `tracehound`, `coderabbit`,
+  `greptile`, or `unsure`. Guess from the comment as it stands on the sheet. Do not change any `decision` or `reason`
+  during this pass. `unsure` is a full answer; a blank is not (the resolve step refuses it). The guess never changes a
+  catch: it measures whether the sheet left cues, and the report gives the hit rate in one line.
 Rules: decide every item (the resolve step refuses a blank). Do not look up the PR, the fix or any tool's page. Since
 T0 Sunny has opened no vendor dashboard, no fork PR and no GitHub mail from the four forks (`F1-freeze.md` §1 row 13,
 gap G2); if he did, he says so before the sitting and it is written into the report. Do not
@@ -93,9 +102,16 @@ When done, Sunny sends `decisions.json` back and says "final".
 
 ## 6. Hash, unblind, final score
 1. `shasum -a 256 $S/sheet/decisions.json > $S/sheet.filled.sha256`; codex sends Sunny that hash; Sunny confirms it
-   matches his file. **Only then:**
+   matches his file. The decisions and the guesses are in that one file, so one hash freezes both. **Only then:**
 2. `node scripts/testset/handcheck-sheet.ts resolve --mapping $S/sheet/mapping.json --decisions $S/sheet/decisions.json --out $S/handcheck.json`
+   It refuses (exit 2, nothing written) an item with no decision or with no guess, and a guess that is neither a
+   `--tool` name nor `unsure` (`resolve` in `handcheck-sheet.ts` as of `595707f`). If it refuses for a guess, Sunny
+   fills the missing guesses **before anything is unblinded**, the file is hashed again (both hashes are kept), and
+   step 1 is repeated. `handcheck.json` gets counts only: `guess: {items, guessed, unsure, right, tools, commonestToolItems}`.
 3. Final tables: the §3 `score-testset.ts` line again with `--handcheck $S/handcheck.json --out $S/summary.final.json`.
+   It prints one line, `hand-check guess: right R of G guessed (U unsure, N items, K tools; uniform chance 1/K; always
+   naming the commonest tool: M of N)`, and writes the same counts as `handcheckGuess` into the summary (`main` in
+   `scripts/testset/score-testset.ts` as of `595707f`).
 4. Secondary rows: one more `score-testset.ts` run with the two other arms, their v1 and x1 details, no `--handcheck`,
    `--out $S/summary.secondary.json`.
 5. `( cd $S && find . -type f | sort | xargs shasum -a 256 > ../hashes.score.txt ); shasum -a 256 $HO/hashes.score.txt`
@@ -120,7 +136,8 @@ pair **m = bug cases reviewed by both** (TraceHound's official record `status: "
 Until `score-testset.ts` prints m (bunny's open change on 076c's Touches list), codex counts it from `$S/official` and
 the two status files and writes the three numbers here. Hand-check:
 items on the sheet, `same-bug` count, judge-matched items Sunny rejected, location-only items Sunny accepted, sitting
-length. Judging: calls, `JUDGE_FAILED`, spend. TraceHound cost per PR (mean, median, max, total) from the records.
+length. **Guess (gap G3), one line, copied from the kit's output:** "hand-check guess: right R of G guessed (U unsure, N
+items, 3 tools; uniform chance 1/3; always naming the commonest tool: M of N)". No adjective is added to it. Judging: calls, `JUDGE_FAILED`, spend. TraceHound cost per PR (mean, median, max, total) from the records.
 
 ## 8. Failures and rules
 | failure | rule |
@@ -129,6 +146,7 @@ length. Judging: calls, `JUDGE_FAILED`, spend. TraceHound cost per PR (mean, med
 | Sunny cannot finish in one sitting | He stops, the partial file is hashed and kept, and he finishes in a second sitting without seeing anything else in between; the report says "two sittings". |
 | Sunny's file hash does not match | Use his file; hash again together; never the operator's copy. |
 | Sunny wants to change a decision after unblinding | Not allowed. It is recorded as a note next to the result. |
+| Sunny sent the file with guesses left blank | `resolve` refuses. He fills them before unblinding (§6 step 2). If anything was unblinded first, the guesses are not collected afterwards: the report line says "guess not collected" and why. |
 | The two judges disagree on many items | Nothing to do: the hand-check decides, and the disagreement count is reported. |
 | A label looks wrong to Sunny during the sitting | He writes it in the reason. No relabelling, no dropped case (protocol §9). It is listed under limits in the write-up. |
 

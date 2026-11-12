@@ -31,6 +31,10 @@ that is not one of these templates, or a placeholder filled from anything but th
 5. **How it was scored.** One golden per bug case (alternates as OR-targets), counted comments, two judges, the blind
    hand-check and what was on the sheet, the policy file.
 6. **Judges versus hand-check.** Per tool: K by judge v1, by judge x1, by hand; items the hand-check rejected and added.
+   Then one line on the guess column (decision 076c item 7), with the counts of `handcheckGuess` in
+   `ts-heldout.summary.json` and nothing added: "After deciding every item, the checker guessed which tool had written
+   each comment: right for R of the G items he guessed (U marked unsure, N items in all); naming the commonest tool
+   every time would have been right for M of N.
 7. **Secondary rows** (the two other TraceHound arms; judges only, not hand-checked), marked report-only.
 8. **Predictions.** The table of decision 078, each scored right / wrong / too vague to score.
 9. **Selection history.** Dev runs 1 and 2, the gates and their verdicts (link to `docs/bench/ts-dev.md`), and the
@@ -112,7 +116,8 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
 4. The configuration was selected on 40 dev cases from three of the same repositories.
 5. The hand-check was done by the project owner, blind to the tool. Only comments that a judge matched or that lie
    within 10 lines of a labelled range were on the sheet; a match outside that set would be missed for every tool alike.
-   Tool-specific formatting was stripped by fixed patterns; residual style cues cannot be excluded.
+   Tool-specific formatting was stripped by fixed patterns; residual style cues cannot be excluded: the checker's
+   guesses of the tool were right for R of G (section 6), against M of N for always naming the commonest tool.
 6. What the other tools could see: each fork's default branch was set to the last upstream commit before 2026-07-01;
    neither vendor documents which ref its repository context is built from (`run/out/grok.tool-facts.md` rows 7, 11).
    CodeRabbit reviewed payload's cases under payload's own configuration file, which is part of that code.
