@@ -4,7 +4,7 @@
  *
  *   node scripts/testset/collect-tool-reviews.ts --side dev --tool <name> --config <json> --repo SunnyBagal/<fork>
  *     --manifest <cases manifest> --pr-map <json {case: PR number}> --window-start <ISO> --window-end <ISO>
- *     --out <dir> [--resume-file <open-prs resume.jsonl>] [--ids a,b] [--gh-bin gh] [--heldout-ok]
+ *     --out <dir> (--resume-file <open-prs resume.jsonl> | --bound window-start) [--ids a,b] [--gh-bin gh] [--heldout-ok]
  *
  * Counting rule (docs/eval/ts-protocol.md §3, the rule of bench/convert.ts): top-level line-level review comments by
  * the tool's own accounts. The accounts are a config value (`{v: 1, tools: {<name>: {logins: [...]}}}`), never
@@ -16,10 +16,14 @@
  * review comment or issue comment on the PR after the trigger and inside the window, except a message that matches one
  * of the tool's `notCompletion` patterns (rate-limit or error messages; config value, frozen with the logins,
  * case-insensitive regular expressions, an explicit [] allowed). "After the trigger" is the tool's first
- * `triggered:<tool>` record for the case in --resume-file (tracehound-testset scripts/open-prs.ts); without
- * --resume-file it is the window start, and the collection file says which bound applied. Issue comments are read for
- * completion only: counted comments stay inline only. Otherwise the case is `no-review`. A PR whose base or head is not
- * the case's pair is `invalid-binding` (the attempt is invalid; nothing is substituted).
+ * `triggered:<tool>` record for the case in --resume-file (tracehound-testset scripts/open-prs.ts). The bound is never
+ * implicit (codex 076c review P2-1; decision 076d item 4): exactly one of --resume-file and `--bound window-start` must
+ * be given, and with neither (or both) the collector refuses before any read. `--bound window-start` is only for cases
+ * with no `triggered:<tool>` record (the PR's tool was never triggered); such a collection is a deviation to report, it
+ * is not evidence of U1's "after the trigger", and open-prs.ts --retrigger refuses it. The collection file says which
+ * bound applied (`completionFrom`). Issue comments are read for completion only: counted comments stay inline only.
+ * Otherwise the case is `no-review`. A PR whose base or head is not the case's pair is `invalid-binding` (the attempt
+ * is invalid; nothing is substituted).
  * Reads only, with exact `gh api --method GET repos/SunnyBagal/<fork>/pulls/<n>[/comments|/reviews]` and
  * `.../issues/<n>/comments` argv, gh's own auth from an allowlisted env, cwd a temp dir; gh's stderr is never echoed.
  * Output: <out>/<tool>/<case>.json (neutral reviews, completed cases), <out>/raw/<tool>/<case>.json (every API object
@@ -38,6 +42,9 @@ import { checkSide, readJson, RefusalError, sha256, writeNew, type Comment } fro
 const FORK_RE = /^SunnyBagal\/[A-Za-z0-9._-]+$/;
 const ENV_ALLOW = ["PATH", "HOME", "TMPDIR", "LANG", "SSL_CERT_FILE", "SSL_CERT_DIR", "GH_TOKEN", "GITHUB_TOKEN", "GH_CONFIG_DIR", "XDG_CONFIG_HOME"];
 const PER_PAGE = 100;
+/** `completionFrom` in <tool>.collection.json. open-prs.ts --retrigger accepts only the first (exact text). */
+export const COMPLETION_FROM_TRIGGER = "first trigger (--resume-file)";
+export const COMPLETION_FROM_WINDOW_START = "window start (--bound window-start)";
 const MAX_PAGES = 50;
 
 export function assertGhRead(argv: string[], repo: string): void {
@@ -146,11 +153,19 @@ export function main(argv: string[], deps: { log?: (l: string) => void; env?: No
       side: { type: "string" }, "heldout-ok": { type: "boolean", default: false }, tool: { type: "string" }, config: { type: "string" },
       repo: { type: "string" }, manifest: { type: "string" }, "pr-map": { type: "string" }, ids: { type: "string" },
       "window-start": { type: "string" }, "window-end": { type: "string" }, out: { type: "string" }, "gh-bin": { type: "string", default: "gh" },
-      "resume-file": { type: "string" },
+      "resume-file": { type: "string" }, bound: { type: "string" },
     } });
     const side = checkSide(values.side, values["heldout-ok"]!, [values.config, values.manifest, values["pr-map"], values.out, values["resume-file"]]);
     if (!values.tool || !values.config || !values.repo || !values.manifest || !values["pr-map"] || !values.out || !values["window-start"] || !values["window-end"]) {
-      throw new RefusalError("usage: collect-tool-reviews.ts --side dev --tool <name> --config <json> --repo SunnyBagal/<fork> --manifest <f> --pr-map <f> --window-start <ISO> --window-end <ISO> --out <dir>");
+      throw new RefusalError("usage: collect-tool-reviews.ts --side dev --tool <name> --config <json> --repo SunnyBagal/<fork> --manifest <f> --pr-map <f> --window-start <ISO> --window-end <ISO> --out <dir> (--resume-file <f> | --bound window-start)");
+    }
+    // the completion bound is an explicit choice, never a default (codex 076c review P2-1; decision 076d item 4)
+    if (values.bound !== undefined && values.bound !== "window-start") throw new RefusalError("--bound takes one value: window-start");
+    if (values["resume-file"] && values.bound) {
+      throw new RefusalError("--resume-file and --bound window-start are separate collections: triggered cases take --resume-file, cases with no trigger record take --bound window-start");
+    }
+    if (!values["resume-file"] && !values.bound) {
+      throw new RefusalError("the completion bound must be named: --resume-file <open-prs resume.jsonl> (after each case's first trigger), or --bound window-start for cases with no trigger record (a deviation; never drives a re-trigger)");
     }
     if (!FORK_RE.test(values.repo)) throw new RefusalError("--repo must be SunnyBagal/<fork>");
     if (!/^[a-z0-9-]+$/.test(values.tool)) throw new RefusalError("--tool must be a lower-case name");
@@ -223,11 +238,11 @@ export function main(argv: string[], deps: { log?: (l: string) => void; env?: No
     writeNew(path.join(values.out, `${values.tool}.status.json`), statusText);
     writeNew(path.join(values.out, `${values.tool}.collection.json`), JSON.stringify({ v: 1, side, tool: values.tool, repo: values.repo,
       window: { start: values["window-start"], end: values["window-end"] }, logins, notCompletion: patterns,
-      completionFrom: triggers ? "first trigger (--resume-file)" : "window start", collectedAt: new Date().toISOString(), totals,
+      completionFrom: triggers ? COMPLETION_FROM_TRIGGER : COMPLETION_FROM_WINDOW_START, collectedAt: new Date().toISOString(), totals,
       files: { ...hashes, [`${values.tool}.status.json`]: sha256(statusText) } }, null, 1) + "\n");
     log(`${values.tool}: ${ids.length} case(s): completed ${totals.completed}, no-review ${totals["no-review"]}, invalid-binding ${totals["invalid-binding"]}, read-failed ${totals["read-failed"]}; `
       + `${totals.comments} counted comment(s); excluded: other author ${totals.excluded.otherAuthor}, reply ${totals.excluded.reply}, outside window ${totals.excluded.outsideWindow}, other commit ${totals.excluded.otherCommit}, duplicate ${totals.excluded.duplicate}`);
-    log(`${values.tool}: completion objects after ${triggers ? "the first trigger" : "the window start"}: review ${totals.completion.review}, inline ${totals.completion.inline}, issue comment ${totals.completion.issueComment}; not completion (pattern) ${totals.completion.notCompletion}`);
+    log(`${values.tool}: completion objects after ${triggers ? "the first trigger" : "the window start (--bound window-start: a deviation, never drives a re-trigger)"}: review ${totals.completion.review}, inline ${totals.completion.inline}, issue comment ${totals.completion.issueComment}; not completion (pattern) ${totals.completion.notCompletion}`);
     return totals["read-failed"] ? 1 : 0;
   } catch (e) {
     log(`refused: ${e instanceof RefusalError || String((e as { code?: string }).code).startsWith("ERR_PARSE_ARGS") ? (e as Error).message : "an input could not be read"}`);

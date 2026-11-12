@@ -417,6 +417,8 @@ describe("collect-tool-reviews", () => {
       "--out", out, "--gh-bin", path.join(dev, "gh"), ...extra];
     return { d, dev, args, log: () => readFileSync(path.join(dev, "gh.log"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) };
   }
+  // the completion bound is always named (codex 076c review P2-1): these collections have no trigger records
+  const WS = ["--bound", "window-start"];
   const bot = { login: "CodeRabbitAI[bot]", type: "Bot" };
   const comment = (id: number, over: Record<string, unknown> = {}) => ({ id, user: bot, created_at: "2026-11-21T00:00:00Z", commit_id: HEAD,
     original_commit_id: HEAD, path: "x.ts", line: id, original_line: id, body: `finding ${id}`, ...over });
@@ -432,7 +434,7 @@ describe("collect-tool-reviews", () => {
     });
     const out = path.join(f.dev, "collected");
     const lines: string[] = [];
-    const code = collectMain(f.args(out), { log: (l) => lines.push(l), env: { ...process.env, NEBIUS_API_KEY: "sk-fake-key-do-not-leak", GH_TOKEN: "ghp_fake" } });
+    const code = collectMain(f.args(out, ...WS), { log: (l) => lines.push(l), env: { ...process.env, NEBIUS_API_KEY: "sk-fake-key-do-not-leak", GH_TOKEN: "ghp_fake" } });
     expect(code).toBe(0);
     const review = JSON.parse(readFileSync(path.join(out, "coderabbit", "c1.json"), "utf8"));
     expect(review.pr_title).toBe("P1");
@@ -453,24 +455,24 @@ describe("collect-tool-reviews", () => {
     const coll = JSON.parse(readFileSync(path.join(out, "coderabbit.collection.json"), "utf8"));
     expect(Object.keys(coll.files).sort()).toEqual(["coderabbit.status.json", "coderabbit/c1.json", "raw/coderabbit/c1.json", "raw/coderabbit/c2.json"]);
     // never overwrites
-    expect(collectMain(f.args(out), { log: () => {} })).toBe(2);
+    expect(collectMain(f.args(out, ...WS), { log: () => {} })).toBe(2);
   });
 
   it("no-review without a review or a counted comment; a failing gh is never echoed; refusals", () => {
     const f = collectorFixture({ 11: { pr: { base: { sha: BASE }, head: { sha: HEAD } }, comments: [comment(1, { user: { login: "other[bot]" } })], reviews: [] } });
     const lines: string[] = [];
-    expect(collectMain(f.args(path.join(f.dev, "o1"), "--ids", "c1"), { log: (l) => lines.push(l) })).toBe(0);
+    expect(collectMain(f.args(path.join(f.dev, "o1"), "--ids", "c1", ...WS), { log: (l) => lines.push(l) })).toBe(0);
     expect(JSON.parse(readFileSync(path.join(f.dev, "o1", "coderabbit.status.json"), "utf8"))).toEqual({ c1: "no-review" });
     json(path.join(f.dev, "gh.json"), { fail: true, pulls: {} });
     const l2: string[] = [];
-    expect(collectMain(f.args(path.join(f.dev, "o2"), "--ids", "c1"), { log: (l) => l2.push(l) })).toBe(1);
+    expect(collectMain(f.args(path.join(f.dev, "o2"), "--ids", "c1", ...WS), { log: (l) => l2.push(l) })).toBe(1);
     expect(l2.join("\n")).not.toMatch(/secret-ish|404/);
     expect(l2[0]).toContain("read-failed 1");
     const refuse = (...a: string[]) => { const l: string[] = []; collectMain(a, { log: (x) => l.push(x) }); return l.join("\n"); };
-    expect(refuse(...f.args(path.join(f.dev, "o3")).map((x) => (x === "SunnyBagal/twenty" ? "twentyhq/twenty" : x)))).toMatch(/must be SunnyBagal/);
-    expect(refuse(...f.args(path.join(f.dev, "o4")).map((x) => (x === START ? "2026-11-20T00:00:00+05:30" : x)))).toMatch(/UTC ISO/);
+    expect(refuse(...f.args(path.join(f.dev, "o3"), ...WS).map((x) => (x === "SunnyBagal/twenty" ? "twentyhq/twenty" : x)))).toMatch(/must be SunnyBagal/);
+    expect(refuse(...f.args(path.join(f.dev, "o4"), ...WS).map((x) => (x === START ? "2026-11-20T00:00:00+05:30" : x)))).toMatch(/UTC ISO/);
     json(path.join(f.dev, "tools.json"), { v: 1, tools: {} });
-    expect(refuse(...f.args(path.join(f.dev, "o5")))).toMatch(/no login list for coderabbit/);
+    expect(refuse(...f.args(path.join(f.dev, "o5"), ...WS))).toMatch(/no login list for coderabbit/);
     expect(() => assertGhRead(["api", "--method", "POST", "repos/SunnyBagal/twenty/pulls/1"], "SunnyBagal/twenty")).toThrow();
     expect(() => assertGhRead(["api", "--method", "GET", "repos/twentyhq/twenty/pulls/1"], "SunnyBagal/twenty")).toThrow();
     expect(() => assertGhRead(["api", "--method", "GET", "repos/SunnyBagal/twenty/pulls/1/comments?per_page=100&page=1"], "SunnyBagal/twenty")).not.toThrow();
@@ -491,28 +493,28 @@ describe("collect-tool-reviews", () => {
     });
     const out = path.join(f.dev, "c");
     const lines: string[] = [];
-    expect(collectMain(f.args(out), { log: (l) => lines.push(l) })).toBe(0);
+    expect(collectMain(f.args(out, ...WS), { log: (l) => lines.push(l) })).toBe(0);
     expect(JSON.parse(readFileSync(path.join(out, "coderabbit.status.json"), "utf8"))).toEqual({ c1: "completed", c2: "no-review" });
     // completed with zero counted comments: the review file exists and is empty; the issue comment is not a comment
     expect(JSON.parse(readFileSync(path.join(out, "coderabbit", "c1.json"), "utf8")).comments).toEqual([]);
     expect(lines[0]).toContain("completed 1, no-review 1");
     expect(lines[0]).toContain("0 counted comment(s)");
-    expect(lines[1]).toBe("coderabbit: completion objects after the window start: review 0, inline 0, issue comment 1; not completion (pattern) 3");
+    expect(lines[1]).toBe("coderabbit: completion objects after the window start (--bound window-start: a deviation, never drives a re-trigger): review 0, inline 0, issue comment 1; not completion (pattern) 3");
     const coll = JSON.parse(readFileSync(path.join(out, "coderabbit.collection.json"), "utf8"));
     expect(coll.notCompletion).toEqual(["rate limit exceeded", "^Failed\\b.*retry"]);
-    expect(coll.completionFrom).toBe("window start");
+    expect(coll.completionFrom).toBe("window start (--bound window-start)");
     expect(JSON.parse(readFileSync(path.join(out, "raw", "coderabbit", "c2.json"), "utf8")).issueComments).toHaveLength(3);
     // the patterns are required (an explicit [] is allowed) and must compile
     json(path.join(f.dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"] } } });
     const l2: string[] = [];
-    expect(collectMain(f.args(path.join(f.dev, "c2")), { log: (l) => l2.push(l) })).toBe(2);
+    expect(collectMain(f.args(path.join(f.dev, "c2"), ...WS), { log: (l) => l2.push(l) })).toBe(2);
     expect(l2[0]).toMatch(/no notCompletion list for coderabbit/);
     json(path.join(f.dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"], notCompletion: ["("] } } });
     const l3: string[] = [];
-    expect(collectMain(f.args(path.join(f.dev, "c3")), { log: (l) => l3.push(l) })).toBe(2);
+    expect(collectMain(f.args(path.join(f.dev, "c3"), ...WS), { log: (l) => l3.push(l) })).toBe(2);
     expect(l3[0]).toMatch(/is not a regular expression/);
     json(path.join(f.dev, "tools.json"), { v: 1, tools: { coderabbit: { logins: ["coderabbitai[bot]"], notCompletion: [] } } });
-    expect(collectMain(f.args(path.join(f.dev, "c4")), { log: () => {} })).toBe(0);
+    expect(collectMain(f.args(path.join(f.dev, "c4"), ...WS), { log: () => {} })).toBe(0);
     expect(JSON.parse(readFileSync(path.join(f.dev, "c4", "coderabbit.status.json"), "utf8"))).toEqual({ c1: "completed", c2: "completed" });
   });
 
@@ -531,9 +533,10 @@ describe("collect-tool-reviews", () => {
     expect(JSON.parse(readFileSync(path.join(out, "coderabbit.status.json"), "utf8"))).toEqual({ c1: "no-review", c2: "completed" });
     expect(lines[1]).toContain("after the first trigger: review 0, inline 0, issue comment 1");
     expect(JSON.parse(readFileSync(path.join(out, "coderabbit.collection.json"), "utf8")).completionFrom).toBe("first trigger (--resume-file)");
-    // without the resume file, c1's comment is inside the window and completes it
-    expect(collectMain(f.args(path.join(f.dev, "t2")), { log: () => {} })).toBe(0);
+    // with the explicit window-start bound, c1's comment is inside the window and completes it
+    expect(collectMain(f.args(path.join(f.dev, "t2"), ...WS), { log: () => {} })).toBe(0);
     expect(JSON.parse(readFileSync(path.join(f.dev, "t2", "coderabbit.status.json"), "utf8"))).toEqual({ c1: "completed", c2: "completed" });
+    expect(JSON.parse(readFileSync(path.join(f.dev, "t2", "coderabbit.collection.json"), "utf8")).completionFrom).toBe("window start (--bound window-start)");
     // a case without a trigger record for this tool refuses before any read
     writeFileSync(resume, rec("c1", "triggered:coderabbit", "2026-11-20T11:00:00Z") + "\n");
     const l3: string[] = [];
@@ -545,6 +548,35 @@ describe("collect-tool-reviews", () => {
     const l4: string[] = [];
     expect(collectMain(f.args(path.join(f.dev, "t4"), "--resume-file", resume), { log: (l) => l4.push(l) })).toBe(2);
     expect(l4[0]).toMatch(/is for SunnyBagal\/medusa/);
+  });
+
+  // codex 076c review P2-1 (decision 076d item 4): the bound is never implicit
+  it("refuses with neither --resume-file nor --bound window-start, with both, and with another --bound; nothing is read or written", () => {
+    // codex's probe: window start 72 h before the end, a bot issue comment 30 h and the actual first trigger 25 h before it
+    const f = collectorFixture({ 11: { pr, comments: [], reviews: [], issueComments: [issue(1, { created_at: "2026-11-21T18:00:00Z" })] } });
+    const resume = path.join(f.dev, "twenty.resume.jsonl");
+    writeFileSync(resume, JSON.stringify({ v: 1, fork: "SunnyBagal/twenty", id: "c1", step: "triggered:coderabbit", at: "2026-11-21T23:00:00Z" }) + "\n");
+    const refused = (dir: string, ...extra: string[]) => {
+      const l: string[] = [];
+      const code = collectMain(f.args(path.join(f.dev, dir), "--ids", "c1", ...extra), { log: (x) => l.push(x) });
+      expect(existsSync(path.join(f.dev, dir))).toBe(false);
+      return { code, out: l.join("\n") };
+    };
+    const neither = refused("n1");
+    expect(neither.code).toBe(2);
+    expect(neither.out).toMatch(/refused: the completion bound must be named: --resume-file .* or --bound window-start for cases with no trigger record/);
+    const both = refused("n2", "--resume-file", resume, ...WS);
+    expect(both.code).toBe(2);
+    expect(both.out).toMatch(/--resume-file and --bound window-start are separate collections/);
+    const other = refused("n3", "--bound", "trigger");
+    expect(other.code).toBe(2);
+    expect(other.out).toMatch(/--bound takes one value: window-start/);
+    expect(f.log()).toEqual([]); // no gh call in any refusal
+    // the probe's two bounds, each named: the trigger bound gives no-review (U1), the window-start bound completed
+    expect(collectMain(f.args(path.join(f.dev, "n4"), "--ids", "c1", "--resume-file", resume), { log: () => {} })).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(f.dev, "n4", "coderabbit.status.json"), "utf8"))).toEqual({ c1: "no-review" });
+    expect(collectMain(f.args(path.join(f.dev, "n5"), "--ids", "c1", ...WS), { log: () => {} })).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(f.dev, "n5", "coderabbit.status.json"), "utf8"))).toEqual({ c1: "completed" });
   });
 });
 
@@ -784,7 +816,7 @@ describe("spec B2 §7 collector row", () => {
     const lines: string[] = [];
     expect(collectMain(["--side", "dev", "--tool", "coderabbit", "--config", path.join(dev, "tools.json"), "--repo", "SunnyBagal/twenty",
       "--manifest", path.join(dev, "manifest.json"), "--pr-map", path.join(dev, "prmap.json"), "--window-start", "2026-11-20T00:00:00Z", "--window-end", END,
-      "--out", out, "--gh-bin", path.join(dev, "gh")], { log: (l) => lines.push(l) })).toBe(0);
+      "--out", out, "--gh-bin", path.join(dev, "gh"), "--bound", "window-start"], { log: (l) => lines.push(l) })).toBe(0);
     expect(JSON.parse(readFileSync(path.join(out, "coderabbit", "c1.json"), "utf8")).comments).toEqual([{ path: "x.ts", line: 5, body: "comment 1" }]);
     expect(lines[0]).toContain("1 counted comment(s); excluded: other author 1, reply 1, outside window 1, other commit 1, duplicate 0");
     const calls = readFileSync(path.join(dev, "gh.log"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).argv[3]);
