@@ -26,8 +26,8 @@ ledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | s
 CAP=<H1 cap from decision 077>
 MAN=<held-out manifest>; CL=<held-out clones dir>          # private paths; codex knows them
 ```
-All times are **T0 + hours**. T0 is the instant the first held-out PR is opened (question "T0" of Planner B's D1
-note, adopted with 076c item 5); the operator opens it at the time planned in decision 078 and writes the actual
+All times are **T0 + hours**. T0 is the instant the first held-out PR is opened (Planner B's D1 note, "Smaller,
+wording only"; protocol revision 6, `5d36dcb`, §7); the operator opens it at the time planned in decision 078 and writes the actual
 instant into `$HO/job.md`, and the scheduler's slot times are counted from that instant. Keep `$HO/window.log`: one line per
 action (`UTC time | action | case position 1–29 | result`). Positions follow the frozen order (medusa, payload,
 twenty, bullmq; manifest order inside each).
