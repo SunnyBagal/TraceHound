@@ -219,3 +219,9 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   and **NO-GO `1a60db5`** (protocol rev 8: exposure from planned order instead of addendum (e)'s branch log; freeze sentence
   and canary row). Nothing merged. grok's inbox note screened by pattern (0 case ids / paths / PRs / dates / forks) and added
   to the brain brief as amendment 3. S1 held until `pa-076d` merges. $0.
+- **`.env` (2026-11-13, 076e item 8):** the dead second `TRACEHOUND_BUDGET_TOTAL_USD=52` line deleted; one definition left,
+  `63.15547` (loaded value checked); no other value changed.
+- **Then (2026-11-13, 13:00–14:30 IST):** decision 076e recorded (`0cf3487`; Planner A's eight open items ruled, window
+  option B 22–25 Nov). Planner A's 076d report, claim and done committed (testset `142ee9b`). Briefs: `codex.076e`
+  (`36aed1f`; tag-worktree and protocol fixes after the brain review, then the delete-mode review); grok told to review
+  `pa-076d`. grok: **NO-GO `0a7a599`** (076e not yet applied; two H1 §3 sentences vs `readPlan`/`spacing`). Nothing merged. $0.
