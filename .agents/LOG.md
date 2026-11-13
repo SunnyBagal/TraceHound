@@ -243,3 +243,6 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   grok `2047e6f` (`pa-076d`, F1 row 14 + H1 failure 17). Merged `ef3d95f` (pa-076d), `f853e77` (b9-tools-s1). Gates on
   `f853e77`: action 395, analyzer 1027 + 6 skipped, viewer 215, typecheck clean; the restart test passed in the full run.
   **S1 go** reported to Sunny. $0.
+- **Then (2026-11-13, 17:30 IST):** decision 076f recorded (`00ef967`) with the S1 approval row (cap $0.45) and L1's
+  interim-table note in budget.md. S1 not started: bunny stopped at S1.md §0 (power, Greptile credits/reset date, app
+  installs unrecorded). Briefs: `bunny.r1` (Sunny sends), `grok.dev-exposure` (sent) (testset `c9bc097`). $0.
