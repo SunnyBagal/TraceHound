@@ -137,7 +137,7 @@ spend so far; unstarted ids roll into the next batch** (this replaced "min(batch
 |---|---|---|---|---|
 | S1 smoke | one dev case end to end, all three tools | **$0.45** | one case at the $0.40 case cap + judging | not started (freeze lifted 2026-11-13; Sunny sends S1) |
 | R1 dev run 1 | pool-verify-v1, fresh, 40 dev cases, judge v1, batches | **$4.68** | 95% completion under bunny's spread model (caps check), incl. ≈ $0.05 judging; was $4.15 | not started |
-| L1 arm scoring | replay of run 1's lineage, 3 arms, judge v1 | **$0.40** | 3 × 40 × $0.0012 ≈ $0.15, + CodeRabbit's dev row | not started |
+| L1 arm scoring | replay of run 1's lineage, 3 arms, judge v1 | **$0.40** | 3 × 40 × $0.0012 ≈ $0.15, + CodeRabbit's dev row; also the optional report-only interim CodeRabbit table (076f item 3), only if both fit in $0.40 | not started |
 | L2 redraw test | 2 fresh redraws per `CHUNK_FAILED` chunk of run 1, cache bypassed | **$0.80** | ≈ 8 chunks × 2 × $0.035 (TS count unmeasured) | not started; first to cut |
 | L3 step 2 | — | **cut** | (≈ $2.17, above its cap; audit b7f) | cut by S0 |
 | L4 union | report only, judge the union of runs 1 and 2 | **$0.10** | ≈ $0.05 (audit C088: unmeasured) | not started |
@@ -189,3 +189,4 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 | 2026-11-12 | 076c: caps procedures (job-start file, one paid process at a time, L2 three-way verdict); protocol, premortem, team process ruled | — | $0 | **$19.31** |
 | 2026-11-13 | balance correction (Sunny): the 2026-11-09 console reading was **$19.13**, not $19.31 (typo). Usable $18.13; unallocated $1.18 → $1.00; billing-lag unexplained $0.22 → $0.40; `.env` hard stop 63.33547 → 63.15547; job caps unchanged (decision 076c correction) | — | $0 | **$19.13** |
 | 2026-11-13 | spend freeze lifted by Sunny without the console check, after 076d and its merges (`4b99fb4`); guard: S1 console ÷ ledger ≥ 2 h after S1, above 1.08 → stop and tell Sunny | — | $0 | **$19.13** |
+| 2026-11-13 | **S1 approved by artu1** (cap $0.45; one dev case end to end through the scheduler, 076e item 1); 076f: P1's $0 steps may start before the ratio, R1 waits for the S1 ratio ≤ 1.08; interim CodeRabbit table only inside L1's $0.40 | $0.45 | — | **$19.13** |

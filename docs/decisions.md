@@ -4171,3 +4171,20 @@ numbers 4 and 5) stay as H1 has them. Sunny's item numbers (1, 2, 6) are from Pl
 list in `run/comms/planner.a.076d.md`; the rulings are identified by content.
 **Touches (addendum e):** Planner A `docs/runbooks/H1-window.md` (failure 17 and its check: "not a ruling" → ruling),
 `docs/runbooks/F1-freeze.md` (row 14 (e)), `docs/specs/S1.md` (step 6b, the 900 s check).
+
+## 076f — Dev table target, P1's start, interim table, unnamed bot messages, Mac (2026-11-13)
+
+**Status: ruled by Sunny; nothing run.** From Planner A's fast-path report (pasted to Sunny, 2026-11-13).
+1. **Dev table:** TraceHound (A0, A1, A2) vs CodeRabbit on the 40 dev cases, labelled "dev, selection set, one draw, one
+   judge, not hand-checked". **No Greptile on dev**; its credits are kept for the window. The label also carries grok's
+   dev exposure count (how many of the 31 dev bug fixes were reachable from another dev case's branch on the forks while
+   P1's reviews ran; counts only).
+2. **P1's $0 steps start as soon as S1 ends and S1's `tools.json` has codex's GO.** They don't wait for the console ÷
+   ledger ratio. **R1 still waits** until that ratio is written at ≤ 1.08.
+3. **Interim table:** one report-only CodeRabbit table from an early collection on 14 Nov evening, never used for any
+   gate, and only if its judging and the official E1 judging together fit inside L1's $0.40 cap. Otherwise skipped.
+4. **A bot message of a kind nobody named goes to Sunny** before the `notCompletion` patterns freeze.
+5. **Mac:** `caffeinate` holds for 48 h from about 17:30 IST on 13 Nov, on mains power (S1, P1's ladder, R1).
+**Touches:** Planner A `docs/specs/P1.md` (items 1, 2, 4), `docs/specs/R1.md` (item 2; R1 run by bunny, 5 batches),
+`docs/specs/E1.md` (items 1, 3); artu1 `docs/budget.md` (item 3 under L1; S1 approval row), `.agents/STATE.md`, this file.
+**Rejected:** Greptile on the dev set; holding P1's $0 steps for the console ratio; an interim table outside L1's cap.
