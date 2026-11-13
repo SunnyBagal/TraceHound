@@ -225,3 +225,8 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   option B 22–25 Nov). Planner A's 076d report, claim and done committed (testset `142ee9b`). Briefs: `codex.076e`
   (`36aed1f`; tag-worktree and protocol fixes after the brain review, then the delete-mode review); grok told to review
   `pa-076d`. grok: **NO-GO `0a7a599`** (076e not yet applied; two H1 §3 sentences vs `readPlan`/`spacing`). Nothing merged. $0.
+- **Firewall incidents (2026-11-13; 076e addendum d):** (1) artu1, about 13:30 IST, one `git status --short` in
+  tracehound-testset: names of untracked files under `heldout/` shown, 8 names; none opened. (2) bunny, at the start of its
+  076e task (report written 13:41 IST), one `git status --short` there: names of untracked files under `heldout/` shown,
+  count not in its report; none opened. Rule since: testset git only with explicit paths outside `heldout/` (AGENTS.md,
+  `_common.md` `7ac7985`).
