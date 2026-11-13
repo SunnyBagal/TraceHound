@@ -246,3 +246,9 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
 - **Then (2026-11-13, 17:30 IST):** decision 076f recorded (`00ef967`) with the S1 approval row (cap $0.45) and L1's
   interim-table note in budget.md. S1 not started: bunny stopped at S1.md §0 (power, Greptile credits/reset date, app
   installs unrecorded). Briefs: `bunny.r1` (Sunny sends), `grok.dev-exposure` (sent) (testset `c9bc097`). $0.
+- **Then (2026-11-13, 20:30 IST):** decision 076g recorded (`6a00997`; Fable's assessment adopted): AGENTS.md exception for
+  an Anthropic provider; budget: R2/L2/L4 cut, unallocated $6.05, Anthropic lines (Haiku $4, Sonnet $8, Sunny's money);
+  live-setup §2 (100 credits; Greptile on 38 dev cases) and §6 (held-out one at a time) fixed; "his" in live-setup §0
+  replaced. Briefs: `codex.076g` (`e240d57`), `bunny.r1` updated (`eaf13e4`). Brain: codex NO-GO on the 076c review for
+  bunny's inbox footer only; six GO files pushed byte-equal (`8fbb4a7`); footer fixed, 076e–g notes added and pushed after
+  the pattern scan (`022edee`). `ANTHROPIC_API_KEY` not yet in `.env`. $0.
