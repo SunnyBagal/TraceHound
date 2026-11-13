@@ -239,3 +239,7 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   kill-before-`step-pid` race, on main since `2c51913`; codex found the same), file alone 17/17 three times, full rerun
   action 392, analyzer 1027 + 6 skipped, viewer 215; typecheck clean. NO-GO: grok on `pa-076d` `c1c3e28` (one F1 row 14
   sentence), codex on `b9-tools-s1` `2acff3a` (that race). S1 not unblocked. $0.
+- **Then (2026-11-13, late afternoon):** GO: codex `3e28342` (`b9-tools-s1`, restart-test race fixed, ≥ 10 loaded runs) and
+  grok `2047e6f` (`pa-076d`, F1 row 14 + H1 failure 17). Merged `ef3d95f` (pa-076d), `f853e77` (b9-tools-s1). Gates on
+  `f853e77`: action 395, analyzer 1027 + 6 skipped, viewer 215, typecheck clean; the restart test passed in the full run.
+  **S1 go** reported to Sunny. $0.

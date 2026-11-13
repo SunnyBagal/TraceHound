@@ -1,5 +1,5 @@
 # .agents/STATE.md: read first; rewrite (never append) at the end of every session; ≤ 60 lines
-HEAD: `main` after the delete-mode merge (`377f350`), 2026-11-13. If HEAD has moved further, trust code and docs/decisions.md over this file.
+HEAD: `main` after the `b9-tools-s1` merge (`f853e77`), 2026-11-13: S1 unblocked. If HEAD has moved further, trust code and docs/decisions.md over this file.
 
 ## Goal
 Show, on fresh held-out TypeScript PRs (twenty, medusa, payload, bullmq), whether TraceHound's reviewer (pool-verify-v1) catches real bugs that later fixes repaired.
@@ -36,13 +36,11 @@ artu1 and bunny tune TraceHound later, so they **never open, list, grep or diff*
 artu1 `t9` · bunny `t15` (dev side) · codex `t14` · grok `t1g` (trust its .done file) · devin no quota. Planners A and B outside Herdr. Coordination `~/Projects/tracehound-testset/run/{briefs,out,comms}`; commands `docs/herdr.md`.
 
 ## OPEN TASKS (in order)
-a. **S1 unblock:** when `pa-076d` (grok GO) **and** `b9-tools-s1` (codex GO) are both merged on main, tell Sunny at once; Sunny sends S1. Don't start S1.
-b. **`pa-076d` `c1c3e28`: NO-GO** (grok `run/out/grok.pa-076d-r2.md`): one sentence in F1 row 14 still says the window is the scheduler's first `--execute` run (S1 is). Planner A fixes → new sha → grok → artu1 merges. Also flagged: H1 still calls the 15-minute line "not a ruling" (addendum e).
-c. **`b9-tools-s1` `2acff3a`: NO-GO** (codex `run/out/codex.076e-tools-s1.md`): config and its 3 tests are fine; the scheduler restart test ("SIGKILL in the middle of a slot", `packages/action/test/window-scheduler.test.ts`, already on main from `2c51913`) has a kill-before-`step-pid` race. Fix: wait for the trigger's `step-pid` before SIGKILL → bunny → codex re-review under load. On main it failed once in the full suite (1 of 392 action tests), passed 3/3 alone and on a full rerun.
-d. Merged today: `bd4f6d9` delete mode (`377f350`, codex GO). 
-e. **Brain:** today's review (`codex.brain-076c`, amendments 1–3) → push only on GO. Tomorrow's single review: Planner A's notes (`run/comms/planner.a.076d.md` "Brain note" and "Brain note for the fix pass"), bunny's counts-only note, a counts-only 076e note incl. addenda a–e (incidents as counts). Add to the brain tree only after today's reviewed files are pushed.
-f. **Open Touches:** Planner A's files for 076d/076e/addenda (on `pa-076d`); Planner B premortem rows 3, 14a; codex held-out overlay (F1); bunny `tools.json` after S1/P1, L2 redraw tool (not built).
-g. Bump the Action pins and create the `tracehound-review` label in the four repos.
+a. **S1: go** (both preconditions on main at `f853e77`); Sunny sends it to bunny (scheduler `--side dev --execute` from `scripts/testset/tools.s1.json`, 076e item 1, addendum e). artu1 approves the spend line ($0.45 cap); console ÷ ledger ≥ 2 h after S1, above 1.08 → stop and tell Sunny. Nebius feedback entry after any Nebius call.
+b. Merged 2026-11-13 on GO: `bd4f6d9` delete mode (`377f350`), `pa-076d` @ `2047e6f` (`ef3d95f`, grok), `b9-tools-s1` @ `3e28342` (`f853e77`, codex; restart-test race fixed). Gates on `f853e77`: action 395, analyzer 1027 + 6 skipped, viewer 215, typecheck clean.
+c. **Brain:** today's review (`codex.brain-076c`, amendments 1–3) → push only on GO. Tomorrow's single review: Planner A's notes (`run/comms/planner.a.076d.md` "Brain note" and "Brain note for the fix pass"), bunny's counts-only notes (076e, r2), a counts-only 076e note incl. addenda a–e (incidents as counts). Add to the brain tree only after today's reviewed files are pushed.
+d. **Open Touches:** Planner B premortem rows 3, 14a; codex held-out overlay (F1); bunny `tools.json` from S1's readings (for P1), L2 redraw tool (not built).
+e. Bump the Action pins and create the `tracehound-review` label in the four repos.
 
 ## Where things are
 Decisions `docs/decisions.md` · budget `docs/budget.md` · plan, audit, premortem, team process `docs/plan/` · specs `docs/specs/` · runbooks `docs/runbooks/` · protocol `codex/ts-protocol` · live plan `docs/live-setup.md` · history `.agents/LOG.md` · test set `~/Projects/tracehound-testset` · brain `~/Projects/tracehound-brain`.
