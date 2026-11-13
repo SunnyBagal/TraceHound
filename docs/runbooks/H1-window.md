@@ -4,8 +4,8 @@ For codex (operator), grok (backup operator). artu1 and bunny do **not** open an
 read the operator's pane; they get `run/out/codex.ho-run.md` (counts and spend only). **From T0 until the firewall
 lifts, artu1 and bunny also make no `gh` or browser read of pulls, issues or notifications on the four forks**
 (decision 076c item 12; `AGENTS.md` "Blindness"): the forks are public, and every tool comment on a held-out PR is
-there. Planner A, 2026-11-11; brought to decision 076c on 2026-11-12, to decision 076d on 2026-11-13 and to decision
-076e with its addendum on 2026-11-13.
+there. Planner A, 2026-11-11; brought to decision 076c on 2026-11-12, to decision 076d on 2026-11-13, to decision
+076e with its addendum on 2026-11-13 and to decision 076g (items 1, 2, 9, 10) on 2026-11-14.
 Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md` §3, §7–§9 (it wins over this
 runbook; report any difference). Budget line: **H1**, cap from decision 077 ($3.15 until then); unstarted cases at the
 cap run from the reserve (decision 076a "Caps" item 4).
@@ -34,10 +34,13 @@ collector's verdict under that definition (`collectCase` in `scripts/testset/col
   `--never-opened <ids>` for a PR that never opened (`b696231`). §6.
 
 **Ruled in decision 076e (`docs/decisions.md`, "076e", items 2, 3, 6 and 7; addendum c):**
-- **Dates (item 7, option B).** Scheduled T0 **Sun 22 Nov 2026, 10:00 IST** (04:30 UTC; the plan's `t0` is
-  `2026-11-22T04:30:00Z`); snapshot **Wed 25 Nov, 10:00 IST**; hand-check **Wed 25 Nov, 16:00–19:00 IST**. If S1 does
-  not run on 13 Nov, all three move day for day. Decision 076b item 3 still applies: if CodeRabbit's rate shrank in
-  P1, T0 is at least 7 days after P1's last review. Decision 078 records the dates used.
+- **Dates (076e item 7, replaced by decision 076g item 10; plan-v2 §6a).** Scheduled T0 at the earliest **Tue 17
+  Nov 2026, 10:00 IST** (04:30 UTC; then the plan's `t0` is `2026-11-17T04:30:00Z`), and always at 10:00 IST on the
+  day after a tag pushed by 20:00 IST. Snapshot 72 hours after T0; hand-check that day, 16:00–19:00 IST. With the tag
+  on Mon 16 Nov: Tue 17 Nov, Fri 20 Nov 10:00, Fri 20 Nov 16:00–19:00. If CodeRabbit could only do 1 per hour in P1:
+  Wed 18 Nov, Sat 21 Nov. **If CodeRabbit's rate shrank in P1 (decision 076b item 3): the first 10:00 IST at least
+  7 days after P1's last CodeRabbit review, and not before Sun 22 Nov** (076e's option B). Decision 078 records the
+  dates used.
 - **T0 (item 3).** T0 is the instant the first held-out PR opens. The plan's fixed time is the **scheduled T0**
   (slot 0). The snapshot is at T0 + 72 h. "Two clocks", below.
 - **Plan values (item 2).** Six spare slots (slots 0–63: 29 first triggers, 29 worst-case re-triggers, 6 spare); the
@@ -129,7 +132,8 @@ order (a rebased or back-dated commit breaks it), which is why §1 item 3 has gr
      with `ts-freeze.md`. From now on none of these files changes: a change stops the scheduler at its next slot.
    - `$HO/sched` does not exist yet (a state dir belongs to one run; the scheduler refuses another run's log).
 5. Decision 078 is pushed: predictions, the scheduled T0, Sunny's "go". If "go" is missing, stop.
-6. Greptile dashboard (Sunny): credits ≥ 35; reset date after T0 + 72 h. Otherwise stop. This is Sunny's **last** look
+6. Greptile dashboard (Sunny): credits ≥ 35 (60 are expected: 100 − 2 for S1 − 38 for P1), and their expiry date is
+   after the hand-check sitting (decision 076g item 2). Otherwise stop. This is Sunny's **last** look
    at any vendor dashboard or fork PR page until his filled sheet is hashed (`F1-freeze.md` §1 row 13, gap G2).
    CodeRabbit (decision 076b item 3): P1's report says the hourly rate at P1's end was not below the rate at its start,
    **or** T0 is at least 7 days after P1's last review. Otherwise stop. P1's slowest completed review took under 8 hours
@@ -151,6 +155,9 @@ order (a rebased or back-dated commit breaks it), which is why §1 item 3 has gr
     `pmset -g assertions | grep -c caffeinate` is not 0, and `sched --status` shows `missed: 0`. A machine that slept
     shows as `missed` slots (failure 7). If T0 comes more than three hours after the scheduled T0 (failure 16), the
     78 hours end before §6 does: tell Sunny, who starts a second `caffeinate` before the first one ends.
+    **A `caffeinate` with no time limit also passes** (decision 076g item 9: the `caffeinate -is` started on 13 Nov
+    has none and holds until it is killed). If that is the one held, nobody kills it before §6's hashing is done,
+    and the three-hour sentence above does not apply.
 
 ## 2. Scheduled T0 − 0:30: start the scheduler; nothing is pushed yet
 ```sh
@@ -353,7 +360,8 @@ trigger (a PR that already carries two trigger comments from the SunnyBagal user
 ## 4. T0 + 2:00 onward: TraceHound, locally, from the tag
 Runs are local: the runner reads each case's commits in the held-out clone and reads no fork, so they depend on
 neither the pushes nor the triggers of §3 (`--post` is never passed). They start at T0 + 2:00, once slot 0 was seen
-to end `done` (`sched --status`), and finish the same day (estimate from R2's timing). One repository per invocation,
+to end `done` (`sched --status`), and finish the same day (estimate from R1's timing; R2 was cut, decision 076g
+item 1). **The row is A0, pool-verify-v1 on Nemotron, as frozen** (076g item 1): the runner line is R1's. One repository per invocation,
 in the order medusa, payload, twenty, bullmq; a batch has at most 10 ids. This batch order is not §3's push order and
 need not be: no tool sees a TraceHound run.
 ```sh
@@ -383,6 +391,12 @@ After each batch: exit code, status per case, `review.chunksFailed`, `usage.ledg
 - After the last batch, and not before: each `failed` or `cap` case is rerun **once** (`--rerun --ids …`, one
   invocation per repository; failure 9 says when). The rerun's record is official. Two failures: a miss.
 - Never `--post`. Never `--cache read`.
+- **A Claude row on held-out exists only if decision 078 says Sunny registered one** (decision 076g item 4; his
+  decision, by 16 Nov). Then 078 also states its model id, its cap, that the money is Sunny's own, and its order
+  here; without those four it is not run. The default this runbook fixes: it runs **after** the four Nemotron
+  batches and their reruns, from the same worktree, one process at a time, into `$HO/th-claude/`, never into
+  `$HO/th`; it is a secondary row (`H2-scoring.md` §1 item 4); a failure of it never delays the snapshot. No such
+  line in 078: nothing in this section calls any provider but Nebius.
 - ≥ 2 hours after the last TraceHound call: Sunny reads the console; ratio = console drop ÷ (`ledger − L0`). Above
   1.08: log it and tell artu1 the number; **H1 continues** (it is never cut).
 

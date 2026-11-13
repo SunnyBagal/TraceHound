@@ -1,7 +1,7 @@
 # Runbook H2: scoring the held-out window and the blind hand-check
 
 For codex (operator), Sunny (the hand-check, one sitting of 2–3 hours), artu1 (receives counts; lifts the firewall at
-the end). Planner A, 2026-11-11; brought to decision 076d and to decision 076e (item 4, the tag-worktree citation) on 2026-11-13. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md`
+the end). Planner A, 2026-11-11; brought to decision 076d and to decision 076e (item 4, the tag-worktree citation) on 2026-11-13, and to decision 076g (items 1, 4, 5) on 2026-11-14. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md`
 §4, §10 (it wins over this runbook). Budget line: **H2, cap $0.40**. Starts after H1's snapshot is hashed.
 
 **Order fixed by decision 076a §13.7:** sheet hashed → unblind → score files hashed and committed → the firewall lifts.
@@ -14,7 +14,7 @@ ledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | s
 POLICY=$TH/scripts/testset/policy.076c.json      # the 076a choices plus registered_tests (two pairs, 0.05, floor 15)
 POLICY2=$TH/scripts/testset/policy.076a.json     # for the secondary rows only: no registered test, so no p-value
 G=$HO/goldens                                    # goldens built and hashed at F1 §4.3
-ARM=<candidate arm directory name, from decision 077>
+ARM=pool-verify-v1                               # A0, the registered primary, frozen by decision 076g item 1 (no arm is chosen by 077)
 SEED=<the hand-check seed in docs/bench/ts-freeze.md>
 ```
 Every kit command below carries `--side heldout --heldout-ok` (written once here, omitted in the lines for length).
@@ -40,7 +40,10 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
    `mkdir -p $S/coderabbit $S/greptile; cp $HO/tools-*/coderabbit/*.json $S/coderabbit/; jq -s add $HO/tools-*/coderabbit.status.json > $S/coderabbit.status.json`
    (and the same for greptile).
 4. Rows. **Primary (these three make the claim):** `tracehound` = `$S/arms/$ARM`, `coderabbit`, `greptile`.
-   **Secondary (report only, judges only, not hand-checked):** the two TraceHound arms that are not the candidate.
+   **Secondary (report only, judges only, not hand-checked):** the two other TraceHound arms, A1 (`pool-raw`) and A2
+   (`review-diff-v1`). **A Claude row is a third secondary row only if decision 078 says Sunny registered one**
+   (decision 076g item 4): then it is scored exactly like A1 and A2 (both judges, `$POLICY2`, never on the sheet,
+   never in a registered pair), from `$HO/th-claude/`, unless 078 words it otherwise. Nemotron A0 stays the primary.
    **Registered pairs (decision 076c item 4): TraceHound vs CodeRabbit and TraceHound vs Greptile**, each an exact
    two-sided sign test at 0.05, uncorrected, exact p reported. CodeRabbit vs Greptile is counts only. A secondary row
    is never tested.
@@ -156,9 +159,18 @@ When done, Sunny sends `decisions.json` back and says "final".
    It prints one line, `hand-check guess: right R of G guessed (U unsure, N items, K tools; uniform chance 1/K; always
    naming the commonest tool: M of N)`, and writes the same counts as `handcheckGuess` into the summary (`main` in
    `scripts/testset/score-testset.ts` as of `595707f`).
-4. Secondary rows: one more `score-testset.ts` run with the two other arms, their v1 and x1 details, no `--handcheck`,
+4. Secondary rows: one more `score-testset.ts` run with the two other arms (and the Claude row, if 078 registered
+   one), their v1 and x1 details, no `--handcheck`,
    `--policy $POLICY2` (a policy that registers a tool which is not a `--tool` refuses, and a secondary row is never
    tested), `--out $S/summary.secondary.json`.
+4b. **The pooled secondary analysis (decision 076g item 5).** It pools dev and held-out for A0 (31 + 20 = 51 bugs).
+   Its definition is protocol revision 10's (codex's file), pre-registered before E1 produced any number; this
+   runbook adds no rule to it. It is computed here, after step 3 and never before, from two committed inputs only:
+   the dev table's summary (`docs/bench/ts-dev.md` and `l1.summary.json`, `docs/specs/E1.md` §1) and
+   `$S/summary.final.json`. Output: `$S/summary.pooled.json`, counts and the protocol's statistic, labelled
+   "secondary", with grok's dev exposure count beside it. **If revision 10 is not on `main` at the tag, or its
+   merge is later than E1's first judge call, the analysis is not pre-registered and is not run** (`F1-freeze.md`
+   §1 row 3). The headline, the registered pairs and every sentence of `W1-writeup.md` §3 stay on the 20 held-out bugs.
 5. `( cd $S && find . -type f | sort | xargs shasum -a 256 > ../hashes.score.txt ); shasum -a 256 $HO/hashes.score.txt`
 5b. **A second run of the final score (gap G7).** grok, from the same hashed inputs and the same command line, runs
    step 3's `score-testset.ts` into its own directory (`$HO/score-grok/summary.final.json`). `cmp` of the two
@@ -171,7 +183,7 @@ When done, Sunny sends `decisions.json` back and says "final".
    has `p: null`). Check: `jq '[.pairs[]|select(.p!=null)|[.a,.b]]' $S/summary.final.json` lists at most the two
    registered pairs, and the same on `summary.secondary.json` prints `[]`. Anything else: report it and stop.
 7. codex commits to `TraceHound/docs/bench/`: `ts-heldout.summary.json` (a copy of `summary.final.json`),
-   `ts-heldout.secondary.json`, and `ts-heldout.hashes.md` with the three single-line hashes (window, blank sheet +
+   `ts-heldout.secondary.json`, `ts-heldout.pooled.json` if step 4b ran, and `ts-heldout.hashes.md` with the three single-line hashes (window, blank sheet +
    filled sheet, score) and the counts of §7. Push.
 8. **The firewall lifts** for artu1 and bunny when that commit is on `main`. artu1 records the time in STATE. The lift
    does not allow changing the frozen reviewer or the scored protocol (protocol §10).
@@ -209,7 +221,8 @@ items, 3 tools; uniform chance 1/3; always naming the commonest tool: M of N)". 
 ## 9. The three most likely ways to get this wrong
 1. **Unblinding early.** Running `resolve`, or showing any per-tool table to Sunny, before his filled sheet's hash is
    confirmed, makes the hand-check an interested party's check again (plan v1 M10).
-2. **Scoring a different arm than the frozen candidate.** `$ARM` comes from decision 077, not from whichever arm looks
-   best in `summary.judges.json`. The other two arms are secondary rows whatever they score.
+2. **Scoring a different arm than the frozen one.** `$ARM` is A0, `pool-verify-v1`, frozen by decision 076g item 1
+   before any TypeScript dev number existed, not whichever arm looks best in `summary.judges.json`. A1, A2 and a
+   registered Claude row are secondary rows whatever they score.
 3. **Committing private content.** Only the three files of step 6.7 go to the repo, and only after the check of step
    6.6. Records, details, the sheet and the mapping stay in `$HO`.
