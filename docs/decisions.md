@@ -4158,7 +4158,7 @@ c. **Mac:** Sunny runs `caffeinate -is -t 280800` (78 h) from about 09:00 IST on
 d. **Firewall in tracehound-testset:** every agent except codex runs git only with explicit paths outside `heldout/`; no
    bare `git status`, `git add` or `git diff`. Recorded in AGENTS.md "Blindness". Two incidents on 2026-11-13, each "names of
    untracked files under `heldout/` shown; none opened": artu1 (one `git status --short`, 8 names) and bunny (one
-   `git status --short` at the start of its 076e task; count not in its report). W1 lists both as limitations.
+   `git status --short` at the start of its 076e task, 8 names per `run/out/bunny.076e-r1.md`). W1 lists both as limitations.
 **Touches (addendum):** bunny `scripts/testset/delete-dev-branches.ts` (a), `scripts/testset/tools.s1.json` (b); Planner A
 `docs/specs/S1.md` (b), `docs/runbooks/H1-window.md` (c, preflight), `docs/runbooks/W1-writeup.md` (d, the two incidents);
 artu1 `AGENTS.md` (d), `docs/decisions.md`, `.agents/LOG.md`, `.agents/STATE.md`.
