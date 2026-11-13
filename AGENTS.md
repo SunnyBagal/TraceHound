@@ -71,6 +71,9 @@ Briefs use the template in `docs/plan/team-process.md` §2: `run/briefs/<lane>.<
   as an alternate object store); never pass `--heldout-ok` or a held-out side flag; never `hc read` the pane of an agent
   doing held-out work. Numbers-only files in `run/out/` are their only held-out input. codex, grok (and devin) may read
   held-out; their held-out reports are counts only.
+- **Git in tracehound-testset (076e addendum d):** every agent except codex runs git there only with explicit paths outside
+  `heldout/` (`git status --short -- run/out/x.md`, `git add <paths>`); never a bare `git status`, `git add` or `git diff`,
+  which print the names of untracked files under `heldout/`.
 - **From the window's start (T0) until the firewall lifts** (076a: sheet hashed → unblind → score files hashed and
   committed → lift): artu1 and bunny make no `gh` or browser read of pulls, issues or notifications on the four forks
   (SunnyBagal/medusa, twenty, payload, bullmq) (076c item 12).

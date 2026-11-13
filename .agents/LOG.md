@@ -219,3 +219,18 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   and **NO-GO `1a60db5`** (protocol rev 8: exposure from planned order instead of addendum (e)'s branch log; freeze sentence
   and canary row). Nothing merged. grok's inbox note screened by pattern (0 case ids / paths / PRs / dates / forks) and added
   to the brain brief as amendment 3. S1 held until `pa-076d` merges. $0.
+- **`.env` (2026-11-13, 076e item 8):** the dead second `TRACEHOUND_BUDGET_TOTAL_USD=52` line deleted; one definition left,
+  `63.15547` (loaded value checked); no other value changed.
+- **Then (2026-11-13, 13:00–14:30 IST):** decision 076e recorded (`0cf3487`; Planner A's eight open items ruled, window
+  option B 22–25 Nov). Planner A's 076d report, claim and done committed (testset `142ee9b`). Briefs: `codex.076e`
+  (`36aed1f`; tag-worktree and protocol fixes after the brain review, then the delete-mode review); grok told to review
+  `pa-076d`. grok: **NO-GO `0a7a599`** (076e not yet applied; two H1 §3 sentences vs `readPlan`/`spacing`). Nothing merged. $0.
+- **Firewall incidents (2026-11-13; 076e addendum d):** (1) artu1, about 13:30 IST, one `git status --short` in
+  tracehound-testset: names of untracked files under `heldout/` shown, 8 names; none opened. (2) bunny, at the start of its
+  076e task (report written 13:41 IST), one `git status --short` there: names of untracked files under `heldout/` shown,
+  count not in its report; none opened. Rule since: testset git only with explicit paths outside `heldout/` (AGENTS.md,
+  `_common.md` `7ac7985`).
+- **Then (2026-11-13, 14:00–14:30 IST):** 076e addendum a–d recorded (`d23fc7e`; 076e Touches corrected to
+  `delete-dev-branches.ts`; AGENTS.md and `_common.md` testset-git rule). grok GO on codex's `775c3d6` (tag worktree) and
+  `5b812d4` (protocol rev 9); merged `64a23a4`, `4d7d159` (docs only). Waiting: `pa-076d` new head, bunny's delete-mode fix
+  (codex NO-GO `74f6c78`) and `tools.s1.json`. $0.
