@@ -37,9 +37,11 @@ collector's verdict under that definition (`collectCase` in `scripts/testset/col
 - **Dates (076e item 7, replaced by decision 076g item 10; plan-v2 §6a).** Scheduled T0 at the earliest **Tue 17
   Nov 2026, 10:00 IST** (04:30 UTC; then the plan's `t0` is `2026-11-17T04:30:00Z`), and always at 10:00 IST on the
   day after a tag pushed by 20:00 IST. Snapshot 72 hours after T0; hand-check that day, 16:00–19:00 IST. With the tag
-  on Mon 16 Nov: Tue 17 Nov, Fri 20 Nov 10:00, Fri 20 Nov 16:00–19:00. If CodeRabbit could only do 1 per hour in P1:
-  Wed 18 Nov, Sat 21 Nov. **If CodeRabbit's rate shrank in P1 (decision 076b item 3): the first 10:00 IST at least
-  7 days after P1's last CodeRabbit review, and not before Sun 22 Nov** (076e's option B). Decision 078 records the
+  on Mon 16 Nov: Tue 17 Nov, Fri 20 Nov 10:00, Fri 20 Nov 16:00–19:00. If a dev case was still without a review when
+  P1's 38 slots ended, so that P1's collection closed on Mon 16 Nov evening: Wed 18 Nov, Sat 21 Nov. CodeRabbit's
+  1 review per hour (S1's reading, 14 Nov) is the plan's assumed rate, not a shrink, and the 7-day rule does not
+  apply to it (Sunny, 14 Nov). **Only if CodeRabbit gave less than 1 per hour in P1 (decision 076b item 3): the
+  first 10:00 IST at least 7 days after P1's last CodeRabbit review, and not before Sun 22 Nov** (076e's option B). Decision 078 records the
   dates used.
 - **T0 (item 3).** T0 is the instant the first held-out PR opens. The plan's fixed time is the **scheduled T0**
   (slot 0). The snapshot is at T0 + 72 h. "Two clocks", below.
@@ -196,6 +198,16 @@ sched --status | jq '{t0, execute, side, boots, missed, stopped}'
   (`EXECUTE_MAX_GRACE_SECONDS`), not a floor: `readPlan` refuses a longer grace and accepts a shorter one.
 - `firstTriggerAttempts` must be **exactly 2** (`FIRST_TRIGGER_TRIES`; addendum e): any other value refuses.
 - The window uses all five values as written; they are frozen in the protocol (§7; decision 076e item 2).
+- **Open since 14 Nov, to be settled before the tag.** CodeRabbit allows 1 review per hour (S1's reading), and Sunny
+  asked for at least 61 minutes between two CodeRabbit posts. A slot posts for CodeRabbit at most once, re-triggers
+  included (`runFirst` runs one trigger command; `runRetrigger` returns after the first PR it posts for; `spacing`
+  counts trigger and re-trigger ends per tool). But 3600 gives 3,600 s from one command's end to the next one's
+  start (3,600.7 s in S1), not 3,660. **What fits: `slotSeconds` and `minTriggerSpacingSeconds` both 3660** (`readPlan`
+  accepts values above its floors). Slots 0–63 then still hold 29 first triggers, 29 worst-case re-triggers and 6
+  spare; a re-trigger check is due 24 slots after its trigger, not 25; the last slot is at scheduled T0 + 64:03 and
+  the last possible re-trigger has 7 h 57 min before the snapshot, not 9 h. Raising only the spacing to 3660 does
+  not fit: the lag then grows by about 68 s a slot and passes the 15-minute stop line at about slot 13. Both values
+  are rulings (076e item 2) and are in the protocol, so nothing above is changed until Sunny says so.
 - `timeoutSeconds`: open 600, trigger 300, collect 300, retrigger 300 are **ruled** (decision 076e item 2) and are
   not changed at run time. They are ceilings for a hung command, not times a slot can absorb. **A slot's commands
   end inside the slot only at the expected command time**, which is about a fifth of those timeouts or less (the
