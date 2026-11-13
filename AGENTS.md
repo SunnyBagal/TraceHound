@@ -31,7 +31,10 @@ reading is open except where the firewall says otherwise.
 A planner writes documents and never executes; a worker writes only the paths its brief lists; nobody commits in another
 lane's checkout; a file with no row belongs to artu1 until a row is added. Exceptions are one dated line here (who, which
 file, which lines, until when). Never force-push or rewrite history.
-Exceptions: none.
+Exceptions: (1) 2026-11-13, decision 076g item 4 (Sunny): an Anthropic provider in `packages/analyzer/src/llm`, selected by
+config, never the default, mocked tests only, for report-only Claude rows on dev (Haiku 5.5, Sonnet 5.5; Sunny's own money);
+never in `packages/action/`, `.github/actions/` or the held-out primary; until Sunny withdraws it. It overrides "Models and
+keys" and the "Build and safety" review rule for that provider only.
 
 ## Process (decision 076c item 14; `docs/plan/team-process.md` §1)
 

@@ -16,8 +16,8 @@ inside the fork, so **no case PR targets the default branch**.
    base..head (`scripts/run-tracehound.ts`, §3). Its findings are scored from the local output; posting them on the PR is
    optional (`--post`). No Nebius secret exists on GitHub anywhere.
 3. **Actions is OFF on all four forks** (done 2026-11-10, §3 step 1).
-4. **Tools:** CodeRabbit (free, manual trigger) and **Greptile on the free Starter plan (50 credits/month), held-out plus
-   one smoke test only, no dev runs.** **Cursor Bugbot is excluded** unless Sunny confirms his Cursor plan covers it at
+4. **Tools:** CodeRabbit (free, manual trigger) and **Greptile (free plan; 100 credits on the account, §2.2), the S1 smoke test, P1's 38 dev
+   cases (076g item 2) and held-out.** **Cursor Bugbot is excluded** unless Sunny confirms that Sunny's Cursor plan covers it at
    $0 (limitation: the comparison has no Bugbot row).
 5. Dev clones filled (Sunny approved; read-only fetch from the SunnyBagal forks only; §3 step 3).
 6. Still blocked: **the spend freeze** (any TraceHound run with `--execute` is paid; it needs the freeze lifted, a line in
@@ -49,12 +49,14 @@ Click steps:
 ## 2. Greptile (Starter) and Cursor Bugbot (excluded)
 Trigger facts: `grok.triggers.md`, summary in §2.1. `open-prs.ts --trigger` knows all three strings; **don't pass
 `bugbot`** unless Sunny lifts the exclusion.
-**Greptile budget (Starter, 50 credits/month, 1 credit per base review):** S1's 2 reviews (the smoke dev case, plus one
-clean dev case to see a review with no findings, decision 076c item 8) + 29 held-out = 31 credits, plus up to 29
-re-triggers in the worst case (076c item 3: only PRs with no completed review 24 h after their trigger); **no other dev runs**. Check the credit balance in the dashboard before the
-held-out window; a review that doesn't complete costs nothing ("Only completed reviews spend credits"). Use base
-reviews only (Plus = 3, Apex = 10 credits). If the smoke test and the held-out window fall in different calendar months,
-each month has its own 50.
+**Greptile budget (1 credit per base review; replaced 2026-11-13, decision 076g item 2):** the account has **100 credits**
+(§2.2: new-account credits, as far as Sunny knows), not the Starter plan's 50 a month assumed before. Use: S1's 2 reviews
+(the smoke dev case and one clean dev case, decision 076c item 8) + **P1's 38 dev cases** (076g item 2; this replaces "no
+other dev runs") = 40, leaving **60** for the 29 held-out reviews plus up to 29 re-triggers (076c item 3: only PRs with no
+completed review 24 h after their trigger). **P1's first Greptile trigger waits for Sunny's reading of the credits' expiry
+date; they must last past the hand-check.** Check the balance in the dashboard before the held-out window; a review that
+doesn't complete costs nothing ("Only completed reviews spend credits"). Use base reviews only (Plus = 3, Apex = 10
+credits).
 Click steps (Greptile): sign in at https://app.greptile.com with GitHub as SunnyBagal → install the Greptile GitHub App
 with "Only select repositories": medusa, twenty, payload, bullmq → Code Review settings → Greptile Review
 Configuration → **Automatic reviews: Never**; leave excluded branches empty; then trigger with `@greptileai` per PR.
@@ -90,7 +92,7 @@ Sunny gave the reading time as "now"; 20:16 IST is when artu1 received it.
 - **Greptile:** installed on the four forks only; **Automatic reviews: Never** (Sunny checked it directly). Indexing
   of the four forks: **done** (time not given).
 - **Greptile credits: 100 left.** Expiry or reset date: **not given** (not recorded). 100 ≥ 37, so S1.md §0
-  precondition 4 passes either way. This is more than the Starter plan's 50 credits/month assumed in §2; the source of
+  precondition 4 passes either way. This is more than the Starter plan's 50 credits/month assumed before (§2 now uses 100); the source of
   the extra 50: new-account credits, as far as Sunny knows.
 - **Mac (precondition 7):** on mains power; artu1 read `pmset` at 20:16 IST: AC power, battery 100%, a `caffeinate`
   assertion held since 16:00:03 (076f item 5: 48 h).
@@ -130,5 +132,7 @@ posts the tools' trigger comments on opened PRs, ≤ 10 per hour per tool and pe
    `.agents/LOG.md`. If any workflow ran on the fork, stop and re-disable Actions.
 
 ## 6. Held-out (only after the freeze tag)
-One window: open all held-out PRs (`open-prs.ts` on the held-out manifest, run by an agent allowed to read held-out),
-trigger every tool, run `run-tracehound.ts` with `--out-dir` outside artu1/bunny's view, score from local output.
+One window, run by the window scheduler (`scripts/testset/window-scheduler.ts`, decisions 076c item 11, 076d, 076e;
+procedure `docs/runbooks/H1-window.md`): held-out branches are pushed and their PRs opened **one at a time, in base-date
+order, each only at its own first-trigger slot** (076d item 1c, 076e item 2; never all at once), each triggered in its
+slot, run `run-tracehound.ts` with `--out-dir` outside artu1/bunny's view, score from local output.

@@ -137,18 +137,28 @@ spend so far; unstarted ids roll into the next batch** (this replaced "min(batch
 |---|---|---|---|---|
 | S1 smoke | one dev case end to end, all three tools | **$0.45** | one case at the $0.40 case cap + judging | not started (freeze lifted 2026-11-13; Sunny sends S1) |
 | R1 dev run 1 | pool-verify-v1, fresh, 40 dev cases, judge v1, batches | **$4.68** | 95% completion under bunny's spread model (caps check), incl. ≈ $0.05 judging; was $4.15 | not started |
-| L1 arm scoring | replay of run 1's lineage, 3 arms, judge v1 | **$0.40** | 3 × 40 × $0.0012 ≈ $0.15, + CodeRabbit's dev row; also the optional report-only interim CodeRabbit table (076f item 3), only if both fit in $0.40 | not started |
-| L2 redraw test | 2 fresh redraws per `CHUNK_FAILED` chunk of run 1, cache bypassed | **$0.80** | ≈ 8 chunks × 2 × $0.035 (TS count unmeasured) | not started; first to cut |
+| L1 arm scoring | replay of run 1's lineage, 3 arms, judge v1 | **$0.40** | 3 × 40 × $0.0012 ≈ $0.15, + CodeRabbit's and Greptile's dev rows (076g item 2); A0/A1/A2 report-only (076g item 1); interim table cut | not started |
+| L2 redraw test | — | **cut** | — | cut by 076g item 1 ($0.80 → unallocated) |
 | L3 step 2 | — | **cut** | (≈ $2.17, above its cap; audit b7f) | cut by S0 |
-| L4 union | report only, judge the union of runs 1 and 2 | **$0.10** | ≈ $0.05 (audit C088: unmeasured) | not started |
-| R2 dev run 2 | fresh draw of the candidate | **$4.15** until decision 077 | recomputed once from R1's measured per-case costs (95% completion), funded from unallocated only, after H1 | not started; becomes a cache replay if cut |
-| H1 held-out run | 29 cases, from the freeze tag | **$3.15** until decision 077 | recomputed once from R1's measured costs (95% completion), funded from unallocated first; an unstarted held-out case at the cap runs from the reserve | never cut |
+| L4 union | — | **cut** | — | cut by 076g item 1 ($0.10 → unallocated) |
+| R2 dev run 2 | — | **cut** | — | cut by 076g item 1 ($4.15 → unallocated); A0 frozen as primary |
+| H1 held-out run | 29 cases, from the freeze tag | **$3.15** until decision 077 (076g: 077 is only the cap reset) | recomputed once from R1's measured costs (95% completion), funded from unallocated first; an unstarted held-out case at the cap runs from the reserve | never cut |
 | H2 scoring | 3 tools + 2 secondary rows × 29 × v1 + x1 | **$0.40** | ≈ $0.20 | never cut |
 | reserve | infrastructure reruns (held-out first), a console-check correction, unstarted held-out cases (076a), the canary (≤ $0.40, 076b) | **$3.00** | owner | held; never cut |
-| unallocated | needs a new line here before use | **$1.00** | $1.71 − $0.53 to R1 (2026-11-11 ruling) − $0.18 (balance correction, 2026-11-13) | held; funds the 077 recompute (H1 first, then R2) |
+| unallocated | needs a new line here before use | **$6.05** | $1.71 − $0.53 to R1 − $0.18 (balance correction) + $5.05 freed by 076g (R2 $4.15, L2 $0.80, L4 $0.10) | held; funds the 077 cap reset (H1 first) |
 | CI review runs | manual Action runs | **$0.00** | none planned; each needs a line first | none since 2026-11-01 |
 | safety margin | never spent (outside the global hard stop) | $1.00 | rule 3 | — |
 | **total** | | **$19.13** | $18.13 usable + $1.00 margin | |
+
+**Anthropic, Sunny's own money (076g item 4; outside the Nebius $19.13; report-only dev rows):**
+
+| line | what | cap | status |
+|---|---|---|---|
+| Haiku 5.5 dev row | all 40 dev cases, same prompts | **$4.00** | waits for codex's provider (merged) and `ANTHROPIC_API_KEY` in `.env` |
+| Sonnet 5.5 dev row | 10 dev cases (8 bug, 2 clean, not S1's), fixed selection rule written before any run | **$8.00** | same |
+
+These spends must not count against `TRACEHOUND_BUDGET_TOTAL_USD` (the Nebius hard stop) unseen: own cap, ledger rows by provider.
+
 
 Done before this split: 075 ($0.49090, ledger; INCONCLUSIVE).
 
@@ -190,3 +200,4 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 | 2026-11-13 | balance correction (Sunny): the 2026-11-09 console reading was **$19.13**, not $19.31 (typo). Usable $18.13; unallocated $1.18 → $1.00; billing-lag unexplained $0.22 → $0.40; `.env` hard stop 63.33547 → 63.15547; job caps unchanged (decision 076c correction) | — | $0 | **$19.13** |
 | 2026-11-13 | spend freeze lifted by Sunny without the console check, after 076d and its merges (`4b99fb4`); guard: S1 console ÷ ledger ≥ 2 h after S1, above 1.08 → stop and tell Sunny | — | $0 | **$19.13** |
 | 2026-11-13 | **S1 approved by artu1** (cap $0.45; one dev case end to end through the scheduler, 076e item 1); 076f: P1's $0 steps may start before the ratio, R1 waits for the S1 ratio ≤ 1.08; interim CodeRabbit table only inside L1's $0.40 | $0.45 | — | **$19.13** |
+| 2026-11-13 | 076g: A0 frozen; R2, L2, L4 and the interim table cut, $5.05 → unallocated ($6.05); 077 only the cap reset; Anthropic lines (Sunny's money) Haiku $4, Sonnet $8; ratio after R1 batch 1 (> 1.08 → stop); S1 ratio weak | — | $0 | **$19.13** |

@@ -4188,3 +4188,51 @@ list in `run/comms/planner.a.076d.md`; the rulings are identified by content.
 **Touches:** Planner A `docs/specs/P1.md` (items 1, 2, 4), `docs/specs/R1.md` (item 2; R1 run by bunny, 5 batches),
 `docs/specs/E1.md` (items 1, 3); artu1 `docs/budget.md` (item 3 under L1; S1 approval row), `.agents/STATE.md`, this file.
 **Rejected:** Greptile on the dev set; holding P1's $0 steps for the console ratio; an interim table outside L1's cap.
+
+## 076g — Fable's assessment adopted: A0 frozen, Greptile on dev, Claude rows, pooled test, stop/go rule (2026-11-13)
+
+**Status: ruled by Sunny; nothing run.** From an outside read-only assessment (Fable), mostly adopted. No earlier 076g
+existed. **Goals:** (1) a viability read from the dev table by 15–17 Nov; (2) a credible held-out result; (3) low spend.
+Fable access ends 17 Nov.
+1. **A0 (pool-verify-v1 on Nemotron) is frozen now as the registered primary.** E1's A0/A1/A2 comparison is report-only.
+   **Cut:** R2, L2, L4 and the interim CodeRabbit table (amends 076f item 3). Decision 077 shrinks to the cap reset. The
+   freed caps ($4.15 + $0.80 + $0.10 = $5.05) go back to unallocated ($1.00 → $6.05).
+2. **Greptile on dev** (reverses 076f item 1): P1 triggers Greptile on its 38 dev cases in P1's slots. Credits:
+   100 − 2 (S1) − 38 = 60, enough for the 29 held-out reviews and up to 29 re-triggers. **The first Greptile trigger in P1
+   waits for Sunny's reading of the credits' expiry date**; they must last past the hand-check.
+3. **Second judge on dev:** E1 also uses H2's second judge (bench-judge-x1, Qwen3-235B-A22B-Instruct-2507; not a Claude
+   model).
+4. **Claude rows, report-only on dev, Sunny's own money**, as new budget lines outside the Nebius split: **Haiku 5.5 on all
+   40 dev cases (cap $4)**; **Sonnet 5.5 on 10 dev cases (8 bug, 2 clean, excluding S1's two), picked by a fixed rule
+   written down before any run (cap $8)**. Same prompts, no retuning; any setting that has to differ (temperature, for
+   example) is recorded. A0's R1 results are the Nemotron comparison; no extra Nemotron run. If a Claude row shows a large
+   gap over A0, Sunny decides by 16 Nov whether to register it as a second TraceHound row on held-out. Nemotron A0 stays
+   primary.
+5. **Pooled test (secondary):** protocol revision 10 pre-registers, before E1 produces any number, a secondary analysis
+   pooling dev and held-out (31 + 20 = 51 bugs) for A0, labelled secondary, with grok's dev exposure count as a caveat.
+6. **Stop/go rule, recorded before E1,** on the 31 dev bugs: **go** if A0's catches ≥ CodeRabbit's − 3 **and** A0's comments
+   per PR ≤ 2 × CodeRabbit's; **rethink** if CodeRabbit leads by 6 or more; anything in between is inconclusive and waits
+   for held-out.
+7. **Billing:** Sunny reads the console balance and usage by model tonight and again after R1's first batch; artu1
+   computes the ratio after R1 batch 1 and stops above 1.08. S1's ratio check stays but counts as weak.
+8. **Process:** artu1 decides operator detail (slot counts, timeouts, stop lines, wording) and logs it; Sunny rules only on
+   goals, money and test design. Docs-only changes get one grok pass: NO-GO only for a factual or rule conflict; wording
+   nits become notes for the next pass. Brain notes: artu1 pushes counts-only notes after a pattern scan (0 case ids,
+   held-out paths, PR numbers, dates, fork names); codex reviews only notes that fail the scan.
+9. **Correction to 076f item 5:** `caffeinate -is` (pid 5457) has no time limit; it holds until killed.
+10. **Dates:** freeze target 16 Nov. Scheduled T0 at the earliest **17 Nov 10:00 IST**, after P1's collection, the dev
+    branch deletion and F1. If CodeRabbit's rate shrank in P1, 076b item 3's 7-day rule applies (then option B, 22 Nov,
+    stands). Planner A sets the exact dates.
+**Model-provider exception (artu1, recorded with this ruling):** AGENTS.md says product model calls go to Nemotron on
+Nebius Token Factory (hackathon rule), and its review rules make a call to another provider a P1 finding. Item 4 needs an
+Anthropic provider in `packages/analyzer/src/llm`. The exception is in AGENTS.md "Exceptions": config-selected, never the
+default, report-only dev rows, mocked tests only, never in `packages/action/` or the held-out primary. Anthropic spend
+must not count against the Nebius hard stop (`TRACEHOUND_BUDGET_TOTAL_USD`) unseen: its own cap and ledger rows by provider.
+**Touches:** artu1 `.agents/STATE.md` (goal line), `docs/budget.md` (items 1, 4; 077), `docs/live-setup.md` (§2 credits,
+§6 held-out one at a time), `AGENTS.md` (exception), this file; Planner A `docs/specs/P1.md` (item 2: Greptile on 38 dev
+cases, expiry wait), `docs/specs/R1.md` (runner bunny; A1/A2 report-only), `docs/specs/E1.md` (items 1, 3, 6; L2/L4/interim
+cut), `docs/runbooks/F1-freeze.md` (item 10, A0 frozen), `docs/runbooks/H1-window.md` (item 10), `docs/runbooks/H2-scoring.md`
+(items 4, 5), `docs/plan/2026-11-11-plan-v2.md` (cuts, dates, 077); codex `docs/eval/ts-protocol.md` (rev 10: items 1, 4, 5),
+`packages/analyzer/src/llm` (Anthropic provider, item 4); bunny the Claude rows (after the provider merges and the key is in
+`.env`).
+**Rejected:** a further Nemotron run for the comparison; tuning prompts for Claude models; Greptile kept off dev.
