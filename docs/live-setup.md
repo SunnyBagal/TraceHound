@@ -82,6 +82,19 @@ https://www.greptile.com/docs/code-review/developer-essentials, https://www.grep
 https://www.greptile.com/open-source, https://cursor.com/docs/bugbot, https://cursor.com/pricing,
 https://cursor.com/blog/may-2026-bugbot-changes. Full quotes: `tracehound-testset/run/out/grok.triggers.md`.
 
+### 2.2 Readings for S1's preconditions (Sunny, reported to artu1 2026-11-13 20:16 IST)
+Sunny gave the reading time as "now"; 20:16 IST is when artu1 received it.
+- **Before:** CodeRabbit and Greptile were installed on the TraceHound repo only, not on the forks. Sunny changed that the
+  same day; the time of the change was not given.
+- **CodeRabbit:** installed on the four forks only (medusa, twenty, payload, bullmq).
+- **Greptile:** installed on the four forks only; **Automatic reviews: Never**. Repositories indexed: **not given**
+  (yes or pending).
+- **Greptile credits: 100 left.** Whether they expire or reset, and on which date: **not given**. 100 ≥ 37, so S1.md §0
+  precondition 4 passes either way. This is more than the Starter plan's 50 credits/month assumed in §2; the source of
+  the extra 50 (trial or other) is not recorded.
+- **Mac (precondition 7):** on mains power; artu1 read `pmset` at 20:16 IST: AC power, battery 100%, a `caffeinate`
+  assertion held since 16:00:03 (076f item 5: 48 h).
+
 ## 3. Fork preparation (costs $0)
 1. **Done 2026-11-10 (artu1):** `gh api -X PUT repos/SunnyBagal/<F>/actions/permissions -F enabled=false` on medusa,
    twenty, payload, bullmq; each reads back `{"enabled":false,…}`. Before any case push, re-check:
