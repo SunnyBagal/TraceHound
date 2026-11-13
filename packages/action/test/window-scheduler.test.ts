@@ -568,8 +568,13 @@ setTimeout(() => {}, 60000);
     const until = async (what: string, ok: () => boolean, ms = 20_000) => { const end = Date.now() + ms; while (!ok()) { if (Date.now() > end) throw new Error(`timed out waiting for ${what}`); await new Promise((r) => setTimeout(r, 50)); } };
     const logOr = (): Rec[] => (existsSync(path.join(t.f("state"), "scheduler.log.jsonl")) ? t.log() : []);
     const pid1 = start();
-    await until("the trigger step to start", () => logOr().some((r) => r.event === "step-start" && r.step === "trigger"));
+    // codex 076e-tools-s1 review, P2-S1: `step-start` is logged before the command is spawned, so killing on it can cut
+    // the scheduler before the command exists. Kill only once the command is running: its `step-pid` is logged and the
+    // stand-in has written its trigger call (it does so before its slow post, so the command is then mid-post).
+    await until("the trigger command to be running", () => logOr().some((r) => r.event === "step-pid" && r.step === "trigger")
+      && t.calls().some((c) => c.kind === "trigger"));
     process.kill(pid1, "SIGKILL");
+    expect(t.log().filter((r) => r.event === "step-pid").map((r) => r.step)).toContain("trigger");
     await until("the first scheduler to be gone", () => { try { process.kill(pid1, 0); return false; } catch { return true; } });
     expect(t.log().some((r) => r.event === "step-end" && r.step === "trigger")).toBe(false);
     const pid2 = start();
