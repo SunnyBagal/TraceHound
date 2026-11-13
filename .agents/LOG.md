@@ -230,3 +230,7 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   076e task (report written 13:41 IST), one `git status --short` there: names of untracked files under `heldout/` shown,
   count not in its report; none opened. Rule since: testset git only with explicit paths outside `heldout/` (AGENTS.md,
   `_common.md` `7ac7985`).
+- **Then (2026-11-13, 14:00–14:30 IST):** 076e addendum a–d recorded (`d23fc7e`; 076e Touches corrected to
+  `delete-dev-branches.ts`; AGENTS.md and `_common.md` testset-git rule). grok GO on codex's `775c3d6` (tag worktree) and
+  `5b812d4` (protocol rev 9); merged `64a23a4`, `4d7d159` (docs only). Waiting: `pa-076d` new head, bunny's delete-mode fix
+  (codex NO-GO `74f6c78`) and `tools.s1.json`. $0.
