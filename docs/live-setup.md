@@ -84,18 +84,18 @@ https://www.greptile.com/docs/code-review/developer-essentials, https://www.grep
 https://www.greptile.com/open-source, https://cursor.com/docs/bugbot, https://cursor.com/pricing,
 https://cursor.com/blog/may-2026-bugbot-changes. Full quotes: `tracehound-testset/run/out/grok.triggers.md`.
 
-### 2.2 Readings for S1's preconditions (Sunny, reported to artu1 2026-11-13 20:16 IST)
-Sunny gave the reading time as "now"; 20:16 IST is when artu1 received it.
-- **Before:** CodeRabbit and Greptile were installed on the TraceHound repo only, not on the forks. Sunny moved both
-  apps to the four forks the same day and re-checked both afterwards; the times of the move and the re-check were not given.
-- **CodeRabbit:** installed on the four forks only (medusa, twenty, payload, bullmq).
-- **Greptile:** installed on the four forks only; **Automatic reviews: Never** (Sunny checked it directly). Indexing
-  of the four forks: **done** (time not given).
-- **Greptile credits: 100 left.** Expiry or reset date: **not given** (not recorded). 100 ≥ 37, so S1.md §0
-  precondition 4 passes either way. This is more than the Starter plan's 50 credits/month assumed before (§2 now uses 100); the source of
-  the extra 50: new-account credits, as far as Sunny knows.
-- **Mac (precondition 7):** on mains power; artu1 read `pmset` at 20:16 IST: AC power, battery 100%, a `caffeinate`
-  assertion held since 16:00:03 (076f item 5: 48 h).
+### 2.2 Readings for S1's preconditions (Sunny, 2026-11-13; corrected 2026-11-14)
+**Correction (Sunny, 2026-11-14):** the apps were **not** moved to the forks on 13 Nov; Sunny's earlier answers recorded here
+were wrong. Until a time on 14 Nov (IST; time not given), **both CodeRabbit and Greptile covered the TraceHound repo only**.
+That is why S1's PRs on the fork got no bot activity. At that time (not given) **both were set to the four forks only**
+(medusa, twenty, payload, bullmq). Greptile indexing of the forks: **not given** (done or in progress). S1's bot readings are
+being re-taken by re-trigger; P1 stays on hold until bunny reports both bots reviewing.
+- **Greptile:** Automatic reviews: Never (Sunny checked it directly, 13 Nov).
+- **Greptile credits: 100 left** (13 Nov). Expiry or reset date: **not given**. 100 ≥ 37, so S1.md §0 precondition 4 passes
+  either way. This is more than the Starter plan's 50 credits/month assumed before (§2 now uses 100); the source of the
+  extra 50: new-account credits, as far as Sunny knows.
+- **Mac (precondition 7):** on mains power; artu1 read `pmset` at 20:16 IST on 13 Nov: AC power, battery 100%, a
+  `caffeinate` assertion held since 16:00:03 (pid 5457, no time limit; 076g item 9).
 
 ## 3. Fork preparation (costs $0)
 1. **Done 2026-11-10 (artu1):** `gh api -X PUT repos/SunnyBagal/<F>/actions/permissions -F enabled=false` on medusa,

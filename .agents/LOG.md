@@ -252,3 +252,6 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   replaced. Briefs: `codex.076g` (`e240d57`), `bunny.r1` updated (`eaf13e4`). Brain: codex NO-GO on the 076c review for
   bunny's inbox footer only; six GO files pushed byte-equal (`8fbb4a7`); footer fixed, 076e–g notes added and pushed after
   the pattern scan (`022edee`). `ANTHROPIC_API_KEY` not yet in `.env`. $0.
+- **2026-11-14:** Sunny's correction: CodeRabbit and Greptile covered the TraceHound repo only until 14 Nov (time not
+  given), so S1's PRs got no bot activity; both now set to the four forks only. live-setup §2.2 corrected. **S1's bot
+  readings are being re-taken by re-trigger; P1 stays on hold until bunny reports both bots reviewing.**
