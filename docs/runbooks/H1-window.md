@@ -401,6 +401,8 @@ After each batch: exit code, status per case, `review.chunksFailed`, `usage.ledg
   1.08: log it and tell artu1 the number; **H1 continues** (it is never cut).
 
 ## 5. Failures and the rule for each
+Where a rule says "tell Sunny", what the operator does if no answer comes within the wait is in
+[`handover.md`](handover.md) §4, one row per point. It is frozen with this runbook.
 | # | failure | rule |
 |---|---|---|
 | 1 | A first-trigger slot fails (`failed:open`, `failed:branches`, `failed:trigger`) | The scheduler serves the same case again in the next slot, before any later case is pushed (addendum e); the operator does nothing and pushes, opens or triggers nothing by hand. After two failed tries the case is `failed-first-trigger`: read the resume file for what was actually done. A tool with a `triggered:<tool>` record keeps its normal path (re-trigger check, §6 with `--resume-file`). A tool with no such record on an open PR is collected with `--bound window-start`; a case whose PR never opened is named in `--never-opened` and is `no-review` for both tools (§6). TraceHound still runs the case locally. Each such case is a deviation in §7. |
