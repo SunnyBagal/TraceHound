@@ -4114,3 +4114,37 @@ contain another case's fix, 3 contain a held-out fix and 2 only a dev fix. The r
 Exposure at first review under 1b–1c: **0 of 20** (codex, grok independently), so 1f needs no new ruling.
 **Spend freeze lifted (2026-11-13, Sunny):** without the console check, after 076d and its merges (`4b99fb4`). Guard: S1's
 console ÷ ledger check at least 2 h after S1; above 1.08, stop and tell Sunny (`docs/budget.md`).
+
+## 076e — Planner A's 076d open items ruled; window dates (2026-11-13)
+
+**Status: ruled by Sunny; nothing run.** Answers the open items in `tracehound-testset/run/comms/planner.a.076d.md`
+("What 076d leaves open", 1–8, and plan v2 §6a on `pa-076d` @ `0a7a599`).
+1. **S1 runs through bunny's window scheduler with `--execute`** on its two dev PRs (`--side dev`), so the scheduler's first
+   real run (pushes, PR opens, branch log, real triggers) comes before the window. One extra CodeRabbit review (on S1's
+   clean case) is accepted. (Open item 1.)
+2. **Planner A's three values become rulings:** 6 spare slots (scheduler slots 0–63: 29 first triggers, 29 worst-case
+   re-triggers, 6 spare; `firstSlot` 0, `retriggerFromSlot` 29, `lastSlot` 63, 3600 s slots, 1800 s grace, 2 tries); the
+   command timeouts as written in H1 (open 600 s, trigger 300, collect 300, re-trigger 300); held-out push order by the
+   **committer date of the base commit, ties broken by case id**. (Open item 2.)
+3. **T0 is the instant the first held-out PR opens** (the protocol's wording). The plan's fixed time is the **scheduled
+   T0** (slot 0). The snapshot is at T0 + 72 h. (Open item 3.)
+4. **One exposed set for every tool:** the union over CodeRabbit's and Greptile's reviews, judged per review from the
+   branch log (addendum e). No scorer change. (Open item 4.)
+5. **Dev branch deletion uses a script mode** (bunny builds it; codex reviews), not hand-typed pushes. After deletion P1
+   also counts `refs/pull/*` refs per fork; W1 states them as a limitation (closed PR refs and pages persist). (Open items
+   6, 8.)
+6. **Auto-review in the window is counted at the snapshot**, as H1 has it (bot objects created before the trigger;
+   failure 2). (Open item 7.)
+7. **Window: option B.** Scheduled T0 **Sun 22 Nov 2026 10:00 IST** (04:30 UTC); snapshot **Wed 25 Nov 10:00 IST**;
+   hand-check **Wed 25 Nov 16:00–19:00 IST**. If S1 doesn't run on 13 Nov, all three move day for day. (076b item 3's
+   CodeRabbit rule still applies: if the rate shrank in P1, T0 is at least 7 days after P1's last review.)
+8. **`.env`:** the dead second `TRACEHOUND_BUDGET_TOTAL_USD=52` line is deleted; no other value changes. The cap stays
+   63.15547.
+**Touches** (owner): Planner A `docs/runbooks/H1-window.md` (items 2, 3, 6, 7; T0 wording; `ffb615b` citation → codex's new
+sha), `docs/runbooks/H2-scoring.md` (item 4; `ffb615b` citation), `docs/specs/P1.md` (item 5: §3b uses the delete mode and
+counts `refs/pull/*`), `docs/specs/S1.md` (item 1), `docs/runbooks/W1-writeup.md` (item 5 limitation),
+`docs/runbooks/F1-freeze.md` (item 7 dates; `ffb615b` citation, row 17), `docs/plan/2026-11-11-plan-v2.md` §6a (item 7);
+codex `docs/eval/ts-protocol.md` (items 2–4, with grok's rev-8 fixes) and `docs/eval/tag-worktree.md` (opening sentence);
+bunny `tracehound-testset/scripts/open-prs.ts` (delete mode; item 5) and S1 through the scheduler (item 1); artu1 `.env`
+(item 8), `docs/decisions.md`, `.agents/STATE.md`, `.agents/LOG.md`.
+**Rejected:** per-tool exposed sets (a scorer change); hand-typed delete refspecs; option A (no spare day).
