@@ -4158,7 +4158,16 @@ c. **Mac:** Sunny runs `caffeinate -is -t 280800` (78 h) from about 09:00 IST on
 d. **Firewall in tracehound-testset:** every agent except codex runs git only with explicit paths outside `heldout/`; no
    bare `git status`, `git add` or `git diff`. Recorded in AGENTS.md "Blindness". Two incidents on 2026-11-13, each "names of
    untracked files under `heldout/` shown; none opened": artu1 (one `git status --short`, 8 names) and bunny (one
-   `git status --short` at the start of its 076e task; count not in its report). W1 lists both as limitations.
+   `git status --short` at the start of its 076e task, 8 names per `run/out/bunny.076e-r1.md`). W1 lists both as limitations.
 **Touches (addendum):** bunny `scripts/testset/delete-dev-branches.ts` (a), `scripts/testset/tools.s1.json` (b); Planner A
 `docs/specs/S1.md` (b), `docs/runbooks/H1-window.md` (c, preflight), `docs/runbooks/W1-writeup.md` (d, the two incidents);
 artu1 `AGENTS.md` (d), `docs/decisions.md`, `.agents/LOG.md`, `.agents/STATE.md`.
+**Addendum e to 076e (2026-11-13, Sunny):** three of Planner A's open items from its fix pass (`pa-076d` @ `c1c3e28`) become
+rulings as written in its files: (1) the **15-minute stop line** (H1 failure 17: a trigger ending more than 15 minutes
+after its slot's planned start is a stop) and its pre-freeze check, **longest open + 29 × (branch read + trigger) ≤ 900 s**
+from S1's run (else Sunny before F1); (2) **F1 row 14 (e):** S1's `--execute` run must end with both slots `done`;
+(3) **S1 step 6b waits until the scheduler is done** (`scheduler.done` exists). Planner A's other two open items (Sunny's
+numbers 4 and 5) stay as H1 has them. Sunny's item numbers (1, 2, 6) are from Planner A's report to Sunny, not the "Open"
+list in `run/comms/planner.a.076d.md`; the rulings are identified by content.
+**Touches (addendum e):** Planner A `docs/runbooks/H1-window.md` (failure 17 and its check: "not a ruling" → ruling),
+`docs/runbooks/F1-freeze.md` (row 14 (e)), `docs/specs/S1.md` (step 6b, the 900 s check).
