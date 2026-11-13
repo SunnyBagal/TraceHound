@@ -1,7 +1,7 @@
 # Runbook W1: the write-up, with the claim wording for every outcome
 
 For artu1 (writes), codex (checks every sentence against a count), Sunny (reads before it is public). Planner A,
-2026-11-11. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §2. Protocol: `docs/eval/ts-protocol.md` §6, §11 (it wins
+2026-11-11; brought to decision 076e (item 5, addendum d) on 2026-11-13. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §2. Protocol: `docs/eval/ts-protocol.md` §6, §11 (it wins
 over this runbook). Cost: $0. Starts after H2's commit (`docs/bench/ts-heldout.summary.json`) and the firewall lift.
 
 The wording in §3 is copied into decision 078 at F1, **before** the window. W1 only fills the placeholders. A sentence
@@ -127,7 +127,7 @@ Sentence 3.1 shortened to the three counts with intervals; the pair sentence(s) 
 outcome's short form ("no detectable difference at this sample size" / "caught more of the labelled bugs than X on this
 set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the link.
 
-## 4. Limits (all 12 go on the page)
+## 4. Limits (all 13 go on the page)
 1. 20 bugs and one run: intervals are wide, and only large differences can be detected (power in plan-v2 §2).
 2. The bugs are ones a later merged fix repaired, found by SZZ and labelled by two labellers; they are not all the bugs
    in those pull requests. A comment on a real defect that no later fix repaired counts as unmatched, so the share of
@@ -166,7 +166,8 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
      exposed and on the unexposed cases separately; no case was left out.
    - *What deleting does not undo.* The dev pull requests were open on the forks for the days of the dev runs. A tool
      that indexed a fork then may keep what it read; the closed pull requests stay public, and GitHub keeps a
-     read-only `refs/pull/<n>/head` ref for each (the count is in P1's report, `docs/specs/P1.md` §4 item 9). So "0 of
+     read-only `refs/pull/<n>/head` ref for each (decision 076e item 5; the count per fork is in P1's report,
+     `docs/specs/P1.md` §4 item 9, and is restated on the page). So "0 of
      20 at first review" is a statement about the branches on the forks, not about what a tool remembers.
    - TraceHound read no fork: it ran locally on each case's own commits.
 7. CodeRabbit and Greptile ran on free plans, triggered by a comment posted from a scheduler, one pull request per
@@ -183,6 +184,15 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
     when neither tool differs from TraceHound can be up to 0.10 (the sum of the two levels). CodeRabbit against
     Greptile was not tested; its counts are shown. A pair with fewer than 15 of the 20 bugs reviewed by both tools gets
     no test sentence (decision 076c items 4 and 6).
+13. **Two firewall slips before the window (decision 076e addendum d). Counts only.** The agents that later tune
+    TraceHound must not see the held-out material. On 2026-11-13, before any held-out pull request was opened, two
+    of them (artu1 and bunny) each ran one unrestricted `git status` in the test-set repository, and each was shown
+    the **names** of 8 untracked files under its held-out directory (`docs/decisions.md` 076e addendum d;
+    `run/out/bunny.076e-r1.md`). No file was opened, by either. The page states exactly that: 2 incidents, 8 file
+    names shown in each, 0 files opened, both before the window; and the rule made the same day: every agent but the
+    held-out operator runs git in that repository only with explicit paths outside the held-out directory. The page
+    gives no file name, and it claims nothing about what the names could reveal beyond the counts: names were
+    shown, no file was opened.
 
 ## 5. Checks before merge
 1. codex: every number in `ts-heldout.md`, `results.md`, the viewer and the README equals `ts-heldout.summary.json` (or
