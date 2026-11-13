@@ -1,7 +1,7 @@
 # Runbook H2: scoring the held-out window and the blind hand-check
 
 For codex (operator), Sunny (the hand-check, one sitting of 2–3 hours), artu1 (receives counts; lifts the firewall at
-the end). Planner A, 2026-11-11. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md`
+the end). Planner A, 2026-11-11; brought to decision 076d and to decision 076e (item 4, the tag-worktree citation) on 2026-11-13. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md`
 §4, §10 (it wins over this runbook). Budget line: **H2, cap $0.40**. Starts after H1's snapshot is hashed.
 
 **Order fixed by decision 076a §13.7:** sheet hashed → unblind → score files hashed and committed → the firewall lifts.
@@ -9,9 +9,11 @@ Nothing in a later step may be seen before the earlier one is done.
 
 ```sh
 TH=~/Projects/th-h1; HO=~/Projects/tracehound-ho-window; S=$HO/score; mkdir -p $S
-export TH_MAIN=~/Projects/TraceHound TH_TAG=$TH      # names used by docs/eval/tag-worktree.md (codex, ffb615b)
+export TH_MAIN=~/Projects/TraceHound TH_TAG=$TH      # names used by docs/eval/tag-worktree.md (codex, 775c3d6)
 ledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | sed -n 's/^Total est. spend: \$\([0-9.]*\).*/\1/p'; }
-POLICY=$(ls $TH/scripts/testset/policy*076a.json); G=$HO/goldens          # goldens built and hashed at F1 §4.3
+POLICY=$TH/scripts/testset/policy.076c.json      # the 076a choices plus registered_tests (two pairs, 0.05, floor 15)
+POLICY2=$TH/scripts/testset/policy.076a.json     # for the secondary rows only: no registered test, so no p-value
+G=$HO/goldens                                    # goldens built and hashed at F1 §4.3
 ARM=<candidate arm directory name, from decision 077>
 SEED=<the hand-check seed in docs/bench/ts-freeze.md>
 ```
@@ -25,7 +27,8 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
    **The records are the frozen run (gap G8):** H1 §4's record check printed one line equal to the freeze, by codex and
    by grok. **No unlisted Bot login (gap G6):** H1 §6's count is zero, or Sunny's ruling on it is recorded. Otherwise stop.
    **The ledger H2 judges against is the main one (decision 076c item 9):** the verifier block of
-   `docs/eval/tag-worktree.md` (codex, `ffb615b`) exits 0 before the first judge process, with `samePhysicalLedger: true`
+   `docs/eval/tag-worktree.md` (codex, `775c3d6`, on `main` since merge `64a23a4`) exits 0 before the first judge
+   process, with `samePhysicalLedger: true`
    and equal totals. The worktree's ledger is the main checkout's file, so H1's spend is already in it; nothing is
    copied or merged (`F1-freeze.md` §4.2). No other paid process runs during §2 (076c item 1).
 1. Official TraceHound records: `mkdir $S/official`; per case copy `<id>.r2.json` where a rerun exists, else `<id>.json`,
@@ -33,7 +36,7 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
 2. `node scripts/testset/replay-arms.ts --records $S/official --out $S/arms` → exit 0. Exit 1 (A0 differs from the
    posted comments): stop and tell Sunny; do not score.
 3. External tools: merge the per-repository collections of H1 §6 (for each repository the last complete one, and
-   the `-untriggered` directory if H1 made one) into one directory and one status file per tool:
+   the `-untriggered` directory if H1 made one with `--bound window-start`; decision 076d item 4) into one directory and one status file per tool:
    `mkdir -p $S/coderabbit $S/greptile; cp $HO/tools-*/coderabbit/*.json $S/coderabbit/; jq -s add $HO/tools-*/coderabbit.status.json > $S/coderabbit.status.json`
    (and the same for greptile).
 4. Rows. **Primary (these three make the claim):** `tracehound` = `$S/arms/$ARM`, `coderabbit`, `greptile`.
@@ -41,6 +44,32 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
    **Registered pairs (decision 076c item 4): TraceHound vs CodeRabbit and TraceHound vs Greptile**, each an exact
    two-sided sign test at 0.05, uncorrected, exact p reported. CodeRabbit vs Greptile is counts only. A secondary row
    is never tested.
+5. **The exposed set (decision 076d item 1d and addendum e; decision 076e item 4: one set for every tool, the union
+   over CodeRabbit's and Greptile's reviews, no scorer change). codex makes it on the held-out side; only counts leave
+   `$HO`.** A bug case is *exposed for a review* if, when that review was made, the case's starting fix could be
+   reached from a case branch on the same fork other than the case's own two (`git merge-base --is-ancestor <fix> <tip>`,
+   the method of `run/out/grok.ancestry.md`). **Exposure is judged per review at its actual time, from the
+   scheduler's branch log, not from the planned slot order** (addendum e).
+   - *Which review:* per external tool and bug case, the completed review the collection counts (after a re-trigger,
+     the re-triggered one). *Its time:* the latest timestamp among that tool's objects on the PR that the collector
+     counted or used for completion (raw files).
+   - *What was on the fork then:* the case branches in the `fork-branches` records of that fork up to that time
+     (`$HO/sched/scheduler.log.jsonl`: every branch and tip, logged right before each trigger and each re-trigger
+     command), together with any case whose `pushed` record in the resume file is at or before that time (a push is
+     logged before the next branch read). The records must show no `cases/` branch that is not on the case list; if
+     one does (a dev branch that was not deleted), stop and tell Sunny in counts.
+   - *Flags:* exposed yes / no per (tool, bug case) with a completed review → `$HO/exposure.reviews.json` (private).
+   - *The one set for the scorer:* `$S/exposure.json` = `{"v": 1, "exposed": [<bug case ids>]}`: a bug case is in it
+     if **either** external tool's review of it was exposed. One set means the exposed and the unexposed group hold
+     the same cases in all three rows (the protocol's common denominators, §4). TraceHound reads no fork; it is split
+     on the same cases only so the rows can be read side by side. A bug case no external tool reviewed is unexposed.
+   - *Against the frozen first-review file:* codex's exposure file frozen before T0 says which cases are exposed at
+     their first review under the push order (expected none: 0 of 20, decision 076d's correction). `$S/exposure.json`
+     can only add cases to it (a re-trigger made after later branches were pushed, a review that arrived late).
+     Report both sizes and the number added.
+   - grok derives the flags on its own from the same hashed inputs; the two files are equal (`cmp`), or stop.
+   Both files are hashed with the rest in §6 step 5 and are made **before** §2, so no judged number is known when the
+   set is fixed.
 
 ## 2. Judging (the only paid step)
 `L0=$(ledger); echo "H2 L0=$L0 $(date -u +%FT%TZ)" >> $S/job.md` (the job-start value lives in the job file; every
@@ -68,8 +97,10 @@ node scripts/testset/score-testset.ts --goldens $G/goldens.json --policy $POLICY
   --judge tracehound=$S/judge/tracehound.v1.json --judge coderabbit=… --judge greptile=… \
   --judge-x1 tracehound=$S/judge/tracehound.x1.json --judge-x1 coderabbit=… --judge-x1 greptile=… \
   --records tracehound=$HO/th --status coderabbit=$S/coderabbit.status.json --status greptile=$S/greptile.status.json \
-  --out $S/summary.judges.json
+  --exposure $S/exposure.json --out $S/summary.judges.json
 ```
+`--exposure` (`82b65e4`) adds, per tool, the counts on the exposed and on the unexposed bug cases; an id in the file
+that is not a bug case of the goldens refuses.
 This is the judges-only result. It is **not** the headline and is not shown to Sunny before his sitting.
 
 ## 4. The blind sheet
@@ -86,8 +117,8 @@ shasum -a 256 $S/sheet/sheet.md $S/sheet/decisions.json $S/sheet/mapping.json $S
   whether to proceed with a known cue or to void the sheet. Record the decision.
 - codex gives Sunny `sheet.md` and `decisions.json` only. `mapping.json` never leaves `$HO`.
 - **The guess column (premortem gap G3; decision 076c item 7).** Every item of `decisions.json` has three fields to
-  fill: `decision`, `reason` and `guess` (`buildSheet` in `scripts/testset/handcheck-sheet.ts` as of `595707f`, branch
-  `b4-076c`; it writes `guess: null`). The sheet itself still names no tool, so the `grep` above stays at 0; the
+  fill: `decision`, `reason` and `guess` (`buildSheet` in `scripts/testset/handcheck-sheet.ts`, `595707f`, on `main` since
+  merge `2e971c5`; it writes `guess: null`). The sheet itself still names no tool, so the `grep` above stays at 0; the
   allowed guesses are given in §5, not on the sheet.
 
 ## 5. Sunny's sitting (one sitting; nobody helps; no tool output open elsewhere)
@@ -119,12 +150,15 @@ When done, Sunny sends `decisions.json` back and says "final".
    `--tool` name nor `unsure` (`resolve` in `handcheck-sheet.ts` as of `595707f`). If it refuses for a guess, Sunny
    fills the missing guesses **before anything is unblinded**, the file is hashed again (both hashes are kept), and
    step 1 is repeated. `handcheck.json` gets counts only: `guess: {items, guessed, unsure, right, tools, commonestToolItems}`.
-3. Final tables: the §3 `score-testset.ts` line again with `--handcheck $S/handcheck.json --out $S/summary.final.json`.
+3. Final tables: the §3 `score-testset.ts` line again (same `--exposure` file) with `--handcheck $S/handcheck.json --out $S/summary.final.json`.
+   Per tool it prints `exposed bug cases E: caught K, completed C · unexposed bug cases U: caught K, completed C`
+   (`main` in `scripts/testset/score-testset.ts`, `82b65e4`), and the summary records the exposure file's sha256.
    It prints one line, `hand-check guess: right R of G guessed (U unsure, N items, K tools; uniform chance 1/K; always
    naming the commonest tool: M of N)`, and writes the same counts as `handcheckGuess` into the summary (`main` in
    `scripts/testset/score-testset.ts` as of `595707f`).
 4. Secondary rows: one more `score-testset.ts` run with the two other arms, their v1 and x1 details, no `--handcheck`,
-   `--out $S/summary.secondary.json`.
+   `--policy $POLICY2` (a policy that registers a tool which is not a `--tool` refuses, and a secondary row is never
+   tested), `--out $S/summary.secondary.json`.
 5. `( cd $S && find . -type f | sort | xargs shasum -a 256 > ../hashes.score.txt ); shasum -a 256 $HO/hashes.score.txt`
 5b. **A second run of the final score (gap G7).** grok, from the same hashed inputs and the same command line, runs
    step 3's `score-testset.ts` into its own directory (`$HO/score-grok/summary.final.json`). `cmp` of the two
@@ -132,10 +166,10 @@ When done, Sunny sends `decisions.json` back and says "final".
    it and Sunny has been told.
 6. codex checks `summary.final.json` and `summary.secondary.json` contain **no case id, title, path or comment text**
    (`grep -c 'ho-[0-9]' …` prints 0; the kit writes counts only). If they do, strip nothing by hand: report it and stop.
-   Also (076c item 4): a p-value appears only for the two registered pairs. The kit at `main` `958171b` prints one for
-   every pair of `--tool` rows (`main` in `scripts/testset/score-testset.ts`); the change is bunny's, on 076c's Touches
-   list, and F1 §1 row 17 does not pass until it is on `main`. If a committed-to-be summary still carries a p-value
-   for CodeRabbit–Greptile or for a secondary arm: the same rule, report it and stop.
+   Also (076c items 4 and 6): a p-value appears only for the two registered pairs, and only where at least 15 bug
+   cases were reviewed by both (the kit does this since `82b65e4`: `registered_tests` in the policy; every other pair
+   has `p: null`). Check: `jq '[.pairs[]|select(.p!=null)|[.a,.b]]' $S/summary.final.json` lists at most the two
+   registered pairs, and the same on `summary.secondary.json` prints `[]`. Anything else: report it and stop.
 7. codex commits to `TraceHound/docs/bench/`: `ts-heldout.summary.json` (a copy of `summary.final.json`),
    `ts-heldout.secondary.json`, and `ts-heldout.hashes.md` with the three single-line hashes (window, blank sheet +
    filled sheet, score) and the counts of §7. Push.
@@ -147,10 +181,13 @@ Per primary tool: completed of 29 (bug n, clean m); caught K of 20 by v1, by x1,
 the hand-check K; comments per attempted and per completed PR (mean, median); comments on clean cases; location hits.
 Pairs: for the two registered pairs (TraceHound–CodeRabbit, TraceHound–Greptile) paired n, only-A, only-B and the
 exact p; for CodeRabbit–Greptile paired n, only-A, only-B and **no p** (076c item 4); and per
-pair **m = bug cases reviewed by both** (TraceHound's official record `status: "ok"` and the tool's collector status
-`completed`; for the CodeRabbit–Greptile pair, both `completed`). 076c item 6: below m = 15 the pair is counts only.
-Until `score-testset.ts` prints m (bunny's open change on 076c's Touches list), codex counts it from `$S/official` and
-the two status files and writes the three numbers here. Hand-check:
+pair **m = bug cases reviewed by both** (both statuses `completed`; the kit prints it as "reviewed by both",
+`82b65e4`). 076c item 6: below m = 15 the pair is counts only, and the kit prints no p for it.
+**Exposure (decision 076d item 1d; addendum e), per primary tool, two lines copied from the kit:** exposed bug cases
+E: caught K, completed C; unexposed bug cases 20 − E: caught K, completed C. With E = 0 the first line is written
+"0 of 0 (no exposed bug cases)", never as a rate. Beside them: E at first review from the frozen file (expected 0),
+the number of cases added by a re-trigger or a late review, and per external tool how many of its own completed
+reviews were exposed. No test is made on either group. Hand-check:
 items on the sheet, `same-bug` count, judge-matched items Sunny rejected, location-only items Sunny accepted, sitting
 length. **Guess (gap G3), one line, copied from the kit's output:** "hand-check guess: right R of G guessed (U unsure, N
 items, 3 tools; uniform chance 1/3; always naming the commonest tool: M of N)". No adjective is added to it. Judging: calls, `JUDGE_FAILED`, spend. TraceHound cost per PR (mean, median, max, total) from the records.
@@ -160,6 +197,7 @@ items, 3 tools; uniform chance 1/3; always naming the commonest tool: M of N)". 
 |---|---|
 | A detail file does not cover a completed bug case | `score-testset.ts` refuses (exit 2). Re-judge that row once; never mark the case a miss by hand. |
 | A status file holds `read-failed` | `score-testset.ts` refuses (exit 2, no output; `main` → `toStatus` at `6fd4568`). It is not a result: H1 §6's repeat collection was skipped. Go back to it (window end unchanged), hash the new directory, then score. Never edit a status file. |
+| The exposed set cannot be derived (a `fork-branches` record is missing for a trigger that posted, or codex's and grok's flags differ) | Do not judge. Find the cause from the scheduler's log and the resume files. A post with no branch record before it should not exist (the scheduler posts nothing when the list cannot be read); if one does, that review is marked exposed (the conservative side), the count is reported, and Sunny is told. |
 | A status file holds `invalid-binding` | Nothing to do by hand: the scorer counts the case as `no-review` for that tool, leaves it out of that tool's pairs and prints "no-review N (invalid-binding k)". The count goes into the report. |
 | Sunny cannot finish in one sitting | He stops, the partial file is hashed and kept, and he finishes in a second sitting without seeing anything else in between; the report says "two sittings". |
 | Sunny's file hash does not match | Use his file; hash again together; never the operator's copy. |
