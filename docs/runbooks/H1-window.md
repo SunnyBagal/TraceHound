@@ -195,7 +195,8 @@ sched --status | jq '{t0, execute, side, boots, missed, stopped}'
   values were sized at five times the slowest command expected; an estimate until S1's scheduler log and P1's
   trigger log give measured durations). At the ceilings themselves they do not ("The post inside a slot drifts
   later", below). Before F1, S1's measured durations are projected to the 29th slot: longest open + 29 × (longest
-  branch read + longest trigger) over 900 s, which is failure 17's line, goes to Sunny before the tag.
+  branch read + longest trigger) over 900 s, which is failure 17's line, goes to Sunny before the tag (ruled:
+  decision 076e addendum e).
 - `firstSlot` 0, `retriggerFromSlot` 29, `lastSlot` 63: the slot room, below.
 
 **A first-trigger slot (`runFirst`).** The slot serves the lowest position that has neither succeeded nor used its two
@@ -222,8 +223,9 @@ p is served in slot p − 1: position 1 at T0, position 29 at T0 + 28:00.
   - *At the timeout ceilings it does not.* With O = 600 s and T = 300 s the lag passes 3600 s around the tenth case,
     and from about slot 16 the following slot would start more than 1800 s late and be `missed` (failure 7).
   - **So a trigger command that ends more than 15 minutes after its slot's planned start is a stop (failure 17).**
-    The log has every step's planned time and end. Fifteen minutes is Planner A's number for "more than a few
-    minutes" (grok's review of `0a7a599`), not a ruling.
+    The log has every step's planned time and end. **The 15-minute stop line and its pre-freeze check (longest
+    open + 29 × (longest branch read + longest trigger) ≤ 900 s from S1's run, else Sunny before F1) are rulings:
+    decision 076e addendum e.**
   - Slots start on the grid from the scheduled T0 as long as the lag is under an hour.
 
 **Re-triggers (decisions 076b item 2, 076c items 2 and 3; `runRetrigger`).** First triggers always go before
@@ -403,7 +405,7 @@ After each batch: exit code, status per case, `review.chunksFailed`, `usage.ledg
 | 14 | Anything this table does not cover | Do nothing that changes what a tool sees. Log it, tell Sunny (not artu1) with counts only, and wait for his answer. |
 | 15 | The scheduler stopped (`stopped` is not null, exit 3) or its process is gone without `scheduler.done` | Read the reason in `sched --status`. **A pinned file changed:** put the file back to its pinned bytes (never write new pins during the window), then start again. **A command's processes could not be confirmed ended:** look at the process group the log names; wait until it is gone; do not kill a group you cannot identify; then start again. **The process is gone (reboot, crash):** start again. "Start again" is §2's `--detach` line, unchanged: the scheduler replays its log, runs no finished step twice and fires no slot late. Slots that passed meanwhile are `missed` (failure 7). More than six slots lost in total: tell Sunny in counts; the window end does not move. |
 | 16 | The first PR does not open in slot 0 | Slot times stay on the scheduled grid (every slot is counted from the plan's `t0`), and the same case is served again at slot 1 (addendum e). **T0 is the instant the first held-out PR does open** (decision 076e item 3), so the snapshot moves with it: T0 + 72 h, later than scheduled T0 + 72 h by the difference. Write both times and the difference into `$HO/job.md`, and tell Sunny the difference in minutes: the hand-check sitting is planned six hours after the scheduled snapshot. Over three hours: §1 item 12 as well. Reported as a deviation. |
-| 17 | A trigger command ended more than 15 minutes after its slot's planned start | The commands are slower than the plan allows for, and the lag grows by one trigger-command length per slot (§3, "The post inside a slot drifts later"): past an hour the next slot starts late, and past 90 minutes it is `missed`. Stop in the sense of failure 14: change nothing by hand, do not stop or restart the scheduler, and tell Sunny (not artu1) in counts only: the slot, the minutes, the longest open and trigger commands so far. Wait for his answer. A deviation in §7. |
+| 17 | A trigger command ended more than 15 minutes after its slot's planned start (the stop line is a ruling: decision 076e addendum e) | The commands are slower than the plan allows for, and the lag grows by one trigger-command length per slot (§3, "The post inside a slot drifts later"): past an hour the next slot starts late, and past 90 minutes it is `missed`. Stop in the sense of failure 14: change nothing by hand, do not stop or restart the scheduler, and tell Sunny (not artu1) in counts only: the slot, the minutes, the longest open and trigger commands so far. Wait for his answer. A deviation in §7. |
 
 ## 6. T0 + 72:00: the snapshot
 T0 in this section is the **actual** T0, the first held-out PR's `created_at` in `$HO/job.md` ("Two clocks"), not
