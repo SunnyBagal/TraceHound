@@ -228,7 +228,7 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
 - **Firewall incidents (2026-11-13; 076e addendum d):** (1) artu1, about 13:30 IST, one `git status --short` in
   tracehound-testset: names of untracked files under `heldout/` shown, 8 names; none opened. (2) bunny, at the start of its
   076e task (report written 13:41 IST), one `git status --short` there: names of untracked files under `heldout/` shown,
-  count not in its report; none opened. Rule since: testset git only with explicit paths outside `heldout/` (AGENTS.md,
+  8 names (count from `run/out/bunny.076e-r1.md`); none opened. Rule since: testset git only with explicit paths outside `heldout/` (AGENTS.md,
   `_common.md` `7ac7985`).
 - **Then (2026-11-13, 14:00–14:30 IST):** 076e addendum a–d recorded (`d23fc7e`; 076e Touches corrected to
   `delete-dev-branches.ts`; AGENTS.md and `_common.md` testset-git rule). grok GO on codex's `775c3d6` (tag worktree) and
