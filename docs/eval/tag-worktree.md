@@ -1,6 +1,6 @@
 # Bind a frozen worktree to the main spend state
 
-Decision076c item9. This command set shares one physical ledger and the same environment file; it makes no provider call. Keep the spend freeze and one-paid-process rule. The final freeze tag does not exist yet: the rehearsal used main `958171b`; at F1 substitute the approved tag for `<freeze-tag>`.
+Decision076c item9. This command set shares one physical ledger and the same environment file; it makes no provider call. Sunny lifted the spend freeze on 2026-11-13 (decision076d); the remaining S1 guard is the console ÷ ledger check at least 2 h after S1: above 1.08, stop and tell Sunny. Keep one paid process at a time across all jobs and the hard stop in the shared `.env`. The final freeze tag does not exist yet: the rehearsal used main `958171b`; at F1 substitute the approved tag for `<freeze-tag>`.
 
 Create the detached execution worktree from the main checkout (not from another lane's checkout):
 
