@@ -9,8 +9,9 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFi
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { guardSide, main, parseCli, pinnedPaths, realIo, runScheduler, type Io, type Opts } from "../../../scripts/testset/window-scheduler.ts";
+import { guardSide, main, parseCli, pinnedPaths, readTools, realIo, runScheduler, type Io, type Opts } from "../../../scripts/testset/window-scheduler.ts";
 import { simulate } from "./fixtures/scheduler-sim.ts";
+import { main as collectMain } from "../../../scripts/testset/collect-tool-reviews.ts";
 
 const SCRIPT = path.resolve(import.meta.dirname, "../../../scripts/testset/window-scheduler.ts");
 const T0 = "2026-11-20T00:00:00.000Z";
@@ -567,8 +568,13 @@ setTimeout(() => {}, 60000);
     const until = async (what: string, ok: () => boolean, ms = 20_000) => { const end = Date.now() + ms; while (!ok()) { if (Date.now() > end) throw new Error(`timed out waiting for ${what}`); await new Promise((r) => setTimeout(r, 50)); } };
     const logOr = (): Rec[] => (existsSync(path.join(t.f("state"), "scheduler.log.jsonl")) ? t.log() : []);
     const pid1 = start();
-    await until("the trigger step to start", () => logOr().some((r) => r.event === "step-start" && r.step === "trigger"));
+    // codex 076e-tools-s1 review, P2-S1: `step-start` is logged before the command is spawned, so killing on it can cut
+    // the scheduler before the command exists. Kill only once the command is running: its `step-pid` is logged and the
+    // stand-in has written its trigger call (it does so before its slow post, so the command is then mid-post).
+    await until("the trigger command to be running", () => logOr().some((r) => r.event === "step-pid" && r.step === "trigger")
+      && t.calls().some((c) => c.kind === "trigger"));
     process.kill(pid1, "SIGKILL");
+    expect(t.log().filter((r) => r.event === "step-pid").map((r) => r.step)).toContain("trigger");
     await until("the first scheduler to be gone", () => { try { process.kill(pid1, 0); return false; } catch { return true; } });
     expect(t.log().some((r) => r.event === "step-end" && r.step === "trigger")).toBe(false);
     const pid2 = start();
@@ -603,4 +609,46 @@ setTimeout(() => {}, 60000);
     expect(existsSync(path.join(t.f("state"), "scheduler.lock"))).toBe(false);
     expect(readFileSync(path.join(t.f("state"), "scheduler.out"), "utf8")).toMatch(/\| slot 1 \| position 1 \| case-901 \| slot \| resumed: first/);
   }, 60_000);
+});
+
+describe("tools.s1.json (decision 076e item 1, addendum b): S1's starting tools file", () => {
+  const TOOLS_S1 = path.resolve(import.meta.dirname, "../../../scripts/testset/tools.s1.json");
+  /** S1 as 076e item 1 runs it: two dev cases on one fork, one hourly slot each, re-triggers off (retriggerFromSlot after lastSlot), H1's timeouts. */
+  const S1_PLAN = { slotSeconds: 3600, firstSlot: 0, retriggerFromSlot: 2, lastSlot: 1, retriggerDueSeconds: 86_400, graceSeconds: 1800,
+    minTriggerSpacingSeconds: 3600, firstTriggerAttempts: 2, timeoutSeconds: { open: 600, trigger: 300, collect: 300, retrigger: 300 } };
+
+  it("is the merged scheduler's tools schema with both tools on, in trigger order, and no held-out details", () => {
+    const raw = readFileSync(TOOLS_S1, "utf8");
+    expect(JSON.parse(raw)).toEqual({ v: 1, tools: { coderabbit: { logins: [], notCompletion: [] }, greptile: { logins: [], notCompletion: [] } } });
+    expect(readTools(TOOLS_S1)).toEqual(["coderabbit", "greptile"]);
+    expect(raw).not.toMatch(/held-?out|ho-\d|case-\d|SunnyBagal/i);
+  });
+
+  it("the plan and config readers accept it with S1's two dev cases; a dry run opens and triggers both tools on both, and nothing else", async () => {
+    const t = fixture(2, { plan: S1_PLAN });
+    copyFileSync(TOOLS_S1, t.f("tools.json"));
+    t.json("cases.json", [{ position: 1, id: "case-901", fork: "SunnyBagal/medusa" }, { position: 2, id: "case-902", fork: "SunnyBagal/medusa" }]);
+    const { o, mode } = parseCli(t.argv("--list"));
+    expect(mode).toBe("list");
+    expect(o.execute).toBe(false);
+    expect(o.tools).toEqual(["coderabbit", "greptile"]);
+    expect(o.plan).toMatchObject({ firstSlot: 0, retriggerFromSlot: 2, lastSlot: 1 });
+    expect(await t.run()).toBe(0);
+    expect(t.calls().map((c) => `${c.kind}:${c.id}:${c.execute}`)).toEqual(["open:case-901:false", "trigger:case-901:false", "open:case-902:false", "trigger:case-902:false"]);
+    for (const c of t.calls().filter((x) => x.kind === "trigger")) expect(c.argv).toEqual(expect.arrayContaining(["--trigger", "coderabbit,greptile"]));
+    expect(t.slots()).toEqual(["0:done", "1:done"]); // slot 1 is the last; no re-trigger slot follows
+    expect(t.sim()).toMatchObject({ pushed: [], prs: {}, comments: {} });
+    expect(t.reads).toEqual([]);
+  });
+
+  it("re-triggers stay off even if the plan had room: the collector refuses a tools file with no logins, so no re-trigger check can pass", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "tools-s1-"));
+    const lines: string[] = [];
+    for (const tool of ["coderabbit", "greptile"]) {
+      expect(collectMain(["--side", "dev", "--tool", tool, "--config", TOOLS_S1, "--repo", "SunnyBagal/medusa", "--manifest", path.join(dir, "m.json"),
+        "--pr-map", path.join(dir, "p.json"), "--out", path.join(dir, "out"), "--window-start", "2026-11-20T00:00:00Z", "--window-end", "2026-11-21T00:00:00Z",
+        "--resume-file", path.join(dir, "r.jsonl")], { log: (l) => lines.push(l) })).toBe(2);
+    }
+    expect(lines.join("\n")).toMatch(/no login list for coderabbit[\s\S]*no login list for greptile/);
+  });
 });
