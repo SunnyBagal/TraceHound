@@ -1,7 +1,7 @@
 # Runbook H2: scoring the held-out window and the blind hand-check
 
 For codex (operator), Sunny (the hand-check, one sitting of 2–3 hours), artu1 (receives counts; lifts the firewall at
-the end). Planner A, 2026-11-11; brought to decision 076d and to decision 076e (item 4, the tag-worktree citation) on 2026-11-13, and to decision 076g (items 1, 4, 5) on 2026-11-14. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md`
+the end). Planner A, 2026-11-11; brought to decision 076d and to decision 076e (item 4, the tag-worktree citation) on 2026-11-13, and to decision 076g (items 1, 4, 5) on 2026-11-13. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md`
 §4, §10 (it wins over this runbook). Budget line: **H2, cap $0.40**. Starts after H1's snapshot is hashed.
 
 **Order fixed by decision 076a §13.7:** sheet hashed → unblind → score files hashed and committed → the firewall lifts.

@@ -1,7 +1,7 @@
 # Runbook W1: the write-up, with the claim wording for every outcome
 
 For artu1 (writes), codex (checks every sentence against a count), Sunny (reads before it is public). Planner A,
-2026-11-11; brought to decision 076e (item 5, addendum d) on 2026-11-13 and to decision 076g (items 1, 4, 5) on 2026-11-14. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §2. Protocol: `docs/eval/ts-protocol.md` §6, §11 (it wins
+2026-11-11; brought to decision 076e (item 5, addendum d) on 2026-11-13 and to decision 076g (items 1, 4, 5) on 2026-11-13. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §2. Protocol: `docs/eval/ts-protocol.md` §6, §11 (it wins
 over this runbook). Cost: $0. Starts after H2's commit (`docs/bench/ts-heldout.summary.json`) and the firewall lift.
 
 The wording in §3 is copied into decision 078 at F1, **before** the window. W1 only fills the placeholders. A sentence

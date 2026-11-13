@@ -1,7 +1,7 @@
 # Runbook F1: the freeze (`review-freeze-3`) and the predictions
 
 For artu1 (does it), codex (freeze check, held-out side), Sunny (go). Planner A, 2026-11-11; brought to decision 076d and
-to decision 076e with its addendum on 2026-11-13, and to decisions 076f and 076g on 2026-11-14. **Freeze target: Mon
+to decision 076e with its addendum on 2026-11-13, and to decisions 076f and 076g on 2026-11-13. **Freeze target: Mon
 16 Nov 2026 (076g item 10).**
 Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md` §11–§12 (codex's file,
 `AGENTS.md` "Who owns which files"; where it and this runbook differ, the protocol wins and the difference is

@@ -1,7 +1,7 @@
 # Runbook: handover. Who decides what from 17 Nov
 
 For artu1, codex (H1's operator), grok (backup operator), bunny. Sunny reads it once and corrects it. Planner A,
-2026-11-14 (first pass; decision 076g item 8 is its basis). Cost: $0.
+2026-11-13 (first pass; decision 076g item 8 is its basis). Cost: $0.
 
 **Why this file exists.** From Tue 17 Nov the window can open (plan-v2 §6a), it runs for 72 hours mostly without
 anyone watching, and Sunny's outside help ends that day. `H1-window.md` sends something to Sunny, or stops for

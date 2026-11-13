@@ -5,7 +5,7 @@ read the operator's pane; they get `run/out/codex.ho-run.md` (counts and spend o
 lifts, artu1 and bunny also make no `gh` or browser read of pulls, issues or notifications on the four forks**
 (decision 076c item 12; `AGENTS.md` "Blindness"): the forks are public, and every tool comment on a held-out PR is
 there. Planner A, 2026-11-11; brought to decision 076c on 2026-11-12, to decision 076d on 2026-11-13, to decision
-076e with its addendum on 2026-11-13 and to decision 076g (items 1, 2, 9, 10) on 2026-11-14.
+076e with its addendum on 2026-11-13 and to decision 076g (items 1, 2, 9, 10) on 2026-11-13.
 Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md` §3, §7–§9 (it wins over this
 runbook; report any difference). Budget line: **H1**, cap from decision 077 ($3.15 until then); unstarted cases at the
 cap run from the reserve (decision 076a "Caps" item 4).
