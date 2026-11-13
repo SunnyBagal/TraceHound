@@ -28,8 +28,13 @@
  * Every action (each command, with its argv and exit) is a line with its UTC time in <out>/delete-dev-branches.log.jsonl
  * and on stdout. The run ends with one line per fork: case branches left (`refs/heads/cases/*`), open PRs, and
  * `refs/pull/*` refs (with how many are `refs/pull/<n>/head`), also in <out>/summary.json.
- * Exit: 0 dry run passed, or --execute deleted everything and every fork ends with 0 case branches and 0 open PRs;
- * 1 a push failed or a fork does not end clean; 2 refused (nothing deleted).
+ * Every one of those counts is required, in dry run and execute: a read that fails, or prints anything that is not a
+ * well-formed line (a `refs/pull/*` line must be `<sha> <tab> refs/pull/<n>/<name>`; an open-PR page must be an array of
+ * PR objects with a number), makes that count unknown, and an unknown count fails the run (codex NO-GO on 74f6c78,
+ * P2-1). A valid empty listing is 0.
+ * Exit: 0 dry run passed with every count known, or --execute deleted everything and every fork ends with 0 case
+ * branches and 0 open PRs, every count known; 1 a push failed, a count is unknown, or a fork does not end clean;
+ * 2 refused (nothing deleted).
  *
  * Firewall: the open-PR count is a `gh` read of the forks' pulls, so this runs before T0 only (P1 §3b), never in the
  * window. No network in tests (fixtures inject the runner).
@@ -228,24 +233,29 @@ function run(o: Opts, deps: Deps, say: (l: string) => void): number {
     let left: Branch[] | null = null;
     try { if (heads.status === 0) left = listCaseBranches(heads, fork); } catch { left = null; }
     if (left) fs.writeFileSync(path.join(o.out, `branches.after.${p.repo}.txt`), left.map((b) => `${b.sha}\t${b.ref}\n`).join(""));
-    const pulls = cmd("git", ["ls-remote", p.url, "refs/pull/*"]);
-    const pullRefs = pulls.status === 0 ? pulls.stdout.split("\n").filter((l) => /\trefs\/pull\//.test(l)) : null;
+    const pullRefs = listPullRefs(cmd("git", ["ls-remote", p.url, "refs/pull/*"]));
     counts[p.repo] = {
       caseBranches: left ? left.length : null,
       openPrs: openPrCount((page) => cmd("gh", ["api", "--method", "GET", `repos/${fork}/pulls?state=open&per_page=100&page=${page}`])),
       pullRefs: pullRefs ? pullRefs.length : null,
-      pullHeadRefs: pullRefs ? pullRefs.filter((l) => /\trefs\/pull\/\d+\/head$/.test(l)).length : null,
+      pullHeadRefs: pullRefs ? pullRefs.filter((ref) => /^refs\/pull\/\d+\/head$/.test(ref)).length : null,
     };
   }
-  const summary = { v: 1, at: new Date(now()).toISOString(), mode: o.execute ? "execute" : "dry-run", failed, counts };
+  // every count is required in both modes (076e item 5): a failed or unreadable read is "unknown", and unknown is a failure
+  const unknown = plans.flatMap((p) => Object.entries(counts[p.repo]!).filter(([, v]) => v === null).map(([k]) => `${p.repo}.${k}`));
+  const clean = Object.values(counts).every((c) => c.caseBranches === 0 && c.openPrs === 0);
+  const exit = failed || unknown.length || (o.execute && !clean) ? 1 : 0;
+  const summary = { v: 1, at: new Date(now()).toISOString(), mode: o.execute ? "execute" : "dry-run", exit, failed, unknown, counts };
   fs.writeFileSync(path.join(o.out, "summary.json"), JSON.stringify(summary, null, 1) + "\n");
   for (const p of plans) {
     const c = counts[p.repo]!;
     log("count", { fork: `${OWNER}/${p.repo}`, ...c, note: `${p.repo} case-branches=${c.caseBranches ?? "unknown"} open-prs=${c.openPrs ?? "unknown"} refs-pull=${c.pullRefs ?? "unknown"} (head ${c.pullHeadRefs ?? "unknown"})` });
   }
-  const clean = Object.values(counts).every((c) => c.caseBranches === 0 && c.openPrs === 0);
-  const exit = failed ? 1 : o.execute && !clean ? 1 : 0;
-  log("end", { exit, note: o.execute ? (clean ? "every fork: 0 case branches, 0 open PRs" : "not clean") : "dry run: nothing deleted" });
+  const note = failed ? "FAILED: a push did not complete"
+    : unknown.length ? `FAILED: count unknown (${unknown.join(", ")})`
+    : o.execute ? (clean ? "every fork: 0 case branches, 0 open PRs" : "FAILED: not clean")
+    : "dry run passed: nothing deleted";
+  log("end", { exit, unknown, note });
   return exit;
 }
 
@@ -263,7 +273,19 @@ function listCaseBranches(r: RunResult, fork: string): Branch[] {
   return out;
 }
 
-/** Open PRs over every page; null if a page cannot be read. */
+/** The refs of `git ls-remote <url> refs/pull/*`; null if it failed or any line is not `<sha> <tab> refs/pull/<n>/<name>`. */
+function listPullRefs(r: RunResult): string[] | null {
+  if (r.status !== 0) return null;
+  const refs: string[] = [];
+  for (const line of r.stdout.split("\n").filter(Boolean)) {
+    const [sha, ref, extra] = line.split("\t");
+    if (!sha || !SHA_RE.test(sha) || !ref || !/^refs\/pull\/\d+\/[A-Za-z0-9._-]+$/.test(ref) || extra !== undefined) return null;
+    refs.push(ref);
+  }
+  return refs;
+}
+
+/** Open PRs over every page; null if a page cannot be read or an entry is not a PR object with a number. */
 function openPrCount(page: (n: number) => RunResult): number | null {
   let n = 0;
   for (let i = 1; i <= 100; i++) {
@@ -271,7 +293,7 @@ function openPrCount(page: (n: number) => RunResult): number | null {
     if (r.status !== 0) return null;
     let a: unknown;
     try { a = JSON.parse(r.stdout); } catch { return null; }
-    if (!Array.isArray(a)) return null;
+    if (!Array.isArray(a) || a.some((x) => !Number.isSafeInteger((x as { number?: unknown })?.number))) return null;
     n += a.length;
     if (a.length < 100) return n;
   }

@@ -13,6 +13,7 @@ import { FORKS, main, type Runner } from "../../../scripts/testset/delete-dev-br
 
 const sha = (n: number) => n.toString(16).padStart(40, "0");
 const T = Date.parse("2026-11-14T10:00:00.000Z");
+type EndFail = "pulls-exit" | "pulls-malformed" | "pulls-foreign-ref" | "heads-exit" | "heads-malformed" | "open-exit" | "open-malformed" | "open-not-prs";
 type Fork = { meta: Record<string, unknown>; heads: [string, string][]; pulls: number; open: number; symref?: string };
 
 /** Three dev cases (two on medusa, one on twenty); every fork has its default branch and an unrelated branch. */
@@ -31,7 +32,9 @@ function world() {
   const clones: Record<string, Record<string, string>> = {
     medusa: Object.fromEntries(forks.medusa!.heads.map(([s, r]) => [r, s])), twenty: Object.fromEntries(forks.twenty!.heads.map(([s, r]) => [r, s])),
   };
-  return { forks, clones, urlConfig: "", pushFail: new Set<string>(), closePrs: true };
+  return { forks, clones, urlConfig: "", pushFail: new Set<string>(), closePrs: true,
+    /** one failing read among the final counts (heads: only the second, final listing of that fork) */
+    endFail: null as null | { repo: string; what: EndFail }, headsCalls: {} as Record<string, number> };
 }
 
 function setup(w = world(), cases: unknown = [{ id: "case-001", repo: "medusa" }, { id: "case-002", repo: "medusa" }, { id: "case-003", repo: "twenty" }]) {
@@ -50,6 +53,10 @@ function setup(w = world(), cases: unknown = [{ id: "case-001", repo: "medusa" }
       expect(argv.slice(0, 3)).toEqual(["api", "--method", "GET"]);
       const f = w.forks[m![1]!]!;
       if (!m![2]) return ok(JSON.stringify(f.meta));
+      const ef = w.endFail && w.endFail.repo === m![1] ? w.endFail.what : null;
+      if (ef === "open-exit") return { status: 1, stdout: "", stderr: "HTTP 502" };
+      if (ef === "open-malformed") return ok("<html>busy</html>");
+      if (ef === "open-not-prs") return ok(JSON.stringify([{ message: "x" }]));
       return ok(JSON.stringify(Array.from({ length: Number(m![3]) === 1 ? f.open : 0 }, (_, i) => ({ number: i + 1 }))));
     }
     expect(bin).toBe("git");
@@ -63,7 +70,18 @@ function setup(w = world(), cases: unknown = [{ id: "case-001", repo: "medusa" }
     }
     if (argv[0] === "ls-remote") {
       const url = argv.find((a) => urlRe.test(a))!;
-      const f = w.forks[urlRe.exec(url)![1]!]!;
+      const repo = urlRe.exec(url)![1]!;
+      const f = w.forks[repo]!;
+      const ef = w.endFail && w.endFail.repo === repo ? w.endFail.what : null;
+      if (argv[1] === "--heads" && (w.headsCalls[repo] = (w.headsCalls[repo] ?? 0) + 1) >= 2) {
+        if (ef === "heads-exit") return { status: 128, stdout: "", stderr: "fatal: unable to access" };
+        if (ef === "heads-malformed") return ok(`${sha(1)}\trefs/heads/develop\nwarning: redirecting\n`);
+      }
+      if (argv[2] === "refs/pull/*") {
+        if (ef === "pulls-exit") return { status: 128, stdout: "", stderr: "fatal: unable to access" };
+        if (ef === "pulls-malformed") return ok(`${sha(90)}\trefs/pull/1/head\nunreadable ref listing\n`);
+        if (ef === "pulls-foreign-ref") return ok(`${sha(90)}\trefs/heads/develop\n`);
+      }
       if (argv[1] === "--get-url") return ok(url + "\n");
       if (argv[1] === "--symref") return ok(`ref: ${f.symref ?? `refs/heads/${f.meta.default_branch}`}\tHEAD\n${sha(1)}\tHEAD\n`);
       if (argv[1] === "--heads") return ok(f.heads.map(([s, r]) => `${s}\t${r}\n`).join(""));
@@ -216,7 +234,46 @@ describe("delete-dev-branches: dry run and execute", { timeout: 60_000 }, () => 
     const t = setup(w);
     expect(t.go(["--execute"])).toBe(1);
     expect(t.lines.join("\n")).toMatch(/medusa case-branches=0 open-prs=2/);
-    expect(t.log().at(-1)).toMatchObject({ event: "end", exit: 1, note: "not clean" });
+    expect(t.log().at(-1)).toMatchObject({ event: "end", exit: 1, note: "FAILED: not clean" });
+  });
+});
+
+describe("delete-dev-branches: every final count is required (codex NO-GO on 74f6c78, P2-1)", { timeout: 120_000 }, () => {
+  const shapes: [EndFail, string, string][] = [
+    ["pulls-exit", "medusa", "pullRefs"], ["pulls-malformed", "medusa", "pullRefs"], ["pulls-foreign-ref", "payload", "pullRefs"],
+    ["heads-exit", "twenty", "caseBranches"], ["heads-malformed", "bullmq", "caseBranches"],
+    ["open-exit", "medusa", "openPrs"], ["open-malformed", "payload", "openPrs"], ["open-not-prs", "twenty", "openPrs"],
+  ];
+  for (const [what, repo, field] of shapes) {
+    for (const mode of ["dry run", "execute"]) {
+      it(`${what} on ${repo} (${mode}): the count is unknown, the run exits 1 and reports failure, never success`, () => {
+        const w = world(); w.endFail = { repo, what };
+        const t = setup(w);
+        expect(t.go(mode === "execute" ? ["--execute"] : [])).toBe(1);
+        const summary = JSON.parse(readFileSync(path.join(t.dir, "out", "summary.json"), "utf8"));
+        expect(summary.counts[repo][field]).toBeNull();
+        if (field === "pullRefs") expect(summary.counts[repo].pullHeadRefs).toBeNull();
+        expect(summary.unknown).toContain(`${repo}.${field}`);
+        expect(summary.exit).toBe(1);
+        const end = t.log().at(-1);
+        expect(end).toMatchObject({ event: "end", exit: 1 });
+        expect(end.note).toMatch(new RegExp(`^FAILED: count unknown \\(.*${repo}\\.${field}`));
+        const out = t.lines.join("\n");
+        expect(out).not.toMatch(/every fork: 0 case branches|dry run passed/);
+        expect(out).toMatch(new RegExp(`${repo} case-branches=\\S+ open-prs=\\S+ refs-pull=\\S+`));
+        // the deletion is not retried to recount
+        expect(t.pushes().length).toBe(2);
+      });
+    }
+  }
+  it("valid empty listings count as 0, and a clean dry run says it passed", () => {
+    const w = world();
+    const t = setup(w);
+    expect(t.go()).toBe(0);
+    const summary = JSON.parse(readFileSync(path.join(t.dir, "out", "summary.json"), "utf8"));
+    expect(summary.counts.payload).toEqual({ caseBranches: 0, openPrs: 0, pullRefs: 0, pullHeadRefs: 0 });
+    expect(summary.unknown).toEqual([]);
+    expect(t.log().at(-1)).toMatchObject({ event: "end", exit: 0, note: "dry run passed: nothing deleted" });
   });
 });
 
