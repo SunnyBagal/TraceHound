@@ -4145,6 +4145,20 @@ sha), `docs/runbooks/H2-scoring.md` (item 4; `ffb615b` citation), `docs/specs/P1
 counts `refs/pull/*`), `docs/specs/S1.md` (item 1), `docs/runbooks/W1-writeup.md` (item 5 limitation),
 `docs/runbooks/F1-freeze.md` (item 7 dates; `ffb615b` citation, row 17), `docs/plan/2026-11-11-plan-v2.md` §6a (item 7);
 codex `docs/eval/ts-protocol.md` (items 2–4, with grok's rev-8 fixes) and `docs/eval/tag-worktree.md` (opening sentence);
-bunny `tracehound-testset/scripts/open-prs.ts` (delete mode; item 5) and S1 through the scheduler (item 1); artu1 `.env`
+bunny `scripts/testset/delete-dev-branches.ts` (delete mode; item 5; corrected by addendum a, was `open-prs.ts`) and S1 through the scheduler (item 1); artu1 `.env`
 (item 8), `docs/decisions.md`, `.agents/STATE.md`, `.agents/LOG.md`.
 **Rejected:** per-tool exposed sets (a scorer change); hand-typed delete refspecs; option A (no spare day).
+**Addendum to 076e (2026-11-13, Sunny), items a–d:**
+a. **Dev branch deletion lives in `scripts/testset/delete-dev-branches.ts`**, not `open-prs.ts`, so `open-prs.ts`'s push
+   guard stays narrow. 076e's Touches line is corrected in place.
+b. **S1 starts from `scripts/testset/tools.s1.json`:** both tools on, re-triggers off, in the merged scheduler's schema, no
+   held-out details. S1's readings then write the real `tools.json` for P1.
+c. **Mac:** Sunny runs `caffeinate -is -t 280800` (78 h) from about 09:00 IST on the day of the scheduled T0. H1's preflight
+   checks that the assertion is held (`pmset -g assertions`) before the scheduler starts.
+d. **Firewall in tracehound-testset:** every agent except codex runs git only with explicit paths outside `heldout/`; no
+   bare `git status`, `git add` or `git diff`. Recorded in AGENTS.md "Blindness". Two incidents on 2026-11-13, each "names of
+   untracked files under `heldout/` shown; none opened": artu1 (one `git status --short`, 8 names) and bunny (one
+   `git status --short` at the start of its 076e task; count not in its report). W1 lists both as limitations.
+**Touches (addendum):** bunny `scripts/testset/delete-dev-branches.ts` (a), `scripts/testset/tools.s1.json` (b); Planner A
+`docs/specs/S1.md` (b), `docs/runbooks/H1-window.md` (c, preflight), `docs/runbooks/W1-writeup.md` (d, the two incidents);
+artu1 `AGENTS.md` (d), `docs/decisions.md`, `.agents/LOG.md`, `.agents/STATE.md`.
