@@ -1,7 +1,7 @@
 # Runbook H2: scoring the held-out window and the blind hand-check
 
 For codex (operator), Sunny (the hand-check, one sitting of 2–3 hours), artu1 (receives counts; lifts the firewall at
-the end). Planner A, 2026-11-11; brought to decision 076d on 2026-11-13. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md`
+the end). Planner A, 2026-11-11; brought to decision 076d and to decision 076e (item 4, the tag-worktree citation) on 2026-11-13. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md`
 §4, §10 (it wins over this runbook). Budget line: **H2, cap $0.40**. Starts after H1's snapshot is hashed.
 
 **Order fixed by decision 076a §13.7:** sheet hashed → unblind → score files hashed and committed → the firewall lifts.
@@ -9,7 +9,7 @@ Nothing in a later step may be seen before the earlier one is done.
 
 ```sh
 TH=~/Projects/th-h1; HO=~/Projects/tracehound-ho-window; S=$HO/score; mkdir -p $S
-export TH_MAIN=~/Projects/TraceHound TH_TAG=$TH      # names used by docs/eval/tag-worktree.md (codex, ffb615b)
+export TH_MAIN=~/Projects/TraceHound TH_TAG=$TH      # names used by docs/eval/tag-worktree.md (codex, 775c3d6)
 ledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | sed -n 's/^Total est. spend: \$\([0-9.]*\).*/\1/p'; }
 POLICY=$TH/scripts/testset/policy.076c.json      # the 076a choices plus registered_tests (two pairs, 0.05, floor 15)
 POLICY2=$TH/scripts/testset/policy.076a.json     # for the secondary rows only: no registered test, so no p-value
@@ -27,7 +27,8 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
    **The records are the frozen run (gap G8):** H1 §4's record check printed one line equal to the freeze, by codex and
    by grok. **No unlisted Bot login (gap G6):** H1 §6's count is zero, or Sunny's ruling on it is recorded. Otherwise stop.
    **The ledger H2 judges against is the main one (decision 076c item 9):** the verifier block of
-   `docs/eval/tag-worktree.md` (codex, `ffb615b`) exits 0 before the first judge process, with `samePhysicalLedger: true`
+   `docs/eval/tag-worktree.md` (codex, `775c3d6`, on `main` since merge `64a23a4`) exits 0 before the first judge
+   process, with `samePhysicalLedger: true`
    and equal totals. The worktree's ledger is the main checkout's file, so H1's spend is already in it; nothing is
    copied or merged (`F1-freeze.md` §4.2). No other paid process runs during §2 (076c item 1).
 1. Official TraceHound records: `mkdir $S/official`; per case copy `<id>.r2.json` where a rerun exists, else `<id>.json`,
@@ -43,7 +44,8 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
    **Registered pairs (decision 076c item 4): TraceHound vs CodeRabbit and TraceHound vs Greptile**, each an exact
    two-sided sign test at 0.05, uncorrected, exact p reported. CodeRabbit vs Greptile is counts only. A secondary row
    is never tested.
-5. **The exposed set (decision 076d item 1d and addendum e). codex makes it on the held-out side; only counts leave
+5. **The exposed set (decision 076d item 1d and addendum e; decision 076e item 4: one set for every tool, the union
+   over CodeRabbit's and Greptile's reviews, no scorer change). codex makes it on the held-out side; only counts leave
    `$HO`.** A bug case is *exposed for a review* if, when that review was made, the case's starting fix could be
    reached from a case branch on the same fork other than the case's own two (`git merge-base --is-ancestor <fix> <tip>`,
    the method of `run/out/grok.ancestry.md`). **Exposure is judged per review at its actual time, from the
