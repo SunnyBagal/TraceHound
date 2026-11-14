@@ -1,7 +1,8 @@
-// Explicit opt-in for decision 076g's report-only dev rows. Existing Action/primary factories do not use this module.
+// Explicit opt-in for decision 076g's report-only dev rows and decision 076k item 1's registered secondary held-out Haiku
+// row (scope registered-heldout-haiku, Haiku 5.5 only). Existing Action/primary factories do not use this module.
 import path from "node:path";
 import { z } from "zod";
-import { AnthropicClient, ANTHROPIC_MODELS, anthropicCapsFromEnv } from "./anthropic.ts";
+import { AnthropicClient, ANTHROPIC_MODELS, anthropicCapsFromEnv, HELDOUT_HAIKU_SCOPE } from "./anthropic.ts";
 import { Budget, capsFromEnv } from "./budget.ts";
 import { ResponseCache, cacheReadFromEnv } from "./cache.ts";
 import { TokenFactoryClient } from "./client.ts";
@@ -10,8 +11,14 @@ import { loadPriceTable, type PriceTable } from "./prices.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "../../../..");
 const NebiusConfig = z.object({ provider: z.literal("nebius").optional(), scope: z.literal("report-only-dev").optional() }).strict();
-const AnthropicConfig = z.object({ provider: z.literal("anthropic"), scope: z.literal("report-only-dev"), model: z.enum(ANTHROPIC_MODELS),
-  effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(), thinking: z.enum(["adaptive", "off"]).optional() }).strict();
+const rowSettings = { effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(), thinking: z.enum(["adaptive", "off"]).optional() };
+const AnthropicConfig = z.union([
+  z.object({ provider: z.literal("anthropic"), scope: z.literal("report-only-dev"), model: z.enum(ANTHROPIC_MODELS), ...rowSettings }).strict(),
+  // 076k items 1 and 3: the held-out row names its scope explicitly and is Haiku 5.5 only (no Sonnet, no dated id)
+  z.object({ provider: z.literal("anthropic"), scope: z.literal(HELDOUT_HAIKU_SCOPE), model: z.literal("claude-haiku-5-5"), ...rowSettings }).strict(),
+]);
+/** The accepted row shapes, for refusal messages. */
+export const ROW_CONFIG_SHAPE = `{provider: anthropic, scope: report-only-dev (a ruled model) | ${HELDOUT_HAIKU_SCOPE} (claude-haiku-5-5 only), model, effort?, thinking?}`;
 
 export type AnthropicRowConfig = z.infer<typeof AnthropicConfig>;
 
@@ -34,7 +41,7 @@ export function createDevReportClient(config: unknown = {}, opts: {
   const selected = config && typeof config === "object" ? (config as { provider?: unknown }).provider : null;
   if (selected === "anthropic") {
     const c = AnthropicConfig.safeParse(config);
-    if (!c.success) throw new Error("Anthropic config requires scope report-only-dev, a ruled model, and supported effort/thinking settings");
+    if (!c.success) throw new Error(`Anthropic config requires scope report-only-dev with a ruled model or scope ${HELDOUT_HAIKU_SCOPE} with claude-haiku-5-5, and supported effort/thinking settings`);
     if (c.data.thinking === "off" && ["xhigh", "max"].includes(c.data.effort ?? "")) throw new Error("Anthropic thinking off requires effort high or below");
     const caps = anthropicCapsFromEnv(env);
     const ledger = new SpendLedger(path.join(dir, "spend.anthropic.jsonl"));

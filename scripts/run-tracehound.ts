@@ -6,7 +6,7 @@
  *   node scripts/run-tracehound.ts --manifest <case manifest json> --clone <git dir> [--ids a,b] [--execute]
  *     [--out-dir runs/tracehound] [--max-usd-per-case 0.25] [--max-usd-run 2] [--cache off|read] [--fixes on|off]
  *     [--contracts on|off] [--rerun] [--post --repo SunnyBagal/<fork> --pr-map <json|resume jsonl>]
- *     [--gh-bin gh] [--git-bin git] [--provider-config <anthropic row json>]
+ *     [--gh-bin gh] [--git-bin git] [--provider-config <anthropic row json> [--draw 1|2]]
  *
  * Commits: base = manifest base_sha (branch cases/<id>-base), head = manifest case_head_sha (branch cases/<id>), the
  * pair open-prs.ts pushes and the fork PR shows. upstream head_sha must have the same tree as case_head_sha.
@@ -39,6 +39,15 @@
  * carry over the row's setting), and the CLIs refuse a row whose thinking conflicts with --reasoning. Dev manifests
  * only; --post, --fixes on and --contracts on are refused. Without the option nothing changes.
  *
+ * The registered secondary held-out Haiku row (decision 076k item 1, AGENTS.md exception (1)): a row config with scope
+ * registered-heldout-haiku (Haiku 5.5 only; Sonnet and dated ids are refused by the config schema) takes the same path
+ * and caps (the provider's own TRACEHOUND_BUDGET_ANTHROPIC_* env and ledger, never the Nebius caps), and also needs:
+ * --draw 1|2 (two draws; refused for any other row and without --provider-config, so A0's default path never takes it);
+ * a manifest outside cases/dev/; an --out-dir with exactly one path segment draw-<n> equal to --draw, holding no record
+ * of another draw or row; and at most one rerun per draw: --rerun only for ids whose first record is failed or cap,
+ * never when <id>.r2.json exists (a case that fails twice is a miss). Records carry scope, row and draw under
+ * settings.provider. --post, --fixes on and --contracts on stay refused.
+ *
  * Exit codes: 0 every case ok, 1 a case failed or hit its cap (each has its file), 2 refused (bad input or a safety
  * check failed; nothing was spent), 3 stopped before a case by --max-usd-run.
  * Node >= 24 type stripping: erasable TypeScript only, no new dependencies.
@@ -58,8 +67,8 @@ import { runContracts as actionRunContracts, selectContracts, type ContractsResu
 import { ledgerMark, ledgerSince, recordingClient, UsageRecorder, type StageUsage } from "../packages/action/src/usage.ts";
 import { BudgetExceededError, capsFromEnv, type BudgetCaps } from "../packages/analyzer/src/llm/budget.ts";
 import { SpendLedger } from "../packages/analyzer/src/llm/ledger.ts";
-import { ANTHROPIC_CAP_NAMES, anthropicCapsFromEnv } from "../packages/analyzer/src/llm/anthropic.ts";
-import { parseAnthropicRowConfig, type AnthropicRowConfig } from "../packages/analyzer/src/llm/provider.ts";
+import { ANTHROPIC_CAP_NAMES, anthropicCapsFromEnv, HELDOUT_HAIKU_SCOPE, scopeLabel } from "../packages/analyzer/src/llm/anthropic.ts";
+import { parseAnthropicRowConfig, ROW_CONFIG_SHAPE, type AnthropicRowConfig } from "../packages/analyzer/src/llm/provider.ts";
 import { REVIEW_PROMPT_SHA256 } from "../packages/analyzer/src/review/review.ts";
 import { REVIEW_CTX_PROMPT_SHA256 } from "../packages/analyzer/src/review/review-ctx.ts";
 import { VERIFY_CTX_PROMPT_SHA256 } from "../packages/analyzer/src/review/verify-ctx.ts";
@@ -101,6 +110,8 @@ export type Opts = {
   rerun: boolean; post: boolean; fork: string | null; prMap: string | null; ghBin: string; gitBin: string;
   /** report-only dev Claude row (--provider-config): the file and its parsed config; null = the Nebius default */
   providerConfig: string | null; provider: AnthropicRowConfig | null;
+  /** the registered held-out Haiku row's draw (--draw); null for every other run */
+  draw: 1 | 2 | null;
 };
 type Proc = { status: number | null; stdout: string; stderr: string };
 
@@ -157,7 +168,7 @@ export function parseCli(argv: string[]): Opts {
         contracts: { type: "string", default: ACTION_DEFAULTS.contracts }, rerun: { type: "boolean", default: false },
         post: { type: "boolean", default: false }, repo: { type: "string" }, "pr-map": { type: "string" },
         "gh-bin": { type: "string", default: "gh" }, "git-bin": { type: "string", default: "git" },
-        "provider-config": { type: "string" },
+        "provider-config": { type: "string" }, draw: { type: "string" },
       },
     }));
   } catch (e) {
@@ -194,22 +205,60 @@ export function parseCli(argv: string[]): Opts {
     let raw: unknown;
     try { raw = JSON.parse(fs.readFileSync(providerConfig, "utf8")); } catch { refuse("--provider-config is not a readable JSON file"); }
     provider = parseAnthropicRowConfig(raw);
-    if (!provider) refuse("--provider-config must be {provider: anthropic, scope: report-only-dev, model, effort?, thinking?} with a ruled model");
-    // decision 076g item 4: report-only rows on dev only; never posted, no fix or contract model
+    if (!provider) refuse(`--provider-config must be ${ROW_CONFIG_SHAPE}`);
+    // decision 076g item 4: report-only rows; never posted, no fix or contract model (076k item 1: the held-out row too)
     if (values.post) refuse("--provider-config rows are report-only: --post is refused");
     if (values.fixes !== "off" || values.contracts !== "off") refuse("--provider-config needs --fixes off --contracts off");
-    const manifest = path.resolve(values.manifest);
-    const paths = [manifest, path.resolve(values.clone), path.resolve(ROOT, values["out-dir"]), providerConfig];
+  }
+  const manifestPath = path.resolve(values.manifest);
+  const outDir = path.resolve(ROOT, values["out-dir"]);
+  const underDev = manifestPath.includes(`${path.sep}cases${path.sep}dev${path.sep}`);
+  let draw: 1 | 2 | null = null;
+  if (provider?.scope === HELDOUT_HAIKU_SCOPE) {
+    // decision 076k item 1: two draws, each in its own directory; held-out cases only (dev rows use report-only-dev)
+    if (values.draw !== "1" && values.draw !== "2") refuse("the registered held-out Haiku row needs --draw 1 or --draw 2 (076k item 1: two draws)");
+    draw = values.draw === "1" ? 1 : 2;
+    if (underDev) refuse(`scope ${HELDOUT_HAIKU_SCOPE} is the held-out row: a cases/dev/ manifest was given (dev rows use scope report-only-dev)`);
+    const segs = outDir.split(path.sep).filter((s) => /^draw-/i.test(s));
+    if (segs.length !== 1 || segs[0] !== `draw-${draw}`) refuse(`--out-dir must contain exactly one path segment draw-${draw} for --draw ${draw} (each draw writes to its own directory)`);
+    checkDrawDir(outDir, draw);
+  } else if (values.draw !== undefined) {
+    refuse(`--draw is only for the registered held-out Haiku row (--provider-config with scope ${HELDOUT_HAIKU_SCOPE})`);
+  } else if (provider) {
+    const paths = [manifestPath, path.resolve(values.clone), outDir, providerConfig!];
     if (paths.some((x) => /held-?out/i.test(x))) refuse("--provider-config rows are dev only: a held-out path was given");
-    if (!manifest.includes(`${path.sep}cases${path.sep}dev${path.sep}`)) refuse("--provider-config rows are dev only: the manifest must be under cases/dev/");
+    if (!underDev) refuse("--provider-config rows are dev only: the manifest must be under cases/dev/");
   }
   return {
-    manifest: path.resolve(values.manifest), clone: path.resolve(values.clone), ids, execute: values.execute,
-    outDir: path.resolve(ROOT, values["out-dir"]), maxUsdPerCase, maxUsdRun, cache: values.cache, fixes: values.fixes,
+    manifest: manifestPath, clone: path.resolve(values.clone), ids, execute: values.execute,
+    outDir, maxUsdPerCase, maxUsdRun, cache: values.cache, fixes: values.fixes,
     contracts: values.contracts, rerun: values.rerun, post: values.post, fork,
     prMap: values["pr-map"] ? path.resolve(values["pr-map"]) : null, ghBin: values["gh-bin"], gitBin: values["git-bin"],
-    providerConfig, provider,
+    providerConfig, provider, draw,
   };
+}
+
+/** The held-out Haiku row: every record already in the draw's directory must be this row's, same draw (076k item 1). */
+export function checkDrawDir(dir: string, draw: 1 | 2): void {
+  if (!fs.existsSync(dir)) return;
+  for (const name of fs.readdirSync(dir).filter((n) => n.endsWith(".json")).sort()) {
+    let rec: { settings?: { provider?: { scope?: unknown; draw?: unknown } } } | null = null;
+    try { rec = JSON.parse(fs.readFileSync(path.join(dir, name), "utf8")); } catch { /* checked below */ }
+    const p = rec?.settings?.provider;
+    if (p?.scope !== HELDOUT_HAIKU_SCOPE || p.draw !== draw) refuse(`--out-dir ${dir} holds ${name}, which is not a draw ${draw} record of the registered held-out Haiku row`);
+  }
+}
+
+/** The held-out Haiku row: one rerun per draw, for failed or capped cases only (076k item 1; R1 §2 step 4). */
+export function checkDrawReruns(dir: string, ids: string[], rerun: boolean): void {
+  for (const id of ids) {
+    if (fs.existsSync(path.join(dir, `${id}.r2.json`))) refuse(`${id}: ${id}.r2.json exists; one rerun per draw, a case that fails twice is a miss (076k item 1)`);
+    const first = path.join(dir, `${id}.json`);
+    if (!rerun || !fs.existsSync(first)) continue; // without --rerun an existing first record refuses in outPath
+    let status: unknown;
+    try { status = JSON.parse(fs.readFileSync(first, "utf8")).status; } catch { /* refused below */ }
+    if (status !== "failed" && status !== "cap") refuse(`${id}: --rerun is only for failed or capped cases (${id}.json status ${JSON.stringify(status ?? null)})`);
+  }
 }
 
 export function loadCases(file: string, ids: string[] | null): { repo: string; cases: Case[] } {
@@ -451,9 +500,10 @@ export function runLedgerFile(o: Pick<Opts, "provider">, deps: Pick<RunnerDeps, 
 }
 
 /** What a Claude row records beside the model: every setting that differs from Nemotron's, with its reason. */
-export function providerSettings(p: AnthropicRowConfig): Record<string, string> {
+export function providerSettings(p: AnthropicRowConfig, draw: 1 | 2 | null = null): Record<string, string | number> {
   return {
     provider: "anthropic", scope: p.scope, model: p.model, ledger: "spend.anthropic.jsonl",
+    ...(p.scope === HELDOUT_HAIKU_SCOPE && { row: "registered secondary held-out Haiku 5.5 (decision 076k item 1)", draw: draw! }),
     sampling: "default: temperature is not sent (Nemotron runs at 0; a non-default value is a 400 on both models)",
     thinking: p.thinking === "off"
       ? `off (stages run with --reasoning off; sent as ${p.model === "claude-haiku-5-5" ? "disabled" : "between_tools"})`
@@ -555,7 +605,7 @@ async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, for
     settings: { model: o.provider?.model ?? ACTION_DEFAULTS.model, fixModel: FIX_MODEL, maxComments: ACTION_DEFAULTS.maxComments,
       fixes: o.fixes, contracts: o.contracts, learn: ACTION_DEFAULTS.learn, cache: o.cache,
       maxUsdPerCase: o.maxUsdPerCase, maxUsdRun: o.maxUsdRun, caps,
-      ...(o.provider && { provider: providerSettings(o.provider) }) },
+      ...(o.provider && { provider: providerSettings(o.provider, o.draw) }) },
     diff: { files: p.diffFiles, chars: p.diffChars, sha256: sha256(p.diff!) },
     // neutral review format (decision 054): what the Action would post, in order
     pr_title: c.title, ...(p.prNumber !== null && { pr_number: p.prNumber }),
@@ -704,9 +754,10 @@ export async function main(argv: string[], deps: RunnerDeps = defaultDeps()): Pr
     const prMap = o.prMap ? loadPrMap(o.prMap, o.fork) : null;
     if (o.post) for (const c of cases) if (!prMap!.has(c.id)) refuse(`--pr-map has no PR for ${c.id}`);
     const git = makeGit(o.gitBin, o.clone, deps.env);
+    if (o.draw !== null) checkDrawReruns(o.outDir, cases.map((c) => c.id), o.rerun);
     const plans = cases.map((c) => planCase(git, c, o, prMap));
     log(`${o.execute ? "EXECUTE" : "DRY RUN (no model call, no gh call; add --execute to run)"}: ${cases.length} ${repo} case(s), clone ${o.clone}`);
-    if (o.provider) log(`provider row: anthropic ${o.provider.model} (report-only dev; ${Object.entries(providerSettings(o.provider)).filter(([k]) => ["sampling", "thinking", "effort"].includes(k)).map(([k, v]) => `${k} ${v}`).join("; ")}); caps and usage from spend.anthropic.jsonl and ${ANTHROPIC_CAP_NAMES.total}`);
+    if (o.provider) log(`provider row: anthropic ${o.provider.model} (${scopeLabel(o.provider.scope)}${o.draw ? `, draw ${o.draw}` : ""}; ${Object.entries(providerSettings(o.provider, o.draw)).filter(([k]) => ["sampling", "thinking", "effort"].includes(k)).map(([k, v]) => `${k} ${v}`).join("; ")}); caps and usage from spend.anthropic.jsonl and ${ANTHROPIC_CAP_NAMES.total}`);
     log(`reviewer ${ACTION_DEFAULTS.reviewer} · model ${o.provider?.model ?? ACTION_DEFAULTS.model} · fix model ${FIX_MODEL} · fixes ${o.fixes} · contracts ${o.contracts} · learn off · max-comments ${ACTION_DEFAULTS.maxComments} · cache ${o.cache === "off" ? "off (reads off, writes on)" : "read"}`);
     log(`caps: per case $${o.maxUsdPerCase} (each reviewer $${o.maxUsdPerCase / 2}, they run in parallel), per run $${o.maxUsdRun} (at most ${Math.floor(o.maxUsdRun / o.maxUsdPerCase + 1e-9)} case(s) at the full per-case cap)`);
     log(`allowance min(per-case cap, global total cap − ledger) is computed per case on --execute; minimum $${MIN_CASE_USD}; the reviewers split it`);
