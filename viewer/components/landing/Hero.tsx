@@ -136,8 +136,8 @@ export function Hero() {
     <section ref={ref} className="hero" data-testid="hero" aria-labelledby="hero-title">
       <div className="hero-copy hero-reveal-text">
         <h1 id="hero-title" className="hero-title">
-          Understand your code.{" "}
-          <em>Fix what breaks.</em>
+          Agents write the code.{" "}
+          <em>We catch what breaks.</em>
         </h1>
         <p className="hero-line" data-testid="hero-line">
           An evidence-backed graph of your repo&apos;s architecture, and a pull-request reviewer on NVIDIA Nemotron through Nebius Token Factory.
