@@ -4326,3 +4326,26 @@ paired table and agreement).
 10. R1's official Nebius reading ($16.46, baaba5d) is recorded as passing the rule as written (0.93), with the finding beside it: without the $0.57 charged for requests that never reached Nebius, the ratio is 1.16 (1.14 from the $19.00 reading), so the ledger runs about 15% low on real calls. Before the F1 dry run, Terry derives the implied per-token price for each model the ledger charged to Nebius (Super and the 076j judge) from the console readings and the ledger's token counts. Sunny reads Nebius's listed prices. If config/prices.json is wrong, Terry fixes it (Amy GOs), and a correction row re-prices R1 and 076j without rewriting history; the recomputed ratio must land between 0.95 and 1.08 before the tag. If the cause isn't found by Sun 15 Nov 23:00 IST, Holt brings it to Sunny before F1; the 1.08 stop is not changed in advance. Touches: config/prices.json, budget.md, F1 row 10.
 
 **Touches (all items):** artu1 this file, `AGENTS.md` (exception 1), `docs/budget.md` (Anthropic held-out line, Greptile line, ratio finding), `.agents/STATE.md`; codex `docs/eval/ts-protocol.md` rev 12; Planner A H1 §4 and §6-adjacent tag timing, H2 §1, the handover (§3, §4), F1 §3 and rows 1 and 10, E1 (§2), R1 §7, W1; bunny `config/prices.json` (item 10); decision 078 (when drafted); the brain (item 9).
+
+## 076l — CodeRabbit's "Review skipped" notice is a not-completion pattern (2026-11-14)
+
+**Status: ruled by Sunny (14 Nov).** Add CodeRabbit's "Review skipped: Auto reviews are disabled" notice to its not-completion
+list in `scripts/testset/tools.json` before the patterns freeze.
+- The match runs on the comment's current body at reading time. A notice later edited into a real summary is a completion.
+  A notice still unedited at the reading is not-completion and is eligible for re-trigger.
+- Test before the GO, on all 9 P1 PRs so far: the pattern matches the saved first wording
+  (`not-completion/coderabbit.review-skipped.1.txt`) and none of the 9 current comment bodies. The 9 results are reported.
+- Config change, so codex (Amy) gives the GO naming the sha; grok (Rosa) does not pass it. The running scheduler is not
+  restarted or signalled.
+- P1, by hand: before the collection closes, check that every CodeRabbit "review skipped" comment on the 38 PRs was edited
+  into a real review; any that weren't are listed as not-completion.
+- The lost 5/15/30-minute readings for slots 1–8 are logged; they are taken on time from slot 9.
+- **Operator note (artu1, 076g item 8):** the running scheduler pins `scripts/testset/tools.json` by sha256 in
+  `~/Projects/tracehound-runs/dev/p1/pins.json` and stops before its next slot if any pinned file changes
+  (`window-scheduler.ts:61`). So the GO'd change is merged into the main checkout only after P1's collection closes; until
+  then no merge may touch a pinned file (`window-scheduler.ts`, `kit.ts`, `collect-tool-reviews.ts`, `tools.json`, the
+  testset's `open-prs.ts` and dev manifest). The scheduler's own re-trigger checks run on the old patterns; the hand check
+  above covers the gap.
+
+**Touches:** bunny `scripts/testset/tools.json` and the not-completion test fixture; codex GO; Planner A H1 (re-trigger
+detection) and F1 (patterns row); artu1 this file, LOG.
