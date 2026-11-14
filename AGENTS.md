@@ -28,6 +28,19 @@ reading is open except where the firewall says otherwise.
 | `docs/bench/ts-heldout.*`, `docs/bench/ts-freeze.md` | codex (held-out side), artu1 (freeze file) | — |
 | money: any paid call | only artu1 approves; never delegated | — |
 
+### Pane names (Sunny, 2026-11-14)
+Display names only. Every file, brief, claim, report path, ruling and brain note keeps using the internal id.
+
+| pane name | internal id |
+|---|---|
+| Holt | artu1 |
+| Terry | bunny |
+| Amy | codex |
+| Rosa | grok |
+| Jake | devin (joins when its quota resets; no lane yet) |
+| Boyle | Planner A |
+| Kevin | Planner B |
+
 A planner writes documents and never executes; a worker writes only the paths its brief lists; nobody commits in another
 lane's checkout; a file with no row belongs to artu1 until a row is added. Exceptions are one dated line here (who, which
 file, which lines, until when). Never force-push or rewrite history.
