@@ -1,0 +1,18 @@
+{
+ "v": 1,
+ "tools": {
+  "coderabbit": {
+   "logins": ["coderabbitai[bot]"],
+   "notCompletion": [
+    "Review rate limited\\.",
+    "You've used all free OSS reviews for now\\. Wait for the free limit to reset to keep reviewing this public repository\\.",
+    "Currently processing new changes in this PR\\. This may take a few minutes, please wait\\.\\.\\.",
+    "Full review triggered\\."
+   ]
+  },
+  "greptile": {
+   "logins": ["greptile-apps[bot]"],
+   "notCompletion": []
+  }
+ }
+}
