@@ -23,7 +23,10 @@ const BASE: Record<string, string> = {
   ].join("\n"),
   "core/src/invoice.ts": ['import { priceOf } from "./pricing.ts";', "export function total(qty: number): number {", "  return priceOf(qty) + 99;", "}", ""].join("\n"),
   "core/src/pricing.test.ts": ['import { priceOf } from "./pricing.ts";', "priceOf(1);", ""].join("\n"),
+  "core/src/index.ts": 'export * from "./pricing.ts";\n',
   "web/package.json": JSON.stringify({ name: "web" }),
+  // imports the other package by name: no node_modules, resolved through the workspace alias
+  "web/src/badge.ts": ['import { priceOf } from "core";', "export const badge = (qty: number) => (priceOf(qty) > 1000 ? \"big\" : \"small\");", ""].join("\n"),
   "web/src/cart.ts": ['import { priceOf, label } from "../../core/src/pricing.ts";', "export const cartLine = (qty: number) => `${label(qty)}: ${priceOf(qty)} cents`;", ""].join("\n"),
   "README.md": "shop\n",
 };
@@ -58,12 +61,13 @@ describe("affected set", () => {
     const report = computeAffected({ repo, diff: `${base}..${head}` });
     expect(report.declarations.map((d) => d.id)).toEqual(["core/src/pricing.ts#priceOf"]);
     const decl = report.declarations[0]!;
-    expect(decl).toMatchObject({ status: "resolved", exported: true, changedLines: [2], referencesTotal: 3, referencesOutsideDiff: 3, referenceFiles: 3 });
+    expect(decl).toMatchObject({ status: "resolved", exported: true, changedLines: [2], referencesTotal: 4, referencesOutsideDiff: 4, referenceFiles: 4 });
     // non-test references first; the import lines are not references
-    expect(decl.references.map((r) => `${r.file}:${r.line}`)).toEqual(["core/src/invoice.ts:3", "web/src/cart.ts:2", "core/src/pricing.test.ts:2"]);
+    expect(decl.references.map((r) => `${r.file}:${r.line}`)).toEqual(["core/src/invoice.ts:3", "web/src/badge.ts:2", "web/src/cart.ts:2", "core/src/pricing.test.ts:2"]);
     expect(decl.references[0]).toMatchObject({ enclosing: "core/src/invoice.ts#total", text: "return priceOf(qty) + 99;", inDiff: false, test: false });
-    expect(decl.references[2]!.test).toBe(true);
-    expect(report.counts).toMatchObject({ declarations: 1, resolved: 1, skippedBudget: 0, referencesTotal: 3, referencesShown: 3 });
+    expect(decl.references[3]!.test).toBe(true);
+    expect(report.workspaceAliases).toBe(1); // core has src/index.ts; web has no entry file
+    expect(report.counts).toMatchObject({ declarations: 1, resolved: 1, skippedBudget: 0, compilerError: 0, referencesTotal: 4, referencesShown: 4 });
   });
 
   it("names changed files it did not analyze, and declarations it did not reach in the budget", () => {
@@ -80,8 +84,8 @@ describe("affected set", () => {
   it("counts references over the limit instead of dropping them", () => {
     const report = computeAffected({ repo, diff: `${base}..${head}`, maxRefs: 1 });
     expect(report.declarations[0]!.references).toHaveLength(1);
-    expect(report.declarations[0]!.referencesTotal).toBe(3);
-    expect(formatAffected(report)).toContain("(2 more not shown)");
+    expect(report.declarations[0]!.referencesTotal).toBe(4);
+    expect(formatAffected(report)).toContain("(3 more not shown)");
   });
 
   it("refuses a working tree that is not the diff's head", () => {
