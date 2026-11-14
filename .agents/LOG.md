@@ -264,3 +264,7 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   rule, P1 opens per slot. `ANTHROPIC_API_KEY` present (not printed). **P1 started**: detached scheduler pid 31492, t0
   07:47:00Z; slot 0 opened + triggered by 07:47:15Z, exit 0; last first trigger 16 Nov 02:54 IST, close 17 Nov 02:54 IST.
   Mac on battery at start. Brain `3509656`. $0.
+- **R1 batch 1 (bunny, 2026-11-14 08:01–08:07Z):** stopped for Sunny's console reading (076g item 7). 2 ok, 6 failed (rerun
+  after the last batch). Ledger $0.62372, of which $0.57054 is the client's upper-bound charge for 17 requests that failed in
+  a local network outage (~08:04–08:07:31Z: 15 DNS ENOTFOUND, 1 connect timeout, 1 read timeout); reported usage $0.05318.
+  P1's scheduler unaffected (no slot in that window; slot 1 due 08:48Z; pid alive; network back by 08:11Z). Mac on AC power.
