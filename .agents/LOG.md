@@ -255,3 +255,7 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
 - **2026-11-14:** Sunny's correction: CodeRabbit and Greptile covered the TraceHound repo only until 14 Nov (time not
   given), so S1's PRs got no bot activity; both now set to the four forks only. live-setup §2.2 corrected. **S1's bot
   readings are being re-taken by re-trigger; P1 stays on hold until bunny reports both bots reviewing.**
+- **Then (2026-11-14, ~13:00–14:00 IST):** 076h recorded (`570fc9b`). codex GO `84a4aa5` → tools.json merged `fc6ae11`
+  (gates: action 399, analyzer 1027 + 6 skipped, viewer 215, typecheck clean). codex's summary check: **NO**, summary text is
+  completion-only by 076c item 2. grok NO-GO on `pa-076g` (E1 coverage clause vs 076g item 6). P1 held; inputs staged in
+  `tracehound-runs/dev/p1/`. codex was blocked on a permission prompt once (pane not read). $0.
