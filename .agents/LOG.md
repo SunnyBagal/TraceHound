@@ -259,3 +259,8 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   (gates: action 399, analyzer 1027 + 6 skipped, viewer 215, typecheck clean). codex's summary check: **NO**, summary text is
   completion-only by 076c item 2. grok NO-GO on `pa-076g` (E1 coverage clause vs 076g item 6). P1 held; inputs staged in
   `tracehound-runs/dev/p1/`. codex was blocked on a permission prompt once (pane not read). $0.
+- **Then (2026-11-14, 13:00–13:30 IST):** 076i recorded (`c9c7320`): S1 ratio 0.86 (ledger $0.0348, console −$0.03), R1
+  approved ($4.68, stop after batch 1), Greptile expiry 27 Nov, CodeRabbit auto review off, scoring inline-only, E1 coverage
+  rule, P1 opens per slot. `ANTHROPIC_API_KEY` present (not printed). **P1 started**: detached scheduler pid 31492, t0
+  07:47:00Z; slot 0 opened + triggered by 07:47:15Z, exit 0; last first trigger 16 Nov 02:54 IST, close 17 Nov 02:54 IST.
+  Mac on battery at start. Brain `3509656`. $0.
