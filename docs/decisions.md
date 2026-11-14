@@ -4256,7 +4256,7 @@ codex `docs/eval/ts-protocol.md` (3, in revision 10).
 
 **Status: ruled by Sunny.** Readings (Sunny, 14 Nov): Nebius console $19.10 at 12:55 IST (baseline $19.13); Greptile 100
 credits expiring 27 Nov (after every hand-check date); `ANTHROPIC_API_KEY` in `.env` (artu1 checked presence only); CodeRabbit
-Automatic review turned off in its dashboard (time not given).
+Automatic review turned off in its dashboard on 13 Nov, before the forks were added (Sunny's correction, 14 Nov).
 - **S1 ratio:** console drop $0.03 ÷ ledger $0.0348 (2 review calls, 2026-11-13T15:12–15:13Z) = **0.86 ≤ 1.08** (weak: the
   console shows cents). **R1 approved** (Sunny), cap $4.68, stopping after batch 1 for Sunny's next console reading (076g
   item 7). **Greptile runs in P1** (expiry 27 Nov is after the hand-check).

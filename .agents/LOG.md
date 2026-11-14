@@ -268,3 +268,6 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   after the last batch). Ledger $0.62372, of which $0.57054 is the client's upper-bound charge for 17 requests that failed in
   a local network outage (~08:04–08:07:31Z: 15 DNS ENOTFOUND, 1 connect timeout, 1 read timeout); reported usage $0.05318.
   P1's scheduler unaffected (no slot in that window; slot 1 due 08:48Z; pid alive; network back by 08:11Z). Mac on AC power.
+- **Mac power (2026-11-14):** P1's scheduler started on battery (boot 07:39:46Z, slot 0 at 07:47Z); Sunny plugged in at a
+  time not given; artu1 read AC power at 08:11:45Z. So the battery gap was at most 32 minutes, with slot 0 done on battery
+  and no slot missed (slot 1 due 08:48Z). CodeRabbit auto review: off since 13 Nov, before the forks were added (Sunny).
