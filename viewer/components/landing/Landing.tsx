@@ -30,6 +30,7 @@ import { Hero } from "./Hero";
 import { FeatureTabs } from "./FeatureTabs";
 import { FEATURES } from "./features";
 import { Pipeline } from "./Pipeline";
+import { Pricing } from "./Pricing";
 import { GRAPH_BEATS, RepoToGraph, RepoToGraphWide } from "./RepoToGraph";
 import { RoadmapFlow } from "./RoadmapFlow";
 import { RunsOn } from "./RunsOn";
@@ -75,6 +76,7 @@ const NAV = [
   { label: "How it works", href: "#how-it-works" },
   { label: "Agents", href: "#agents" },
   { label: "Roadmap", href: "#roadmap" },
+  { label: "Pricing", href: "#pricing" },
 ] as const;
 
 const focusInk = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
@@ -384,6 +386,7 @@ export function Landing() {
         </div>
       </section>
 
+      <Pricing />
       <footer className="border-t border-hairline">
         <div className="lp-col flex flex-wrap items-center justify-between gap-4 py-8 text-[14px] text-muted">
           <span className="inline-flex items-center gap-2 text-text">TraceHound <span className="text-faint">· graph + reviewer on NVIDIA Nemotron</span></span>
