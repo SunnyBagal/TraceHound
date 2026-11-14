@@ -5,7 +5,8 @@ read the operator's pane; they get `run/out/codex.ho-run.md` (counts and spend o
 lifts, artu1 and bunny also make no `gh` or browser read of pulls, issues or notifications on the four forks**
 (decision 076c item 12; `AGENTS.md` "Blindness"): the forks are public, and every tool comment on a held-out PR is
 there. Planner A, 2026-11-11; brought to decision 076c on 2026-11-12, to decision 076d on 2026-11-13, to decision
-076e with its addendum on 2026-11-13 and to decision 076g (items 1, 2, 9, 10) on 2026-11-13.
+076e with its addendum on 2026-11-13, to decision 076g (items 1, 2, 9, 10) on 2026-11-13 and to decision 076h
+(item 3) on 2026-11-14.
 Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md` §3, §7–§9 (it wins over this
 runbook; report any difference). Budget line: **H1**, cap from decision 077 ($3.15 until then); unstarted cases at the
 cap run from the reserve (decision 076a "Caps" item 4).
@@ -49,6 +50,10 @@ collector's verdict under that definition (`collectCase` in `scripts/testset/col
   four command timeouts of §3; the push order by the committer date of the base commit, ties by case id. They are
   rulings, frozen in the protocol (`docs/eval/ts-protocol.md` §7), and nobody changes them at run time.
 - **Auto-review (item 6)** is counted at the snapshot (§5 failure 2).
+- **Slots of 61 minutes (decision 076h item 3, 14 Nov 2026; it amends two of 076e item 2's values).** `slotSeconds` and
+  `minTriggerSpacingSeconds` are both **3660**, not 3600. CodeRabbit allows 1 review per hour (S1's reading), and at
+  3600 two of its posts were only 3,600.7 s apart in S1. The last slot is at scheduled T0 + 64:03, and the last
+  possible re-trigger is 7 h 57 min before the snapshot. §3.
 - **The machine (addendum c).** Sunny runs `caffeinate -is -t 280800` (78 hours) from about 09:00 IST on the day of
   the scheduled T0; §2 checks that the assertion is held before the scheduler starts (§1 item 12).
 
@@ -71,12 +76,12 @@ case id without it, and no tuning agent ever passes it (`guardSide` in `scripts/
   it once, at the first visit after the PR exists (`gh api --method GET repos/<fork>/pulls/<n> --jq .created_at`; the
   number is in the `pr-created` record of the fork's resume file), and writes it into `$HO/job.md`.
 - **The scheduled T0 is the `t0` field of `$HO/plan.json`:** the planned instant of slot 0, fixed in decision 078 and
-  written into the plan file **before** the run. Every slot time is scheduled T0 + k × 3600 s, computed from that one
+  written into the plan file **before** the run. Every slot time is scheduled T0 + k × 3660 s, computed from that one
   value (`slotTime`). The scheduler knows no other clock.
 - **The snapshot is at T0 + 72 h, not at scheduled T0 + 72 h.** When slot 0 works, the two clocks differ by the
   seconds it takes to push two branches and open a PR. If slot 0 fails or is missed before the PR opens, they differ
   by an hour or more (failure 16). Both times and their difference go into `$HO/job.md` and the report (§7).
-- In this runbook every time before §6 ("T0 − 0:30", "T0 + 28:00", a slot's hour) is on the **scheduled** grid.
+- In this runbook every time before §6 ("T0 − 0:30", "T0 + 28:28", a slot's time) is on the **scheduled** grid.
   §6's window start and end are the actual T0 and T0 + 72 h.
 
 The scheduler's own log is `$HO/sched/scheduler.log.jsonl`. The operator also keeps `$HO/window.log`: one line per
@@ -126,7 +131,7 @@ order (a rebased or back-dated commit breaks it), which is why §1 item 3 has gr
 4. **The scheduler (decision 076d item 3).** `scripts/testset/window-scheduler.ts` in `$TH` has the sha256 recorded in
    `ts-freeze.md`. Write `$HO/plan.json` (§3 gives every value; `t0` is the scheduled T0 of decision 078), then:
    - `sched --list` exits 0 and prints 64 slots with their UTC times: 29 first-trigger slots, re-trigger checks from
-     slot 29, last slot 63, "dry run plan check passed"; the same with `--execute` prints "EXECUTE plan check passed"
+     slot 29, last slot 63 at scheduled T0 + 64:03, "dry run plan check passed"; the same with `--execute` prints "EXECUTE plan check passed"
      (`readPlan` applies the floors of `EXECUTE_MIN` and the grace maximum only then). Slot 0's time equals the
      scheduled T0.
    - `sched --print-pins > $HO/pins.json`: the sha256 of the scheduler, both `kit.ts`, `open-prs.ts`, the collector,
@@ -138,9 +143,9 @@ order (a rebased or back-dated commit breaks it), which is why §1 item 3 has gr
    after the hand-check sitting (decision 076g item 2). Otherwise stop. This is Sunny's **last** look
    at any vendor dashboard or fork PR page until his filled sheet is hashed (`F1-freeze.md` §1 row 13, gap G2).
    CodeRabbit (decision 076b item 3): P1's report says the hourly rate at P1's end was not below the rate at its start,
-   **or** T0 is at least 7 days after P1's last review. Otherwise stop. P1's slowest completed review took under 8 hours
-   (P1 report item 2, "maximum minutes to outcome"; S1's for Greptile): the last re-trigger slot is 9 hours before the
-   snapshot (§3). If one took longer, tell Sunny before T0.
+   **or** T0 is at least 7 days after P1's last review. Otherwise stop. P1's slowest completed review took under 7 hours
+   (P1 report item 2, "maximum minutes to outcome"): the last re-trigger slot is 7 h 57 min before the snapshot (§3).
+   If one took longer, tell Sunny before T0.
 7. `for f in medusa twenty payload bullmq; do gh api repos/SunnyBagal/$f/actions/permissions; done` → four `"enabled":false`.
 8. `gh auth status` shows the SunnyBagal **user** (`open-prs.ts` requires it for triggers; see its header).
 9. Dry runs again from `$TH`: the runner per repository (F1 §4.4), and `open-prs.ts` without `--execute` for the case
@@ -183,31 +188,30 @@ sched --status | jq '{t0, execute, side, boots, missed, stopped}'
   `$HO/job.md`. T0 itself (the first PR's `created_at`) is added at the first visit after slot 0 ("Two clocks").
 - The operator's session may end now. Everything in §3 happens without it.
 
-## 3. Scheduled T0 to scheduled T0 + 63:00: pushes, PRs and triggers, one slot per hour
+## 3. Scheduled T0 to scheduled T0 + 64:03: pushes, PRs and triggers, one slot every 61 minutes
 **The plan file** (`$HO/plan.json`; every field is required, `readPlan`):
 ```json
-{ "v": 1, "t0": "<scheduled T0, UTC, from decision 078>", "slotSeconds": 3600, "firstSlot": 0, "retriggerFromSlot": 29, "lastSlot": 63,
-  "retriggerDueSeconds": 86400, "graceSeconds": 1800, "minTriggerSpacingSeconds": 3600, "firstTriggerAttempts": 2,
+{ "v": 1, "t0": "<scheduled T0, UTC, from decision 078>", "slotSeconds": 3660, "firstSlot": 0, "retriggerFromSlot": 29, "lastSlot": 63,
+  "retriggerDueSeconds": 86400, "graceSeconds": 1800, "minTriggerSpacingSeconds": 3660, "firstTriggerAttempts": 2,
   "timeoutSeconds": { "open": 600, "trigger": 300, "collect": 300, "retrigger": 300 } }
 ```
-- `slotSeconds`, `minTriggerSpacingSeconds` 3600: one slot per hour and at least an hour between two triggers of one
-  tool on two PRs (CodeRabbit is planned at 1 review per hour; U11: the schedule stays 1 per hour even if P1 measured
-  more). `retriggerDueSeconds` 86400: 076c item 3. **These three are the floors of `--execute`** (`EXECUTE_MIN`):
-  `readPlan` refuses a lower value.
+- `slotSeconds`, `minTriggerSpacingSeconds` **3660** (decision 076h item 3; 076e item 2 had 3600): one slot
+  every 61 minutes, and at least 61 minutes from the end of one trigger command to the start of the next one for the
+  same tool on another PR. CodeRabbit allows 1 review per hour (S1's reading, 14 Nov), and a post lies inside its
+  command, so two CodeRabbit posts are at least 3,660 s apart. `retriggerDueSeconds` 86400: 076c item 3. **The floors
+  of `--execute` for these three are 3600, 3600 and 86400** (`EXECUTE_MIN`): `readPlan` refuses a lower value and
+  accepts 3660.
+- **A slot posts for CodeRabbit at most once, re-triggers included:** `runFirst` runs one trigger command;
+  `runRetrigger` returns after the first PR it posts for; `spacing` counts the ends of trigger and re-trigger
+  commands alike, per tool.
 - `graceSeconds` 1800: a slot later than 30 minutes is not fired (failure 7). **1800 is the most `--execute` allows**
   (`EXECUTE_MAX_GRACE_SECONDS`), not a floor: `readPlan` refuses a longer grace and accepts a shorter one.
 - `firstTriggerAttempts` must be **exactly 2** (`FIRST_TRIGGER_TRIES`; addendum e): any other value refuses.
-- The window uses all five values as written; they are frozen in the protocol (§7; decision 076e item 2).
-- **Open since 14 Nov, to be settled before the tag.** CodeRabbit allows 1 review per hour (S1's reading), and Sunny
-  asked for at least 61 minutes between two CodeRabbit posts. A slot posts for CodeRabbit at most once, re-triggers
-  included (`runFirst` runs one trigger command; `runRetrigger` returns after the first PR it posts for; `spacing`
-  counts trigger and re-trigger ends per tool). But 3600 gives 3,600 s from one command's end to the next one's
-  start (3,600.7 s in S1), not 3,660. **What fits: `slotSeconds` and `minTriggerSpacingSeconds` both 3660** (`readPlan`
-  accepts values above its floors). Slots 0–63 then still hold 29 first triggers, 29 worst-case re-triggers and 6
-  spare; a re-trigger check is due 24 slots after its trigger, not 25; the last slot is at scheduled T0 + 64:03 and
-  the last possible re-trigger has 7 h 57 min before the snapshot, not 9 h. Raising only the spacing to 3660 does
-  not fit: the lag then grows by about 68 s a slot and passes the 15-minute stop line at about slot 13. Both values
-  are rulings (076e item 2) and are in the protocol, so nothing above is changed until Sunny says so.
+- The window uses all five values as written. **The protocol's §7 still stated 3600 for the first two when this
+  was written (main `570fc9b`). codex brings it to 3660 in revision 10 (decision 076h, "Touches"); while the two
+  documents differ, the tag is not made**
+  (`F1-freeze.md` §1 row 14 c). Raising only the spacing to 3660 would not do: the lag would grow by about 68 s a
+  slot and pass the 15-minute stop line at about slot 13, which is why both values moved together.
 - `timeoutSeconds`: open 600, trigger 300, collect 300, retrigger 300 are **ruled** (decision 076e item 2) and are
   not changed at run time. They are ceilings for a hung command, not times a slot can absorb. **A slot's commands
   end inside the slot only at the expected command time**, which is about a fifth of those timeouts or less (the
@@ -223,7 +227,7 @@ tries. For that case the scheduler runs, in this order: `open-prs.ts --ids <id> 
 branches, open its PR**); the spacing wait; the read of the fork's branches (`gh api --method GET
 repos/<fork>/branches`, logged as `fork-branches` with every branch name and tip); `open-prs.ts --trigger
 coderabbit,greptile --ids <id> --execute` (the tools of `tools.json`, both in one command). With no failure, position
-p is served in slot p − 1: position 1 at T0, position 29 at T0 + 28:00.
+p is served in slot p − 1: position 1 at T0, position 29 at T0 + 28:28.
 - **Retry (addendum e).** If the slot fails (`failed:open`, `failed:branches`, `failed:trigger`) or is missed, the
   **next slot serves the same case again**, before any later case's branch is pushed. A try is a slot that started
   for the case; a slot missed while the scheduler was down is not a try. After two failed tries the scheduler logs
@@ -232,20 +236,21 @@ p is served in slot p − 1: position 1 at T0, position 29 at T0 + 28:00.
   PR opened or after one tool was triggered. The resume file (`$HO/open-prs/<fork name>.resume.jsonl`) is the record of
   what was pushed, opened and posted; a tool with a `triggered:<tool>` record still gets its re-trigger check. The
   operator does not push, open or trigger such a case by hand (§5 failure 1).
-- **The post inside a slot drifts later; the grid does not.** A trigger command starts no sooner than 3600 s after
+- **The post inside a slot drifts later; the grid does not.** A trigger command starts no sooner than 3660 s after
   the **end** of the last trigger command on another PR (`spacing`), and `runFirst` opens the PR before that wait.
   So slot n's trigger ends about O + (n + 1) × T after the slot's planned start (O = one open command, T = one branch
   read plus one trigger command): the lag grows by one trigger-command length per slot.
   - *At the expected command time the lag stays inside the slot.* Commands that take seconds give a few minutes by
     the 29th case; at a fifth of the timeouts (120 s and 60 s) the 29th trigger ends about 31 minutes into its slot
     (estimate).
-  - *At the timeout ceilings it does not.* With O = 600 s and T = 300 s the lag passes 3600 s around the tenth case,
-    and from about slot 16 the following slot would start more than 1800 s late and be `missed` (failure 7).
+  - *At the timeout ceilings it does not.* With O = 600 s and T = 300 s the lag passes one slot (3660 s) around the
+    eleventh case, and from about slot 16 the following slot would start more than 1800 s late and be `missed`
+    (failure 7).
   - **So a trigger command that ends more than 15 minutes after its slot's planned start is a stop (failure 17).**
     The log has every step's planned time and end. **The 15-minute stop line and its pre-freeze check (longest
     open + 29 × (longest branch read + longest trigger) ≤ 900 s from S1's run, else Sunny before F1) are rulings:
     decision 076e addendum e.**
-  - Slots start on the grid from the scheduled T0 as long as the lag is under an hour.
+  - Slots start on the grid from the scheduled T0 as long as the lag is under one slot (61 minutes).
 
 **Re-triggers (decisions 076b item 2, 076c items 2 and 3; `runRetrigger`).** First triggers always go before
 re-triggers: no re-trigger check is made while any first trigger is pending, and never before slot
@@ -277,12 +282,12 @@ at or before every trigger), then acts on the status:
 - `lastSlot` **63** = 57 + 6. Count, with X = extra slots used by first triggers (failed tries and missed slots) and by
   re-trigger slots that passed without a post:
   - the first triggers end at slot 28 + X;
-  - a position's check cannot come before 24 h after its own trigger, and the post sits a little after its slot's
-    start, so the check of the case triggered in slot s is at slot s + 25 at the earliest: slot 53 + X for the last
-    position;
+  - a position's check cannot come before 24 h after its own trigger. Twenty-four slots are 24 h 24 min, so the
+    check of the case triggered in slot s is at slot s + 24 at the earliest (s + 25 if that trigger ended more than
+    24 minutes into its slot): slot 52 + X for the last position;
   - worst case, every position needs a re-trigger, one PR per slot: slots 29 + X … 57 + X.
-  So slot 63 covers X ≤ 6 when every PR needs its re-trigger, and X ≤ 10 when few do. **Six spare slots is the
-  ruling (decision 076e item 2):** each spare slot is one failed try, one missed hour or one unreadable collection.
+  So slot 63 covers X ≤ 6 when every PR needs its re-trigger, and X ≤ 11 when few do. **Six spare slots is the
+  ruling (decision 076e item 2):** each spare slot is one failed try, one missed slot or one unreadable collection.
 - **If the room runs out.** First triggers go first, so what is lost first is the last positions' re-trigger checks:
   such a tool on such a PR stays as it is, `no-review` if no review completed (failure 6).
   - *Failed tries alone cannot push a first trigger past the last slot:* two tries for each of 29 cases end by
@@ -295,15 +300,16 @@ at or before every trigger), then acts on the status:
 
 | scheduled T0 + | slot | what happens |
 |---|---|---|
-| 0:00 – 28:00 | 0 – 28 | one case per slot: push its branches, open its PR, trigger both tools; a failed or missed slot is repeated for the same case before the next case is pushed; **no re-trigger** |
-| 29:00 – 63:00 | 29 – 63 | first triggers still owed go first; then one re-trigger slot per hour: the lowest due position that still needs one, checked at the slot |
-| 64:00 onward | — | no trigger of any kind (earlier, if the queue emptied earlier: the scheduler writes `scheduler.done` and ends) |
+| 0:00 – 28:28 | 0 – 28 | one case per slot: push its branches, open its PR, trigger both tools; a failed or missed slot is repeated for the same case before the next case is pushed; **no re-trigger** |
+| 29:29 – 64:03 | 29 – 63 | first triggers still owed go first; then one re-trigger slot every 61 minutes: the lowest due position that still needs one, checked at the slot |
+| after 64:03 | — | no trigger of any kind (earlier, if the queue emptied earlier: the scheduler writes `scheduler.done` and ends) |
 | **T0** + 72:00 | — | the snapshot (§6), counted from the actual T0: scheduled 72:00 plus the difference between the two clocks. **The window is still 72 hours** (decision 076 S0.4; protocol §7) |
 
 Before decision 076d the triggers ran from T0 + 1:00 to T0 + 58:00 and the last possible re-trigger had 14 hours
-before the snapshot; it now has 9 (slot 63 at scheduled T0 + 63:00), plus the difference between the two clocks.
+before the snapshot. With hourly slots (076d, 076e) it had 9. **With 61-minute slots it has 7 h 57 min** (slot 63
+at scheduled T0 + 64:03), plus the difference between the two clocks. Slot k is at scheduled T0 + k × 61 minutes.
 
-**Who keeps the clock (gap G4; decision 076c item 11, amended by 076d item 3).** The hourly slots run from **bunny's
+**Who keeps the clock (gap G4; decision 076c item 11, amended by 076d item 3).** The slots run from **bunny's
 window scheduler, detached, with its own log, not from an agent's session**: a background process of a session here
 dies after 2 hours (`docs/bench/results.md` §8 "Losses", "v1 dev run 2 was void"). The scheduler is
 `scripts/testset/window-scheduler.ts` (`b5-window-scheduler` @ `2c51913`, merged at `4b99fb4`; codex's GO names
@@ -335,7 +341,8 @@ dies after 2 hours (`docs/bench/results.md` §8 "Losses", "v1 dev run 2 was void
 **Evidence that it keeps time:** codex's 8-slot rehearsal on `2c51913` (dev cases, real hours, no `--execute`, one
 SIGKILL and restart after slot 0; `run/out/codex.076d-r3.md`, `run/out/codex.076d-r3-rehearsal/`; last slot
 2026-11-13T04:26:39Z). Its final result is a pass with all eight slots assessed (first lines of
-`run/out/codex.076d-r3.md`); F1 §1 row 14 reads it. The rehearsal is a dry run. **The scheduler's first run with
+`run/out/codex.076d-r3.md`); F1 §1 row 14 reads it. The rehearsal is a dry run, and it and S1 both ran with 3600 s
+slots: 3660 is the same code with another plan value, checked by `sched --list --execute` (§1 item 4), not rehearsed. **The scheduler's first run with
 `--execute` is S1** (decision 076e item 1; `docs/specs/S1.md` step 2): two dev cases, two hourly slots, both tools,
 re-triggers off. So a push, a PR opening, the branch read and a real trigger are each made twice through the
 scheduler before the window, and F1 §1 row 14 (e) reads the result. **What the window is still first to do against
@@ -433,7 +440,7 @@ Where a rule says "tell Sunny", what the operator does if no answer comes within
 | 14 | Anything this table does not cover | Do nothing that changes what a tool sees. Log it, tell Sunny (not artu1) with counts only, and wait for his answer. |
 | 15 | The scheduler stopped (`stopped` is not null, exit 3) or its process is gone without `scheduler.done` | Read the reason in `sched --status`. **A pinned file changed:** put the file back to its pinned bytes (never write new pins during the window), then start again. **A command's processes could not be confirmed ended:** look at the process group the log names; wait until it is gone; do not kill a group you cannot identify; then start again. **The process is gone (reboot, crash):** start again. "Start again" is §2's `--detach` line, unchanged: the scheduler replays its log, runs no finished step twice and fires no slot late. Slots that passed meanwhile are `missed` (failure 7). More than six slots lost in total: tell Sunny in counts; the window end does not move. |
 | 16 | The first PR does not open in slot 0 | Slot times stay on the scheduled grid (every slot is counted from the plan's `t0`), and the same case is served again at slot 1 (addendum e). **T0 is the instant the first held-out PR does open** (decision 076e item 3), so the snapshot moves with it: T0 + 72 h, later than scheduled T0 + 72 h by the difference. Write both times and the difference into `$HO/job.md`, and tell Sunny the difference in minutes: the hand-check sitting is planned six hours after the scheduled snapshot. Over three hours: §1 item 12 as well. Reported as a deviation. |
-| 17 | A trigger command ended more than 15 minutes after its slot's planned start (the stop line is a ruling: decision 076e addendum e) | The commands are slower than the plan allows for, and the lag grows by one trigger-command length per slot (§3, "The post inside a slot drifts later"): past an hour the next slot starts late, and past 90 minutes it is `missed`. Stop in the sense of failure 14: change nothing by hand, do not stop or restart the scheduler, and tell Sunny (not artu1) in counts only: the slot, the minutes, the longest open and trigger commands so far. Wait for his answer. A deviation in §7. |
+| 17 | A trigger command ended more than 15 minutes after its slot's planned start (the stop line is a ruling: decision 076e addendum e) | The commands are slower than the plan allows for, and the lag grows by one trigger-command length per slot (§3, "The post inside a slot drifts later"): past 61 minutes the next slot starts late, and past 91 minutes it is `missed`. Stop in the sense of failure 14: change nothing by hand, do not stop or restart the scheduler, and tell Sunny (not artu1) in counts only: the slot, the minutes, the longest open and trigger commands so far. Wait for his answer. A deviation in §7. |
 
 ## 6. T0 + 72:00: the snapshot
 T0 in this section is the **actual** T0, the first held-out PR's `created_at` in `$HO/job.md` ("Two clocks"), not

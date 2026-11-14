@@ -180,8 +180,8 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
      `docs/specs/P1.md` §4 item 9, and is restated on the page). So "0 of
      20 at first review" is a statement about the branches on the forks, not about what a tool remembers.
    - TraceHound read no fork: it ran locally on each case's own commits.
-7. CodeRabbit and Greptile ran on free plans, triggered by a comment posted from a scheduler, one pull request per
-   hour, within their rate and credit limits; a tool that
+7. CodeRabbit and Greptile ran on free plans, triggered by a comment posted from a scheduler, one pull request every 61
+   minutes, within their rate and credit limits; a tool that
    delivered no review after one re-trigger is left out of its pairs, with n stated.
 8. No row for Augment, Cursor Bugbot or Copilot. TypeScript only; the repositories named; these dates.
 9. Costs: TraceHound's is the ledger figure for this run; the console-to-ledger ratio is stated.
