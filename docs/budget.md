@@ -155,8 +155,8 @@ spend so far; unstarted ids roll into the next batch** (this replaced "min(batch
 | line | what | cap | status |
 |---|---|---|---|
 | Haiku 5.5 dev row | all 40 dev cases, same prompts | **$2.50** (was $4.00; Sunny, 14 Nov) | approved by Sunny; runs after R1 ends and codex's provider is merged; key present |
-| Sonnet 5.5 dev row | **8 dev cases** (was 10; Sunny, 14 Nov): artu1 reads it as R1 §7's 8 bug cases, the 2 clean dropped, until Sunny says otherwise; ids committed before any run | **$6.00** (was $8.00) | same |
-| **Anthropic total** | hard stop for both rows together | **$9.50** | Sunny, 14 Nov (the two row caps add to $8.50) |
+| Sonnet 5.5 dev row | **8 dev cases** (was 10; Sunny, 14 Nov): R1 §7's 8 bug cases, the 2 clean dropped (Sunny confirmed artu1's reading, 14 Nov); ids committed before any run | **$6.00** (was $8.00) | same |
+| **Anthropic total** | hard stop for both rows together | **$9.50** | Sunny, 14 Nov; kept as is although the two row caps add to $8.50 (Sunny confirmed, 14 Nov) |
 
 These spends must not count against `TRACEHOUND_BUDGET_TOTAL_USD` (the Nebius hard stop) unseen: own cap, ledger rows by provider.
 
@@ -204,3 +204,4 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 | 2026-11-13 | 076g: A0 frozen; R2, L2, L4 and the interim table cut, $5.05 → unallocated ($6.05); 077 only the cap reset; Anthropic lines (Sunny's money) Haiku $4, Sonnet $8; ratio after R1 batch 1 (> 1.08 → stop); S1 ratio weak | — | $0 | **$19.13** |
 | 2026-11-14 | console $19.10 at 12:55 IST (Sunny); S1 ratio = $0.03 console drop ÷ $0.0348 ledger (2 review calls, 13 Nov) = **0.86** ≤ 1.08 (weak, cents). **R1 approved by Sunny, cap $4.68; stops after batch 1 for Sunny's next console reading** (076g item 7, 076i) | $4.68 | $0.0348 (S1) | **$19.10** |
 | 2026-11-14 | Anthropic lines changed by Sunny (Sunny's own money is outside the Nebius split): Haiku 5.5 40 cases $2.50, Sonnet 5.5 8 cases $6.00, total hard stop $9.50; approved, run after R1 and the provider merge | — | $0 | **$19.10** |
+| 2026-11-14 | console **$19.00** (Sunny; time not given). **R1 batch 1 ratio** = $0.10 console drop ($19.10 → $19.00; the only ledger rows since 12:55 IST are R1's 24, 08:02:57Z–08:07:31Z) ÷ **$0.62372** ledger = **0.16 ≤ 1.08 → R1 batch 2 onward may run** (artu1). The ledger is high because 17 failed requests were charged at the upper bound ($0.57054). Report only: against the $0.05318 reported usage the drop is 1.88×, and against reported usage plus the one request that may have run (`read ETIMEDOUT`, $0.03356) it is 1.15× (1.04–1.27 with cent rounding); the other 16 never reached Nebius. So the console drop is a little more than the requests could have cost, unexplained, within cents. RUNCAP left $4.05628 includes the $0.57 | $4.68 | $0.62372 (R1 batch 1) | **$19.00** |
