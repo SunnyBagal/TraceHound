@@ -1,13 +1,14 @@
 // --provider-config on the review, review-ctx and verify-ctx CLIs (decision 076g item 4, AGENTS.md exception (1)):
 // an explicit report-only dev Anthropic row; without it nothing changes. Invented text, injected fetch, no network.
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ANTHROPIC_URL } from "../src/llm/anthropic.ts";
+import { AnthropicClient, ANTHROPIC_URL } from "../src/llm/anthropic.ts";
 import { SpendLedger } from "../src/llm/ledger.ts";
-import { parseAnthropicRowConfig } from "../src/llm/provider.ts";
+import { createDevReportClient, parseAnthropicRowConfig } from "../src/llm/provider.ts";
+import { loadPriceTable } from "../src/llm/prices.ts";
 import { providerClient } from "../src/review/provider-option.ts";
 import { REVIEW_PROMPT_SHA256, reviewPull } from "../src/review/review.ts";
 import { main as reviewMain } from "../src/review/cli.ts";
@@ -179,4 +180,56 @@ describe("thinking off (codex NO-GO on e4f13aa): the row's setting and the sent 
       expect(fetch).not.toHaveBeenCalled();
     });
   }
+});
+
+// Decision 076k item 1 (AGENTS.md exception (1)): the registered secondary held-out Haiku 5.5 row. Invented text, no network.
+describe("scope registered-heldout-haiku (the registered held-out Haiku row)", () => {
+  const ho = { provider: "anthropic", scope: "registered-heldout-haiku", model: HAIKU };
+
+  it("is accepted only as an explicit Anthropic row on Haiku 5.5; Sonnet, a dated id, a missing scope or provider, and extra keys are refused", () => {
+    expect(parseAnthropicRowConfig(ho)).toEqual(ho);
+    expect(parseAnthropicRowConfig({ ...ho, effort: "low", thinking: "off" })).toMatchObject({ scope: "registered-heldout-haiku", effort: "low", thinking: "off" });
+    for (const bad of [{ ...ho, model: "claude-sonnet-5-5" }, { ...ho, model: "claude-haiku-5-5-20261007" }, { provider: "anthropic", model: HAIKU },
+      { scope: ho.scope, model: HAIKU }, { provider: "nebius", scope: ho.scope }, { ...ho, scope: "heldout" }, { ...ho, draw: 1 },
+      { ...ho, effort: "xhigh", thinking: "off" }]) {
+      expect(parseAnthropicRowConfig(bad)).toBeNull();
+    }
+  });
+
+  it("refusals name both scopes; Sonnet on the held-out scope and the default (Nebius) shape never build a client", () => {
+    const d = dir();
+    expect(providerClient(configFile(d, { ...ho, model: "claude-sonnet-5-5" }), "claude-sonnet-5-5", "on", { env, stateDir: d }))
+      .toEqual({ error: "--provider-config must be {provider: anthropic, scope: report-only-dev (a ruled model) | registered-heldout-haiku (claude-haiku-5-5 only), model, effort?, thinking?}" });
+    expect(() => createDevReportClient({ ...ho, model: "claude-sonnet-5-5" }, { env, stateDir: d })).toThrow(/registered-heldout-haiku with claude-haiku-5-5/);
+    expect(() => createDevReportClient({ scope: ho.scope }, { env, stateDir: d })).toThrow(/invalid report-only dev provider config/);
+    expect(() => new AnthropicClient({ scope: "registered-heldout-haiku", model: "claude-sonnet-5-5", apiKey: KEY, caps: { totalUSD: 1, runUSD: 1 },
+      prices: loadPriceTable(path.resolve(import.meta.dirname, "../../../config/prices.json")), ledger: new SpendLedger(path.join(d, "spend.anthropic.jsonl")) }))
+      .toThrow(/Haiku 5\.5 only/);
+  });
+
+  it("runs the frozen review prompt on Haiku with its own ledger and caps; a cap refusal names the row", async () => {
+    const d = dir();
+    const bodies: Record<string, unknown>[] = [];
+    const fetch = (async (url: unknown, init?: RequestInit) => {
+      expect(String(url)).toBe(ANTHROPIC_URL);
+      bodies.push(JSON.parse(init!.body as string));
+      return new Response(JSON.stringify({ model: HAIKU, stop_reason: "end_turn",
+        content: [{ type: "text", text: '{"findings":[]}' }], usage: { input_tokens: 1000, output_tokens: 200 } }), { status: 200 });
+    }) as typeof globalThis.fetch;
+    const p = providerClient(configFile(d, ho), HAIKU, "on", { env: { ...env, TRACEHOUND_BUDGET_ANTHROPIC_USD: "1" }, stateDir: d, fetch });
+    if ("error" in p) throw new Error(p.error);
+    expect(p.budget.caps).toEqual({ totalUSD: 1, runUSD: 0.2 });
+    const out = await reviewPull(p.client, { title: "Invented change", description: "", diff: DIFF }, { model: HAIKU, reasoning: "on" });
+    expect(out.review.chunks.map((c) => c.status)).toEqual(["OK"]);
+    expect(createHash("sha256").update(bodies[0]!.system as string).digest("hex")).toBe(REVIEW_PROMPT_SHA256);
+    expect(bodies[0]).not.toHaveProperty("temperature");
+    expect(new SpendLedger(path.join(d, "spend.anthropic.jsonl")).entries()).toMatchObject([{ provider: "anthropic", model: HAIKU, ok: true }]);
+    expect(existsSync(path.join(d, "spend.jsonl"))).toBe(false);
+    // a run cap of 0 refuses before any request, and the refusal names the held-out row
+    const z = providerClient(configFile(d, ho), HAIKU, "on", { env: { ...env, TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD: "0" }, stateDir: dir(), fetch });
+    if ("error" in z) throw new Error(z.error);
+    await expect(z.client.chat({ model: HAIKU, temperature: 0, max_tokens: 100, messages: [{ role: "user", content: "Invented." }] }, { purpose: "review" }))
+      .rejects.toThrow(/refusing Anthropic registered held-out Haiku row claude-haiku-5-5/);
+    expect(bodies).toHaveLength(1);
+  });
 });

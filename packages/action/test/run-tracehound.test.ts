@@ -768,3 +768,145 @@ describe("--provider-config (report-only dev Claude rows)", () => {
       ["GIT_NO_LAZY_FETCH", "TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD", "TRACEHOUND_BUDGET_ANTHROPIC_USD", "TRACEHOUND_BUDGET_RUN_USD", "TRACEHOUND_CACHE_READ"]);
   });
 });
+
+// Decision 076k item 1 (AGENTS.md exception (1)): the registered secondary held-out Haiku 5.5 row. Fakes only: the
+// manifest is the synthetic fixture under a non-dev folder; no held-out file is read.
+describe("--provider-config scope registered-heldout-haiku with --draw (the registered held-out Haiku row)", () => {
+  const HAIKU = "claude-haiku-5-5";
+  const SCOPE = "registered-heldout-haiku";
+  const AKEY = "invented-anthropic-key-runner-0001";
+  const ROW = { provider: "anthropic", scope: SCOPE, model: HAIKU };
+  type HoFixture = Fixture & { cfg: string; anth: string; draws: (n: number) => string };
+
+  function hoFixture(n = 2, config: unknown = ROW): HoFixture {
+    const f = fixture(n);
+    const win = path.join(f.dir, "cases", "window");
+    mkdirSync(win, { recursive: true });
+    const manifest = path.join(win, "manifest.json");
+    renameSync(f.manifest, manifest);
+    const cfg = path.join(f.dir, "haiku-row.json");
+    writeFileSync(cfg, JSON.stringify(config));
+    return { ...f, manifest, cfg, anth: path.join(f.dir, "spend.anthropic.jsonl"), draws: (d: number) => path.join(f.dir, "haiku", `draw-${d}`, "th") };
+  }
+  function hoDeps(f: HoFixture, o: { budget?: string; spend?: number } = {}) {
+    const { d, calls } = deps(f);
+    const argv: string[][] = [];
+    const exec: Execute = async (_file, a, options) => {
+      argv.push(a);
+      calls.stages.push({ cmd: a[1]!, env: options.env });
+      if (a[1] === o.budget) throw Object.assign(new Error("Command failed"), { stderr: "BudgetExceededError: refusing Anthropic registered held-out Haiku row claude-haiku-5-5: over TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD=0.125" });
+      if (a[1] === "verify-ctx" && o.spend) appendFileSync(f.anth, JSON.stringify({ timestamp: "2026-11-22T00:00:00Z", provider: "anthropic",
+        model: HAIKU, inputTokens: 1, outputTokens: 1, estCostUSD: o.spend, purpose: "review" }) + "\n");
+      return {};
+    };
+    const env = { PATH: process.env.PATH, HOME: process.env.HOME, ANTHROPIC_API_KEY: AKEY,
+      TRACEHOUND_BUDGET_ANTHROPIC_USD: "1", TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD: "1", TRACEHOUND_BUDGET_TOTAL_USD: "0.01" };
+    return { d: { ...d, exec, env } as RunnerDeps, calls, argv };
+  }
+  const hargs = (f: HoFixture, draw: number, ...extra: string[]) =>
+    [...args(f, "--provider-config", f.cfg, "--fixes", "off", "--contracts", "off"), "--out-dir", f.draws(draw), "--draw", String(draw), ...extra];
+  const rec = (dir: string, name: string) => JSON.parse(readFileSync(path.join(dir, name), "utf8"));
+  async function refused(f: HoFixture, argv: string[]): Promise<string> {
+    const { d, calls } = hoDeps(f);
+    expect(await main(argv, d)).toBe(2);
+    expect(calls.stages).toEqual([]);
+    expect(calls.pipeline).toEqual([]);
+    return calls.logs.join("\n");
+  }
+
+  it("dry run names the row and the draw; execute runs the three stages on Haiku with Anthropic caps; records carry scope, row and draw", async () => {
+    const f = hoFixture(2);
+    const dry = hoDeps(f);
+    expect(await main(hargs(f, 1), dry.d)).toBe(0);
+    expect(dry.calls.logs.join("\n")).toMatch(/provider row: anthropic claude-haiku-5-5 \(registered held-out Haiku row, draw 1; sampling default/);
+    expect(dry.calls.stages).toEqual([]);
+    const nebiusBefore = readFileSync(f.ledger, "utf8");
+    const { d, calls, argv } = hoDeps(f, { spend: 0.02 });
+    expect(await main(hargs(f, 1, "--execute"), d)).toBe(0);
+    expect(calls.pipeline.map((p) => p.model)).toEqual([HAIKU, HAIKU]);
+    expect(argv.map((a) => a[1])).toEqual(["review", "review-ctx", "verify-ctx", "review", "review-ctx", "verify-ctx"]);
+    for (const a of argv) expect(a.slice(-2)).toEqual(["--provider-config", f.cfg]);
+    for (const s of calls.stages) {
+      expect(s.env.TRACEHOUND_BUDGET_RUN_USD).toBe("0"); // no Nebius call can be made
+      expect(s.env.TRACEHOUND_BUDGET_ANTHROPIC_USD).toBeDefined();
+    }
+    const r = rec(f.draws(1), "case-901.json");
+    expect(r.settings.model).toBe(HAIKU);
+    expect(r.settings.provider).toMatchObject({ provider: "anthropic", scope: SCOPE, model: HAIKU, draw: 1, ledger: "spend.anthropic.jsonl",
+      row: "registered secondary held-out Haiku 5.5 (decision 076k item 1)" });
+    expect(r.usage.ledger.costUSD).toBeCloseTo(0.02, 10);
+    expect(readFileSync(f.ledger, "utf8")).toBe(nebiusBefore);
+    // draw 2 writes to its own directory, and its records say draw 2
+    const two = hoDeps(f);
+    expect(await main(hargs(f, 2, "--execute"), two.d)).toBe(0);
+    expect(rec(f.draws(2), "case-902.json").settings.provider.draw).toBe(2);
+    expect(rec(f.draws(1), "case-902.json").settings.provider.draw).toBe(1);
+    expect(JSON.stringify(r)).not.toContain(AKEY);
+  });
+
+  it("refuses without the row's explicit selection: no --draw, a bad --draw, --draw on a dev row or on the default (A0) path", async () => {
+    const f = hoFixture(1);
+    const noDraw = args(f, "--provider-config", f.cfg, "--fixes", "off", "--contracts", "off", "--out-dir", f.draws(1));
+    expect(await refused(f, noDraw)).toMatch(/needs --draw 1 or --draw 2/);
+    for (const bad of ["0", "3", "two"]) expect(await refused(f, [...noDraw, "--draw", bad])).toMatch(/needs --draw 1 or --draw 2/);
+    // the default path: no --provider-config, so the Nebius A0 runner; --draw is refused there
+    expect(await refused(f, [...args(f, "--out-dir", f.draws(1)), "--draw", "1"])).toMatch(/--draw is only for the registered held-out Haiku row/);
+    // a dev row with --draw
+    const dev = path.join(f.dir, "dev-row.json");
+    writeFileSync(dev, JSON.stringify({ provider: "anthropic", scope: "report-only-dev", model: HAIKU }));
+    expect(await refused(f, [...args(f, "--provider-config", dev, "--fixes", "off", "--contracts", "off", "--out-dir", f.draws(1)), "--draw", "1"]))
+      .toMatch(/--draw is only for the registered held-out Haiku row/);
+  });
+
+  it("refuses Sonnet, a dated model id, a missing scope and a config without provider (the default path) for the held-out scope", async () => {
+    for (const config of [{ ...ROW, model: "claude-sonnet-5-5" }, { ...ROW, model: "claude-haiku-5-5-20261007" },
+      { provider: "anthropic", model: HAIKU }, { scope: SCOPE, model: HAIKU }, { provider: "nebius", scope: SCOPE }, { ...ROW, draw: 1 }]) {
+      const f = hoFixture(1, config);
+      expect(await refused(f, hargs(f, 1))).toMatch(/--provider-config must be \{provider: anthropic, scope: report-only-dev \(a ruled model\) \| registered-heldout-haiku \(claude-haiku-5-5 only\)/);
+    }
+  });
+
+  it("refuses a dev manifest, an --out-dir without exactly its own draw-<n> segment, a directory holding another draw's record, posting, fixes and contracts", async () => {
+    const f = hoFixture(1);
+    const devDir = path.join(f.dir, "cases", "dev");
+    mkdirSync(devDir, { recursive: true });
+    const devManifest = path.join(devDir, "manifest.json");
+    writeFileSync(devManifest, readFileSync(f.manifest));
+    expect(await refused(f, [...hargs(f, 1), "--manifest", devManifest])).toMatch(/is the held-out row: a cases\/dev\/ manifest was given/);
+    expect(await refused(f, [...hargs(f, 1), "--out-dir", path.join(f.dir, "haiku", "th")])).toMatch(/exactly one path segment draw-1 for --draw 1/);
+    expect(await refused(f, [...hargs(f, 1), "--out-dir", f.draws(2)])).toMatch(/exactly one path segment draw-1 for --draw 1/);
+    expect(await refused(f, [...hargs(f, 1), "--out-dir", path.join(f.draws(1), "draw-2")])).toMatch(/exactly one path segment draw-1/);
+    // a draw-2 directory that already holds a draw-1 record (or anything else) is refused before any case
+    mkdirSync(f.draws(2), { recursive: true });
+    writeFileSync(path.join(f.draws(2), "case-777.json"), JSON.stringify({ settings: { provider: { scope: SCOPE, draw: 1 } } }));
+    expect(await refused(f, hargs(f, 2))).toMatch(/holds case-777\.json, which is not a draw 2 record of the registered held-out Haiku row/);
+    writeFileSync(path.join(f.draws(2), "case-777.json"), JSON.stringify({ settings: { model: "nvidia/Nemotron-3.5-Super-VL" } }));
+    expect(await refused(f, hargs(f, 2))).toMatch(/holds case-777\.json/);
+    expect(await refused(f, hargs(f, 1, "--execute", "--post", "--repo", FORK, "--pr-map", path.join(f.dir, "prmap.json")))).toMatch(/report-only: --post is refused/);
+    expect(await refused(f, [...args(f, "--provider-config", f.cfg, "--fixes", "off"), "--out-dir", f.draws(1), "--draw", "1"])).toMatch(/needs --fixes off --contracts off/);
+    expect(await refused(f, [...args(f, "--provider-config", f.cfg, "--contracts", "off"), "--out-dir", f.draws(1), "--draw", "1"])).toMatch(/needs --fixes off --contracts off/);
+  });
+
+  it("one rerun per draw: only for failed or capped cases, written as <id>.r2.json with the same draw; no third attempt", async () => {
+    const f = hoFixture(2);
+    const capped = hoDeps(f, { budget: "review" });
+    expect(await main(hargs(f, 1, "--execute", "--ids", "case-901"), capped.d)).toBe(1);
+    expect(rec(f.draws(1), "case-901.json").status).toBe("cap");
+    // case-902 ran ok in a second invocation (its own batch)
+    const ok = hoDeps(f);
+    expect(await main(hargs(f, 1, "--execute", "--ids", "case-902"), ok.d)).toBe(0);
+    // no rerun of an ok case, and no plain rerun of an existing record
+    expect(await refused(f, hargs(f, 1, "--execute", "--rerun", "--ids", "case-902"))).toMatch(/--rerun is only for failed or capped cases \(case-902\.json status "ok"\)/);
+    expect(await refused(f, hargs(f, 1, "--execute", "--ids", "case-901"))).toMatch(/case-901\.json exists; never overwritten/);
+    const rerun = hoDeps(f);
+    expect(await main(hargs(f, 1, "--execute", "--rerun", "--ids", "case-901"), rerun.d)).toBe(0);
+    expect(rec(f.draws(1), "case-901.r2.json").settings.provider).toMatchObject({ scope: SCOPE, draw: 1 });
+    // a third attempt is refused, whatever the rerun's status
+    expect(await refused(f, hargs(f, 1, "--execute", "--rerun", "--ids", "case-901"))).toMatch(/case-901\.r2\.json exists; one rerun per draw/);
+    expect(await refused(f, hargs(f, 1, "--ids", "case-901"))).toMatch(/one rerun per draw/);
+    // draw 2 is independent: its own first attempt
+    const two = hoDeps(f);
+    expect(await main(hargs(f, 2, "--execute", "--ids", "case-901"), two.d)).toBe(0);
+    expect(existsSync(path.join(f.draws(2), "case-901.json"))).toBe(true);
+  });
+});

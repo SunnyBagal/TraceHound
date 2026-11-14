@@ -11,6 +11,11 @@ export type AnthropicModel = typeof ANTHROPIC_MODELS[number];
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 export const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 export const ANTHROPIC_VERSION = "2023-06-01";
+/** Decision 076k item 1 (AGENTS.md exception (1)): the registered secondary held-out row, Haiku 5.5 only; never the primary. */
+export const HELDOUT_HAIKU_SCOPE = "registered-heldout-haiku";
+export type AnthropicScope = "report-only-dev" | typeof HELDOUT_HAIKU_SCOPE;
+/** How a scope reads in budget refusals and logs. */
+export const scopeLabel = (scope: AnthropicScope): string => scope === HELDOUT_HAIKU_SCOPE ? "registered held-out Haiku row" : "report-only dev";
 export const ANTHROPIC_CAP_NAMES = { total: "TRACEHOUND_BUDGET_ANTHROPIC_USD", run: "TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD" };
 
 /** Explicit separate caps, no Nebius fallback and no echo of an invalid value (it could be a misplaced key). */
@@ -26,7 +31,7 @@ export function anthropicCapsFromEnv(env: NodeJS.ProcessEnv = process.env): Budg
 }
 
 export interface AnthropicOptions {
-  scope: "report-only-dev";
+  scope: AnthropicScope;
   model: AnthropicModel;
   apiKey: string;
   caps: BudgetCaps;
@@ -61,7 +66,8 @@ export class AnthropicClient {
   readonly budget: Budget;
   readonly #o: AnthropicOptions;
   constructor(o: AnthropicOptions) {
-    if (o.scope !== "report-only-dev" || !isModel(o.model)) throw new Error("Anthropic is only for explicit report-only dev rows on the two ruled models");
+    if ((o.scope !== "report-only-dev" && o.scope !== HELDOUT_HAIKU_SCOPE) || !isModel(o.model)) throw new Error("Anthropic is only for explicit report-only dev rows on the two ruled models or the registered held-out Haiku row");
+    if (o.scope === HELDOUT_HAIKU_SCOPE && o.model !== "claude-haiku-5-5") throw new Error("the registered held-out row is Haiku 5.5 only (076k items 1, 3)");
     if (!o.apiKey && !o.offline) throw new Error("ANTHROPIC_API_KEY is not set (put it in .env)");
     if (!o.caps || ![o.caps.totalUSD, o.caps.runUSD].every((n) => Number.isFinite(n) && n >= 0)) throw new Error("Anthropic caps must be non-negative finite USD amounts");
     if (o.effort !== undefined && !isEffort(o.effort)) throw new Error("unsupported Anthropic effort");
@@ -112,9 +118,9 @@ export class AnthropicClient {
         return { ...hit, cached: true, costUSD: 0, latencyMs: Math.round(performance.now() - began) };
       }
     }
-    if (o.offline) throw new CacheMissError("no cached Anthropic report-only dev response; no request sent");
+    if (o.offline) throw new CacheMissError(`no cached Anthropic ${scopeLabel(o.scope)} response; no request sent`);
     const estimate = costUSD(anthropicPrice(o.prices, o.model, estIn), estIn, request.max_tokens);
-    const reserved = this.budget.reserve(estimate, `Anthropic report-only dev ${o.model}`);
+    const reserved = this.budget.reserve(estimate, `Anthropic ${scopeLabel(o.scope)} ${o.model}`);
     let recorded: number | undefined;
     const record = (value: MessageBody, status?: number, ok = false) => {
       if (recorded !== undefined) return recorded;

@@ -1,10 +1,11 @@
 // Decision 076g item 4 (AGENTS.md exception (1)): `--provider-config <file>` on the review, review-ctx and verify-ctx
-// CLIs selects the report-only dev Anthropic client (llm/provider.ts). Without the option each CLI builds its Nebius
+// CLIs selects the report-only dev Anthropic client (llm/provider.ts), or, with scope registered-heldout-haiku, the
+// registered secondary held-out Haiku 5.5 row (decision 076k item 1). Without the option each CLI builds its Nebius
 // client exactly as before; there is no env switch and no default change.
 import { readFileSync } from "node:fs";
 import type { ChatClient } from "../agent/decider.ts";
 import type { Budget } from "../llm/budget.ts";
-import { createDevReportClient, parseAnthropicRowConfig } from "../llm/provider.ts";
+import { createDevReportClient, parseAnthropicRowConfig, ROW_CONFIG_SHAPE } from "../llm/provider.ts";
 
 /** The Anthropic client for an explicit row config, or a fixed error line (never a key or a raw exception). */
 export function providerClient(file: string, model: string, reasoning: "on" | "off",
@@ -17,7 +18,7 @@ export function providerClient(file: string, model: string, reasoning: "on" | "o
     return { error: "--provider-config is not a readable JSON file" };
   }
   const config = parseAnthropicRowConfig(raw);
-  if (!config) return { error: "--provider-config must be {provider: anthropic, scope: report-only-dev, model, effort?, thinking?} with a ruled model" };
+  if (!config) return { error: `--provider-config must be ${ROW_CONFIG_SHAPE}` };
   if (config.model !== model) return { error: "--model must equal the provider config's model (no model fallback)" };
   // the CLI's --reasoning becomes the request's enable_thinking, which the Anthropic client honours over the row's own
   // thinking setting: a row that says one thing while the request asks for the other is refused, never run as recorded
