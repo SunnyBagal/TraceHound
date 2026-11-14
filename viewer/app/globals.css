@@ -76,8 +76,10 @@
   --glass-line: rgba(255, 255, 255, 0.09);
   /* the text on an ink button: 16.5:1 on --ink */
   --on-ink: var(--text);
-  /* the landing column's side gutter (max-width 1200px between them) */
-  --landing-gutter: clamp(20px, 5vw, 64px);
+  /* shared landing, reviews and benchmark edges; phone gutters are set below */
+  --content-max-width: 1440px;
+  --page-gutter: clamp(24px, 3vw, 32px);
+  --content-width: min(var(--content-max-width), 100% - 2 * var(--page-gutter));
 
   /* luminous accents: amber (TraceHound's selection) and glacier (the snow of the hero) */
   --glacier: #8fd3ff;
@@ -251,7 +253,7 @@ html:has(.landing) body {
 }
 /* the one content column: nav, hero content and every section share these edges */
 .lp-col {
-  width: min(1200px, 100% - 2 * var(--landing-gutter));
+  width: var(--content-width);
   margin-inline: auto;
 }
 .lp-anchor {
@@ -494,9 +496,9 @@ html:has(.landing) body {
   color: var(--hero-ink);
   font-family: var(--ui);
 }
-.hero-copy { width: 100%; padding: 0 24px; text-align: center; }
+.hero-copy { width: var(--content-width); text-align: center; }
 .hero-title {
-  max-width: 1200px;
+  max-width: var(--content-max-width);
   margin: 0 auto;
   font-family: Georgia, "Times New Roman", serif;
   font-size: clamp(44px, min(5.4vw, 9vh), 76px);
@@ -611,7 +613,7 @@ html:has(.landing) body {
 .hero-connect:focus-visible, .hero-ghost:focus-visible { outline: 2px solid #465f77; outline-offset: 4px; }
 
 /* the app window, 64px under the buttons as on nuphos */
-.hero-window { position: relative; z-index: 1; width: min(1248px, 100% - 32px); margin-top: 64px; }
+.hero-window { position: relative; z-index: 1; width: var(--content-width); margin-top: 64px; }
 
 /* nuphos's reveals: the copy rises out of a blur, then the window */
 .hero-reveal-text { animation: hero-rise 1.4s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both; --rise: 28px; --blur: 14px; }
@@ -622,8 +624,8 @@ html:has(.landing) body {
 
 /* phones, with nuphos's phone values */
 @media (max-width: 767px) {
+  :root { --page-gutter: 16px; }
   .hero { --W: 260vw; padding-top: 124px; }
-  .hero-copy { padding: 0 20px; }
   .hero-title { max-width: 560px; font-size: clamp(40px, 7.5vw, 56px); line-height: 1.06; }
   .hero-line { max-width: 510px; margin-top: 22px; font-size: 15px; }
   .hero-ghost { font-size: 13px; }
@@ -718,14 +720,14 @@ html:has(.landing) body {
   pointer-events: none;
   font-family: -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif;
 }
-/* nuphos's bar: 1240px at 1440, 66px tall, 18px radius, warm white glass */
+/* the bar shares the content edges: 66px tall, 18px radius, warm white glass */
 .lp-nav-bar {
   pointer-events: auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  width: min(1240px, 100% - 24px);
+  width: var(--content-width);
   height: 66px;
   margin-inline: auto;
   padding: 0 14px 0 22px;
@@ -789,7 +791,7 @@ html:has(.landing) body {
 .lp-fig { background: #f2e9e1; padding: 0 0 22px; font-family: -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
 .lp-fig-row {
   display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;
-  width: calc(100% - 48px); max-width: 1248px; margin: 0 auto; padding-top: 16px;
+  width: var(--content-width); margin: 0 auto; padding-top: 16px;
   border-top: 1px solid rgba(37, 37, 34, 0.15); color: #68685f;
 }
 .lp-fig-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; }
@@ -1368,7 +1370,7 @@ html:has(.landing) body {
 
 /* ---------- reviews and benchmark pages: the landing's night theme (ReviewShell) ---------- */
 .rv-top { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--hairline); background: rgba(14, 14, 19, 0.86); backdrop-filter: blur(16px) saturate(1.2); }
-.rv-top-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: min(1200px, 100% - 2 * var(--landing-gutter)); height: 60px; margin-inline: auto; }
+.rv-top-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: var(--content-width); height: 60px; margin-inline: auto; }
 .rv-tabs { display: flex; height: 100%; }
 .rv-tab { position: relative; display: flex; align-items: center; padding: 0 clamp(10px, 2vw, 18px); font-family: var(--font-code); font-size: 13.5px; color: var(--faint); transition: color var(--dur-base); }
 .rv-tab:hover { color: var(--muted); }
@@ -1376,8 +1378,8 @@ html:has(.landing) body {
 .rv-tab[aria-current="page"] { color: var(--text); }
 .rv-tab[aria-current="page"]::after { transform: scaleX(1); }
 .rv-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -6px; border-radius: 6px; }
-.rv-frame { width: min(1200px, 100% - 2 * var(--landing-gutter)); margin-inline: auto; padding: 0 0 72px; }
-.rv-foot { width: min(1200px, 100% - 2 * var(--landing-gutter)); margin-inline: auto; padding: 28px 0 36px; border-top: 1px solid var(--hairline); font-size: 14px; color: var(--muted); }
+.rv-frame { width: var(--content-width); margin-inline: auto; padding: 0 0 72px; }
+.rv-foot { width: var(--content-width); margin-inline: auto; padding: 28px 0 36px; border-top: 1px solid var(--hairline); font-size: 14px; color: var(--muted); }
 .rv-hero { display: grid; grid-template-columns: 1fr; margin-bottom: 40px; border-inline: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); }
 @media (min-width: 960px) { .rv-hero[data-has-aside] { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); } }
 .rv-hero-copy { display: flex; flex-direction: column; gap: 18px; padding: clamp(40px, 6vw, 72px) clamp(20px, 4vw, 48px); }
@@ -1461,6 +1463,27 @@ html:has(.landing) body {
   .rv-list > li, .rv-findings > li { animation: none; }
   .rv-tab::after, .rv-row-go { transition: none; }
 }
+
+/* ---------- pricing: the shared night shell, flat per-seat plans ---------- */
+.pricing-label { margin-bottom: 20px; font-family: var(--font-code); font-size: 12.5px; color: var(--faint); }
+.pricing-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.pricing-card { display: flex; flex-direction: column; min-width: 0; padding: 24px; border: 1px solid var(--panel-line); border-radius: 14px; background: var(--panel); color: var(--text); }
+.pricing-card[data-popular] { border-color: var(--accent); }
+.pricing-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 44px; }
+.pricing-name { font-size: 18px; font-weight: 500; letter-spacing: -0.015em; }
+.pricing-badge { padding: 4px 8px; border: 1px solid var(--accent); border-radius: 999px; font-family: var(--font-code); font-size: 11px; line-height: 1.4; color: var(--accent); }
+.pricing-cost { margin-top: 24px; }
+.pricing-price { display: block; font-size: clamp(36px, 3.3vw, 44px); line-height: 1.1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.pricing-terms { display: block; min-height: 4.5em; margin-top: 12px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.pricing-monthly { display: block; }
+.pricing-features { display: flex; flex: 1; flex-direction: column; gap: 12px; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--hairline); font-size: 14px; line-height: 1.5; }
+.pricing-features li { display: flex; align-items: flex-start; gap: 10px; }
+.pricing-check { width: 16px; height: 16px; flex-shrink: 0; margin-top: 3px; color: var(--muted); }
+.pricing-cta { justify-content: center; margin-top: 32px; }
+.pricing-cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.pricing-note { margin-top: 28px; font-size: 15px; line-height: 1.6; color: var(--muted); }
+@media (min-width: 640px) { .pricing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1200px) { .pricing-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
 /* ---------- landing: section heads, and the animated figures in a coderabbit-style box ---------- */
 .sec-kicker { font-family: var(--font-code); font-size: 12.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tone); }
@@ -1709,7 +1732,7 @@ html:has(.landing) body {
 .cta-grid { display: grid; grid-template-columns: 1fr; align-items: end; gap: 12px; }
 @media (min-width: 960px) { .cta-grid { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); } }
 .cta-copy { padding-top: clamp(64px, 9vw, 120px); padding-bottom: clamp(24px, 6vw, 110px); }
-.cta-wolf { position: relative; margin-right: calc(-1 * var(--landing-gutter)); padding-top: clamp(24px, 4vw, 60px); }
+.cta-wolf { position: relative; margin-right: calc(-1 * var(--page-gutter)); padding-top: clamp(24px, 4vw, 60px); }
 .cta-canvas { display: block; width: 100%; aspect-ratio: 560 / 440; filter: drop-shadow(0 0 6px rgba(245, 165, 36, 0.45)) drop-shadow(0 0 22px rgba(245, 165, 36, 0.18)); }
 
 /* ---------- the trust section's machines (Anatomy style on paper: ink outlines, one lit part) ---------- */

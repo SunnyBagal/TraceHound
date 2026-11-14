@@ -72,6 +72,7 @@ const NAV = [
   { label: "Graph", href: GRAPH_HREF },
   { label: "Reviews", href: reviewsHref() },
   { label: "Benchmark", href: `${base}/benchmark` },
+  { label: "Pricing", href: `${base}/pricing` },
   { label: "How it works", href: "#how-it-works" },
   { label: "Agents", href: "#agents" },
   { label: "Roadmap", href: "#roadmap" },
