@@ -45,13 +45,13 @@ describe("parseAnthropicRowConfig", () => {
 describe("providerClient", () => {
   it("refuses an unreadable file, a non-Anthropic config, a model that differs from --model, and missing caps or key", () => {
     const d = dir();
-    expect(providerClient(path.join(d, "missing.json"), HAIKU, { env, stateDir: d })).toEqual({ error: "--provider-config is not a readable JSON file" });
-    expect(providerClient(configFile(d, { provider: "nebius" }), HAIKU, { env, stateDir: d })).toMatchObject({ error: expect.stringMatching(/^--provider-config must be/) });
-    expect(providerClient(configFile(d, row), "nvidia/Nemotron-3.5-Super-VL", { env, stateDir: d }))
+    expect(providerClient(path.join(d, "missing.json"), HAIKU, "on", { env, stateDir: d })).toEqual({ error: "--provider-config is not a readable JSON file" });
+    expect(providerClient(configFile(d, { provider: "nebius" }), HAIKU, "on", { env, stateDir: d })).toMatchObject({ error: expect.stringMatching(/^--provider-config must be/) });
+    expect(providerClient(configFile(d, row), "nvidia/Nemotron-3.5-Super-VL", "on", { env, stateDir: d }))
       .toEqual({ error: "--model must equal the provider config's model (no model fallback)" });
-    expect(providerClient(configFile(d, row), HAIKU, { env: { ANTHROPIC_API_KEY: KEY }, stateDir: d }))
+    expect(providerClient(configFile(d, row), HAIKU, "on", { env: { ANTHROPIC_API_KEY: KEY }, stateDir: d }))
       .toMatchObject({ error: expect.stringMatching(/^TRACEHOUND_BUDGET_ANTHROPIC_USD must be explicitly set/) });
-    const noKey = providerClient(configFile(d, row), HAIKU, { env: { ...env, ANTHROPIC_API_KEY: "" }, stateDir: d });
+    const noKey = providerClient(configFile(d, row), HAIKU, "on", { env: { ...env, ANTHROPIC_API_KEY: "" }, stateDir: d });
     expect(noKey).toMatchObject({ error: expect.stringMatching(/^ANTHROPIC_API_KEY is not set/) });
     expect(JSON.stringify(noKey)).not.toContain(KEY);
   });
@@ -65,7 +65,7 @@ describe("providerClient", () => {
       return new Response(JSON.stringify({ model: HAIKU, stop_reason: "end_turn",
         content: [{ type: "text", text: '{"findings":[]}' }], usage: { input_tokens: 1000, output_tokens: 200 } }), { status: 200 });
     }) as typeof globalThis.fetch;
-    const p = providerClient(configFile(d, row), HAIKU, { env, stateDir: d, fetch });
+    const p = providerClient(configFile(d, row), HAIKU, "on", { env, stateDir: d, fetch });
     if ("error" in p) throw new Error(p.error);
     expect(p.budget.caps).toEqual({ totalUSD: 2.5, runUSD: 0.2 });
     const out = await reviewPull(p.client, { title: "Invented change", description: "", diff: DIFF }, { model: HAIKU, reasoning: "on" });
@@ -117,4 +117,66 @@ describe("the three CLIs take --provider-config and refuse a mismatched row befo
     expect(errors.join("\n")).toMatch(/TRACEHOUND_BUDGET_ANTHROPIC_USD must be explicitly set/);
     expect(errors.join("\n")).not.toMatch(/NEBIUS_API_KEY/);
   });
+});
+
+describe("thinking off (codex NO-GO on e4f13aa): the row's setting and the sent request agree", () => {
+  function fakeFetch(model: string, bodies: Record<string, unknown>[]) {
+    return (async (_url: unknown, init?: RequestInit) => {
+      bodies.push(JSON.parse(init!.body as string));
+      return new Response(JSON.stringify({ model, stop_reason: "end_turn", content: [{ type: "text", text: '{"findings":[]}' }],
+        usage: { input_tokens: 10, output_tokens: 5 } }), { status: 200 });
+    }) as typeof globalThis.fetch;
+  }
+  const off = (model: string) => ({ provider: "anthropic", scope: "report-only-dev", model, thinking: "off" });
+
+  it("refuses a row whose thinking conflicts with --reasoning, in both directions, before any client exists", () => {
+    const d = dir();
+    expect(providerClient(configFile(d, off(HAIKU)), HAIKU, "on", { env, stateDir: d }))
+      .toEqual({ error: "--provider-config thinking off conflicts with --reasoning on (thinking off needs --reasoning off; adaptive needs --reasoning on)" });
+    expect(providerClient(configFile(d, { ...row, thinking: "adaptive" }), HAIKU, "off", { env, stateDir: d }))
+      .toMatchObject({ error: expect.stringMatching(/^--provider-config thinking adaptive conflicts with --reasoning off/) });
+  });
+
+  for (const [model, sent] of [[HAIKU, "disabled"], ["claude-sonnet-5-5", "between_tools"]] as const) {
+    it(`${model}: thinking off with --reasoning off sends thinking ${sent} on the frozen prompt and ledgers the same`, async () => {
+      const d = dir();
+      const bodies: Record<string, unknown>[] = [];
+      // one Sonnet call reserves about $0.33 even here (32,000 output tokens at $10/M), above the shared env's $0.20 run cap
+      const p = providerClient(configFile(d, off(model)), model, "off", { env: { ...env, TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD: "1" }, stateDir: d, fetch: fakeFetch(model, bodies) });
+      if ("error" in p) throw new Error(p.error);
+      const out = await reviewPull(p.client, { title: "Invented change", description: "", diff: DIFF }, { model, reasoning: "off" });
+      expect(out.review.chunks.map((c) => c.status)).toEqual(["OK"]);
+      expect(bodies).toHaveLength(1);
+      expect(bodies[0]!.thinking).toEqual({ type: sent });
+      expect(createHash("sha256").update(bodies[0]!.system as string).digest("hex")).toBe(REVIEW_PROMPT_SHA256);
+      expect(new SpendLedger(path.join(d, "spend.anthropic.jsonl")).entries()[0]!.settings).toMatchObject({ thinking: sent, sampling: "default" });
+    });
+  }
+
+  type In = { d: string; pr: string; review: string; cfg: string };
+  const clis: [string, (i: In, extra: string[]) => Promise<number>][] = [
+    ["review", (i, extra) => reviewMain(["--pr", i.pr, "--out", path.join(i.d, "out.json"), "--model", HAIKU, "--provider-config", i.cfg, ...extra])],
+    ["review-ctx", (i, extra) => ctxMain(["--pr", i.pr, "--head", "a".repeat(40), "--repo", i.d, "--out", path.join(i.d, "out.json"), "--model", HAIKU, "--provider-config", i.cfg, ...extra])],
+    ["verify-ctx", (i, extra) => verifyCtxMain(["--review", i.review, "--pr", i.pr, "--head", "a".repeat(40), "--repo", i.d,
+      "--out", path.join(i.d, "v.json"), "--kept", path.join(i.d, "k.json"), "--model", HAIKU, "--provider-config", i.cfg, ...extra])],
+  ];
+  for (const [name, run] of clis) {
+    it(`${name}: a thinking-off row is refused under the default --reasoning on, and passes the check with --reasoning off`, async () => {
+      const d = dir();
+      const pr = path.join(d, "pr.json");
+      writeFileSync(pr, JSON.stringify({ title: "Invented change", description: "", diff: DIFF }));
+      const review = path.join(d, "review.json");
+      writeFileSync(review, JSON.stringify({ pr_title: "Invented change", comments: [] }));
+      const i = { d, pr, review, cfg: configFile(d, off(HAIKU)) };
+      const errors: string[] = [];
+      vi.spyOn(console, "error").mockImplementation((m: unknown) => { errors.push(String(m)); });
+      const fetch = vi.spyOn(globalThis, "fetch");
+      expect(await run(i, [])).toBe(1);
+      expect(errors.at(-1)).toMatch(/^--provider-config thinking off conflicts with --reasoning on/);
+      // with --reasoning off the row is accepted and setup goes on to the Anthropic caps (unset in tests): no request
+      expect(await run(i, ["--reasoning", "off"])).toBe(1);
+      expect(errors.at(-1)).toMatch(/^TRACEHOUND_BUDGET_ANTHROPIC_USD must be explicitly set/);
+      expect(fetch).not.toHaveBeenCalled();
+    });
+  }
 });

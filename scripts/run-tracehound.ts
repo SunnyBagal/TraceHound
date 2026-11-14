@@ -35,7 +35,9 @@
  * verify-ctx; any other stage is refused), so they build the Anthropic client instead of the Nebius one. Caps and usage
  * move to the separate .tracehound/spend.anthropic.jsonl: the global cap is TRACEHOUND_BUDGET_ANTHROPIC_USD, each
  * stage gets TRACEHOUND_BUDGET_ANTHROPIC_USD / _RUN_USD as above, and its Nebius run cap is 0, so no Nebius call can be
- * made. Dev manifests only; --post, --fixes on and --contracts on are refused. Without the option nothing changes.
+ * made. A row with thinking off also gets --reasoning off on each stage (the CLIs default to on, which the request would
+ * carry over the row's setting), and the CLIs refuse a row whose thinking conflicts with --reasoning. Dev manifests
+ * only; --post, --fixes on and --contracts on are refused. Without the option nothing changes.
  *
  * Exit codes: 0 every case ok, 1 a case failed or hit its cap (each has its file), 2 refused (bad input or a safety
  * check failed; nothing was spent), 3 stopped before a case by --max-usd-run.
@@ -453,7 +455,9 @@ export function providerSettings(p: AnthropicRowConfig): Record<string, string> 
   return {
     provider: "anthropic", scope: p.scope, model: p.model, ledger: "spend.anthropic.jsonl",
     sampling: "default: temperature is not sent (Nemotron runs at 0; a non-default value is a 400 on both models)",
-    thinking: p.thinking === "off" ? "off" : "adaptive (the reviewers ask for reasoning on)",
+    thinking: p.thinking === "off"
+      ? `off (stages run with --reasoning off; sent as ${p.model === "claude-haiku-5-5" ? "disabled" : "between_tools"})`
+      : "adaptive (stages run with --reasoning on, as for Nemotron)",
     effort: p.effort ?? `provider default (${p.model === "claude-haiku-5-5" ? "medium" : "high"})`,
   };
 }
@@ -480,7 +484,9 @@ async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, for
     const command = args[1] ?? "";
     // a Claude row: only the three pool-verify-v1 stages run, each told to build the Anthropic client
     if (o.provider && !PROVIDER_STAGES.includes(command)) throw new Error("stage not allowed for a provider row");
-    const stageArgs = o.provider ? [...args, "--provider-config", o.providerConfig!] : args;
+    // thinking off reaches the request only as --reasoning off (the CLIs default to on, which would override the row)
+    const stageArgs = o.provider
+      ? [...args, "--provider-config", o.providerConfig!, ...(o.provider.thinking === "off" ? ["--reasoning", "off"] : [])] : args;
     try {
       return await deps.exec(file, stageArgs, { ...options, env: stageEnv(options.env, command, caps, o.cache, o.provider !== null) });
     } catch (e) {

@@ -744,6 +744,22 @@ describe("--provider-config (report-only dev Claude rows)", () => {
       .toMatch(/TRACEHOUND_BUDGET_ANTHROPIC_USD and TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD must be set/);
   });
 
+  it("thinking off (codex NO-GO on e4f13aa): every stage also gets --reasoning off, and the record says what is sent", async () => {
+    const f = devFixture(1, { provider: "anthropic", scope: "report-only-dev", model: HAIKU, thinking: "off" });
+    const { d, argv } = providerDeps(f);
+    expect(await main(pargs(f, "--execute"), d)).toBe(0);
+    expect(argv.map((a) => a[1])).toEqual(["review", "review-ctx", "verify-ctx"]);
+    for (const a of argv) expect(a.slice(-4)).toEqual(["--provider-config", f.cfg, "--reasoning", "off"]);
+    const rec = JSON.parse(readFileSync(path.join(f.out, "case-901.json"), "utf8"));
+    expect(rec.settings.provider.thinking).toBe("off (stages run with --reasoning off; sent as disabled)");
+    // the default row adds no --reasoning: the CLIs' default on matches its adaptive record
+    const g = devFixture(1);
+    const { d: d2, argv: a2 } = providerDeps(g);
+    expect(await main(pargs(g, "--execute"), d2)).toBe(0);
+    for (const a of a2) expect(a).not.toContain("--reasoning");
+    expect(JSON.parse(readFileSync(path.join(g.out, "case-901.json"), "utf8")).settings.provider.thinking).toBe("adaptive (stages run with --reasoning on, as for Nemotron)");
+  });
+
   it("without the option the stage env is the Nebius one, unchanged", () => {
     const caps = caseCaps(50, 1, 0.25);
     const e = stageEnv({}, "review", caps, "off");

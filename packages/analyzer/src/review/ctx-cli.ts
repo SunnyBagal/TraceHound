@@ -104,7 +104,7 @@ export async function main(argv: string[]): Promise<number> {
   let client: ChatClient;
   let budget: Budget;
   if (values["provider-config"]) {
-    const p = providerClient(values["provider-config"], values.model!);
+    const p = providerClient(values["provider-config"], values.model!, values.reasoning as "on" | "off");
     if ("error" in p) {
       console.error(p.error);
       return 1;
