@@ -32,7 +32,7 @@ artu1 and bunny tune TraceHound later, so they **never open, list, grep or diff*
 - Protocol `docs/eval/ts-protocol.md` **rev 9 `5b812d4` merged** (`4d7d159`, grok GO). Tag-worktree command set `docs/eval/tag-worktree.md` **`775c3d6` merged** (`64a23a4`, grok GO); cite `775c3d6`, not `ffb615b` (NO-GO).
 
 ## Money (docs/budget.md is the authority)
-- Real balance **$19.10** (console 2026-11-14 12:55 IST; $19.13 on 9 and 13 Nov): usable $18.13, unallocated $1.00. `TRACEHOUND_BUDGET_TOTAL_USD=63.15547` in `.env`. **Freeze lifted 2026-11-13** (Sunny, without the console check); guard: S1's console ÷ ledger ≥ 2 h after S1, above 1.08 → stop and tell Sunny. Only artu1 approves spend; Sunny sends S1. This session: $0.
+- Real balance **$16.46** (console 2026-11-14 ~21:38 IST, R1's official reading; $19.10 at 12:55 IST, $19.13 on 9 and 13 Nov): usable $18.13, unallocated $1.00. `TRACEHOUND_BUDGET_TOTAL_USD=63.15547` in `.env`. **Freeze lifted 2026-11-13** (Sunny, without the console check); guard: S1's console ÷ ledger ≥ 2 h after S1, above 1.08 → stop and tell Sunny. Only artu1 approves spend; Sunny sends S1. This session: $0.
 
 ## Standing rules
 - Cal.com is spent; never open its goldens, tool comments or score detail. Never scan `.tracehound/cache`. Only artu1 approves spend. Compare ledger vs console ≥ 2 h after a paid job.
