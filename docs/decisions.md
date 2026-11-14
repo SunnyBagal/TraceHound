@@ -4269,3 +4269,43 @@ Automatic review turned off in its dashboard on 13 Nov, before the forks were ad
    collector's flag) and reported to Sunny. (Replaces P1 §1's open-all-first.)
 **Touches:** artu1 this file, `docs/budget.md` (ratio, R1 approval), `docs/live-setup.md` (Greptile expiry, CodeRabbit auto
 review off); Planner A `docs/specs/E1.md` (2), `docs/runbooks/W1-writeup.md` (1), `docs/specs/P1.md` §1 (3).
+
+## 076j — Model comparison on dev: same inputs, two judges, paired counts, a second Haiku draw, a blind check (2026-11-14)
+
+**Status: ruled by Sunny.** Dev, report-only, the selection set: nothing here adopts a model or changes A0, the
+protocol or the held-out plan. Facts at ruling time: Haiku 5.5 ran on R1's 40 cases ($0.30288), Sonnet 5.5 on R1 §7's 8 bug
+cases ($1.36342), Anthropic total $1.66630 of $9.50; neither row is judged yet (`run/out/bunny.r1-claude.md`).
+1. **Same inputs.** The Claude rows use R1's cases, R1's three prompts (sha256 equal to R1's records) and R1's pipeline
+   (`run-tracehound.ts`, `--fixes off --contracts off --cache off`), no retuning. The only allowed difference is default
+   sampling (no temperature sent: a non-default one is refused by both models), recorded in each row's job file with its
+   thinking setting.
+2. **Two judges on every row** (A0, Haiku, Sonnet): bench-judge-v1 (scorer of record) and **bench-judge-x1**
+   (`Qwen/Qwen3-235B-A22B-Instruct-2507`, reasoning off). x1 is already H2's second judge and qualifies: Qwen (Alibaba) is
+   neither Nemotron nor Claude, so no new model is picked. Each judge's catches are reported, and their agreement per row
+   over the bug cases: both / v1 only / x1 only / neither, percent agreement and Cohen's kappa.
+3. **Paired counts.** Per judge, a per-case matrix A0 vs Haiku on the 31 bug cases (both / A0 only / Haiku only / neither)
+   with an exact two-sided sign test on the discordant cases; the same for A0 vs Sonnet on Sonnet's 8. Dev, report-only:
+   the p-values register nothing. A Wilson 95% interval on every catch rate.
+4. **Per row also:** location hits; comments per case (mean, median, max); comments on the 9 clean cases (A0, Haiku;
+   Sonnet ran on bug cases only); cost per case (median, mean, max; Nebius ledger for A0, Anthropic ledger for the Claude
+   rows); failures (cases, chunks, requests, `JUDGE_FAILED`).
+5. **Variance.** Anthropic left after both rows: $9.50 − $1.66630 = **$7.83370 ≥ $2.00, so Haiku runs a second draw** on
+   all 40, same command, a new output directory, run cap = Haiku's $2.50 − its spend so far, under the $9.50 stop.
+   Judged by v1 and x1; the report gives, per judge, the cases caught in one draw only (and in which), and location hits
+   changed.
+6. **Blind check.** Every (row, bug case) where v1 and x1 disagree on the catch goes to `run/out/sunny-blind-check.md`
+   (artu1) with the model and both verdicts hidden: the bug as labelled and that row's comments on the case. At most 15;
+   if more, the 15 with the lowest sha256 of `<row>|<case id>` (a rule that reads no result), and the file states the
+   total. Sunny marks each one.
+- **Money.** Judging is Nebius money and counts against **L1 ($0.40)**: the 076j judge processes are E1's processes 3 and
+  10–13 brought forward, plus Haiku draw 2 under v1 and x1, all in E1's job directory under E1's one L1 envelope
+  (`L1 L0=` written once, 076c item 1). E1 reuses these detail files and does not judge those rows again. Estimate ≈ $0.15
+  of the $0.40; if E1's remaining processes would not fit, that is a money question for Sunny before E1. One paid process
+  at a time across both providers.
+- **Lanes:** bunny (judging, Haiku draw 2), codex (an independent recount per row, MATCH/MISMATCH, and the table for
+  items 2–5), grok (one pass on codex's table and the sign-test arithmetic), artu1 (this record, the blind-check file,
+  merges on GO).
+
+**Touches:** artu1 this file, `docs/budget.md` (L1 started early for 076j), `run/out/sunny-blind-check.md`; Planner A
+`docs/specs/E1.md` (processes 3 and 10–13 done early and reused, Sonnet on 8 cases not 10, Haiku draw 2, items 2–4's
+paired table and agreement).
