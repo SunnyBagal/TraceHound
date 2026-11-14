@@ -3,7 +3,7 @@
 // fork, parent, PR refs and both PR shas, re-checked right before the comment), scoped gh argv, allowlisted gh env, no
 // duplicate comment; a fake key never leaks, also when gh fails and dumps its env. One local git fixture repo per file
 // (copied per test) behind a /bin/sh recording shim, a fake pipeline, a fake gh. No network, no model.
-import { copyFileSync, cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -620,5 +620,135 @@ describe("lineage and replay-arms (B1)", () => {
     expect(r.arms.A1.comments).toHaveLength(15);
     expect(r.arms.A2.comments).toHaveLength(11);
     expect(r.a0MatchesPosted).toBeNull();
+  });
+});
+
+// Decision 076g item 4 (AGENTS.md exception (1)): --provider-config selects a report-only dev Anthropic row. Fakes only.
+describe("--provider-config (report-only dev Claude rows)", () => {
+  const HAIKU = "claude-haiku-5-5";
+  const AKEY = "invented-anthropic-key-runner-0000";
+  const anthEntry = (usd: number) => JSON.stringify({ timestamp: "2026-11-14T00:00:00Z", provider: "anthropic", model: HAIKU,
+    inputTokens: 1, outputTokens: 1, estCostUSD: usd, purpose: "review" }) + "\n";
+
+  /** the fixture with its manifest moved under cases/dev/, and a row config file */
+  function devFixture(n = 2, config: unknown = { provider: "anthropic", scope: "report-only-dev", model: HAIKU }): Fixture & { cfg: string; anth: string } {
+    const f = fixture(n);
+    const dev = path.join(f.dir, "cases", "dev");
+    mkdirSync(dev, { recursive: true });
+    const manifest = path.join(dev, "manifest.json");
+    renameSync(f.manifest, manifest);
+    const cfg = path.join(f.dir, "row.json");
+    writeFileSync(cfg, JSON.stringify(config));
+    return { ...f, manifest, cfg, anth: path.join(f.dir, "spend.anthropic.jsonl") };
+  }
+  function providerDeps(f: ReturnType<typeof devFixture>, o: { spend?: number; budget?: string; env?: NodeJS.ProcessEnv } = {}) {
+    const { d, calls } = deps(f);
+    const argv: string[][] = [];
+    const exec: Execute = async (_file, args, options) => {
+      argv.push(args);
+      calls.stages.push({ cmd: args[1]!, env: options.env });
+      if (args[1] === o.budget) throw Object.assign(new Error("Command failed"), { stderr: "BudgetExceededError: refusing Anthropic report-only dev claude-haiku-5-5: over TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD=0.125" });
+      if (args[1] === "verify-ctx" && o.spend) appendFileSync(f.anth, anthEntry(o.spend));
+      return {};
+    };
+    const env = o.env ?? { PATH: process.env.PATH, HOME: process.env.HOME, ANTHROPIC_API_KEY: AKEY,
+      TRACEHOUND_BUDGET_ANTHROPIC_USD: "9.5", TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD: "9.5", TRACEHOUND_BUDGET_TOTAL_USD: "0.01" };
+    return { d: { ...d, exec, env } as RunnerDeps, calls, argv };
+  }
+  const pargs = (f: ReturnType<typeof devFixture>, ...extra: string[]) =>
+    args(f, "--provider-config", f.cfg, "--fixes", "off", "--contracts", "off", ...extra);
+
+  it("dry run: names the row and its settings, makes no stage call", async () => {
+    const f = devFixture();
+    const { d, calls } = providerDeps(f);
+    expect(await main(pargs(f), d)).toBe(0);
+    const log = calls.logs.join("\n");
+    expect(log).toMatch(/provider row: anthropic claude-haiku-5-5 \(report-only dev; sampling default: temperature is not sent/);
+    expect(log).toMatch(/model claude-haiku-5-5 · /);
+    expect(calls.stages).toEqual([]);
+  });
+
+  it("execute: each stage gets the row config and Anthropic caps (Nebius run cap 0); record and usage come from the Anthropic ledger", async () => {
+    const f = devFixture(2);
+    const nebiusBefore = readFileSync(f.ledger, "utf8");
+    const { d, calls, argv } = providerDeps(f, { spend: 0.03 });
+    // the Nebius total cap (0.01) is already used up by its ledger (0.01): a provider row does not read it
+    expect(await main(pargs(f, "--execute"), d)).toBe(0);
+    expect(calls.pipeline.map((p) => p.model)).toEqual([HAIKU, HAIKU]);
+    expect(argv.map((a) => a[1])).toEqual(["review", "review-ctx", "verify-ctx", "review", "review-ctx", "verify-ctx"]);
+    for (const a of argv) expect(a.slice(-2)).toEqual(["--provider-config", f.cfg]);
+    const env = (i: number) => calls.stages[i]!.env;
+    // case 1: Anthropic ledger 0 + allowance 0.25; case 2: 0.03 + 0.25; the reviewers split it, the verifier gets all of it
+    expect([env(0).TRACEHOUND_BUDGET_ANTHROPIC_USD, env(0).TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD, env(2).TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD]).toEqual(["0.25", "0.125", "0.25"]);
+    expect(Number(env(3).TRACEHOUND_BUDGET_ANTHROPIC_USD)).toBeCloseTo(0.28, 10);
+    for (const s of calls.stages) expect(s.env.TRACEHOUND_BUDGET_RUN_USD).toBe("0");
+    const rec = JSON.parse(readFileSync(path.join(f.out, "case-901.json"), "utf8"));
+    expect(rec.settings.model).toBe(HAIKU);
+    expect(rec.settings.provider).toMatchObject({ provider: "anthropic", model: HAIKU, ledger: "spend.anthropic.jsonl",
+      sampling: expect.stringMatching(/^default: temperature is not sent/), thinking: expect.stringMatching(/^adaptive/), effort: "provider default (medium)" });
+    expect(rec.usage.ledger.costUSD).toBeCloseTo(0.03, 10);
+    expect(readFileSync(f.ledger, "utf8")).toBe(nebiusBefore);
+    expect(JSON.stringify(rec)).not.toContain(AKEY);
+    expect(calls.logs.join("\n")).not.toContain(AKEY);
+  });
+
+  it("--max-usd-run and the global cap read the Anthropic ledger and TRACEHOUND_BUDGET_ANTHROPIC_USD", async () => {
+    const f = devFixture(2);
+    const { d, calls } = providerDeps(f, { spend: 0.3 });
+    expect(await main(pargs(f, "--execute", "--max-usd-run", "0.5"), d)).toBe(3);
+    expect(calls.logs.join("\n")).toMatch(/STOPPED before case-902: run spent \$0\.3000/);
+    const g = devFixture(1);
+    writeFileSync(g.anth, anthEntry(9.45));
+    const { d: d2, calls: c2 } = providerDeps(g);
+    expect(await main(pargs(g, "--execute"), d2)).toBe(3);
+    expect(c2.logs.join("\n")).toMatch(/STOPPED before case-901: the global total cap leaves \$0\.0500 \(TRACEHOUND_BUDGET_ANTHROPIC_USD 9\.5 - ledger 9\.4500\)/);
+    expect(c2.stages).toEqual([]);
+  });
+
+  it("a stage that dies on an Anthropic cap marks the case cap; a stage outside the three is refused", async () => {
+    const f = devFixture(1);
+    const { d } = providerDeps(f, { budget: "review" });
+    expect(await main(pargs(f, "--execute"), d)).toBe(1);
+    expect(JSON.parse(readFileSync(path.join(f.out, "case-901.json"), "utf8")).status).toBe("cap");
+    const g = devFixture(1);
+    const { d: d2, argv } = providerDeps(g);
+    const odd: RunnerDeps = { ...d2, runPipeline: async (_i, _m, _r, _h, _l, ex) => {
+      try { await ex(process.execPath, ["bin.ts", "naming"], { cwd: g.dir, env: {}, maxBuffer: 1 }); } catch { return null; }
+      return null;
+    } };
+    expect(await main(pargs(g, "--execute"), odd)).toBe(1);
+    expect(argv).toEqual([]);
+    expect(JSON.parse(readFileSync(path.join(g.out, "case-901.json"), "utf8")).status).toBe("failed");
+  });
+
+  it("refuses posting, fixes or contracts on, a non-dev manifest, a held-out path, a bad config, and a missing key or cap", async () => {
+    const refused = async (f: ReturnType<typeof devFixture>, argv: string[], env?: NodeJS.ProcessEnv) => {
+      const { d, calls } = providerDeps(f, env ? { env } : {});
+      expect(await main(argv, d)).toBe(2);
+      expect(calls.stages).toEqual([]);
+      return calls.logs.join("\n");
+    };
+    const f = devFixture(1);
+    expect(await refused(f, pargs(f, "--execute", "--post", "--repo", FORK, "--pr-map", path.join(f.dir, "prmap.json")))).toMatch(/report-only: --post is refused/);
+    expect(await refused(f, args(f, "--provider-config", f.cfg, "--contracts", "off"))).toMatch(/needs --fixes off --contracts off/);
+    expect(await refused(f, args(f, "--provider-config", f.cfg, "--fixes", "off"))).toMatch(/needs --fixes off --contracts off/);
+    const flat = path.join(f.dir, "manifest.json");
+    writeFileSync(flat, readFileSync(f.manifest));
+    expect(await refused(f, [...pargs(f), "--manifest", flat])).toMatch(/dev only: the manifest must be under cases\/dev\//);
+    expect(await refused(f, [...pargs(f), "--out-dir", path.join(f.dir, "heldout", "th")])).toMatch(/dev only: a held-out path was given/);
+    const bad = devFixture(1, { provider: "anthropic", scope: "report-only-dev", model: "nvidia/Nemotron-3.5-Super-VL" });
+    expect(await refused(bad, pargs(bad))).toMatch(/must be \{provider: anthropic/);
+    expect(await refused(f, pargs(f, "--execute"), { PATH: process.env.PATH, TRACEHOUND_BUDGET_ANTHROPIC_USD: "9.5", TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD: "9.5" }))
+      .toMatch(/ANTHROPIC_API_KEY is missing/);
+    expect(await refused(f, pargs(f, "--execute"), { PATH: process.env.PATH, ANTHROPIC_API_KEY: AKEY, TRACEHOUND_BUDGET_ANTHROPIC_USD: "9.5" }))
+      .toMatch(/TRACEHOUND_BUDGET_ANTHROPIC_USD and TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD must be set/);
+  });
+
+  it("without the option the stage env is the Nebius one, unchanged", () => {
+    const caps = caseCaps(50, 1, 0.25);
+    const e = stageEnv({}, "review", caps, "off");
+    expect(e).toEqual({ TRACEHOUND_BUDGET_TOTAL_USD: "1.25", TRACEHOUND_BUDGET_RUN_USD: "0.125", TRACEHOUND_CACHE_READ: "off", GIT_NO_LAZY_FETCH: "1" });
+    expect(Object.keys(stageEnv({}, "verify-ctx", caps, "read", true)).sort()).toEqual(
+      ["GIT_NO_LAZY_FETCH", "TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD", "TRACEHOUND_BUDGET_ANTHROPIC_USD", "TRACEHOUND_BUDGET_RUN_USD", "TRACEHOUND_CACHE_READ"]);
   });
 });

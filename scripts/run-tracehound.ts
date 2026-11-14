@@ -6,7 +6,7 @@
  *   node scripts/run-tracehound.ts --manifest <case manifest json> --clone <git dir> [--ids a,b] [--execute]
  *     [--out-dir runs/tracehound] [--max-usd-per-case 0.25] [--max-usd-run 2] [--cache off|read] [--fixes on|off]
  *     [--contracts on|off] [--rerun] [--post --repo SunnyBagal/<fork> --pr-map <json|resume jsonl>]
- *     [--gh-bin gh] [--git-bin git]
+ *     [--gh-bin gh] [--git-bin git] [--provider-config <anthropic row json>]
  *
  * Commits: base = manifest base_sha (branch cases/<id>-base), head = manifest case_head_sha (branch cases/<id>), the
  * pair open-prs.ts pushes and the fork PR shows. upstream head_sha must have the same tree as case_head_sha.
@@ -29,6 +29,14 @@
  * statuses and attempts), the pool with sources, the verifier's verdicts (with reasons) and kept file, and the contracts
  * result. scripts/testset/replay-arms.ts rebuilds the arms (A0 pool-verify-v1, A1 pool-raw, A2 review-diff-v1) from it.
  *
+ * Report-only Claude rows (decision 076g item 4, AGENTS.md exception (1)): --provider-config <file> names a
+ * {provider: anthropic, scope: report-only-dev, model, effort?, thinking?} row (llm/provider.ts). The runner then hands
+ * runPipeline that model and appends --provider-config to each of its three analyzer stages (review, review-ctx,
+ * verify-ctx; any other stage is refused), so they build the Anthropic client instead of the Nebius one. Caps and usage
+ * move to the separate .tracehound/spend.anthropic.jsonl: the global cap is TRACEHOUND_BUDGET_ANTHROPIC_USD, each
+ * stage gets TRACEHOUND_BUDGET_ANTHROPIC_USD / _RUN_USD as above, and its Nebius run cap is 0, so no Nebius call can be
+ * made. Dev manifests only; --post, --fixes on and --contracts on are refused. Without the option nothing changes.
+ *
  * Exit codes: 0 every case ok, 1 a case failed or hit its cap (each has its file), 2 refused (bad input or a safety
  * check failed; nothing was spent), 3 stopped before a case by --max-usd-run.
  * Node >= 24 type stripping: erasable TypeScript only, no new dependencies.
@@ -48,6 +56,8 @@ import { runContracts as actionRunContracts, selectContracts, type ContractsResu
 import { ledgerMark, ledgerSince, recordingClient, UsageRecorder, type StageUsage } from "../packages/action/src/usage.ts";
 import { BudgetExceededError, capsFromEnv, type BudgetCaps } from "../packages/analyzer/src/llm/budget.ts";
 import { SpendLedger } from "../packages/analyzer/src/llm/ledger.ts";
+import { ANTHROPIC_CAP_NAMES, anthropicCapsFromEnv } from "../packages/analyzer/src/llm/anthropic.ts";
+import { parseAnthropicRowConfig, type AnthropicRowConfig } from "../packages/analyzer/src/llm/provider.ts";
 import { REVIEW_PROMPT_SHA256 } from "../packages/analyzer/src/review/review.ts";
 import { REVIEW_CTX_PROMPT_SHA256 } from "../packages/analyzer/src/review/review-ctx.ts";
 import { VERIFY_CTX_PROMPT_SHA256 } from "../packages/analyzer/src/review/verify-ctx.ts";
@@ -71,7 +81,7 @@ export const ACTION_DEFAULTS = {
 } as const;
 export const MARKER = (id: string) => `<!-- tracehound-runner case=${id} -->`;
 /** A model refusal by the budget: the analyzer CLIs rethrow BudgetExceededError, so the child dies with this on stderr. */
-const BUDGET_RE = /BudgetExceededError|TRACEHOUND_BUDGET_(RUN|TOTAL)_USD/;
+const BUDGET_RE = /BudgetExceededError|TRACEHOUND_BUDGET_(RUN|TOTAL|ANTHROPIC|ANTHROPIC_RUN)_USD/;
 const GH_COMMENT_MAX = 65_000;
 
 export class Refusal extends Error {}
@@ -87,6 +97,8 @@ export type Opts = {
   manifest: string; clone: string; ids: string[] | null; execute: boolean; outDir: string;
   maxUsdPerCase: number; maxUsdRun: number; cache: "off" | "read"; fixes: "on" | "off"; contracts: "on" | "off";
   rerun: boolean; post: boolean; fork: string | null; prMap: string | null; ghBin: string; gitBin: string;
+  /** report-only dev Claude row (--provider-config): the file and its parsed config; null = the Nebius default */
+  providerConfig: string | null; provider: AnthropicRowConfig | null;
 };
 type Proc = { status: number | null; stdout: string; stderr: string };
 
@@ -95,6 +107,8 @@ export interface RunnerDeps {
   env: NodeJS.ProcessEnv;
   log: (line: string) => void;
   ledgerFile: string;
+  /** the Anthropic row ledger; default: spend.anthropic.jsonl next to ledgerFile */
+  anthropicLedgerFile?: string;
   envFile: string;
   runPipeline: (input: ReviewerInput, model: string, repo: string, head: string, log: (m: string) => void,
     exec: Execute, options: PipelineOptions) => Promise<PipelineOutput | null>;
@@ -141,6 +155,7 @@ export function parseCli(argv: string[]): Opts {
         contracts: { type: "string", default: ACTION_DEFAULTS.contracts }, rerun: { type: "boolean", default: false },
         post: { type: "boolean", default: false }, repo: { type: "string" }, "pr-map": { type: "string" },
         "gh-bin": { type: "string", default: "gh" }, "git-bin": { type: "string", default: "git" },
+        "provider-config": { type: "string" },
       },
     }));
   } catch (e) {
@@ -170,11 +185,28 @@ export function parseCli(argv: string[]): Opts {
     fork = values.repo ?? null; // used for the PR number in the plan and the output only
   }
   const ids = values.ids === undefined ? null : values.ids.split(",").map((s) => s.trim()).filter(Boolean);
+  let providerConfig: string | null = null;
+  let provider: AnthropicRowConfig | null = null;
+  if (values["provider-config"] !== undefined) {
+    providerConfig = path.resolve(values["provider-config"]);
+    let raw: unknown;
+    try { raw = JSON.parse(fs.readFileSync(providerConfig, "utf8")); } catch { refuse("--provider-config is not a readable JSON file"); }
+    provider = parseAnthropicRowConfig(raw);
+    if (!provider) refuse("--provider-config must be {provider: anthropic, scope: report-only-dev, model, effort?, thinking?} with a ruled model");
+    // decision 076g item 4: report-only rows on dev only; never posted, no fix or contract model
+    if (values.post) refuse("--provider-config rows are report-only: --post is refused");
+    if (values.fixes !== "off" || values.contracts !== "off") refuse("--provider-config needs --fixes off --contracts off");
+    const manifest = path.resolve(values.manifest);
+    const paths = [manifest, path.resolve(values.clone), path.resolve(ROOT, values["out-dir"]), providerConfig];
+    if (paths.some((x) => /held-?out/i.test(x))) refuse("--provider-config rows are dev only: a held-out path was given");
+    if (!manifest.includes(`${path.sep}cases${path.sep}dev${path.sep}`)) refuse("--provider-config rows are dev only: the manifest must be under cases/dev/");
+  }
   return {
     manifest: path.resolve(values.manifest), clone: path.resolve(values.clone), ids, execute: values.execute,
     outDir: path.resolve(ROOT, values["out-dir"]), maxUsdPerCase, maxUsdRun, cache: values.cache, fixes: values.fixes,
     contracts: values.contracts, rerun: values.rerun, post: values.post, fork,
     prMap: values["pr-map"] ? path.resolve(values["pr-map"]) : null, ghBin: values["gh-bin"], gitBin: values["git-bin"],
+    providerConfig, provider,
   };
 }
 
@@ -382,12 +414,17 @@ export function caseCaps(globalTotal: number, ledgerBefore: number, perCase: num
 }
 
 /** The env one analyzer subprocess of runPipeline gets: the case caps, cache reads, and no lazy git fetch. */
-export function stageEnv(env: NodeJS.ProcessEnv, command: string, caps: CaseCaps, cache: "off" | "read"): NodeJS.ProcessEnv {
+export function stageEnv(env: NodeJS.ProcessEnv, command: string, caps: CaseCaps, cache: "off" | "read",
+  provider = false): NodeJS.ProcessEnv {
   const parallel = command === "review" || command === "review-ctx";
+  const run = String(parallel ? caps.reviewerRunUSD : caps.stageRunUSD);
+  // a Claude row: the case caps apply to the Anthropic ledger, and the Nebius run cap is 0 (no Nebius call can pass)
+  const budget = provider
+    ? { [ANTHROPIC_CAP_NAMES.total]: String(caps.totalUSD), [ANTHROPIC_CAP_NAMES.run]: run, TRACEHOUND_BUDGET_RUN_USD: "0" }
+    : { TRACEHOUND_BUDGET_TOTAL_USD: String(caps.totalUSD), TRACEHOUND_BUDGET_RUN_USD: run };
   return {
     ...env,
-    TRACEHOUND_BUDGET_TOTAL_USD: String(caps.totalUSD),
-    TRACEHOUND_BUDGET_RUN_USD: String(parallel ? caps.reviewerRunUSD : caps.stageRunUSD),
+    ...budget,
     TRACEHOUND_CACHE_READ: cache === "off" ? "off" : "on",
     GIT_NO_LAZY_FETCH: "1",
   };
@@ -402,13 +439,33 @@ function tracehoundHead(env: NodeJS.ProcessEnv): { sha: string | null; dirty: bo
   return { sha: h.status === 0 ? h.stdout.trim() : null, dirty: s.status === 0 ? s.stdout.trim() !== "" : null };
 }
 
+/** The analyzer stages a provider row may run (runPipeline's pool-verify-v1 path). */
+export const PROVIDER_STAGES: readonly string[] = ["review", "review-ctx", "verify-ctx"];
+
+/** The ledger the run's caps and usage read: the Anthropic row ledger for a provider row, else the Nebius one. */
+export function runLedgerFile(o: Pick<Opts, "provider">, deps: Pick<RunnerDeps, "ledgerFile" | "anthropicLedgerFile">): string {
+  if (!o.provider) return deps.ledgerFile;
+  return deps.anthropicLedgerFile ?? path.join(path.dirname(deps.ledgerFile), "spend.anthropic.jsonl");
+}
+
+/** What a Claude row records beside the model: every setting that differs from Nemotron's, with its reason. */
+export function providerSettings(p: AnthropicRowConfig): Record<string, string> {
+  return {
+    provider: "anthropic", scope: p.scope, model: p.model, ledger: "spend.anthropic.jsonl",
+    sampling: "default: temperature is not sent (Nemotron runs at 0; a non-default value is a 400 on both models)",
+    thinking: p.thinking === "off" ? "off" : "adaptive (the reviewers ask for reasoning on)",
+    effort: p.effort ?? `provider default (${p.model === "claude-haiku-5-5" ? "medium" : "high"})`,
+  };
+}
+
 type CaseResult = { status: "ok" | "failed" | "cap"; file: string; bodyOnly: string | null; posted: number };
 
 async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, fork: string | null, caps: CaseCaps,
   th: ReturnType<typeof tracehoundHead>): Promise<CaseResult> {
   const c = p.c;
   const startedAt = new Date().toISOString();
-  const mark = await ledgerMark(deps.ledgerFile);
+  const ledgerFile = runLedgerFile(o, deps);
+  const mark = await ledgerMark(ledgerFile);
   const recorder = new UsageRecorder();
   const logs: string[] = [];
   const log = recorder.logger((m) => { logs.push(m); deps.log(`${c.id}: ${m}`); });
@@ -420,8 +477,12 @@ async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, for
     lineage[stage] = "output" in rest ? rest.output : rest;
   };
   const stageExec: Execute = async (file, args, options) => {
+    const command = args[1] ?? "";
+    // a Claude row: only the three pool-verify-v1 stages run, each told to build the Anthropic client
+    if (o.provider && !PROVIDER_STAGES.includes(command)) throw new Error("stage not allowed for a provider row");
+    const stageArgs = o.provider ? [...args, "--provider-config", o.providerConfig!] : args;
     try {
-      return await deps.exec(file, args, { ...options, env: stageEnv(options.env, args[1] ?? "", caps, o.cache) });
+      return await deps.exec(file, stageArgs, { ...options, env: stageEnv(options.env, command, caps, o.cache, o.provider !== null) });
     } catch (e) {
       // never echoed: a child's stderr can carry request details
       if (BUDGET_RE.test(String((e as { stderr?: unknown })?.stderr ?? ""))) capHit = true;
@@ -444,7 +505,7 @@ async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, for
     runReviewer: async () => { throw new Error("pool-verify-v1 only"); },
     checkRepoHead: deps.checkRepoHead,
     runPipeline: async (input, model, repoDir, head) => {
-      const r = await deps.runPipeline(input, model, repoDir, head, log, stageExec, { onUsage: recorder.add, onLineage });
+      const r = await deps.runPipeline(input, o.provider?.model ?? model, repoDir, head, log, stageExec, { onUsage: recorder.add, onLineage });
       if (!r) pipelineFailed = true;
       return r;
     },
@@ -471,7 +532,7 @@ async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, for
     crashed = true; // exception text is never echoed (cli.ts rule)
     log("TraceHound: local run failed before a review was prepared.");
   }
-  const ledgerDelta: StageUsage | null = await ledgerSince(deps.ledgerFile, mark);
+  const ledgerDelta: StageUsage | null = await ledgerSince(ledgerFile, mark);
   const status: CaseResult["status"] = capHit ? "cap" : crashed || pipelineFailed ? "failed" : "ok";
   const findings = prepared?.findings ?? [];
   const posted = findings.slice(0, ACTION_DEFAULTS.maxComments);
@@ -485,9 +546,10 @@ async function runCase(p: CasePlan, o: Opts, repo: string, deps: RunnerDeps, for
       "verify-ctx-v1": VERIFY_CTX_PROMPT_SHA256, fix: sha256(FIX_SYSTEM_PROMPT) },
     versions: { analyzer: ANALYZER_VERSION, action: actionVersion(), runner: 2 },
     tracehound: th,
-    settings: { model: ACTION_DEFAULTS.model, fixModel: FIX_MODEL, maxComments: ACTION_DEFAULTS.maxComments,
+    settings: { model: o.provider?.model ?? ACTION_DEFAULTS.model, fixModel: FIX_MODEL, maxComments: ACTION_DEFAULTS.maxComments,
       fixes: o.fixes, contracts: o.contracts, learn: ACTION_DEFAULTS.learn, cache: o.cache,
-      maxUsdPerCase: o.maxUsdPerCase, maxUsdRun: o.maxUsdRun, caps },
+      maxUsdPerCase: o.maxUsdPerCase, maxUsdRun: o.maxUsdRun, caps,
+      ...(o.provider && { provider: providerSettings(o.provider) }) },
     diff: { files: p.diffFiles, chars: p.diffChars, sha256: sha256(p.diff!) },
     // neutral review format (decision 054): what the Action would post, in order
     pr_title: c.title, ...(p.prNumber !== null && { pr_number: p.prNumber }),
@@ -638,7 +700,8 @@ export async function main(argv: string[], deps: RunnerDeps = defaultDeps()): Pr
     const git = makeGit(o.gitBin, o.clone, deps.env);
     const plans = cases.map((c) => planCase(git, c, o, prMap));
     log(`${o.execute ? "EXECUTE" : "DRY RUN (no model call, no gh call; add --execute to run)"}: ${cases.length} ${repo} case(s), clone ${o.clone}`);
-    log(`reviewer ${ACTION_DEFAULTS.reviewer} · model ${ACTION_DEFAULTS.model} · fix model ${FIX_MODEL} · fixes ${o.fixes} · contracts ${o.contracts} · learn off · max-comments ${ACTION_DEFAULTS.maxComments} · cache ${o.cache === "off" ? "off (reads off, writes on)" : "read"}`);
+    if (o.provider) log(`provider row: anthropic ${o.provider.model} (report-only dev; ${Object.entries(providerSettings(o.provider)).filter(([k]) => ["sampling", "thinking", "effort"].includes(k)).map(([k, v]) => `${k} ${v}`).join("; ")}); caps and usage from spend.anthropic.jsonl and ${ANTHROPIC_CAP_NAMES.total}`);
+    log(`reviewer ${ACTION_DEFAULTS.reviewer} · model ${o.provider?.model ?? ACTION_DEFAULTS.model} · fix model ${FIX_MODEL} · fixes ${o.fixes} · contracts ${o.contracts} · learn off · max-comments ${ACTION_DEFAULTS.maxComments} · cache ${o.cache === "off" ? "off (reads off, writes on)" : "read"}`);
     log(`caps: per case $${o.maxUsdPerCase} (each reviewer $${o.maxUsdPerCase / 2}, they run in parallel), per run $${o.maxUsdRun} (at most ${Math.floor(o.maxUsdRun / o.maxUsdPerCase + 1e-9)} case(s) at the full per-case cap)`);
     log(`allowance min(per-case cap, global total cap − ledger) is computed per case on --execute; minimum $${MIN_CASE_USD}; the reviewers split it`);
     log(`output ${o.outDir}${o.post ? ` · post to ${o.fork}` : " · no posting"}`);
@@ -660,11 +723,18 @@ export async function main(argv: string[], deps: RunnerDeps = defaultDeps()): Pr
     if (missing.length) refuse(`blobs missing in the clone for ${missing.map((p) => p.c.id).join(", ")}`);
     // the key from env or the workspace .env (same loader as packages/analyzer/src/bin.ts); never printed
     // loadEnvFile never overrides a variable already set; the analyzer subprocesses get process.env from runPipeline
-    if (!deps.env.NEBIUS_API_KEY && deps.env === process.env && fs.existsSync(deps.envFile)) process.loadEnvFile(deps.envFile);
-    if (!deps.env.NEBIUS_API_KEY?.trim()) refuse("NEBIUS_API_KEY is missing (env or .env)");
+    const keyName = o.provider ? "ANTHROPIC_API_KEY" : "NEBIUS_API_KEY";
+    if (!deps.env[keyName] && deps.env === process.env && fs.existsSync(deps.envFile)) process.loadEnvFile(deps.envFile);
+    if (!deps.env[keyName]?.trim()) refuse(`${keyName} is missing (env or .env)`);
     // a fresh worktree has an empty ledger, which would hide all earlier spend from the total cap
     if (!fs.existsSync(deps.ledgerFile) || fs.statSync(deps.ledgerFile).size === 0) refuse(`spend ledger ${deps.ledgerFile} is missing or empty; run from the main checkout`);
-    const globalTotal = capsFromEnv(deps.env).totalUSD; // a malformed cap refuses here, not in a child
+    // a malformed cap refuses here, not in a child; a Claude row needs both Anthropic caps set explicitly
+    let globalTotal: number;
+    if (o.provider) {
+      try { globalTotal = anthropicCapsFromEnv(deps.env).totalUSD; } catch { refuse(`${ANTHROPIC_CAP_NAMES.total} and ${ANTHROPIC_CAP_NAMES.run} must be set to non-negative USD amounts`); }
+    } else globalTotal = capsFromEnv(deps.env).totalUSD;
+    const ledgerFile = runLedgerFile(o, deps);
+    const capName = o.provider ? ANTHROPIC_CAP_NAMES.total : "TRACEHOUND_BUDGET_TOTAL_USD";
     let gh: Gh | null = null;
     if (o.post) {
       gh = makeGh({ fork: o.fork!, ghBin: o.ghBin, env: deps.env, log });
@@ -673,18 +743,18 @@ export async function main(argv: string[], deps: RunnerDeps = defaultDeps()): Pr
       log(`post checks passed: ${o.fork} is a fork of ${UPSTREAM[repo]}; ${plans.length} PR(s) match their case refs`);
     }
     const th = tracehoundHead(deps.env); // one HEAD per run
-    const runStart = new SpendLedger(deps.ledgerFile).totalUSD();
+    const runStart = new SpendLedger(ledgerFile).totalUSD();
     let code = 0;
     for (const p of plans) {
-      const spent = new SpendLedger(deps.ledgerFile).totalUSD() - runStart;
+      const spent = new SpendLedger(ledgerFile).totalUSD() - runStart;
       if (spent + o.maxUsdPerCase > o.maxUsdRun + 1e-12) {
         log(`STOPPED before ${p.c.id}: run spent $${spent.toFixed(4)} + per-case cap $${o.maxUsdPerCase} > --max-usd-run $${o.maxUsdRun}; not run: ${plans.slice(plans.indexOf(p)).map((x) => x.c.id).join(", ")}`);
         return 3;
       }
-      const ledgerBefore = new SpendLedger(deps.ledgerFile).totalUSD();
+      const ledgerBefore = new SpendLedger(ledgerFile).totalUSD();
       const caps = caseCaps(globalTotal, ledgerBefore, o.maxUsdPerCase);
       if (caps.allowanceUSD < MIN_CASE_USD) {
-        log(`STOPPED before ${p.c.id}: the global total cap leaves $${caps.allowanceUSD.toFixed(4)} (TRACEHOUND_BUDGET_TOTAL_USD ${globalTotal} - ledger ${ledgerBefore.toFixed(4)}), below the $${MIN_CASE_USD} minimum; not run: ${plans.slice(plans.indexOf(p)).map((x) => x.c.id).join(", ")}`);
+        log(`STOPPED before ${p.c.id}: the global total cap leaves $${caps.allowanceUSD.toFixed(4)} (${capName} ${globalTotal} - ledger ${ledgerBefore.toFixed(4)}), below the $${MIN_CASE_USD} minimum; not run: ${plans.slice(plans.indexOf(p)).map((x) => x.c.id).join(", ")}`);
         return 3;
       }
       const r = await runCase(p, o, repo, deps, o.fork, caps, th);
@@ -692,7 +762,7 @@ export async function main(argv: string[], deps: RunnerDeps = defaultDeps()): Pr
       if (gh && r.status === "ok" && r.bodyOnly) postCase(gh, o, p, r.bodyOnly, log);
       else if (gh) log(`${p.c.id}: nothing to post (${r.status === "ok" ? "no findings" : r.status})`);
     }
-    log(`done: ${plans.length} case(s); run ledger +$${(new SpendLedger(deps.ledgerFile).totalUSD() - runStart).toFixed(4)}`);
+    log(`done: ${plans.length} case(s); run ledger +$${(new SpendLedger(ledgerFile).totalUSD() - runStart).toFixed(4)}`);
     return code;
   } catch (e) {
     if (e instanceof Refusal) {

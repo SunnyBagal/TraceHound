@@ -13,8 +13,18 @@ const NebiusConfig = z.object({ provider: z.literal("nebius").optional(), scope:
 const AnthropicConfig = z.object({ provider: z.literal("anthropic"), scope: z.literal("report-only-dev"), model: z.enum(ANTHROPIC_MODELS),
   effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(), thinking: z.enum(["adaptive", "off"]).optional() }).strict();
 
+export type AnthropicRowConfig = z.infer<typeof AnthropicConfig>;
+
+/** The same check createDevReportClient applies, for callers that validate a row config before any client exists. */
+export function parseAnthropicRowConfig(config: unknown): AnthropicRowConfig | null {
+  const c = AnthropicConfig.safeParse(config);
+  if (!c.success || (c.data.thinking === "off" && ["xhigh", "max"].includes(c.data.effort ?? ""))) return null;
+  return c.data;
+}
+
 export function createDevReportClient(config: unknown = {}, opts: {
   env?: NodeJS.ProcessEnv; stateDir?: string; prices?: PriceTable; fetch?: typeof fetch; readCache?: boolean; offline?: boolean;
+  timeoutMs?: number; // Anthropic only; the client default (300 s) when unset
 } = {}) {
   const env = opts.env ?? process.env;
   const dir = opts.stateDir ?? path.join(ROOT, ".tracehound");
@@ -29,7 +39,7 @@ export function createDevReportClient(config: unknown = {}, opts: {
     const caps = anthropicCapsFromEnv(env);
     const ledger = new SpendLedger(path.join(dir, "spend.anthropic.jsonl"));
     const client = new AnthropicClient({ ...c.data, apiKey: env.ANTHROPIC_API_KEY ?? "", caps, ledger, prices, cache,
-      readCache, offline: opts.offline, fetch: opts.fetch });
+      readCache, offline: opts.offline, fetch: opts.fetch, ...(opts.timeoutMs !== undefined && { timeoutMs: opts.timeoutMs }) });
     return { client, budget: client.budget, caps, ledger, model: c.data.model };
   }
   if (!NebiusConfig.safeParse(config).success) throw new Error("invalid report-only dev provider config (default: nebius)");
