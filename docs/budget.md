@@ -154,8 +154,9 @@ spend so far; unstarted ids roll into the next batch** (this replaced "min(batch
 
 | line | what | cap | status |
 |---|---|---|---|
-| Haiku 5.5 dev row | all 40 dev cases, same prompts | **$4.00** | waits for codex's provider (merged) and `ANTHROPIC_API_KEY` in `.env` |
-| Sonnet 5.5 dev row | 10 dev cases (8 bug, 2 clean, not S1's), fixed selection rule written before any run | **$8.00** | same |
+| Haiku 5.5 dev row | all 40 dev cases, same prompts | **$2.50** (was $4.00; Sunny, 14 Nov) | approved by Sunny; runs after R1 ends and codex's provider is merged; key present |
+| Sonnet 5.5 dev row | **8 dev cases** (was 10; Sunny, 14 Nov): artu1 reads it as R1 §7's 8 bug cases, the 2 clean dropped, until Sunny says otherwise; ids committed before any run | **$6.00** (was $8.00) | same |
+| **Anthropic total** | hard stop for both rows together | **$9.50** | Sunny, 14 Nov (the two row caps add to $8.50) |
 
 These spends must not count against `TRACEHOUND_BUDGET_TOTAL_USD` (the Nebius hard stop) unseen: own cap, ledger rows by provider.
 
@@ -202,3 +203,4 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 | 2026-11-13 | **S1 approved by artu1** (cap $0.45; one dev case end to end through the scheduler, 076e item 1); 076f: P1's $0 steps may start before the ratio, R1 waits for the S1 ratio ≤ 1.08; interim CodeRabbit table only inside L1's $0.40 | $0.45 | — | **$19.13** |
 | 2026-11-13 | 076g: A0 frozen; R2, L2, L4 and the interim table cut, $5.05 → unallocated ($6.05); 077 only the cap reset; Anthropic lines (Sunny's money) Haiku $4, Sonnet $8; ratio after R1 batch 1 (> 1.08 → stop); S1 ratio weak | — | $0 | **$19.13** |
 | 2026-11-14 | console $19.10 at 12:55 IST (Sunny); S1 ratio = $0.03 console drop ÷ $0.0348 ledger (2 review calls, 13 Nov) = **0.86** ≤ 1.08 (weak, cents). **R1 approved by Sunny, cap $4.68; stops after batch 1 for Sunny's next console reading** (076g item 7, 076i) | $4.68 | $0.0348 (S1) | **$19.10** |
+| 2026-11-14 | Anthropic lines changed by Sunny (Sunny's own money is outside the Nebius split): Haiku 5.5 40 cases $2.50, Sonnet 5.5 8 cases $6.00, total hard stop $9.50; approved, run after R1 and the provider merge | — | $0 | **$19.10** |
