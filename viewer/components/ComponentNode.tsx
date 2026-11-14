@@ -10,8 +10,6 @@ import { KIND_META } from "@/lib/kinds";
 import { ComponentIcon } from "./ComponentIcon";
 import { ModelMark } from "./ModelMark";
 import { METHOD_COLORS } from "@/lib/contents";
-import { findingTitle } from "@/lib/pulls";
-import { MODEL_DISCLOSURE } from "@/lib/reviews";
 
 /** The drop-down strip under every card. */
 const STRIP = 32;
@@ -144,22 +142,22 @@ function FindingsBadge({ count, name, onOpen }: { count: number; name: string; o
   );
 }
 
-/** Pinned under the card: the first finding, effect-first, with its location and the disclosure. */
+/** Pinned under the card: how many findings, and where the first one is; the text is in the inspector (ui-01). */
 function FindingCallout({ findings, onOpen }: { findings: NonNullable<ComponentNodeType["data"]["pr"]>["findings"]; onOpen?: () => void }) {
   const first = findings[0]!;
+  const count = `${findings.length} finding${findings.length === 1 ? "" : "s"}`;
+  const where = `${first.path}${first.line !== null ? `:${first.line}` : ""}`;
   return (
     <button
       type="button"
       data-testid="finding-callout"
+      aria-label={`Open ${count}, first at ${where}`}
+      title={where}
       onClick={(event) => { event.stopPropagation(); onOpen?.(); }}
-      className="finding-callout nodrag nopan absolute left-0 top-[calc(100%+14px)] z-10 w-full rounded-md border border-accent/50 bg-panel/95 p-3 text-left shadow-[0_14px_36px_-14px_var(--scrim)] backdrop-blur hover:border-accent"
+      className="finding-callout nodrag nopan absolute left-0 top-[calc(100%+14px)] z-10 flex w-full items-center gap-2.5 rounded-md border border-accent/50 bg-panel/95 px-3 py-2 text-left shadow-[0_14px_36px_-14px_var(--scrim)] backdrop-blur hover:border-accent"
     >
-      <span className="block text-sm font-medium leading-snug text-text">{findingTitle(first.body)}</span>
-      <span className="mt-1.5 block truncate font-mono text-xs text-muted">{first.path}{first.line !== null ? `:${first.line}` : ""}</span>
-      <span className="mt-1 flex items-center justify-between gap-2 text-xs text-faint">
-        <span>{MODEL_DISCLOSURE}</span>
-        {findings.length > 1 && <span className="shrink-0 text-accent">+{findings.length - 1} more</span>}
-      </span>
+      <span className="shrink-0 text-sm font-semibold text-accent">{count}</span>
+      <span className="min-w-0 truncate font-mono text-xs text-muted [direction:rtl]"><bdi>{where}</bdi></span>
     </button>
   );
 }

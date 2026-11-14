@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeModel, ChangeSetEntry } from "@/lib/changes";
 import { useHighlight, type Highlight } from "@/lib/highlight";
 import { impactParam, type ImpactReport } from "@/lib/impact";
-import { inspectorOcclusion } from "@/lib/inspector";
+import { useInspectorWidth } from "@/lib/inspector-width";
 import { current, usePanelNavigation } from "@/lib/navigation";
 import { prLaneRepo, type RepoInfo } from "@/lib/repos";
 import { prOverlay } from "@/lib/pulls";
@@ -20,18 +20,6 @@ import { Rail } from "./Rail";
 import { PrLane, usePrLane } from "./PrLane";
 import { TopBar } from "./TopBar";
 import { WarningsControl } from "./WarningsControl";
-
-/** px of the canvas the floating inspector covers on desktop (lib/inspector.ts); 0 on phones. */
-function useOverlayWidth(): number {
-  const [width, setWidth] = useState(0);
-  useEffect(() => {
-    const measure = () => setWidth(inspectorOcclusion(window.innerWidth));
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, []);
-  return width;
-}
 
 /** Below 768px (the inspector's md breakpoint) the change view is a list, not a canvas. */
 function useIsPhone(): boolean {
@@ -63,7 +51,9 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
   const selection: Selection = entry ? { type: entry.type, id: entry.id } : null;
   const [impactName] = useState(() => (typeof window === "undefined" ? null : impactParam(window.location.search)));
   const [focus, setFocus] = useState<{ ids: string[]; nonce: number }>({ ids: [], nonce: 0 });
-  const overlay = useOverlayWidth();
+  // the floating inspector: its width (draggable, lib/inspector-width.ts) and the canvas it covers
+  const inspector = useInspectorWidth();
+  const overlay = inspector.occlusion;
   const phone = useIsPhone();
   const { close } = nav;
   const occludeRight = selection ? overlay : 0;
@@ -122,12 +112,12 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
               <>
                 {impact && <ImpactPanel name={impactName ?? "impact"} impact={impact} snapshot={snapshot} onSelect={nav.open} />}
                 {changes && <ChangeWarningsPanel model={changes} activeId={activeWarning} onToggle={toggleWarning} onOpen={(id) => nav.open({ type: "node", id })} />}
-                {laneRepo && lane.list && <PrLane repo={laneRepo} list={lane.list} selected={lane.selected} onSelect={lane.select} overlay={lane.overlay} model={pr ?? null} />}
+                {laneRepo && lane.list && <PrLane repo={laneRepo} list={lane.list} selected={lane.selected} onSelect={lane.select} overlay={lane.overlay} model={pr ?? null} collapsed={Boolean(selection) && !phone} />}
                 {/* Railway's boxed canvas: a rounded, bordered panel inset in the chrome, so the
                     chrome's colour shows around it; nodes, edges and the canvas buttons are
                     clipped by its corners. At 640px+ the rail's own width is the left gutter. */}
                 <div className={`min-w-0 flex-1 pb-1.5 pr-1.5 ${impact || changes ? "pl-1.5" : laneRepo && lane.list ? "pl-1.5 md:pl-0" : "pl-1.5 sm:pl-0"}`}>
-                  <div className="canvas-glow relative size-full overflow-hidden rounded-xl border border-line bg-bg" data-testid="canvas-panel">
+                  <div className="graph-surface canvas-glow relative size-full overflow-hidden rounded-xl border border-line bg-bg" data-testid="canvas-panel">
                     <GraphCanvas
                       snapshot={snapshot}
                       selection={selection}
@@ -155,7 +145,7 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
                 </div>
               </>
             )}
-            <Inspector snapshot={snapshot} nav={nav} bind={highlight.bind} changes={changes} findings={pr && laneRepo && overlayData ? { repo: laneRepo, number: pr.number, reviewId: overlayData.reviewId, byComponent: pr.findings } : undefined} />
+            <Inspector snapshot={snapshot} nav={nav} bind={highlight.bind} changes={changes} findings={pr && laneRepo && overlayData ? { repo: laneRepo, number: pr.number, reviewId: overlayData.reviewId, byComponent: pr.findings } : undefined} size={inspector.width ? { width: inspector.width, min: inspector.bounds.min, max: inspector.bounds.max, onResize: inspector.setWidth } : undefined} />
           </main>
         </div>
       </div>

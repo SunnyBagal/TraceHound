@@ -148,10 +148,9 @@ it("pins findings: a badge and callout on the component, its card outlined (no P
   const card = badge.closest<HTMLElement>('[data-testid="component-node"]')!;
   expect(card.dataset.componentId).toBe(inGraph.id);
   expect(badge.textContent).toBe("1");
+  // ui-01: the card says how many and where; the finding's text is only in the inspector
   const callout = within(card).getByTestId("finding-callout");
-  expect(callout.textContent).toContain("This can cause search to miss every description.");
-  expect(callout.textContent).toContain(`${file}:3`);
-  expect(callout.textContent).toContain("model-generated, not tested");
+  expect(callout.textContent).toBe(`1 finding${file}:3`);
   // the PR is a panel row, not a graph node: only its card is outlined, nothing is drawn for the PR
   expect(card.dataset.pr).toBe("touched");
   expect(within(screen.getByTestId("pr-lane")).getByTestId("pr-summary")).toBeTruthy();
@@ -163,4 +162,87 @@ it("pins findings: a badge and callout on the component, its card outlined (no P
   const panel = await screen.findByTestId("inspector-findings");
   const finding = within(panel).getByTestId("review-finding");
   expect(within(finding).getAllByRole("link").some((a) => a.getAttribute("href")!.endsWith("/pull/2#discussion_r101"))).toBe(true);
+});
+
+it("ui-01: the inspector's finding says it once: effect line, location + disclosure, the full comment behind Details", async () => {
+  vi.stubGlobal("fetch", github());
+  window.history.replaceState(null, "", "/graph?repo=tracehound-demo&pr=2");
+  render(<Viewer snapshot={snapshot} repoId="tracehound-demo" />);
+  fireEvent.click(await screen.findByTestId("findings-badge", {}, { timeout: 3000 }));
+  const finding = within(await screen.findByTestId("inspector-findings")).getByTestId("review-finding");
+  expect(finding.dataset.variant).toBe("compact");
+  const title = within(finding).getByTestId("finding-title");
+  expect(title.textContent).toBe("This can cause search to miss every description.");
+  expect(title.tagName).toBe("H3");
+  expect(title.className).toContain("line-clamp-2");
+  expect(within(finding).getByText("model-generated, not tested")).toBeTruthy();
+  expect(within(finding).getByRole("link", { name: `${file}:3` })).toBeTruthy();
+  // the whole comment is collapsed behind a real button; the effect sentence is not repeated in view
+  const toggle = within(finding).getByRole("button", { name: "Details" });
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  const details = within(finding).getByTestId("finding-details");
+  expect(toggle.getAttribute("aria-controls")).toBe(details.id);
+  expect(details.hidden).toBe(true);
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(details.hidden).toBe(false);
+  expect(details.textContent).toContain("The parser now drops the last field.");
+  // order: effect → location → Details → fix (or its absence) → action
+  const order = [title, within(finding).getByRole("link", { name: `${file}:3` }), toggle, within(finding).getByText("No suggestion was posted for this finding."), within(finding).getByRole("link", { name: "Open finding on GitHub" })];
+  for (let i = 1; i < order.length; i++) expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+it("ui-01: opening the inspector folds the PR list to an icon rail that expands on click; closing it restores the list", async () => {
+  vi.stubGlobal("fetch", github());
+  window.localStorage.removeItem("tracehound:pr-panel");
+  window.history.replaceState(null, "", "/graph?repo=tracehound-demo&pr=2");
+  render(<Viewer snapshot={snapshot} repoId="tracehound-demo" />);
+  await within(await screen.findByTestId("pr-lane")).findAllByTestId("pr-chip");
+  fireEvent.click(await screen.findByTestId("findings-badge", {}, { timeout: 3000 }));
+  const rail = await screen.findByTestId("pr-rail");
+  expect(screen.queryByTestId("pr-lane")).toBeNull();
+  expect(rail.textContent).toContain("#2");
+  const expand = within(rail).getByTestId("pr-rail-expand");
+  expect(expand.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(expand);
+  expect(await screen.findByTestId("pr-lane")).toBeTruthy();
+  expect(screen.getByTestId("inspector-findings")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Close inspector" }));
+  await waitFor(() => expect(screen.queryByTestId("pr-rail")).toBeNull());
+  expect(screen.getByTestId("pr-lane")).toBeTruthy();
+});
+
+it("ui-01: the inspector's left edge is a keyboard separator; the width is kept, and nothing breaks when storage throws", async () => {
+  vi.stubGlobal("fetch", github());
+  window.localStorage.removeItem("tracehound:inspector-width");
+  window.history.replaceState(null, "", "/graph?repo=tracehound-demo&pr=2");
+  const first = render(<Viewer snapshot={snapshot} repoId="tracehound-demo" />);
+  fireEvent.click(await screen.findByTestId("findings-badge", {}, { timeout: 3000 }));
+  const sep = await screen.findByRole("separator", { name: "Resize inspector" });
+  const start = Number(sep.getAttribute("aria-valuenow"));
+  expect(start).toBeGreaterThan(0);
+  expect(sep.getAttribute("aria-orientation")).toBe("vertical");
+  expect(sep.tabIndex).toBe(0);
+  fireEvent.keyDown(sep, { key: "ArrowLeft" });
+  await waitFor(() => expect(Number(sep.getAttribute("aria-valuenow"))).toBe(start + 16));
+  expect(window.localStorage.getItem("tracehound:inspector-width")).toBe(String(start + 16));
+  expect(screen.getByTestId("inspector").style.getPropertyValue("--inspector-w")).toBe(`${start + 16}px`);
+  fireEvent.keyDown(sep, { key: "Home" });
+  await waitFor(() => expect(sep.getAttribute("aria-valuenow")).toBe(sep.getAttribute("aria-valuemin")));
+  first.unmount();
+  window.localStorage.removeItem("tracehound:inspector-width");
+
+  // storage that throws on every call: the page still renders, opens and resizes
+  const throwing = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); }, removeItem: () => { throw new Error("blocked"); } };
+  const spy = vi.spyOn(window, "localStorage", "get").mockReturnValue(throwing as unknown as Storage);
+  try {
+    render(<Viewer snapshot={snapshot} repoId="tracehound-demo" />);
+    fireEvent.click(await screen.findByTestId("findings-badge", {}, { timeout: 3000 }));
+    const blocked = await screen.findByRole("separator", { name: "Resize inspector" });
+    const w = Number(blocked.getAttribute("aria-valuenow"));
+    fireEvent.keyDown(blocked, { key: "ArrowRight", shiftKey: true });
+    await waitFor(() => expect(Number(blocked.getAttribute("aria-valuenow"))).toBe(w - 64));
+  } finally {
+    spy.mockRestore();
+  }
 });
