@@ -95,7 +95,7 @@ review per hour (the second PR's first trigger was rate-limited). Neither tool l
 object on any of the 4 reviews: each finished with an issue comment (summary) plus a check run.
 - **Greptile:** Automatic reviews: Never (Sunny checked it directly, 13 Nov).
 - **Greptile credits: 100 left, expiring 27 Nov 2026** (Sunny, 14 Nov), after every hand-check date; Greptile runs in P1 (076i).
-- **CodeRabbit Automatic review: turned off in its dashboard** (Sunny, 14 Nov; time not given).
+- **CodeRabbit Automatic review: turned off in its dashboard on 13 Nov, before the forks were added** (Sunny).
 - (13 Nov, superseded) Expiry or reset date was not given. 100 ≥ 37, so S1.md §0 precondition 4 passes
   either way. This is more than the Starter plan's 50 credits/month assumed before (§2 now uses 100); the source of the
   extra 50: new-account credits, as far as Sunny knows.

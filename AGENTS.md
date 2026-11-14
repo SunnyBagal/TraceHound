@@ -28,12 +28,28 @@ reading is open except where the firewall says otherwise.
 | `docs/bench/ts-heldout.*`, `docs/bench/ts-freeze.md` | codex (held-out side), artu1 (freeze file) | — |
 | money: any paid call | only artu1 approves; never delegated | — |
 
+### Pane names (Sunny, 2026-11-14)
+Display names only. Every file, brief, claim, report path, ruling and brain note keeps using the internal id.
+Set as Herdr labels (`hc label <t> name=<pane name> id=<internal id>`, 2026-11-14); a label is not an address, so
+`hc send` keeps using the t-address from `hc ls` (t9, t15, t14, t1g on 14 Nov). Jake is labelled when devin's pane opens.
+
+| pane name | internal id |
+|---|---|
+| Holt | artu1 |
+| Terry | bunny |
+| Amy | codex |
+| Rosa | grok |
+| Jake | devin (joins when its quota resets; no lane yet) |
+| Boyle | Planner A |
+| Kevin | Planner B |
+
 A planner writes documents and never executes; a worker writes only the paths its brief lists; nobody commits in another
 lane's checkout; a file with no row belongs to artu1 until a row is added. Exceptions are one dated line here (who, which
 file, which lines, until when). Never force-push or rewrite history.
 Exceptions: (1) 2026-11-13, decision 076g item 4 (Sunny): an Anthropic provider in `packages/analyzer/src/llm`, selected by
-config, never the default, mocked tests only, for report-only Claude rows on dev (Haiku 5.5, Sonnet 5.5; Sunny's own money);
-never in `packages/action/`, `.github/actions/` or the held-out primary; until Sunny withdraws it. It overrides "Models and
+config, never the default, mocked tests only, for report-only Claude rows on dev (Haiku 5.5, Sonnet 5.5; Sunny's own money)
+and, since 2026-11-14 (decision 076k item 1), for the registered secondary held-out Haiku 5.5 row (two draws, after A0, on
+A0's cases); never in `packages/action/`, `.github/actions/` or the held-out primary (A0); until Sunny withdraws it. It overrides "Models and
 keys" and the "Build and safety" review rule for that provider only.
 
 ## Process (decision 076c item 14; `docs/plan/team-process.md` §1)

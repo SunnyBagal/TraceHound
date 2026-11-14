@@ -4256,7 +4256,7 @@ codex `docs/eval/ts-protocol.md` (3, in revision 10).
 
 **Status: ruled by Sunny.** Readings (Sunny, 14 Nov): Nebius console $19.10 at 12:55 IST (baseline $19.13); Greptile 100
 credits expiring 27 Nov (after every hand-check date); `ANTHROPIC_API_KEY` in `.env` (artu1 checked presence only); CodeRabbit
-Automatic review turned off in its dashboard (time not given).
+Automatic review turned off in its dashboard on 13 Nov, before the forks were added (Sunny's correction, 14 Nov).
 - **S1 ratio:** console drop $0.03 ÷ ledger $0.0348 (2 review calls, 2026-11-13T15:12–15:13Z) = **0.86 ≤ 1.08** (weak: the
   console shows cents). **R1 approved** (Sunny), cap $4.68, stopping after batch 1 for Sunny's next console reading (076g
   item 7). **Greptile runs in P1** (expiry 27 Nov is after the hand-check).
@@ -4269,3 +4269,83 @@ Automatic review turned off in its dashboard (time not given).
    collector's flag) and reported to Sunny. (Replaces P1 §1's open-all-first.)
 **Touches:** artu1 this file, `docs/budget.md` (ratio, R1 approval), `docs/live-setup.md` (Greptile expiry, CodeRabbit auto
 review off); Planner A `docs/specs/E1.md` (2), `docs/runbooks/W1-writeup.md` (1), `docs/specs/P1.md` §1 (3).
+
+## 076j — Model comparison on dev: same inputs, two judges, paired counts, a second Haiku draw, a blind check (2026-11-14)
+
+**Status: ruled by Sunny.** Dev, report-only, the selection set: nothing here adopts a model or changes A0, the
+protocol or the held-out plan. Facts at ruling time: Haiku 5.5 ran on R1's 40 cases ($0.30288), Sonnet 5.5 on R1 §7's 8 bug
+cases ($1.36342), Anthropic total $1.66630 of $9.50; neither row is judged yet (`run/out/bunny.r1-claude.md`).
+1. **Same inputs.** The Claude rows use R1's cases, R1's three prompts (sha256 equal to R1's records) and R1's pipeline
+   (`run-tracehound.ts`, `--fixes off --contracts off --cache off`), no retuning. The only allowed difference is default
+   sampling (no temperature sent: a non-default one is refused by both models), recorded in each row's job file with its
+   thinking setting.
+2. **Two judges on every row** (A0, Haiku, Sonnet): bench-judge-v1 (scorer of record) and **bench-judge-x1**
+   (`Qwen/Qwen3-235B-A22B-Instruct-2507`, reasoning off). x1 is already H2's second judge and qualifies: Qwen (Alibaba) is
+   neither Nemotron nor Claude, so no new model is picked. Each judge's catches are reported, and their agreement per row
+   over the bug cases: both / v1 only / x1 only / neither, percent agreement and Cohen's kappa.
+3. **Paired counts.** Per judge, a per-case matrix A0 vs Haiku on the 31 bug cases (both / A0 only / Haiku only / neither)
+   with an exact two-sided sign test on the discordant cases; the same for A0 vs Sonnet on Sonnet's 8. Dev, report-only:
+   the p-values register nothing. A Wilson 95% interval on every catch rate.
+4. **Per row also:** location hits; comments per case (mean, median, max); comments on the 9 clean cases (A0, Haiku;
+   Sonnet ran on bug cases only); cost per case (median, mean, max; Nebius ledger for A0, Anthropic ledger for the Claude
+   rows); failures (cases, chunks, requests, `JUDGE_FAILED`).
+5. **Variance.** Anthropic left after both rows: $9.50 − $1.66630 = **$7.83370 ≥ $2.00, so Haiku runs a second draw** on
+   all 40, same command, a new output directory, run cap = Haiku's $2.50 − its spend so far, under the $9.50 stop.
+   Judged by v1 and x1; the report gives, per judge, the cases caught in one draw only (and in which), and location hits
+   changed.
+6. **Blind check.** Every (row, bug case) where v1 and x1 disagree on the catch goes to `run/out/sunny-blind-check.md`
+   (artu1) with the model and both verdicts hidden: the bug as labelled and that row's comments on the case. At most 15;
+   if more, the 15 with the lowest sha256 of `<row>|<case id>` (a rule that reads no result), and the file states the
+   total. Sunny marks each one.
+- **Money.** Judging is Nebius money and counts against **L1 ($0.40)**: the 076j judge processes are E1's processes 3 and
+  10–13 brought forward, plus Haiku draw 2 under v1 and x1, all in E1's job directory under E1's one L1 envelope
+  (`L1 L0=` written once, 076c item 1). E1 reuses these detail files and does not judge those rows again. Estimate ≈ $0.15
+  of the $0.40; if E1's remaining processes would not fit, that is a money question for Sunny before E1. One paid process
+  at a time across both providers.
+- **Lanes:** bunny (judging, Haiku draw 2), codex (an independent recount per row, MATCH/MISMATCH, and the table for
+  items 2–5), grok (one pass on codex's table and the sign-test arithmetic), artu1 (this record, the blind-check file,
+  merges on GO).
+
+**Touches:** artu1 this file, `docs/budget.md` (L1 started early for 076j), `run/out/sunny-blind-check.md`; Planner A
+`docs/specs/E1.md` (processes 3 and 10–13 done early and reused, Sonnet on 8 cases not 10, Haiku draw 2, items 2–4's
+paired table and agreement).
+
+## 076k — Haiku registered as a secondary held-out row; product default; no further Sonnet; tag timing; bullmq probe; ledger pricing (2026-11-14)
+
+**Status: ruled by Sunny (14 Nov).** Recorded exactly as ruled.
+
+1. Haiku 5.5 is registered as a secondary held-out row. Two draws, judges only, no hand-check. Cap $1.00 of Sunny's Anthropic credit (estimate 2 × $0.22). Runs after A0 on the same cases. One rerun for failed cases, as for A0; a case still failing after that counts as a miss and is reported. Compared with A0 on judge v1 for both rows; A0's hand-checked score stays the headline. Disclosure (protocol and W1): Planner B drafted the thresholds before 076j's results existed; they were adopted after. Dev: v1 14 and 11 vs A0 12; second judge 15 and 12 vs 13; clean-case comments 1 and 0; draws differ by 3. Touches: AGENTS.md, ts-protocol.md rev 12, budget.md, H1 §4, H2 §1, handover §4, F1 §3, 078.
+2. Product default (not a test claim; A0 stays the headline): Haiku becomes the default if neither dev draw is more than 1 behind A0 under v1 (met) and, on held-out under v1, the mean of its two draws is no more than 2 behind A0. Touches: 078, W1.
+3. No Sonnet spend before the write-up. The Sonnet switching rule is dropped. Touches: E1, R1 §7, handover.
+4. The dev verdict does not gate the tag. GO, INCONCLUSIVE or RETHINK: held-out runs on schedule. RETHINK also pauses company work (pricing, demo) until the held-out result. Touches: E1 §2, F1 row 1, handover §3.
+5. A missed tag moves the tag and T0 by one day each, with no ruling, up to T0 Sun 22 Nov 10:00 IST. Past that, a ruling is needed (Greptile credits expire 27 Nov). Touches: handover, H1.
+6. bullmq probe: yes. Amy opens one throwaway PR on the bullmq fork on Mon 16 Nov after P1's last re-trigger check: a whitespace change to the README, from no case. It stays open until both bots respond or 60 minutes pass, then it is closed unmerged and the branch deleted. Cost: 1 Greptile credit, 1 CodeRabbit hour. If either bot doesn't review, tell Sunny before the tag. Touches: handover, budget.md (Greptile line).
+7. Unchanged, Planner B's suggestions withdrawn: E1 §5's cost simulation runs Sunday (076a); the 1.08 billing stops stay (076g item 7, F1 row 10); plan-v2 is not declared historical (F1 row 17). Touches: none.
+8. After 076k, no rulings before 077 except for a blocker (a bot not reviewing, a money stop, the Mac). Planner A's files are final by Sun 15 Nov 23:00 IST. Touches: STATE.
+9. The 14 Nov research changes nothing before the write-up. W1 and posts may use a vendor fact only if the verified table labels it D. The benchmark line reads "none of the five I could check has a blind held-out set". The post-test order goes in the brain only. Touches: W1, brain.
+10. R1's official Nebius reading ($16.46, baaba5d) is recorded as passing the rule as written (0.93), with the finding beside it: without the $0.57 charged for requests that never reached Nebius, the ratio is 1.16 (1.14 from the $19.00 reading), so the ledger runs about 15% low on real calls. Before the F1 dry run, Terry derives the implied per-token price for each model the ledger charged to Nebius (Super and the 076j judge) from the console readings and the ledger's token counts. Sunny reads Nebius's listed prices. If config/prices.json is wrong, Terry fixes it (Amy GOs), and a correction row re-prices R1 and 076j without rewriting history; the recomputed ratio must land between 0.95 and 1.08 before the tag. If the cause isn't found by Sun 15 Nov 23:00 IST, Holt brings it to Sunny before F1; the 1.08 stop is not changed in advance. Touches: config/prices.json, budget.md, F1 row 10.
+
+**Touches (all items):** artu1 this file, `AGENTS.md` (exception 1), `docs/budget.md` (Anthropic held-out line, Greptile line, ratio finding), `.agents/STATE.md`; codex `docs/eval/ts-protocol.md` rev 12; Planner A H1 §4 and §6-adjacent tag timing, H2 §1, the handover (§3, §4), F1 §3 and rows 1 and 10, E1 (§2), R1 §7, W1; bunny `config/prices.json` (item 10); decision 078 (when drafted); the brain (item 9).
+
+## 076l — CodeRabbit's "Review skipped" notice is a not-completion pattern (2026-11-14)
+
+**Status: ruled by Sunny (14 Nov).** Add CodeRabbit's "Review skipped: Auto reviews are disabled" notice to its not-completion
+list in `scripts/testset/tools.json` before the patterns freeze.
+- The match runs on the comment's current body at reading time. A notice later edited into a real summary is a completion.
+  A notice still unedited at the reading is not-completion and is eligible for re-trigger.
+- Test before the GO, on all 9 P1 PRs so far: the pattern matches the saved first wording
+  (`not-completion/coderabbit.review-skipped.1.txt`) and none of the 9 current comment bodies. The 9 results are reported.
+- Config change, so codex (Amy) gives the GO naming the sha; grok (Rosa) does not pass it. The running scheduler is not
+  restarted or signalled.
+- P1, by hand: before the collection closes, check that every CodeRabbit "review skipped" comment on the 38 PRs was edited
+  into a real review; any that weren't are listed as not-completion.
+- The lost 5/15/30-minute readings for slots 1–8 are logged; they are taken on time from slot 9.
+- **Operator note (artu1, 076g item 8):** the running scheduler pins `scripts/testset/tools.json` by sha256 in
+  `~/Projects/tracehound-runs/dev/p1/pins.json` and stops before its next slot if any pinned file changes
+  (`window-scheduler.ts:61`). So the GO'd change is merged into the main checkout only after P1's collection closes; until
+  then no merge may touch a pinned file (`window-scheduler.ts`, `kit.ts`, `collect-tool-reviews.ts`, `tools.json`, the
+  testset's `open-prs.ts` and dev manifest). The scheduler's own re-trigger checks run on the old patterns; the hand check
+  above covers the gap.
+
+**Touches:** bunny `scripts/testset/tools.json` and the not-completion test fixture; codex GO; Planner A H1 (re-trigger
+detection) and F1 (patterns row); artu1 this file, LOG.

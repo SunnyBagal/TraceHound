@@ -30,10 +30,12 @@ export class Budget {
   readonly spentBeforeRun: number;
   #runSpent = 0;
   #reserved = 0;
+  readonly #names: { total: string; run: string };
 
-  constructor(caps: BudgetCaps, spentBeforeRun: number) {
+  constructor(caps: BudgetCaps, spentBeforeRun: number, names = { total: "TRACEHOUND_BUDGET_TOTAL_USD", run: "TRACEHOUND_BUDGET_RUN_USD" }) {
     this.caps = caps;
     this.spentBeforeRun = spentBeforeRun;
+    this.#names = names;
   }
 
   get runSpent(): number {
@@ -47,12 +49,12 @@ export class Budget {
     const fmt = (n: number) => `$${n.toFixed(4)}`;
     if (run > this.caps.runUSD) {
       throw new BudgetExceededError(
-        `refusing ${what}: estimated ${fmt(estimateUSD)} would bring this run to ${fmt(run)}, over TRACEHOUND_BUDGET_RUN_USD=${this.caps.runUSD}`,
+        `refusing ${what}: estimated ${fmt(estimateUSD)} would bring this run to ${fmt(run)}, over ${this.#names.run}=${this.caps.runUSD}`,
       );
     }
     if (total > this.caps.totalUSD) {
       throw new BudgetExceededError(
-        `refusing ${what}: estimated ${fmt(estimateUSD)} would bring total spend to ${fmt(total)}, over TRACEHOUND_BUDGET_TOTAL_USD=${this.caps.totalUSD}`,
+        `refusing ${what}: estimated ${fmt(estimateUSD)} would bring total spend to ${fmt(total)}, over ${this.#names.total}=${this.caps.totalUSD}`,
       );
     }
     this.#reserved += estimateUSD;

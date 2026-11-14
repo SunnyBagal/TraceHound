@@ -13,6 +13,8 @@ import { cacheReadFromEnv, ResponseCache } from "../llm/cache.ts";
 import { TokenFactoryClient } from "../llm/client.ts";
 import { SpendLedger } from "../llm/ledger.ts";
 import { loadPriceTable } from "../llm/prices.ts";
+import type { ChatClient } from "../agent/decider.ts";
+import { providerClient } from "./provider-option.ts";
 import { DROP_REASONS, reviewPull, type PullInput, type ReviewOutput } from "./review.ts";
 
 const WORKSPACE_ROOT = path.resolve(import.meta.dirname, "../../../..");
@@ -35,6 +37,7 @@ export async function main(argv: string[]): Promise<number> {
       prs: { type: "string" },
       out: { type: "string" },
       model: { type: "string", default: DEFAULT_MODEL },
+      "provider-config": { type: "string" }, // report-only dev Anthropic row (provider-option.ts)
       reasoning: { type: "string", default: "on" },
       concurrency: { type: "string", default: "2" },
       summary: { type: "string" },
@@ -50,23 +53,35 @@ export async function main(argv: string[]): Promise<number> {
     console.error(USAGE);
     return 1;
   }
-  const apiKey = process.env.NEBIUS_API_KEY;
-  if (!apiKey) {
-    console.error("NEBIUS_API_KEY is not set (put it in .env)");
-    return 1;
+  let client: ChatClient;
+  let budget: Budget;
+  if (values["provider-config"]) {
+    const p = providerClient(values["provider-config"], values.model!, values.reasoning as "on" | "off");
+    if ("error" in p) {
+      console.error(p.error);
+      return 1;
+    }
+    client = p.client;
+    budget = p.budget;
+  } else {
+    const apiKey = process.env.NEBIUS_API_KEY;
+    if (!apiKey) {
+      console.error("NEBIUS_API_KEY is not set (put it in .env)");
+      return 1;
+    }
+    const ledger = new SpendLedger(path.join(STATE_DIR, "spend.jsonl"));
+    budget = new Budget(capsFromEnv(), ledger.totalUSD());
+    client = new TokenFactoryClient({
+      apiKey,
+      baseUrl: process.env.NEBIUS_BASE_URL,
+      prices: loadPriceTable(path.join(WORKSPACE_ROOT, "config/prices.json")),
+      budget,
+      ledger,
+      cache: new ResponseCache(path.join(STATE_DIR, "cache")),
+      readCache: cacheReadFromEnv(),
+      timeoutMs: 600_000, // a reasoning model over a 60,000-character chunk can take minutes
+    });
   }
-  const ledger = new SpendLedger(path.join(STATE_DIR, "spend.jsonl"));
-  const budget = new Budget(capsFromEnv(), ledger.totalUSD());
-  const client = new TokenFactoryClient({
-    apiKey,
-    baseUrl: process.env.NEBIUS_BASE_URL,
-    prices: loadPriceTable(path.join(WORKSPACE_ROOT, "config/prices.json")),
-    budget,
-    ledger,
-    cache: new ResponseCache(path.join(STATE_DIR, "cache")),
-    readCache: cacheReadFromEnv(),
-    timeoutMs: 600_000, // a reasoning model over a 60,000-character chunk can take minutes
-  });
   const opts = {
     model: values.model!,
     reasoning: values.reasoning as "on" | "off",

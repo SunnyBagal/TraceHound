@@ -356,6 +356,7 @@ export class TokenFactoryClient {
     const cost = costUSD(price, inputTokens, outputTokens);
     this.#opts.ledger.append({
       timestamp: this.#opts.now().toISOString(),
+      provider: request.model === NVIDIA_API_MODEL && this.#opts.nvidiaApi ? "nvidia" : "nebius",
       model: request.model,
       inputTokens,
       outputTokens,
