@@ -4,6 +4,8 @@ import { z } from "zod";
 
 export const SpendEntry = z.object({
   timestamp: z.string(),
+  // Rows predating provider accounting are Nebius (the historical free NVIDIA route costs $0).
+  provider: z.enum(["nebius", "nvidia", "anthropic"]).optional(),
   model: z.string(),
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
@@ -14,6 +16,12 @@ export const SpendEntry = z.object({
   ok: z.boolean().optional(),
   usageReported: z.boolean().optional(), // false → tokens are our pre-call upper-bound estimate
   priceEstimated: z.boolean().optional(), // true → placeholder price, cost is a conservative estimate
+  settings: z.object({
+    sampling: z.literal("default"),
+    thinking: z.enum(["adaptive", "disabled", "between_tools"]),
+    effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
+    apiVersion: z.string(),
+  }).optional(),
 });
 export type SpendEntry = z.infer<typeof SpendEntry>;
 
@@ -51,10 +59,10 @@ export interface SpendSummaryRow {
   costUSD: number;
 }
 
-export function summarize(entries: SpendEntry[], by: "model" | "purpose"): SpendSummaryRow[] {
+export function summarize(entries: SpendEntry[], by: "model" | "purpose" | "provider"): SpendSummaryRow[] {
   const rows = new Map<string, SpendSummaryRow>();
   for (const e of entries) {
-    const key = e[by];
+    const key = by === "provider" ? e.provider ?? "nebius" : e[by];
     const row = rows.get(key) ?? { key, calls: 0, inputTokens: 0, outputTokens: 0, costUSD: 0 };
     row.calls++;
     row.inputTokens += e.inputTokens;
