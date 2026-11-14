@@ -5,8 +5,8 @@ read the operator's pane; they get `run/out/codex.ho-run.md` (counts and spend o
 lifts, artu1 and bunny also make no `gh` or browser read of pulls, issues or notifications on the four forks**
 (decision 076c item 12; `AGENTS.md` "Blindness"): the forks are public, and every tool comment on a held-out PR is
 there. Planner A, 2026-11-11; brought to decision 076c on 2026-11-12, to decision 076d on 2026-11-13, to decision
-076e with its addendum on 2026-11-13, to decision 076g (items 1, 2, 9, 10) on 2026-11-13 and to decision 076h
-(item 3) on 2026-11-14.
+076e with its addendum on 2026-11-13, to decision 076g (items 1, 2, 9, 10) on 2026-11-13, to decision 076h
+(item 3) on 2026-11-14, and to decisions 076k (items 1, 5) and 076l on 2026-11-14.
 Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md` §3, §7–§9 (it wins over this
 runbook; report any difference). Budget line: **H1**, cap from decision 077 ($3.15 until then); unstarted cases at the
 cap run from the reserve (decision 076a "Caps" item 4).
@@ -37,9 +37,14 @@ collector's verdict under that definition (`collectCase` in `scripts/testset/col
 **Ruled in decision 076e (`docs/decisions.md`, "076e", items 2, 3, 6 and 7; addendum c):**
 - **Dates (076e item 7, replaced by decision 076g item 10; plan-v2 §6a).** Scheduled T0 at the earliest **Tue 17
   Nov 2026, 10:00 IST** (04:30 UTC; then the plan's `t0` is `2026-11-17T04:30:00Z`), and always at 10:00 IST on the
-  day after a tag pushed by 20:00 IST. Snapshot 72 hours after T0; hand-check that day, 16:00–19:00 IST. With the tag
-  on Mon 16 Nov: Tue 17 Nov, Fri 20 Nov 10:00, Fri 20 Nov 16:00–19:00. If a dev case was still without a review when
-  P1's 38 slots ended, so that P1's collection closed on Mon 16 Nov evening: Wed 18 Nov, Sat 21 Nov. CodeRabbit's
+  day after a tag pushed by 20:00 IST. Snapshot 72 hours after T0; hand-check that day, 16:00–19:00 IST.
+  **A tag on Mon 16 Nov is no longer possible (Planner A's derivation, 14 Nov):** P1's collection closes at a fixed
+  **Tue 17 Nov 02:54 IST** (24 h after its last first trigger; decision 076h item 4), `F1-freeze.md` §1 rows 6 and 11
+  need that collection hashed and the final `tools.json`, and decision 076l's pattern is merged only after the close.
+  So the earliest tag is Tue 17 Nov, and the earliest dates are **scheduled T0 Wed 18 Nov 10:00 IST** (04:30 UTC),
+  snapshot Sat 21 Nov 10:00, hand-check Sat 21 Nov 16:00–19:00. **A missed tag (decision 076k item 5)** moves the tag
+  and the scheduled T0 by one day each, with no ruling, up to a scheduled T0 of **Sun 22 Nov 10:00 IST**. Past that a
+  ruling is needed: Greptile's credits expire on 27 Nov (decision 076i). CodeRabbit's
   1 review per hour (S1's reading, 14 Nov) is the plan's assumed rate, not a shrink, and the 7-day rule does not
   apply to it (Sunny, 14 Nov). **Only if CodeRabbit gave less than 1 per hour in P1 (decision 076b item 3): the
   first 10:00 IST at least 7 days after P1's last CodeRabbit review, and not before Sun 22 Nov** (076e's option B). Decision 078 records the
@@ -61,13 +66,18 @@ collector's verdict under that definition (`collectCase` in `scripts/testset/col
 TH=~/Projects/th-h1                       # worktree at the tag review-freeze-3 (F1 §4.2); never the main checkout
 export TH_MAIN=~/Projects/TraceHound TH_TAG=$TH      # names used by docs/eval/tag-worktree.md (codex, 775c3d6)
 TS=~/Projects/tracehound-testset; HO=~/Projects/tracehound-ho-window
-ledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | sed -n 's/^Total est. spend: \$\([0-9.]*\).*/\1/p'; }
+ledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | sed -n 's/^Nebius est\. spend: \$\([0-9.]*\).*/\1/p'; }      # Nebius only
+aledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | sed -n 's/^Anthropic est\. spend ([^)]*): \$\([0-9.]*\).*/\1/p'; }  # Haiku row, §4
+[ -n "$(ledger)" ] && [ -n "$(aledger)" ] || echo "STOP: a ledger helper printed no number"   # before any paid call
 CAP=<H1 cap from decision 077>
 MAN=<held-out manifest>; CL=<held-out clones dir: one clone per fork name>          # private paths; codex knows them
 sched() { node $TH/scripts/testset/window-scheduler.ts --side heldout --heldout-ok --cases $HO/cases.json --plan $HO/plan.json \
   --tools $TH/scripts/testset/tools.json --manifest $MAN --clones $CL --resume-dir $HO/open-prs --state-dir $HO/sched \
   --open-prs $TS/scripts/open-prs.ts --collector $TH/scripts/testset/collect-tool-reviews.ts "$@"; }
 ```
+Both helpers read the lines `spend.ts` prints since the provider merge (`2441a6b`): "Nebius est. spend: $X of $C cap …"
+and "Anthropic est. spend (Sunny's money): $Y …". The helper this runbook had before grepped `Total est. spend`, a line
+that no longer exists, and printed nothing (artu1's operator ruling, 14 Nov; `run/comms/artu1-to-planner-a.ledger-helper.md`).
 `--side heldout --heldout-ok` is codex's explicit flag: the scheduler refuses every held-out path and every held-out
 case id without it, and no tuning agent ever passes it (`guardSide` in `scripts/testset/window-scheduler.ts`).
 
@@ -139,7 +149,7 @@ order (a rebased or back-dated commit breaks it), which is why §1 item 3 has gr
      with `ts-freeze.md`. From now on none of these files changes: a change stops the scheduler at its next slot.
    - `$HO/sched` does not exist yet (a state dir belongs to one run; the scheduler refuses another run's log).
 5. Decision 078 is pushed: predictions, the scheduled T0, Sunny's "go". If "go" is missing, stop.
-6. Greptile dashboard (Sunny): credits ≥ 35 (60 are expected: 100 − 2 for S1 − 38 for P1), and their expiry date is
+6. Greptile dashboard (Sunny): credits ≥ 35 (59 are expected: 100 − 2 for S1 − 38 for P1 − 1 for the bullmq probe of decision 076k item 6), and their expiry date is
    after the hand-check sitting (decision 076g item 2). Otherwise stop. This is Sunny's **last** look
    at any vendor dashboard or fork PR page until his filled sheet is hashed (`F1-freeze.md` §1 row 13, gap G2).
    CodeRabbit (decision 076b item 3): P1's report says the hourly rate at P1's end was not below the rate at its start,
@@ -162,9 +172,12 @@ order (a rebased or back-dated commit breaks it), which is why §1 item 3 has gr
     `pmset -g assertions | grep -c caffeinate` is not 0, and `sched --status` shows `missed: 0`. A machine that slept
     shows as `missed` slots (failure 7). If T0 comes more than three hours after the scheduled T0 (failure 16), the
     78 hours end before §6 does: tell Sunny, who starts a second `caffeinate` before the first one ends.
-    **A `caffeinate` with no time limit also passes** (decision 076g item 9: the `caffeinate -is` started on 13 Nov
-    has none and holds until it is killed). If that is the one held, nobody kills it before §6's hashing is done,
-    and the three-hour sentence above does not apply.
+    **A `caffeinate` with no time limit also passes** (decision 076g item 9), and nobody kills it before §6's hashing
+    is done; then the three-hour sentence above does not apply. **None is held now (checked 14 Nov):** the one started
+    on 13 Nov (pid 5457) is gone, and the assertion held since 14 Nov is pid 22530, `caffeinate -i -s -w 31492`, which
+    lasts only as long as P1's scheduler (pid 31492) and ends with it. So Sunny's `caffeinate -is -t 280800` on the
+    day of the scheduled T0 is needed. A `-w <pid>` form is not used for the window: a restarted scheduler has a new
+    pid (failure 15), and the assertion would end with the old one.
 
 ## 2. Scheduled T0 − 0:30: start the scheduler; nothing is pushed yet
 ```sh
@@ -262,12 +275,22 @@ at or before every trigger), then acts on the status:
   - `completed` → nothing for that tool, ever (076c item 3). A review that completed with zero inline comments is
     `completed`: the bot left a review object or an issue comment that matches no `notCompletion` pattern.
   - `no-review` (nothing arrived, or only messages that match the tool's frozen `notCompletion` patterns: a rate-limit
-    comment, an error or "Failed" message, an "in progress", "review skipped" or "paused" message) → the fork's
+    comment, an error or "Failed" message, an "in progress", "review skipped" or "paused" message; **each pattern is
+    matched against the comment's current body at the reading**, decision 076l, below) → the fork's
     branches are read and logged again (`fork-branches`, `before: "retrigger:<tool>"`), then **one re-trigger** for
     that tool on that PR, by the re-trigger mode (below). Never a second.
   - `invalid-binding` → failure 5; no re-trigger.
   - a collection that cannot be read is tried once more in the same slot; if it fails again the slot passes without a
     re-trigger and that PR is first at the next slot (`passed:collection-failed-twice`).
+- **CodeRabbit's "Review skipped" notice (decision 076l).** CodeRabbit posts "Review skipped: Auto reviews are disabled
+  on this repository." when a PR opens (seen on 8 of P1's first 9 PRs, 6–52 s before the trigger) and later edits that
+  same comment into its summary. The frozen `tools.json` has a CodeRabbit `notCompletion` pattern for it (`F1-freeze.md`
+  §1 row 6). The collector tests each comment's **current** body when it reads (`collectCase` in
+  `collect-tool-reviews.ts`), so at a re-trigger check: a notice already edited into a real summary is not matched and
+  counts as a completion like any other bot comment after the bound; a notice still unedited at the reading matches the
+  pattern, is not a completion, and leaves the PR eligible for its one re-trigger. A notice created **before** the
+  trigger cannot complete the review in any case (the bound is the first trigger); the pattern matters when the notice
+  lands after the trigger. It is also a bot post before the trigger: recorded as failure 2 says.
 - If no tool needed a re-trigger, the position is handled and the same slot goes on to the next due position; a slot
   ends when a re-trigger was posted or no position is due. One slot posts for one PR at most.
 - A re-trigger is never posted because a review looks thin or missed something, and never by hand.
@@ -410,14 +433,42 @@ After each batch: exit code, status per case, `review.chunksFailed`, `usage.ledg
 - After the last batch, and not before: each `failed` or `cap` case is rerun **once** (`--rerun --ids …`, one
   invocation per repository; failure 9 says when). The rerun's record is official. Two failures: a miss.
 - Never `--post`. Never `--cache read`.
-- **A Claude row on held-out exists only if decision 078 says Sunny registered one** (decision 076g item 4; his
-  decision, by 16 Nov). Then 078 also states its model id, its cap, that the money is Sunny's own, and its order
-  here; without those four it is not run. The default this runbook fixes: it runs **after** the four Nemotron
-  batches and their reruns, from the same worktree, one process at a time, into `$HO/th-claude/`, never into
-  `$HO/th`; it is a secondary row (`H2-scoring.md` §1 item 4); a failure of it never delays the snapshot. No such
-  line in 078: nothing in this section calls any provider but Nebius.
-- ≥ 2 hours after the last TraceHound call: Sunny reads the console; ratio = console drop ÷ (`ledger − L0`). Above
-  1.08: log it and tell artu1 the number; **H1 continues** (it is never cut).
+- ≥ 2 hours after the last Nemotron call of H1: Sunny reads the console; ratio = console drop ÷ (`ledger − L0`). Above
+  1.08: log it and tell artu1 the number; **H1 continues** (it is never cut). The Haiku row below makes no Nebius call.
+
+**The Haiku 5.5 row (decision 076k item 1; protocol revision 12 §5, "Registered secondary held-out row").** A
+registered **secondary** row: two draws, judges only, no hand-check. A0 stays the primary, and A0's hand-checked score
+stays the headline. This is the whole procedure; nothing here is chosen at run time.
+- **Model and settings:** `claude-haiku-5-5`, with the dev draws' row settings (076j item 1): default sampling (no
+  temperature is sent; a non-default one is refused), thinking adaptive with the stages' `--reasoning on` as for
+  Nemotron, effort the provider's default; prompts, pipeline and flags are A0's. The config file is `$HO/haiku.row.json`;
+  its sha256 and the commands are in `ts-freeze.md` before the first call (F1 §3).
+- **Precondition, not met on 14 Nov:** the runner refuses `--provider-config` with any path matching `held-?out` or a
+  manifest outside `cases/dev/` (`scripts/run-tracehound.ts:203-204`), and the provider accepts only `scope:
+  "report-only-dev"` (`packages/analyzer/src/llm/provider.ts:13`, `llm/anthropic.ts:64`). The change that admits this
+  one row must be on `main` with codex's GO, as an ancestor of the tag (F1 §1 row 17). If it is not, the row is not
+  run, the report says so, and nothing else changes.
+- **Money:** **$1.00 of Sunny's Anthropic credit for both draws together** (estimate 2 × $0.22), his own money, outside
+  the Nebius budget and under the $9.50 combined Anthropic hard stop; every attempt counts against the $1.00 and the
+  Nebius reserve never pays for it. Before draw 1's first call, `AL0=$(aledger)` is written once to `$HO/job.md` as
+  `AL0=<value> <UTC>` and read back from there afterwards. Each invocation sets
+  `TRACEHOUND_BUDGET_ANTHROPIC_USD` = AL0 + 1.00 and `TRACEHOUND_BUDGET_ANTHROPIC_RUN_USD` = `--max-usd-run` =
+  1.00 − (`aledger` − AL0), with `--max-usd-per-case 0.40`.
+- **Order:** after A0's four batches **and A0's reruns**; then draw 1 (the four batches of the table above, same ids),
+  draw 1's reruns; then draw 2 the same way. One paid process at a time across both providers: no H2 judging, canary
+  or other job meanwhile.
+- **Command:** §4's runner line unchanged plus `--provider-config $HO/haiku.row.json`, with `--out-dir $HO/th-haiku-1`
+  or `$HO/th-haiku-2`, never `$HO/th`; dry run first, then `--execute`. Never `--post`, never `--cache read`.
+- **Failures:** each draw's `failed` and `cap` cases get **one rerun, as for A0** (after that draw's last batch and at
+  least 2 hours after the failure); the rerun's record is official. **A case still failing after it counts as a miss
+  and is reported**; there is no third attempt and no case is left out. If the $1.00 is used up with cases unstarted,
+  those cases are misses for that draw and nothing more is spent (handover §4 row 18). A Haiku case with no official
+  record at T0 + 72:00 is a miss (failure 12). Failure 9's canary is for Nebius and is not used here. **Nothing about
+  this row ever delays A0, a trigger or the snapshot.**
+- **Record check, per draw** (the A0 check above, on `$HO/th-haiku-<d>`, with `.settings.model` and
+  `.settings.provider.model` added): one line, the tag's commit, `false`, `off`, `off`, `off`, `0.4`, the three prompt
+  hashes of `ts-freeze.md`, and `claude-haiku-5-5` twice. Otherwise that draw is not scored; codex and grok write
+  the counts for Sunny (as for A0, handover §4 row 8).
 
 ## 5. Failures and the rule for each
 Where a rule says "tell Sunny", what the operator does if no answer comes within the wait is in
@@ -425,7 +476,7 @@ Where a rule says "tell Sunny", what the operator does if no answer comes within
 | # | failure | rule |
 |---|---|---|
 | 1 | A first-trigger slot fails (`failed:open`, `failed:branches`, `failed:trigger`) | The scheduler serves the same case again in the next slot, before any later case is pushed (addendum e); the operator does nothing and pushes, opens or triggers nothing by hand. After two failed tries the case is `failed-first-trigger`: read the resume file for what was actually done. A tool with a `triggered:<tool>` record keeps its normal path (re-trigger check, §6 with `--resume-file`). A tool with no such record on an open PR is collected with `--bound window-start`; a case whose PR never opened is named in `--never-opened` and is `no-review` for both tools (§6). TraceHound still runs the case locally. Each such case is a deviation in §7. |
-| 2 | A tool reviews a PR before its trigger (auto-review) | The trigger now follows the opening inside the same slot, so this cannot be checked before the trigger and the trigger is posted anyway. It is counted afterwards: at the snapshot, per tool, the PRs with a bot object created before that tool's `triggered:<tool>` time (raw files against the resume file; a count). Such an object does not complete a review (the bound is the first trigger); an inline comment inside the window is counted like any other. Reported as a deviation. S1 and P1 are where auto-review is ruled out beforehand (`docs/specs/P1.md` §1); if Greptile's own messages show it on several PRs, tell Sunny at once in words only (credits); he does not open the dashboard or the PRs (gap G2). |
+| 2 | A tool reviews a PR before its trigger (auto-review) | The trigger now follows the opening inside the same slot, so this cannot be checked before the trigger and the trigger is posted anyway. It is counted afterwards: at the snapshot, per tool, the PRs with a bot object created before that tool's `triggered:<tool>` time (raw files against the resume file; a count). Such an object does not complete a review (the bound is the first trigger); an inline comment inside the window is counted like any other. Reported as a deviation. **Every such PR carries the auto-reviewed flag (decision 076i item 3).** CodeRabbit's "Review skipped" notice on opening (decision 076l; §3) is such a post, and P1 saw it on 8 of 9 PRs, so the count is given in two parts: PRs whose only pre-trigger object is that notice, and PRs with any other pre-trigger object. Both are in §7. Only the second part is a message to Sunny during the window, under the Greptile sentence below; the first is expected and goes into the report. S1 and P1 are where auto-review is ruled out beforehand (`docs/specs/P1.md` §1); if Greptile's own messages show it on several PRs, tell Sunny at once in words only (credits); he does not open the dashboard or the PRs (gap G2). |
 | 3 | CodeRabbit posts a rate-limit comment | No review ran (https://docs.coderabbit.ai/management/rate-limits). Its wording is a frozen `notCompletion` pattern, so the PR is `no-review` at its re-trigger slot (§3) and gets the one re-trigger. Do not re-trigger earlier than 24 h after the PR's own trigger (076c item 3). The same holds for an "in progress", "review skipped" or "paused" message that is the tool's only object (decision 076d item 2). If a message's wording does **not** match a frozen pattern, the collector says `completed`: do not re-trigger by hand; log it as a deviation and tell Sunny in counts only. |
 | 4 | Greptile shows "Failed" | Same: the one re-trigger, at that PR's re-trigger slot (§3). |
 | 5 | A PR's base or head no longer equals the case pair | The attempt is invalid (`invalid-binding`); nothing is pushed or repaired; that case is `no-review` for the external tools. Find out who pushed, after the window. |
@@ -441,6 +492,8 @@ Where a rule says "tell Sunny", what the operator does if no answer comes within
 | 15 | The scheduler stopped (`stopped` is not null, exit 3) or its process is gone without `scheduler.done` | Read the reason in `sched --status`. **A pinned file changed:** put the file back to its pinned bytes (never write new pins during the window), then start again. **A command's processes could not be confirmed ended:** look at the process group the log names; wait until it is gone; do not kill a group you cannot identify; then start again. **The process is gone (reboot, crash):** start again. "Start again" is §2's `--detach` line, unchanged: the scheduler replays its log, runs no finished step twice and fires no slot late. Slots that passed meanwhile are `missed` (failure 7). More than six slots lost in total: tell Sunny in counts; the window end does not move. |
 | 16 | The first PR does not open in slot 0 | Slot times stay on the scheduled grid (every slot is counted from the plan's `t0`), and the same case is served again at slot 1 (addendum e). **T0 is the instant the first held-out PR does open** (decision 076e item 3), so the snapshot moves with it: T0 + 72 h, later than scheduled T0 + 72 h by the difference. Write both times and the difference into `$HO/job.md`, and tell Sunny the difference in minutes: the hand-check sitting is planned six hours after the scheduled snapshot. Over three hours: §1 item 12 as well. Reported as a deviation. |
 | 17 | A trigger command ended more than 15 minutes after its slot's planned start (the stop line is a ruling: decision 076e addendum e) | The commands are slower than the plan allows for, and the lag grows by one trigger-command length per slot (§3, "The post inside a slot drifts later"): past 61 minutes the next slot starts late, and past 91 minutes it is `missed`. Stop in the sense of failure 14: change nothing by hand, do not stop or restart the scheduler, and tell Sunny (not artu1) in counts only: the slot, the minutes, the longest open and trigger commands so far. Wait for his answer. A deviation in §7. |
+| 18 | Haiku row: the $1.00 is used up with cases still unstarted (§4, "The Haiku 5.5 row") | Nothing more is spent; the unstarted cases are misses for that draw. Tell Sunny in counts (cases left, draw); the money is his, so raising the cap is his. A0, the triggers and the snapshot go on (handover §4 row 18). |
+| 19 | Haiku row: a case still fails after its one rerun | A miss for that draw, reported with its count (076k item 1). No third attempt. Not a message to Sunny. |
 
 ## 6. T0 + 72:00: the snapshot
 T0 in this section is the **actual** T0, the first held-out PR's `created_at` in `$HO/job.md` ("Two clocks"), not
@@ -498,7 +551,7 @@ hold case branch names and stay on the held-out side.
 ## 7. Report: `run/out/codex.ho-run.md` (counts and spend only; no case id, title, path or text)
 PRs opened of 29; per tool: triggered, completed, no-review, re-triggers used, auto-reviews, rate-limit comments;
 TraceHound: ok / failed / cap / unstarted, reruns, misses by rule, chunks failed, empty reviews; spend: job, reserve,
-canary; console ratio; every deviation with its failure number; the single sha256 of `hashes.window.txt`; the fork check before T0 (four lines `0 0`); grok's exposure counts on the actual list (at first review K of 20; the most that can be exposed at a re-trigger); the scheduled T0, T0 (the first PR's creation time) and their difference, and the time the snapshot's collection started; the stay-awake preflight's result (§2); trigger commands that ended more than 15 minutes after their slot's planned start (a count; failure 17) and the longest open and trigger commands in seconds; cases never triggered because missed slots ran past slot 63; first triggers: done at the first try, done at the second, `failed-first-trigger`; slots: started, `missed`, late by more than 30 minutes, extra slots used of the 6 spare, re-trigger checks not reached by slot 63; branch-list reads that failed; scheduler starts (count), stops with exit 3 (count, reason in words), and whether the operator's session restarted while it ran; re-triggers posted per tool; cases collected with `--bound window-start` and with `--never-opened` (each a deviation); bot objects created before their PR's trigger, per tool; comments by unlisted logins and distinct unlisted Bot logins (gap G6); the record check's one line as "equal to the freeze: yes / no", from codex and from grok (gaps G7, G8); the ledger total before T0 in the worktree and in the main checkout; `invalid-binding` and `read-failed` counts per tool. Then the
+canary; console ratio; every deviation with its failure number; the single sha256 of `hashes.window.txt`; the fork check before T0 (four lines `0 0`); grok's exposure counts on the actual list (at first review K of 20; the most that can be exposed at a re-trigger); the scheduled T0, T0 (the first PR's creation time) and their difference, and the time the snapshot's collection started; the stay-awake preflight's result (§2); trigger commands that ended more than 15 minutes after their slot's planned start (a count; failure 17) and the longest open and trigger commands in seconds; cases never triggered because missed slots ran past slot 63; first triggers: done at the first try, done at the second, `failed-first-trigger`; slots: started, `missed`, late by more than 30 minutes, extra slots used of the 6 spare, re-trigger checks not reached by slot 63; branch-list reads that failed; scheduler starts (count), stops with exit 3 (count, reason in words), and whether the operator's session restarted while it ran; re-triggers posted per tool; cases collected with `--bound window-start` and with `--never-opened` (each a deviation); bot objects created before their PR's trigger, per tool, in failure 2's two parts (only CodeRabbit's "Review skipped" notice; anything else); for CodeRabbit, the re-trigger checks at which an unedited "Review skipped" notice was matched (076l); the Haiku row per draw: ok / failed / cap / unstarted, reruns, misses by rule, chunks failed, empty reviews, Anthropic spend of the $1.00, and the record check's line (or "not run" and why); comments by unlisted logins and distinct unlisted Bot logins (gap G6); the record check's one line as "equal to the freeze: yes / no", from codex and from grok (gaps G7, G8); the ledger total before T0 in the worktree and in the main checkout; `invalid-binding` and `read-failed` counts per tool. Then the
 `.done` marker. artu1 writes STATE, LOG, the budget log row and the brain entry from this file alone.
 
 ## 8. The three most likely ways to get this wrong
