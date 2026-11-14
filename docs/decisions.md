@@ -4236,3 +4236,18 @@ cut), `docs/runbooks/F1-freeze.md` (item 10, A0 frozen), `docs/runbooks/H1-windo
 `packages/analyzer/src/llm` (Anthropic provider, item 4); bunny the Claude rows (after the provider merges and the key is in
 `.env`).
 **Rejected:** a further Nemotron run for the comparison; tuning prompts for Claude models; Greptile kept off dev.
+
+## 076h — Apps on the forks since 14 Nov, P1's hold lifted, 3660 s spacing (2026-11-14)
+
+**Status: ruled by Sunny.** Source: `tracehound-testset/run/out/bunny.s1-retrigger.md` (counts and fixed bot wording).
+1. **Correction:** CodeRabbit and Greptile covered only the TraceHound repo until about 01:30 IST on 14 Nov; Sunny's earlier
+   "moved" answers were wrong. Since then: the four forks only, Greptile indexed, Automatic reviews Never. S1's first
+   triggers (before the fix) got no bot activity; the re-trigger got both tools reviewing both S1 PRs.
+2. **P1's hold is lifted:** both bots are confirmed reviewing on the forks. CodeRabbit allows 1 review per hour.
+3. **`slotSeconds` and `minTriggerSpacingSeconds` are both 3660** (amends 076e item 2's 3600 spacing): the next command starts
+   at least 3660 s after the previous one ended.
+4. **P1's collection close stays fixed at 24 h after the last first trigger;** a re-trigger does not extend it.
+Observed in S1 (for codex's check before P1): all 4 reviews had 0 inline comments and 0 review objects; each ended with a
+summary issue comment and a check run. A reader that counts only inline comments would score both tools 0.
+**Touches:** artu1 `docs/live-setup.md` §2.2 (1, 2), this file; Planner A `docs/runbooks/H1-window.md` (3; Sunny sends it);
+codex `docs/eval/ts-protocol.md` (3, in revision 10).
