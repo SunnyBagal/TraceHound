@@ -67,7 +67,9 @@ describe('the landing page at "/"', () => {
   it("renders the landing page: nav, hero, the sections and the footer, and no viewer", () => {
     render(<Home />);
     expect(screen.getByTestId("landing")).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Understand your code. Fix what breaks.");
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.textContent).toBe("Agents write the code. We catch what breaks.");
+    expect(heading.querySelector("em")?.textContent).toBe("We catch what breaks.");
     expect(screen.getByTestId("hero-line").textContent).toBe("An evidence-backed graph of your repo's architecture, and a pull-request reviewer on NVIDIA Nemotron through Nebius Token Factory.");
     for (const name of ["Read the architecture, not the diff.", "Understand what agents write.", "How it works", "Agents", "Roadmap", "See your pull requests on the map."]) expect(screen.getByRole("heading", { level: 2, name })).toBeTruthy();
     const nav = screen.getByRole("navigation", { name: "Main" });
