@@ -86,10 +86,13 @@ https://cursor.com/blog/may-2026-bugbot-changes. Full quotes: `tracehound-testse
 
 ### 2.2 Readings for S1's preconditions (Sunny, 2026-11-13; corrected 2026-11-14)
 **Correction (Sunny, 2026-11-14):** the apps were **not** moved to the forks on 13 Nov; Sunny's earlier answers recorded here
-were wrong. Until a time on 14 Nov (IST; time not given), **both CodeRabbit and Greptile covered the TraceHound repo only**.
-That is why S1's PRs on the fork got no bot activity. At that time (not given) **both were set to the four forks only**
-(medusa, twenty, payload, bullmq). Greptile indexing of the forks: **not given** (done or in progress). S1's bot readings are
-being re-taken by re-trigger; P1 stays on hold until bunny reports both bots reviewing.
+were wrong. Until **about 01:30 IST on 14 Nov**, **both CodeRabbit and Greptile covered the TraceHound repo only**.
+That is why S1's PRs on the fork got no bot activity. Since then **both cover the four forks only**
+(medusa, twenty, payload, bullmq); **Greptile has indexed them**; Automatic reviews: Never.
+**P1's hold is lifted (2026-11-14):** S1's re-trigger (`run/out/bunny.s1-retrigger.md`) confirmed both bots reviewing both
+S1 PRs on the fork (logins `coderabbitai[bot]`, `greptile-apps[bot]`), with no branch restriction. CodeRabbit allowed 1
+review per hour (the second PR's first trigger was rate-limited). Neither tool left an inline comment or a review
+object on any of the 4 reviews: each finished with an issue comment (summary) plus a check run.
 - **Greptile:** Automatic reviews: Never (Sunny checked it directly, 13 Nov).
 - **Greptile credits: 100 left** (13 Nov). Expiry or reset date: **not given**. 100 ≥ 37, so S1.md §0 precondition 4 passes
   either way. This is more than the Starter plan's 50 credits/month assumed before (§2 now uses 100); the source of the
