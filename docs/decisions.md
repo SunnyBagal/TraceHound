@@ -4251,3 +4251,21 @@ Observed in S1 (for codex's check before P1): all 4 reviews had 0 inline comment
 summary issue comment and a check run. A reader that counts only inline comments would score both tools 0.
 **Touches:** artu1 `docs/live-setup.md` §2.2 (1, 2), this file; Planner A `docs/runbooks/H1-window.md` (3; Sunny sends it);
 codex `docs/eval/ts-protocol.md` (3, in revision 10).
+
+## 076i — S1 ratio, R1 approved, Greptile expiry, scoring stays inline-only, E1 coverage, P1 opens per slot (2026-11-14)
+
+**Status: ruled by Sunny.** Readings (Sunny, 14 Nov): Nebius console $19.10 at 12:55 IST (baseline $19.13); Greptile 100
+credits expiring 27 Nov (after every hand-check date); `ANTHROPIC_API_KEY` in `.env` (artu1 checked presence only); CodeRabbit
+Automatic review turned off in its dashboard (time not given).
+- **S1 ratio:** console drop $0.03 ÷ ledger $0.0348 (2 review calls, 2026-11-13T15:12–15:13Z) = **0.86 ≤ 1.08** (weak: the
+  console shows cents). **R1 approved** (Sunny), cap $4.68, stopping after batch 1 for Sunny's next console reading (076g
+  item 7). **Greptile runs in P1** (expiry 27 Nov is after the hand-check).
+1. **Scoring: option (a).** Findings are counted from inline comments only, as 076c item 2 and protocol §3 say. W1 states
+   that summary text was excluded and reports how many completed reviews had 0 inline comments. Raw summaries stay archived.
+2. **E1 coverage:** RETHINK stands whatever CodeRabbit's coverage. A GO with CodeRabbit completing fewer than 30 of 40 becomes
+   INCONCLUSIVE. Planner A edits E1 to match.
+3. **P1 opens each PR in its own slot, immediately before its trigger** (as H1 does), not all 38 first: a PR opened early
+   could be auto-reviewed outside its slot. A bot post on a PR before its trigger is recorded as auto-reviewed (the
+   collector's flag) and reported to Sunny. (Replaces P1 §1's open-all-first.)
+**Touches:** artu1 this file, `docs/budget.md` (ratio, R1 approval), `docs/live-setup.md` (Greptile expiry, CodeRabbit auto
+review off); Planner A `docs/specs/E1.md` (2), `docs/runbooks/W1-writeup.md` (1), `docs/specs/P1.md` §1 (3).
