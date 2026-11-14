@@ -30,6 +30,8 @@ reading is open except where the firewall says otherwise.
 
 ### Pane names (Sunny, 2026-11-14)
 Display names only. Every file, brief, claim, report path, ruling and brain note keeps using the internal id.
+Set as Herdr labels (`hc label <t> name=<pane name> id=<internal id>`, 2026-11-14); a label is not an address, so
+`hc send` keeps using the t-address from `hc ls` (t9, t15, t14, t1g on 14 Nov). Jake is labelled when devin's pane opens.
 
 | pane name | internal id |
 |---|---|
