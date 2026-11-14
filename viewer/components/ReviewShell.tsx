@@ -3,10 +3,10 @@ import { LogoLink } from "./Logo";
 import { DEFAULT_REVIEW_REPO, reviewsHref } from "@/lib/reviews";
 
 const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-const NAV = [["Graph", `${base}/graph`], ["Reviews", reviewsHref()], ["Benchmark", `${base}/benchmark`]] as const;
+const NAV = [["Graph", `${base}/graph`], ["Reviews", reviewsHref()], ["Benchmark", `${base}/benchmark`], ["Pricing", `${base}/pricing`]] as const;
 
 /** The reviews and benchmark pages: the landing's night theme, a hairline frame and mono tabs. */
-export function ReviewShell({ children, active = "Reviews" }: { children: ReactNode; active?: "Reviews" | "Benchmark" }) {
+export function ReviewShell({ children, active = "Reviews" }: { children: ReactNode; active?: "Reviews" | "Benchmark" | "Pricing" }) {
   return <div className="page-shell h-dvh overflow-y-auto overflow-x-hidden bg-page text-text" data-page={active.toLowerCase()}>
     <header className="rv-top">
       <nav aria-label="Main" className="rv-top-bar">
