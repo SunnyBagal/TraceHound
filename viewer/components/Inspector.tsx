@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, ChevronRight, ExternalLink, Spline, TriangleAlert, X } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { componentEdgeChanges, declStatus, endpointLabel, evidenceLink, type ChangeModel } from "@/lib/changes";
 import { EDGE_STYLES, redisKeys } from "@/lib/graph";
 import { permalink } from "@/lib/github";
@@ -20,6 +20,7 @@ import { NameSourceBadge } from "./NameSourceBadge";
 import { ExpandableSourceRow } from "./ExpandableSourceRow";
 import { fileEvidence } from "@/lib/source";
 import type { Finding } from "@/lib/reviews";
+import { InspectorResizer } from "./InspectorResizer";
 import { ReviewFinding } from "./ReviewFinding";
 
 /** PR lane: the selected PR's findings for the open component (task 4). */
@@ -466,7 +467,11 @@ function Breadcrumbs({ snapshot, nav }: { snapshot: Snapshot; nav: PanelNavigati
  * from the canvas's edges (numbers in lib/inspector.ts). Phones: a full-screen sheet. `bind` wires
  * rows that point at the canvas (connections, files, endpoints) to the transient hover highlight.
  */
-export function Inspector({ snapshot, nav, bind = noHighlight, changes, findings }: { snapshot: Snapshot; nav: PanelNavigation; bind?: BindHighlight; changes?: ChangeModel; findings?: InspectorFindings }) {
+export interface InspectorSize { width: number; min: number; max: number; onResize: (width: number) => void }
+
+export function Inspector({ snapshot, nav, bind = noHighlight, changes, findings, size }: { snapshot: Snapshot; nav: PanelNavigation; bind?: BindHighlight; changes?: ChangeModel; findings?: InspectorFindings; size?: InspectorSize }) {
+  // a drag in progress: the panel follows the pointer; the canvas re-frames on release
+  const [preview, setPreview] = useState<number | null>(null);
   const entry = current(nav.stack);
   const component = entry?.type === "node" ? snapshot.components.find((c) => c.id === entry.id) : undefined;
   const edge = entry?.type === "edge" ? snapshot.edges.find((e) => e.id === entry.id) : undefined;
@@ -508,7 +513,7 @@ export function Inspector({ snapshot, nav, bind = noHighlight, changes, findings
       tab === "findings" && componentFindings?.length && findings ? (
         <section className="space-y-4 px-5 py-6 sm:px-7" data-testid="inspector-findings">
           <p className="text-sm text-muted">TraceHound&apos;s review of <a className="text-text hover:text-accent" href={`https://github.com/${findings.repo}/pull/${findings.number}`} target="_blank" rel="noreferrer">#{findings.number}</a>: {componentFindings.length} finding{componentFindings.length === 1 ? "" : "s"} in this component.</p>
-          {componentFindings.map((f) => <ReviewFinding key={f.id} finding={f} repo={findings.repo} number={findings.number} reviewId={findings.reviewId ?? 0} />)}
+          {componentFindings.map((f) => <ReviewFinding key={f.id} finding={f} repo={findings.repo} number={findings.number} reviewId={findings.reviewId ?? 0} variant="compact" />)}
         </section>
       ) : tab === "changes" && changes ? (
         <section className="px-7 py-6">
@@ -558,22 +563,27 @@ export function Inspector({ snapshot, nav, bind = noHighlight, changes, findings
       );
   }
 
+  const shownWidth = preview ?? size?.width;
   return (
     <aside
+      id="inspector"
       aria-label="Inspector"
       aria-hidden={!open}
+      style={shownWidth ? ({ "--inspector-w": `${shownWidth}px` } as CSSProperties) : undefined}
       inert={!open}
       data-testid="inspector"
       className={[
         "inspector-panel fixed inset-0 z-30 flex flex-col bg-panel transition-transform duration-300 ease-out",
-        // lib/inspector.ts: clamp(480px, 50vw, 760px) wide, 10px inside the canvas (whose box sits
-        // 6px in from main's right and bottom edges, so right/bottom are 16px here)
-        "md:absolute md:bottom-4 md:left-auto md:right-4 md:top-2.5 md:z-20 md:w-[clamp(480px,50vw,760px)] md:overflow-hidden md:rounded-xl md:border md:border-panel-line md:shadow-[0_16px_48px_-16px_var(--scrim)]",
+        // lib/inspector.ts: clamp(480px, 50vw, 760px) wide unless dragged (lib/inspector-width.ts),
+        // 10px inside the canvas (whose box sits 6px in from main's right and bottom edges, so
+        // right/bottom are 16px here)
+        "md:absolute md:bottom-4 md:left-auto md:right-4 md:top-2.5 md:z-20 md:w-[var(--inspector-w,clamp(480px,50vw,760px))] md:overflow-hidden md:rounded-xl md:border md:border-panel-line md:shadow-[0_16px_48px_-16px_var(--scrim)]",
         open ? "translate-x-0 translate-y-0" : "translate-y-full md:translate-x-[calc(100%+2rem)] md:translate-y-0",
       ].join(" ")}
     >
       {open && (
         <>
+          {size && size.width > 0 && <InspectorResizer width={shownWidth ?? size.width} min={size.min} max={size.max} onPreview={setPreview} onCommit={size.onResize} controls="inspector" />}
           <div className={`relative shrink-0 border-b border-panel-line bg-panel ${nav.stack.length > 1 ? "" : "pt-7"}`}>
             {/* the title row only when there is a path to show: a one-item breadcrumb would just repeat the name */}
             {nav.stack.length > 1 && (

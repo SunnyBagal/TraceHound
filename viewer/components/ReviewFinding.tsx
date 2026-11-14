@@ -1,4 +1,7 @@
-import { ArrowUpRight, Code2, FileCode2 } from "lucide-react";
+"use client";
+
+import { ArrowUpRight, ChevronDown, Code2, FileCode2 } from "lucide-react";
+import { useId, useState } from "react";
 import { findingParts } from "@/lib/pulls";
 import { MODEL_DISCLOSURE, pullHref, type Finding } from "@/lib/reviews";
 import { CodeBlock } from "./CodeSnippet";
@@ -7,9 +10,10 @@ function CommentText({ body }: { body: string }) {
   return <div className="max-w-[80ch] whitespace-pre-wrap break-words text-[15px] leading-relaxed text-text">{body.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) => part.startsWith("**") ? <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong> : part.startsWith("`") ? <code key={i} className="rounded bg-bg px-1 font-mono text-sm">{part.slice(1, -1)}</code> : part)}</div>;
 }
 
-export function FixDiff({ finding }: { finding: Finding }) {
+/** `container`: two columns only when the enclosing @container (the inspector) is wide enough, not the viewport. */
+export function FixDiff({ finding, container = false }: { finding: Finding; container?: boolean }) {
   if (finding.suggestion === undefined) return <p className="text-sm leading-relaxed text-muted">No suggestion was posted for this finding.</p>;
-  return <div className="grid min-w-0 gap-4 lg:grid-cols-2" aria-label="Suggested fix diff" data-testid="fix-diff">
+  return <div className={`grid min-w-0 gap-4 ${container ? "@2xl:grid-cols-2" : "lg:grid-cols-2"}`} aria-label="Suggested fix diff" data-testid="fix-diff">
     <section className="min-w-0" aria-label="Original code">
       <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-muted"><span className="text-diff-removed" aria-hidden>−</span> Before</h3>
       {finding.original !== undefined ? <CodeBlock lines={finding.original.split("\n")} startLine={finding.startLine ?? finding.line ?? 1} marker="-" wrap /> : <p className="rounded-lg border border-line bg-bg p-4 text-sm leading-relaxed text-muted">Original code is unavailable in this review’s diff context. Open the comment on GitHub.</p>}
@@ -21,7 +25,13 @@ export function FixDiff({ finding }: { finding: Finding }) {
   </div>;
 }
 
-export function ReviewFinding({ finding, repo, number, reviewId, index }: { finding: Finding; repo: string; number: number; reviewId: number; index?: number }) {
+/**
+ * `card` (default, /reviews): the full card. `compact` (the graph's inspector, ui-01): a clamped
+ * effect line, the location and disclosure, the full comment behind a Details toggle, the fix,
+ * the commit button; nothing is said twice.
+ */
+export function ReviewFinding({ finding, repo, number, reviewId, index, variant = "card" }: { finding: Finding; repo: string; number: number; reviewId: number; index?: number; variant?: "card" | "compact" }) {
+  if (variant === "compact") return <CompactFinding finding={finding} repo={repo} number={number} reviewId={reviewId} />;
   const comment = pullHref(repo, number, finding.commentId ? `#discussion_r${finding.commentId}` : `#pullrequestreview-${reviewId}`);
   const files = pullHref(repo, number, finding.commentId ? `/files#r${finding.commentId}` : "/files");
   const hasFix = finding.suggestion !== undefined;
@@ -49,5 +59,36 @@ export function ReviewFinding({ finding, repo, number, reviewId, index }: { find
         <Code2 className="size-4" aria-hidden />{hasFix ? "Commit fix on GitHub" : "Open finding on GitHub"}<ArrowUpRight className="size-4" aria-hidden />
       </a>
     </footer>
+  </article>;
+}
+
+function CompactFinding({ finding, repo, number, reviewId }: { finding: Finding; repo: string; number: number; reviewId: number }) {
+  const [open, setOpen] = useState(false);
+  const detailsId = useId();
+  const comment = pullHref(repo, number, finding.commentId ? `#discussion_r${finding.commentId}` : `#pullrequestreview-${reviewId}`);
+  const files = pullHref(repo, number, finding.commentId ? `/files#r${finding.commentId}` : "/files");
+  const hasFix = finding.suggestion !== undefined;
+  const { title } = findingParts(finding.body);
+  return <article id={`finding-${finding.id}`} aria-label={`Finding in ${finding.path}`} className="rv-compact @container" data-testid="review-finding" data-variant="compact">
+    {/* effect first (R15), clamped to two lines; the whole comment is under Details */}
+    <h3 className="rv-compact-title line-clamp-2" data-testid="finding-title" title={title}>{title}</h3>
+    <div className="rv-card-tags !mt-2.5">
+      <a href={comment} target="_blank" rel="noreferrer" className="rv-loc"><FileCode2 className="size-3.5 shrink-0" aria-hidden /><span className="break-all">{finding.path}{finding.line !== null ? `:${finding.line}` : ""}</span><ArrowUpRight className="size-3.5 shrink-0 opacity-60" aria-hidden /></a>
+      <span className="rv-disclosure">{MODEL_DISCLOSURE}</span>
+      {finding.outdated && <span className="rv-tag">earlier version of this code</span>}
+    </div>
+    <button type="button" className="rv-details-toggle" aria-expanded={open} aria-controls={detailsId} onClick={() => setOpen((o) => !o)} data-testid="finding-details-toggle">
+      <ChevronDown className={`size-4 transition-transform motion-reduce:transition-none ${open ? "" : "-rotate-90"}`} aria-hidden />Details
+    </button>
+    <div id={detailsId} hidden={!open} className="rv-compact-details" data-testid="finding-details">
+      <CommentText body={finding.body} />
+      <p className="mt-3 text-xs text-muted">{finding.source ? <>Source: <span className="font-mono text-text">{finding.source}</span></> : "Source not recorded"}</p>
+    </div>
+    <div className="mt-5"><FixDiff finding={finding} container /></div>
+    <div className="mt-5 flex justify-end">
+      <a href={hasFix ? files : comment} target="_blank" rel="noreferrer" className={`rv-action ${hasFix ? "rv-action-fix" : ""}`}>
+        <Code2 className="size-4" aria-hidden />{hasFix ? "Commit fix on GitHub" : "Open finding on GitHub"}<ArrowUpRight className="size-4" aria-hidden />
+      </a>
+    </div>
   </article>;
 }

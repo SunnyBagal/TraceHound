@@ -28,3 +28,16 @@ it("offers a discussion link when no fix was posted", () => {
   expect(screen.queryByRole("link", { name: "Commit fix on GitHub" })).toBeNull();
   expect(screen.getByRole("link", { name: "Open finding on GitHub" })).toBeTruthy();
 });
+it("the default card (/reviews) is unchanged: the full comment shows, no Details toggle", () => {
+  render(<ReviewFinding finding={finding} repo="acme/shop" number={3} reviewId={10} />);
+  expect(screen.getByTestId("review-finding").dataset.variant).toBeUndefined();
+  expect(screen.queryByRole("button", { name: "Details" })).toBeNull();
+  expect(screen.getByText("Validate input").tagName).toBe("STRONG");
+});
+it("the compact variant (graph inspector) keeps the fix and the commit link and hides the comment behind Details", () => {
+  render(<ReviewFinding finding={finding} repo="acme/shop" number={3} reviewId={10} variant="compact" />);
+  expect(screen.getByRole("button", { name: "Details" }).getAttribute("aria-expanded")).toBe("false");
+  expect(screen.getByTestId("finding-details").hidden).toBe(true);
+  expect(screen.getByRole("link", { name: "Commit fix on GitHub" }).getAttribute("href")).toBe("https://github.com/acme/shop/pull/3/files#r42");
+  expect(within(screen.getByRole("region", { name: "Suggested replacement" })).getByTestId("code-snippet").textContent).toContain("return check(value);");
+});

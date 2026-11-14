@@ -66,7 +66,8 @@ function PullRow({ pull, active, onSelect, children }: { pull: LanePull; active:
       >
         <Icon className={`mt-0.5 size-4 shrink-0 ${STATE_TONE[pull.state]}`} aria-label={pull.state} />
         <span className="min-w-0 flex-1">
-          <span className="line-clamp-2 leading-snug text-text"><span className="font-mono text-faint">#{pull.number}</span> {pull.title}</span>
+          <span className="line-clamp-2 leading-snug text-text"><span className="font-mono text-muted">#{pull.number}</span> {pull.title}</span>
+          {/* ui-01: #n and the grey chips are --muted (≥ 6.6:1 on every row background, 4.5:1 is AA) */}
           <span className={`mt-1.5 inline-block px-1.5 py-px font-mono text-xs ${pull.status === "reviewed" ? "bg-accent text-ink" : "border border-line-strong text-muted"}`} data-testid="pr-status">
             {pull.status === "reviewed" ? `${pull.findingCount} finding${pull.findingCount === 1 ? "" : "s"}` : STATUS_LABEL[pull.status]}
           </span>
@@ -79,21 +80,47 @@ function PullRow({ pull, active, onSelect, children }: { pull: LanePull; active:
 
 const PANEL_KEY = "tracehound:pr-panel";
 
-/** Open by default; closing it is remembered across visits. */
+/** Open by default; closing it is remembered across visits (when storage works: it may throw). */
 function usePanelOpen() {
   const [open, setOpen] = useState(true);
-  useEffect(() => { if (window.localStorage.getItem(PANEL_KEY) === "closed") setOpen(false); }, []);
+  useEffect(() => {
+    try { if (window.localStorage.getItem(PANEL_KEY) === "closed") setOpen(false); } catch { /* storage blocked: stay open */ }
+  }, []);
   const toggle = useCallback(() => setOpen((o) => {
-    window.localStorage.setItem(PANEL_KEY, o ? "closed" : "open");
+    try { window.localStorage.setItem(PANEL_KEY, o ? "closed" : "open"); } catch { /* not remembered */ }
     return !o;
   }), []);
   return [open, toggle] as const;
 }
 
 /** Left of the canvas: the repo's pull requests, newest first. The selected one opens its summary in place and outlines its cards. */
-export function PrLane({ repo, list, selected, onSelect, overlay, model }: { repo: string; list: Load<LaneList>; selected: number | null; onSelect: (n: number | null) => void; overlay: Load<PullOverlayData> | null; model: PrOverlay | null }) {
+/**
+ * `collapsed` (the inspector is open, ui-01): the panel shrinks to an icon rail so the canvas keeps
+ * its room; clicking the rail expands it again until the inspector next opens.
+ */
+export function PrLane({ repo, list, selected, onSelect, overlay, model, collapsed = false }: { repo: string; list: Load<LaneList>; selected: number | null; onSelect: (n: number | null) => void; overlay: Load<PullOverlayData> | null; model: PrOverlay | null; collapsed?: boolean }) {
   const [open, toggle] = usePanelOpen();
+  const [peek, setPeek] = useState(false);
+  useEffect(() => { if (collapsed) setPeek(false); }, [collapsed]);
   const count = list.status === "ready" ? list.data.pulls.length : null;
+  const findings = list.status === "ready" && selected !== null ? list.data.pulls.find((p) => p.number === selected)?.findingCount ?? null : null;
+  if (open && collapsed && !peek) {
+    return (
+      <aside aria-label="Pull requests" data-testid="pr-rail" className="flex w-[3.25rem] shrink-0 flex-col items-center pb-1.5 pl-1 pr-1.5 max-md:hidden">
+        <div className="flex w-full flex-1 flex-col items-center gap-2 border border-line bg-panel py-2">
+          <button type="button" onClick={() => setPeek(true)} aria-expanded={false} aria-label={`Show pull requests${count !== null ? ` (${count})` : ""}`} title="Show pull requests" data-testid="pr-rail-expand" className="pr-rail-button grid size-8 place-items-center text-muted hover:bg-card hover:text-text">
+            <GitPullRequest className="size-4 text-accent" aria-hidden />
+          </button>
+          {count !== null && <span className="font-mono text-xs text-muted" aria-hidden>{count}</span>}
+          {selected !== null && (
+            <button type="button" onClick={() => setPeek(true)} title={`#${selected}${findings ? ` · ${findings} finding${findings === 1 ? "" : "s"}` : ""}`} aria-label={`Selected pull request #${selected}; show pull requests`} className="pr-rail-button max-w-full truncate bg-accent px-1 py-px font-mono text-xs text-ink">
+              #{selected}
+            </button>
+          )}
+        </div>
+      </aside>
+    );
+  }
   if (!open) {
     // closed: the same button, floating in the canvas's top-left corner
     return (
