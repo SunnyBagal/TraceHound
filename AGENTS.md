@@ -47,8 +47,9 @@ A planner writes documents and never executes; a worker writes only the paths it
 lane's checkout; a file with no row belongs to artu1 until a row is added. Exceptions are one dated line here (who, which
 file, which lines, until when). Never force-push or rewrite history.
 Exceptions: (1) 2026-11-13, decision 076g item 4 (Sunny): an Anthropic provider in `packages/analyzer/src/llm`, selected by
-config, never the default, mocked tests only, for report-only Claude rows on dev (Haiku 5.5, Sonnet 5.5; Sunny's own money);
-never in `packages/action/`, `.github/actions/` or the held-out primary; until Sunny withdraws it. It overrides "Models and
+config, never the default, mocked tests only, for report-only Claude rows on dev (Haiku 5.5, Sonnet 5.5; Sunny's own money)
+and, since 2026-11-14 (decision 076k item 1), for the registered secondary held-out Haiku 5.5 row (two draws, after A0, on
+A0's cases); never in `packages/action/`, `.github/actions/` or the held-out primary (A0); until Sunny withdraws it. It overrides "Models and
 keys" and the "Build and safety" review rule for that provider only.
 
 ## Process (decision 076c item 14; `docs/plan/team-process.md` §1)
