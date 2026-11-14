@@ -4349,3 +4349,17 @@ list in `scripts/testset/tools.json` before the patterns freeze.
 
 **Touches:** bunny `scripts/testset/tools.json` and the not-completion test fixture; codex GO; Planner A H1 (re-trigger
 detection) and F1 (patterns row); artu1 this file, LOG.
+
+## 076m — Side track on `claude/upbeat-lamport-b280zm` (2026-11-15)
+
+**Status: ruled by Sunny (15 Nov 2026).** Sunny opens a side track on branch `claude/upbeat-lamport-b280zm`, starting now.
+It amends 076k items 8–9 for this track only.
+- New paths only. Unmerged until held-out scoring is done.
+- No API spend. Model runs use Sunny's Claude subscription via Claude Code. API credits come later, only to measure cost per PR.
+- The registered held-out run stays Nemotron and is untouched.
+- Direction: reviewer as a Claude Code skill + symbol-level affected-set lookup + contract-check findings fed in as facts.
+- Rejected: reverse-engineering competitor products (vendor ToS risk, logic is server-side).
+- Bring-your-own-credential for customers is planned as BYO API key; any plan-based login is on hold pending a policy check.
+
+**Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`, the brain inbox; the side-track branch (new paths only).
+Nothing in the held-out run, its freeze, the protocol or `docs/budget.md` changes.
