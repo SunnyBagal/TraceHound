@@ -21,7 +21,8 @@ that is not one of these templates, or a placeholder filled from anything but th
 
 ## 2. `docs/bench/ts-heldout.md`: sections in this order
 1. **Result in three sentences** (§3.1, §3.2, §3.3).
-2. **Headline table.** One row per tool (TraceHound, CodeRabbit, Greptile): reviews completed of 29; bugs caught of 20
+2. **Headline table.** One row per tool (TraceHound, CodeRabbit, Greptile): reviews completed of 29 and, of those,
+   the number with 0 inline comments (limit 14); bugs caught of 20
    (hand-checked) with the Wilson 95% interval; comments per PR (mean, median); comments on the 9 clean cases; cost per
    PR (TraceHound only; "free tier" for the others).
 3. **Pairs.** Two pairs were registered before the run and are the only tests (decision 076c item 4): **TraceHound vs
@@ -43,7 +44,8 @@ that is not one of these templates, or a placeholder filled from anything but th
    decision 076d), triggers, first triggers that needed their second try or failed both, re-triggers used, who
    operated (a detached scheduler; the operator typed no trigger).
 5. **How it was scored.** One golden per bug case (alternates as OR-targets), counted comments, two judges, the blind
-   hand-check and what was on the sheet, the policy file.
+   hand-check and what was on the sheet, the policy file. One sentence says that only inline review comments are
+   scored and a tool's summary text is not (decision 076i item 1; limit 14).
 6. **Judges versus hand-check.** Per tool: K by judge v1, by judge x1, by hand; items the hand-check rejected and added.
    Then one line on the guess column (decision 076c item 7), with the counts of `handcheckGuess` in
    `ts-heldout.summary.json` and nothing added: "After deciding every item, the checker guessed which tool had written
@@ -133,7 +135,7 @@ Sentence 3.1 shortened to the three counts with intervals; the pair sentence(s) 
 outcome's short form ("no detectable difference at this sample size" / "caught more of the labelled bugs than X on this
 set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the link.
 
-## 4. Limits (all 13 go on the page)
+## 4. Limits (all 14 go on the page)
 1. 20 bugs and one run: intervals are wide, and only large differences can be detected (power in plan-v2 §2).
 2. The bugs are ones a later merged fix repaired, found by SZZ and labelled by two labellers; they are not all the bugs
    in those pull requests. A comment on a real defect that no later fix repaired counts as unmatched, so the share of
@@ -203,6 +205,15 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
     held-out operator runs git in that repository only with explicit paths outside the held-out directory. The page
     gives no file name, and it claims nothing about what the names could reveal beyond the counts: names were
     shown, no file was opened.
+14. **A tool's summary text was not scored (decision 076i item 1).** Only a tool's top-level inline review comments
+    count as its comments and can catch a bug. A summary, a walkthrough or a review body counts for one thing only:
+    that the review was completed (decision 076c item 2). So a review that names its findings only in its summary
+    scores no catch here, whatever that text says. The page gives, per tool, **the number of completed reviews that
+    had 0 inline comments**: Z of the C completed on the 29 held-out pull requests, and beside the dev table Z of C
+    on the 40 dev cases. Both counts come from the committed counts (`H2-scoring.md` §7; `docs/bench/ts-dev.md`).
+    The page also says that in the smoke test all 4 reviews, 2 from each tool, had 0 inline comments and ended with
+    a summary comment (decision 076h). TraceHound's comments are its findings from the local export, so this limit
+    is about the two other tools.
 
 ## 5. Checks before merge
 1. codex: every number in `ts-heldout.md`, `results.md`, the viewer and the README equals `ts-heldout.summary.json` (or

@@ -189,7 +189,8 @@ When done, Sunny sends `decisions.json` back and says "final".
    does not allow changing the frozen reviewer or the scored protocol (protocol §10).
 
 ## 7. Report: `run/out/codex.ho-score.md` (counts only)
-Per primary tool: completed of 29 (bug n, clean m); caught K of 20 by v1, by x1, by the hand-check; Wilson interval of
+Per primary tool: completed of 29 (bug n, clean m), and how many of the completed reviews had 0 inline comments
+(decision 076i item 1: summary text is not scored; `W1-writeup.md` §4 limit 14); caught K of 20 by v1, by x1, by the hand-check; Wilson interval of
 the hand-check K; comments per attempted and per completed PR (mean, median); comments on clean cases; location hits.
 Pairs: for the two registered pairs (TraceHound–CodeRabbit, TraceHound–Greptile) paired n, only-A, only-B and the
 exact p; for CodeRabbit–Greptile paired n, only-A, only-B and **no p** (076c item 4); and per
