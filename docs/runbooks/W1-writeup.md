@@ -1,7 +1,7 @@
 # Runbook W1: the write-up, with the claim wording for every outcome
 
 For artu1 (writes), codex (checks every sentence against a count), Sunny (reads before it is public). Planner A,
-2026-11-11; brought to decision 076e (item 5, addendum d) on 2026-11-13. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §2. Protocol: `docs/eval/ts-protocol.md` §6, §11 (it wins
+2026-11-11; brought to decision 076e (item 5, addendum d) on 2026-11-13 and to decision 076g (items 1, 4, 5) on 2026-11-13. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §2. Protocol: `docs/eval/ts-protocol.md` §6, §11 (it wins
 over this runbook). Cost: $0. Starts after H2's commit (`docs/bench/ts-heldout.summary.json`) and the firewall lift.
 
 The wording in §3 is copied into decision 078 at F1, **before** the window. W1 only fills the placeholders. A sentence
@@ -21,7 +21,8 @@ that is not one of these templates, or a placeholder filled from anything but th
 
 ## 2. `docs/bench/ts-heldout.md`: sections in this order
 1. **Result in three sentences** (§3.1, §3.2, §3.3).
-2. **Headline table.** One row per tool (TraceHound, CodeRabbit, Greptile): reviews completed of 29; bugs caught of 20
+2. **Headline table.** One row per tool (TraceHound, CodeRabbit, Greptile): reviews completed of 29 and, of those,
+   the number with 0 inline comments (limit 14); bugs caught of 20
    (hand-checked) with the Wilson 95% interval; comments per PR (mean, median); comments on the 9 clean cases; cost per
    PR (TraceHound only; "free tier" for the others).
 3. **Pairs.** Two pairs were registered before the run and are the only tests (decision 076c item 4): **TraceHound vs
@@ -38,27 +39,34 @@ that is not one of these templates, or a placeholder filled from anything but th
    the table's exposed columns read "0 of 0 (no exposed bug cases)" and the second and third sentences become "No bug
    case was exposed at any review." Counts only: never a rate or a percentage on either group, never a comparison of the two
    groups in words, and never "the tools did not use the fix": the run cannot show what a tool read.
-4. **What was run.** Tag `review-freeze-3`, candidate arm and attempts, model, the command shape, window start and end
+4. **What was run.** Tag `review-freeze-3`, the arm (A0, pool-verify-v1, attempts 2: frozen by decision 076g item 1), model, the command shape, window start and end
    (UTC), the push order in one sentence (one case per hour, by base date, each pushed only at its own first trigger;
    decision 076d), triggers, first triggers that needed their second try or failed both, re-triggers used, who
    operated (a detached scheduler; the operator typed no trigger).
 5. **How it was scored.** One golden per bug case (alternates as OR-targets), counted comments, two judges, the blind
-   hand-check and what was on the sheet, the policy file.
+   hand-check and what was on the sheet, the policy file. One sentence says that only inline review comments are
+   scored and a tool's summary text is not (decision 076i item 1; limit 14).
 6. **Judges versus hand-check.** Per tool: K by judge v1, by judge x1, by hand; items the hand-check rejected and added.
    Then one line on the guess column (decision 076c item 7), with the counts of `handcheckGuess` in
    `ts-heldout.summary.json` and nothing added: "After deciding every item, the checker guessed which tool had written
    each comment: right for R of the G items he guessed (U marked unsure, N items in all); naming the commonest tool
    every time would have been right for M of N.
-7. **Secondary rows** (the two other TraceHound arms; judges only, not hand-checked), marked report-only. Counts
-   only; no test and no p-value on a secondary row, against anything.
+7. **Secondary rows** (the two other TraceHound arms, and a Claude row only if decision 078 registered one; judges
+   only, not hand-checked), marked report-only. Counts only; no test and no p-value on a secondary row, against
+   anything. **Then the pooled secondary analysis** (decision 076g item 5), if `H2-scoring.md` §6 step 4b ran: dev
+   and held-out pooled for A0 (51 bugs), under the heading "Secondary", with protocol revision 10's wording, the
+   dev table's label and grok's dev exposure count beside it. It is never in the three result sentences.
 8. **Predictions.** The table of decision 078, each scored right / wrong / too vague to score.
-9. **Selection history.** Dev runs 1 and 2, the gates and their verdicts (link to `docs/bench/ts-dev.md`), and the
-   sentence "the configuration was chosen on 40 dev cases before the held-out cases were opened".
+9. **Dev history.** Dev run 1 and the dev table with its label (link to `docs/bench/ts-dev.md`), the stop/go verdict
+   of decision 076g item 6, and the sentence "the configuration (pool-verify-v1) was fixed on 13 November 2026,
+   before any result on the TypeScript dev cases existed and before the held-out cases were opened; it had been
+   chosen earlier on a different benchmark (decision 059)". The dev rows for A1, A2 and the Claude models are
+   named as report-only. There was no second dev run (cut by decision 076g).
 10. **Failures and deviations.** Every numbered failure of `H1-window.md` §5 that occurred, with counts.
 11. **Limits** (§4, all of them, unshortened).
-12. **Cost.** Ledger spend for H1 and H2, console ratio, cost per PR measured on this set. If the frozen candidate is
-    A1 or A2 it was run by the unchanged runner and extracted by replay, so two figures are given (decision 076b item 5):
-    the cost paid per PR, and beside it the cost of the adopted arm's own calls from the ledger.
+12. **Cost.** Ledger spend for H1 and H2, console ratio, cost per PR measured on this set. The frozen arm is A0,
+    the full pipeline, so one figure is given: the cost paid per PR (the two-figure rule of decision 076b item 5 was
+    for an adopted A1 or A2, and none can be adopted since 076g).
 No case id, PR number, file path, label text or comment text from held-out appears on the page.
 
 ## 3. Claim wording
@@ -112,8 +120,8 @@ then the test.
 > labelled bug they posted c_T, c_C and c_G comments in total. TraceHound ran on an open model (Nemotron 3.5 on Nebius)
 > at $D per pull request.
 
-`$D` is the cost **paid** per pull request. For an adopted A1 or A2 add: "($D_arm for the calls the reported
-configuration itself uses; the run also executed the verifier.)" (076b item 5).
+`$D` is the cost **paid** per pull request. (The second figure of 076b item 5 was for an adopted A1 or A2; A0 is
+frozen by decision 076g item 1, so it is not used.)
 
 ### 3.4 Never written, whatever the numbers
 "beats", "outperforms", "wins", "best", a rank or "first/second/third", "matches", "as good as", "catches as many",
@@ -127,13 +135,17 @@ Sentence 3.1 shortened to the three counts with intervals; the pair sentence(s) 
 outcome's short form ("no detectable difference at this sample size" / "caught more of the labelled bugs than X on this
 set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the link.
 
-## 4. Limits (all 13 go on the page)
+## 4. Limits (all 14 go on the page)
 1. 20 bugs and one run: intervals are wide, and only large differences can be detected (power in plan-v2 §2).
 2. The bugs are ones a later merged fix repaired, found by SZZ and labelled by two labellers; they are not all the bugs
    in those pull requests. A comment on a real defect that no later fix repaired counts as unmatched, so the share of
    matching comments is a lower bound on precision.
 3. "Clean" means no qualifying later fix was found, not bug-free.
-4. The configuration was selected on 40 dev cases from three of the same repositories.
+4. The configuration was fixed before any result on the 40 TypeScript dev cases existed (decision 076g item 1); it
+   had been chosen on an earlier benchmark of other repositories. The 40 dev cases, from three of the same
+   repositories as the held-out cases, were then used for a stop/go reading and for report-only rows, and those
+   numbers were known before the window. The pooled analysis mixes those dev cases with the held-out ones and is
+   secondary for that reason.
 5. The hand-check was done by the project owner, blind to the tool. Only comments that a judge matched or that lie
    within 10 lines of a labelled range were on the sheet; a match outside that set would be missed for every tool alike.
    Tool-specific formatting was stripped by fixed patterns; residual style cues cannot be excluded: the checker's
@@ -170,8 +182,8 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
      `docs/specs/P1.md` §4 item 9, and is restated on the page). So "0 of
      20 at first review" is a statement about the branches on the forks, not about what a tool remembers.
    - TraceHound read no fork: it ran locally on each case's own commits.
-7. CodeRabbit and Greptile ran on free plans, triggered by a comment posted from a scheduler, one pull request per
-   hour, within their rate and credit limits; a tool that
+7. CodeRabbit and Greptile ran on free plans, triggered by a comment posted from a scheduler, one pull request every 61
+   minutes, within their rate and credit limits; a tool that
    delivered no review after one re-trigger is left out of its pairs, with n stated.
 8. No row for Augment, Cursor Bugbot or Copilot. TypeScript only; the repositories named; these dates.
 9. Costs: TraceHound's is the ledger figure for this run; the console-to-ledger ratio is stated.
@@ -193,6 +205,15 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
     held-out operator runs git in that repository only with explicit paths outside the held-out directory. The page
     gives no file name, and it claims nothing about what the names could reveal beyond the counts: names were
     shown, no file was opened.
+14. **A tool's summary text was not scored (decision 076i item 1).** Only a tool's top-level inline review comments
+    count as its comments and can catch a bug. A summary, a walkthrough or a review body counts for one thing only:
+    that the review was completed (decision 076c item 2). So a review that names its findings only in its summary
+    scores no catch here, whatever that text says. The page gives, per tool, **the number of completed reviews that
+    had 0 inline comments**: Z of the C completed on the 29 held-out pull requests, and beside the dev table Z of C
+    on the 40 dev cases. Both counts come from the committed counts (`H2-scoring.md` §7; `docs/bench/ts-dev.md`).
+    The page also says that in the smoke test all 4 reviews, 2 from each tool, had 0 inline comments and ended with
+    a summary comment (decision 076h). TraceHound's comments are its findings from the local export, so this limit
+    is about the two other tools.
 
 ## 5. Checks before merge
 1. codex: every number in `ts-heldout.md`, `results.md`, the viewer and the README equals `ts-heldout.summary.json` (or
