@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat(workflow): periodic core-consistency check for workflows, versions and triggers",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/modules/workflow/workflow-core-consistency/services/workflow-core-consistency.service.ts",
+      "line": 240,
+      "body": "The drift metrics are emitted with `metricsService.incrementCounterBy` (service.ts:240, called from emitDrift at lines 99, 145 and 207). Each 3-hourly run adds the current drift count as an increment. A workspace with a persistent 2 unlinked workflows therefore adds 2 on every run, about 16 per day, and the counter never reflects the current drift. It only grows, so dashboards built on it cannot show whether drift exists now. The metrics layer offers observable gauges (metrics.service.ts:36 `createObservableGauge`, :58 `createMultiObservableGauge`), and a gauge that holds the last-computed count per (entity, driftType) is the natural fit for a snapshot check. The unit tests (spec lines 256-289) only assert the per-run amount, so they do not catch this."
+    },
+    {
+      "path": "packages/twenty-server/src/modules/workflow/workflow-core-consistency/services/workflow-core-consistency.service.ts",
+      "line": 39,
+      "body": "The workspace discovery query `SELECT DISTINCT \"workspaceId\" FROM core.\"workflow\"` (service.ts:39) only visits workspaces that already have at least one core workflow row. A workspace whose workflows were never dual-written, so every workspace `workflow` row has `coreWorkflowId` NULL and core has no rows for that workspace, is never checked. That is the exact case the `unlinked` drift type (service.ts:454, 496) exists to detect, so it stays silent. The discovery needs to include workspaces that have workflows in their own schema, or be justified as an explicit limit with the gap documented."
+    }
+  ]
+}

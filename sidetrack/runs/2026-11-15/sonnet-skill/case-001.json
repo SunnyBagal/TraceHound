@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(address): populate street line from place details",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/ui/meta-types/input/components/AddressFieldInput.tsx",
+      "line": 29,
+      "body": "`castAsNumberOrNull` throws `Error('Cannot cast to number or null')` when it gets `undefined`. The check is at `packages/twenty-front/src/utils/cast-as-number-or-null.ts:10-13` and the throw at `:55-57`. The old code, `newAddress?.addressLat ?? null`, turned `undefined` into `null`. `convertToAddress` is called during render at line 72, as `value={convertToAddress(draftValue)}`. It also runs in every handler. `newAddress` can be `undefined`, since the parameter is typed `FieldAddressDraftValue | undefined`. `addressLat` or `addressLng` can also be missing, for example on a draft built from a record that has no lat/lng keys. In either case the address input now throws and crashes instead of showing empty coordinates. The same applies to line 30. Use `newAddress?.addressLat ?? null` or pass `?? null` into the cast."
+    },
+    {
+      "path": "packages/twenty-server/src/engine/core-modules/geo-map/utils/sanitize-place-details-results.util.ts",
+      "line": 28,
+      "body": "For a place that has a `street_number` component but no `route`, `address.street` becomes `long_name + ' ' + ''`, which gives `\"48 \"` with a trailing space. That value is non-empty, so on the front end `placeData?.street || addressStreet1 || ...` at `useAddressAutocomplete.ts:84` picks it. The street line then holds just the number and replaces the full autocomplete text. The street should be trimmed, and it should only be set when a `route` exists."
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat(utils): Introduce promiseAll util",
+  "comments": [
+    {
+      "path": "packages/medusa/src/subscribers/order.js",
+      "line": 37,
+      "body": "`promiseAll` is called at packages/medusa/src/subscribers/order.js:37 but the file has no import for it. The file's only import-like code is the class definition at lines 1-62, and the diff adds the `promiseAll` call (replacing `Promise.all`) without adding `import { promiseAll } from \"@medusajs/utils\"`. Every other changed .js file in this PR (shopify.js, contentful.js, brightpearl.js, webshipper-fulfillment.js) does add the import. Because this is plain JS, tsc does not catch it. When an `order.placed` event fires, `handleOrderPlaced` (lines 32-45) runs `retrieveWithTotals` and then throws `ReferenceError: promiseAll is not defined` at line 37, whether or not the order has discounts. As a result, `discountService_.update` is never called and discount `usage_count` is never incremented. The separate `updateDraftOrder` subscriber on the same event is unaffected."
+    }
+  ]
+}

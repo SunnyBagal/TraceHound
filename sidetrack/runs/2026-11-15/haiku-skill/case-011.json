@@ -1,0 +1,20 @@
+{
+  "pr_title": "fix(payment): round currency precision",
+  "comments": [
+    {
+      "path": "packages/modules/payment/src/services/payment-module.ts",
+      "line": 205,
+      "body": "roundToCurrencyPrecision gets the precision by splitting Intl's output on \".\" (`formatted.split(\".\")[1].length`). Under a locale whose decimal separator is \",\" (for example de-DE, where USD 0.1111111 formats as \"0,11 $\"), `split(\".\")[1]` is undefined, the TypeError is swallowed by the catch at line 206, and precision stays undefined, so nothing is rounded. The fix is then silently disabled on such hosts. With 200.129 authorized and a provider-rounded capture of 200.13, the check at lines 721-726 still throws \"You cannot capture more than the authorized amount...\", and maybeUpdatePaymentCollection_ (lines 969-994) does not reach COMPLETED. The new test at integration-tests/.../index.spec.ts:171 only passes on hosts whose default locale uses \".\"."
+    },
+    {
+      "path": "packages/modules/payment/src/services/payment-module.ts",
+      "line": 983,
+      "body": "The COMPLETED check changed from `MathBN.eq(paymentCollection.amount, capturedAmount)` to `MathBN.gte(...)`. This is not part of the rounding change, and the PR description does not mention it. Input: collection amount 500, sessions authorized 1000 and captured 1000 (index.spec.ts:1106-1113). Before, the status stayed \"authorized\" and completed_at was not set. Now it becomes \"completed\" with completed_at set. The existing expectation at index.spec.ts:1108 was changed from \"authorized\" to \"completed\" to match, so over-capture is now reported as completed without being called out."
+    },
+    {
+      "path": "packages/core/utils/src/totals/math.ts",
+      "line": 24,
+      "body": "`if (decimalPlaces)` treats 0 as \"no rounding\". For zero-decimal currencies such as JPY, Intl formats without a \".\", so the precision is already undefined and the helper never rounds to whole units. Input: a JPY payment authorized at 1000.4, with the provider rounding the capture to 1000. At payment-module.ts:737-740, totalCaptured 1000 is compared with 1000.4, so isFullyCaptured is false and captured_at is not set. In maybeUpdatePaymentCollection_ (lines 983-994) the collection stays \"authorized\" although the provider has settled the full amount. The rounding the PR describes does not occur for these currencies."
+    }
+  ]
+}

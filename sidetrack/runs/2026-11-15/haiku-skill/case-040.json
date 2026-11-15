@@ -1,0 +1,25 @@
+{
+  "pr_title": "chore(): Improve workflows sdk tooling",
+  "comments": [
+    {
+      "path": "packages/core/orchestration/src/transaction/distributed-transaction.ts",
+      "line": 315,
+      "body": "The temporary-data store is now a `WeakMap` keyed by a new object on every call: `set({ key }, value)` at :315, `get({ key })` at :319 and `has({ key })` at :323. Lookups by identity can never match, so `hasTemporaryData` always returns false and `getTemporaryData` always returns undefined. The memo in `packages/core/workflows-sdk/src/utils/composer/transform.ts:179-181` therefore never hits, and each `transform` re-runs its functions every time it is resolved within a transaction, instead of reusing the first result. Any transform that is non-deterministic or has side effects will now produce different values across resumptions of the same transaction."
+    },
+    {
+      "path": "packages/core/workflows-sdk/src/utils/composer/helpers/resolve-value.ts",
+      "line": 155,
+      "body": "The async branch treats any resolved value with a `key` property as the internal `{ key, value }` wrapper, but promises from `resolveProperty` at :125-128 (for example a `transform` via `__resolver`) are not wrapped. Trigger: `transform({ a: someTransform }, fn)` where `someTransform` resolves to `{ key: \"email\", value: 1 }`. Line 156 then sets `parentRef[\"email\"] = 1`, `a` is never assigned, and `fn` receives `data.a === undefined`. The wrapper check needs to distinguish wrapped results from raw ones."
+    },
+    {
+      "path": "packages/core/workflows-sdk/src/utils/composer/helpers/resolve-value.ts",
+      "line": 130,
+      "body": "Resolved step outputs are assigned by reference: `parentRef[key] = result`, with no `deepCopy`. The old code was `parentRef[key] = deepCopy(await resolveProperty(...))`. The top-level `deepCopy(input)` does not cover values fetched from the transaction context, and `parseStringifyIfNecessary` only copies the top level. Trigger: step A returns `{ items: [...] }`, and step B is given `input: { order: <ref to A> }` (an object, not a bare ref). If B's invoke function mutates `input.order.items`, it mutates the object stored in `transactionContext.invoke[A].output`, which later steps and A's compensation then read. The same shared object is also written to by the recursion at :132-145 when a resolved value contains a nested `__type`."
+    },
+    {
+      "path": "packages/core/workflows-sdk/src/helper/workflow-export.ts",
+      "line": 41,
+      "body": "`cachedLoadedModules` is cached process-wide with no invalidation. An empty array is truthy, so if the first run without a container happens before any module is registered in `MedusaModule.modules_`, `[]` is cached and every later run without a container resolves no modules (used at line 106 via `executionContainer = getCachedLoadedModules()`). Modules registered after the first call are also never seen. The previous code called `MedusaModule.getLoadedModules()` on each run."
+    }
+  ]
+}

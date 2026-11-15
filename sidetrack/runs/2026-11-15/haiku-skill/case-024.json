@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat: Add support for stats query",
+  "comments": [
+    {
+      "path": "packages/modules/search/src/providers/search-medusa/utils/facets.ts",
+      "line": 137,
+      "body": "The stats `agg` sub-query counts with `filters: base` (facets.ts:137), but the min/max sub-queries use `present = mergeFilters([base, [field, \"NotEq\", null]])` (facets.ts:101). So `count` and `sum` are taken over every document matching the search, including documents where the stat field is null, while min and max only see documents that have a value. Example: an index with 3 products, 2 of which have a price. `search({ search_options: { facets: [{ field: \"price\", type: \"stats\" }] } })` returns `count: 3` alongside min/max computed from 2 priced products, so the facet is internally inconsistent. The count should use the same `present` filter as min/max (or the agg query should add `[field, \"NotEq\", null]`)."
+    },
+    {
+      "path": "packages/modules/providers/search-postgres/integration-tests/__tests__/postgres-search.spec.ts",
+      "line": 173,
+      "body": "The changed assertion `.rejects.toThrow(/Unknown field \"embedding\"/)` cannot match what this provider throws. Nothing in packages/modules/providers/search-postgres/src emits \"Unknown field\". The only similar message is \"Unknown filter field\" (src/utils/filters.ts:191), which does not contain the pattern. The engine is native here, and the native-engine guard in assertQuerySupported (src/utils/plan.ts:170-173, called from src/services/postgres-search.ts:794) fires with \"Vector search requires engine: \\\"lakebase\\\"\", which matches the old /lakebase/ expectation. The rewritten test therefore fails, and the diff contains no source change that would produce the new message."
+    }
+  ]
+}

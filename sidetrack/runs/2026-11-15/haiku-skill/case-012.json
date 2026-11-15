@@ -1,0 +1,25 @@
+{
+  "pr_title": "feat: Add github authentication provider",
+  "comments": [
+    {
+      "path": "packages/modules/providers/auth-github/src/services/github.ts",
+      "line": 110,
+      "body": "Every GitHub login fails when the token response has no `expires_in`. Line 110 `Date.now() + response.expires_in * 1000` (and line 113 `response.refresh_token_expires_in`) yields NaN when the field is absent. `new Date(NaN).toISOString()` throws RangeError, which the catch at lines 126-127 turns into `{ success: false, error: \"Invalid time value\" }`. GitHub OAuth Apps, and GitHub Apps without token expiration, return only `access_token`, `scope` and `token_type`, so the provider cannot log in with them. The test mock always returns `expires_in`, so this path is not exercised. The same happens on a bad code: GitHub returns HTTP 200 with an `error` body, so the `!r.ok` check at lines 94-100 does not fire, and the user sees the misleading \"Invalid time value\" instead of GitHub's error."
+    },
+    {
+      "path": "packages/modules/providers/auth-github/src/services/github.ts",
+      "line": 151,
+      "body": "`upsert_` never checks that the `/user` response is OK. Lines 144-151 read `const entity_id = user.id` from whatever body comes back. When GitHub returns an error body (for example a 403 rate limit or a 5xx on a valid token), `entity_id` is undefined. `authIdentityService.update(undefined, ...)` at line 811 in the same file then builds a filter with `entity_id: undefined`. `buildWhere` in packages/core/utils/src/modules-sdk/build-query.ts (lines 101-107) passes undefined values through unchanged. Unless the ORM drops undefined where-keys, which I did not verify, the query matches every `github` provider identity. If exactly one exists, its provider metadata is overwritten with the caller's token and that existing identity is returned as authenticated, so the caller is issued a JWT for another user's account."
+    },
+    {
+      "path": "packages/medusa/src/api/auth/[actor_type]/[auth_provider]/route.ts",
+      "line": 50,
+      "body": "The GET auth-start endpoint no longer redirects. Line 50 `return res.status(200).json({ location })` replaces the previous `res.redirect(location)`. A browser navigation or `<a href=\"/auth/user/google\">` to this route now shows the JSON body `{ \"location\": ... }` and never reaches the provider. The PR's breaking-change list covers the callback and the Google option renames but not this change to the start route. Clients that followed the redirect from the GET endpoint break."
+    },
+    {
+      "path": "packages/modules/providers/auth-github/src/services/github.ts",
+      "line": 16,
+      "body": "The OAuth flow has no `state` parameter, so login CSRF is possible. `getRedirect` (lines 188-202) and `validateCallback` accept any `code` with no binding to the initiating session. An attacker can start the flow with their own GitHub account, obtain the `code` from the callback URL, and get a victim's browser to request `/auth/user/github/callback?code=...`. The victim's app then stores a token for the attacker's identity. The TODO acknowledges the gap, but this provider is new in this change and ships without the protection."
+    }
+  ]
+}

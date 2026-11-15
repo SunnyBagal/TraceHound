@@ -1,0 +1,15 @@
+{
+  "pr_title": "Fix multi select filtering",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-filter/utils/isMatchingMultiSelectFilter.ts",
+      "line": 9,
+      "body": "The client-side `containsAny` check uses `.every(...)`, which means \"contains all\". The server builds `containsAny` as an overlap (`&&`) in `compute-where-condition-parts.ts:98-102`, which means \"contains any\". Take a Contains filter with options [A, B] and a record whose value is [A]. The server returns that record, but `isRecordMatchingFilter` (`isRecordMatchingFilter.ts:186`) returns false. As a result, `triggerCreateRecordsOptimisticEffect.ts:90` and `triggerUpdateRecordOptimisticEffect.ts:68` drop or omit matching records from cached filtered lists. Use `.some(...)`."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-filter/utils/isMatchingArrayFilter.ts",
+      "line": 23,
+      "body": "`computeViewRecordGqlOperationFilter.ts:695` and `:702` send `containsIlike: `%${filter.value}%``, and the server passes that value to `ILIKE` as a pattern. This matcher lowercases the same string and uses `item.toLowerCase().includes(searchTerm)`. The literal `%` characters are therefore part of the substring. For example, a filter value of 'foo' gives the search term '%foo%', which no array item contains, so the matcher returns false. Optimistic-effect matching for ARRAY Contains filters is then wrong, and for DoesNotContain it is inverted. Strip the leading and trailing `%`, or convert the pattern to a proper ILIKE match."
+    }
+  ]
+}

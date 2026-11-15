@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(ui): ensure that schedule publishing time picker can only be in the future",
+  "comments": [
+    {
+      "path": "packages/ui/src/elements/PublishButton/ScheduleDrawer/index.tsx",
+      "line": 299,
+      "body": "The new minTime is computed from the browser clock (startOfDay(new Date()) / new Date()), but the picker's wall-clock values are interpreted in the selected publish timezone. When `timezone` is ahead of the browser's zone, past times can still be scheduled. Example: browser in UTC at 10:00 on Nov 14, timezone set to Asia/Tokyo. Tokyo is already 19:00 on Nov 14, so 12:00 Tokyo is in the past. The picker shows 12:00 as today's wall-clock value; `date` becomes Nov 14 03:00 UTC, and isToday(date) is true, so minTime = 10:00 (browser time) and 12:00 is allowed. `handleSave` then calls schedulePublish with that past date (passed as `waitUntil` at packages/ui/src/utilities/schedulePublishHandler.ts:66, with no past-date check), so the job runs immediately instead of at the chosen time. The minTime at line 344 (`minTime={minTime}`) inherits this, since it is derived from the same browser clock. The minimum needs to be computed in the selected timezone (for example, the current wall-clock time in `timezone`) rather than from `new Date()`."
+    }
+  ]
+}

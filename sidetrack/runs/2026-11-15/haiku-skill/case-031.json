@@ -1,0 +1,20 @@
+{
+  "pr_title": "feat: Add support for authentication to the sdk, and plug it in the admin",
+  "comments": [
+    {
+      "path": "packages/admin-next/dashboard/src/hooks/api/auth.tsx",
+      "line": 10,
+      "body": "`useEmailPassLogin` now calls `sdk.auth.login`, which goes through the js-sdk `Client.fetch` and rejects with `FetchError` (`packages/core/js-sdk/src/client.ts:48-49`, `status` set, no `isAxiosError`). The login page still decides on a wrong password with `isAxiosError(error)` followed by `error.response?.status === 401` (`packages/admin-next/dashboard/src/v2-routes/login/login.tsx:45-46`). `isAxiosError` only checks `error.isAxiosError` (`packages/admin-next/dashboard/src/lib/is-axios-error.ts:4`), so it is false for a FetchError. A 401 on bad credentials therefore skips the field errors (`invalidCredentials` on email/password) and shows the generic `errors.serverError` instead. This happens on every wrong-password attempt."
+    },
+    {
+      "path": "packages/core/js-sdk/src/client.ts",
+      "line": 41,
+      "body": "`normalizeRequest` now sets `credentials: \"omit\"` for every config that is not `auth.type === \"session\"`. Before this change fetch used the default `same-origin`, so same-origin requests carried cookies. Now a `new Medusa({ baseUrl })` client without `auth` (the default JWT mode) never sends cookies, even to its own origin. Any same-origin deployment that relies on the cookie set by `/auth/session` for an SDK client that does not use session mode will be logged out. The fix is to keep `same-origin` as the non-session default, or to add `omit` only for cross-origin requests."
+    },
+    {
+      "path": "packages/core/js-sdk/tsconfig.json",
+      "line": 8,
+      "body": "`\"module\"` changed from `commonjs` to `ES2020`, so `tsc --build` (used by `build` and `prepublishOnly`) now emits ESM syntax into `dist/`. `packages/core/js-sdk/package.json:5` still sets `\"main\": \"dist/index.js\"` and has no `\"type\": \"module\"` or `exports` map. A Node consumer that loads the published package with `require` or plain CommonJS `import` will fail with a SyntaxError on `export`/`import` in `dist/index.js`. The workspace consumer (the Vite dashboard) is not affected by this."
+    }
+  ]
+}

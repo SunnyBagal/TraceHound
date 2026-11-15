@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat(medusa): Allow regexp in CORS configuration",
+  "comments": [
+    {
+      "path": "packages/medusa-core-utils/src/parse-cors-origins.ts",
+      "line": 4,
+      "body": "`str.split(\",\")` runs before the regex check, so a regex that contains a comma is cut in two and never becomes a RegExp. Example: store_cors = `/^https:\\/\\/shop{1,3}\\.example\\.com$/`. The split gives `/^https:\\/\\/shop{1` and `3}\\.example\\.com$/`. `buildRegexpIfValid` needs a closing delimiter followed only by flags, so neither piece matches and both fall back to plain strings (`packages/medusa-core-utils/src/build-regexp-if-valid.ts:3`). The origin then never matches, and nothing reports the failure. Every consumer of this function is affected: `packages/medusa/src/api/routes/store/index.js:30`, `packages/medusa/src/api/routes/admin/index.js:49`, and the plugin route files that call `parseCorsOrigins`. Splitting on commas that sit outside the regex, or documenting that regexes cannot contain commas, would avoid the silent failure."
+    }
+  ]
+}

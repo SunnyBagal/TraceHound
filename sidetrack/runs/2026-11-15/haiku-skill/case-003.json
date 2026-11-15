@@ -1,0 +1,10 @@
+{
+  "pr_title": "Polish settings page titles and admin tables",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/pages/settings/ai/components/SettingsToolParameterTable.tsx",
+      "line": 125,
+      "body": "Crash when a tool parameter's `format` names an inherited Object.prototype member. `getTypeIconKey` (line 91) checks `isDefined(TYPE_ICON_MAP[property.format])`, but `TYPE_ICON_MAP` is a plain object literal, so `format` values such as `constructor`, `hasOwnProperty` or `__proto__` resolve to inherited properties and pass the check. Line 125 then sets `TypeIcon` to that inherited value and renders `<TypeIcon size=… />` (line 140). For `constructor` the render returns the props object, which React rejects with \"Objects are not valid as a React child\"; `__proto__` is an object, not a component, so React throws \"Element type is invalid\". The settings tool page then fails to render. The old code keyed on `property.type`, which JSON Schema constrains to a small set, so this is new: `format` is a free-form string from the tool's input schema. Fix: use an own-property check (`Object.hasOwn(TYPE_ICON_MAP, key)`) or a `Map`/null-prototype object for the lookup."
+    }
+  ]
+}

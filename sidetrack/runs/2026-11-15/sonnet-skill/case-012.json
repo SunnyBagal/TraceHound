@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat: Add github authentication provider",
+  "comments": [
+    {
+      "path": "packages/modules/providers/auth-github/src/services/github.ts",
+      "line": 151,
+      "body": "`upsert_` never checks the response of `https://api.github.com/user`. It runs `.then((r) => r.json())` and then uses `user.id` directly. If that call fails (rate limit, 401/5xx, or an error body), `user.id` is `undefined`. `authIdentityService.update(undefined, ...)` in `packages/modules/auth/src/services/auth-module.ts` then builds the filter `provider_identities: { entity_id: undefined, provider }`. A filter with an undefined value is typically dropped, so it can match any existing github identity. If exactly one exists, the new (possibly attacker-obtained) tokens and metadata overwrite that user's identity. The callback route then issues a JWT for that identity. If several exist, the call throws INVALID_DATA instead. Check `r.ok` and that `user.id` is present before calling `update` or `create`."
+    },
+    {
+      "path": "packages/modules/providers/auth-github/src/services/github.ts",
+      "line": 122,
+      "body": "`validateCallback` discards the error from `upsert_`. When `upsert_` returns `{ success: false, error }` (for example 'No access token found', or a non-NOT_FOUND `update` error), this line returns only `{ success, authIdentity }`, so the `error` field is lost. GitHub's token endpoint returns HTTP 200 with `{ error: 'bad_verification_code' }` for an invalid or expired code, so this is the normal failure path. The callback route in `packages/medusa/src/api/auth/[actor_type]/[auth_provider]/callback/route.ts` then reports a generic 'Authentication failed'. Pass the `error` through."
+    }
+  ]
+}

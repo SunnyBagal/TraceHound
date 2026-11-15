@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat: implement resend rest email adapter",
+  "comments": [
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 130,
+      "body": "`mapAttachments` rejects any attachment without `content`: `if (!attachment.filename || !attachment.content) throw new APIError('Attachment is missing filename or content', 400)`. The adapter's own `Attachment` type declares `path?: string` (packages/email-resend-rest/src/index.ts:228), and `sendEmail` is typed as nodemailer's `SendMailOptions` (packages/payload/src/email/types.ts:12). Nodemailer accepts path-based attachments, and the sibling adapter packages/email-nodemailer/src/index.ts:33-37 forwards `message` unchanged to nodemailer, so it sends them. Here, `sendEmail({ to, subject, attachments: [{ filename: 'report.pdf', path: '/srv/report.pdf' }] })` throws a 400 `APIError` before any request reaches Resend. The same email succeeds through the nodemailer adapter. Path-only attachments are therefore unsupported in this adapter even though its type says they are accepted."
+    }
+  ]
+}

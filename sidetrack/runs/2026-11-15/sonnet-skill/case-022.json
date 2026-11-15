@@ -1,0 +1,25 @@
+{
+  "pr_title": "Feature : Adding percentage option to Input Number",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/engine/metadata-modules/field-metadata/field-metadata-validation.service.ts",
+      "line": 51,
+      "body": "`validateSettingsOrThrow` is now `async`, but its only caller doesn't await it. `field-metadata.service.ts:764` calls `this.fieldMetadataValidationService.validateSettingsOrThrow({...})` inside the synchronous `validateFieldMetadata`. That method is called without await at lines 172 and 404. As a result, invalid settings such as `decimals: -1`, `decimals: 1.5` or `type: 'foo'` are no longer rejected. The create or update goes ahead and saves them. The `FieldMetadataException` thrown inside the promise becomes an unhandled promise rejection. On Node 15 and later that can crash the server process. Before this change the check was synchronous and did block the request. The fix is to make `validateFieldMetadata` async and await the call, and to await `validateFieldMetadata` at both call sites."
+    },
+    {
+      "path": "packages/twenty-server/src/engine/metadata-modules/field-metadata/field-metadata-validation.service.ts",
+      "line": 62,
+      "body": "The `catch (errors)` block assumes `errors` is an array of `ValidationError`. It calls `errors.map(...)` and then `Object.values(error.constraints)`. If `plainToInstance` or `validateOrReject` throws anything else, for example when `settings` is null or a non-object, this raises a `TypeError` instead of the intended `FieldMetadataException(INVALID_FIELD_INPUT)`. A `ValidationError` with no `constraints` also hits this, because `Object.values(undefined)` throws."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/meta-types/display/components/NumberFieldDisplay.tsx",
+      "line": 12,
+      "body": "The truthiness checks (`type === 'percentage' && fieldValue` and `fieldValue ? ... : null`) turn a value of `0` into `null`. A number field holding `0`, or a percentage holding 0%, now renders blank. Before this change `NumberDisplay` rendered `value && formatNumber(...)`, which showed `0`. Use an `isDefined` or null check instead of truthiness."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/utils/computeDraftValueFromFieldValue.ts",
+      "line": 51,
+      "body": "`(fieldValue * 100).toString()` uses floating-point multiplication. For example, a stored 0.07 gives `'7.000000000000001'`, and 0.29 gives `'28.999999999999996'`. The inline editor then opens with these noisy values, and saving writes back `x/100`. That can store a value other than the one the user entered. Round the result to the field's decimals, or to a fixed precision, before converting to a string."
+    }
+  ]
+}

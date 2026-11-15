@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat: add FormData, text, and none body types to HTTP request workflow",
+  "comments": [
+    {
+      "path": "packages/twenty-shared/src/workflow/index.ts",
+      "line": 10,
+      "body": "The re-export imports from `./constants/ContentTypeValuesHttpRequest` (capital C), but the file this PR adds is `packages/twenty-shared/src/workflow/constants/contentTypeValuesHttpRequest.ts` (lowercase c). On a case-sensitive filesystem (Linux, most CI runners, Docker), module resolution fails for the whole `twenty-shared/workflow` entry point. That breaks every importer of that barrel, including the new `parseDataFromContentType` import at `packages/twenty-server/src/engine/core-modules/tool/tools/http-tool/http-tool.ts:5`, the `CONTENT_TYPE_VALUES_HTTP_REQUEST` import at `packages/twenty-front/src/modules/workflow/workflow-steps/workflow-actions/http-request-action/utils/getBodyTypeFromHeaders.ts:5`, and the `BodyInput.tsx:20` import. Renaming either the file or the import path to match fixes it."
+    }
+  ]
+}

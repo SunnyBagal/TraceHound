@@ -1,0 +1,20 @@
+{
+  "pr_title": "Feature : Adding percentage option to Input Number",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/engine/metadata-modules/field-metadata/field-metadata-validation.service.ts",
+      "line": 42,
+      "body": "`validateSettingsOrThrow` is now `async`, but its caller does not await it. `packages/twenty-server/src/engine/metadata-modules/field-metadata/field-metadata.service.ts:764` calls `this.fieldMetadataValidationService.validateSettingsOrThrow({...})` with no `await`. The call therefore returns a promise, and the `FieldMetadataException` thrown by `validateNumberSettings` never reaches the caller. Settings that fail validation, such as `decimals: -1`, `decimals: 1.5`, or `type: 'bogus'` on a NUMBER field, are saved without any error, and the rejection becomes an unhandled promise rejection. Before this change the same input was rejected synchronously with INVALID_FIELD_INPUT."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/meta-types/display/components/NumberFieldDisplay.tsx",
+      "line": 12,
+      "body": "A stored value of 0 now renders as an empty cell. The ternary `fieldValue ? formatNumber(...) : null` treats 0 as falsy, so `value` becomes null. Before this change, `NumberDisplay` rendered `value && formatNumber(Number(value), decimals)`, which displays 0 as \"0\". The same applies to percentage fields: a stored 0 now shows blank instead of \"0%\". The guard should be `isDefined(fieldValue)` (or `fieldValue !== null && fieldValue !== undefined`)."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/utils/computeDraftValueFromFieldValue.ts",
+      "line": 53,
+      "body": "Floating-point error in the percentage edit draft. `(fieldValue * 100).toString()` with the stored fraction produces values such as 7.000000000000001 for 0.07 (0.07 * 100) and 28.999999999999996 for 0.29 (0.29 * 100). The percentage input therefore shows these long values when a user opens the field for editing, instead of 7 or 29. The value should be rounded (for example, Number((fieldValue * 100).toFixed(10)) or rounding to the field's decimals) before converting it to a string."
+    }
+  ]
+}

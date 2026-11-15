@@ -1,0 +1,20 @@
+{
+  "pr_title": "chore(): Improve workflows sdk tooling",
+  "comments": [
+    {
+      "path": "packages/core/orchestration/src/transaction/distributed-transaction.ts",
+      "line": 319,
+      "body": "The temporary storage is now a `WeakMap` keyed by a fresh object literal, `{ key }` (lines 94, 315, 319, 323). Each call creates a new object, so `get` and `has` can never match what `set` stored. `hasTemporaryData` always returns false and `getTemporaryData` always returns undefined. The cache in `transform.ts:179-181` (`hasTemporaryData(temporaryDataKey)`, then `getTemporaryData`) is therefore dead, and `setTemporaryData` at `transform.ts:200` writes entries that are never read. Every `transform` result is recomputed each time it is resolved. That includes the final `resolveValue(resultFrom, ...)` after the workflow has finished, and it repeats any side effects or non-deterministic work in transformers. Fix: keep the `Map<string, unknown>`."
+    },
+    {
+      "path": "packages/core/workflows-sdk/src/utils/composer/helpers/resolve-value.ts",
+      "line": 155,
+      "body": "The async merge step uses `\"key\" in resolved` to tell its own `{ key, value }` wrapper (built at ~line 140 with `unwrapped.then((r) => ({ key, value: r }))`) from a plain resolved value. Any user value that is an object with a `key` property is misread as that wrapper. An example is a transformer or step that resolves to `{ key: \"a\", value: 1 }`, or to a config object that has a `key` field. In that case `parentRef[resolved.key] = resolved.value` writes the wrong property, and the real property is left unset or holds a stale value. The old code did not have this ambiguity. Use a unique wrapper, or keep the index and key in a side array."
+    },
+    {
+      "path": "packages/core/workflows-sdk/src/utils/composer/helpers/resolve-value.ts",
+      "line": 168,
+      "body": "Inside the `for` loop over `resolvedPromises`, `return unwrapped.then(...)` exits the whole `.then` callback on the first entry that needs further async unwrapping. Entries after it (`i+1..n`) are never assigned to `parentRef`. Example: an object with two async-transformer properties, where the first resolves to an object containing another async reference. The second property is then missing from the resolved input. The early return also skips the final `return parentRef` for that case, so the resolved value is the nested result and not the parent object."
+    }
+  ]
+}

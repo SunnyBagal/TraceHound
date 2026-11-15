@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(db-sqlite): convert Date to ISO 8601 string in queries",
+  "comments": [
+    {
+      "path": "packages/drizzle/src/queries/sanitizeQueryValue.ts",
+      "line": 116,
+      "body": "The new `convertDateToISO` helper maps the strings `'null'` and `''` to `null` for every element of an array. That is now applied to `not_in` as well as `in` (sanitizeQueryValue.ts:129-132). A `not_in` list that contains one of those values now carries a SQL NULL into `notInArray`. Breaking site: packages/drizzle/src/queries/parseParams.ts:310-316 and 380-398. The null-handling at parseParams.ts:383-389 is limited to `operator === 'in'`, so for `not_in` the constraint stays `col NOT IN (NULL, ...)`. In SQL that evaluates to NULL for every row, so the query returns no rows. Example: a `not_in` on a date field with value `null` or an empty string, e.g. `createdAt[not_in]=null,2024-01-01T00:00:00.000Z`, previously sent `'null'` through unchanged and returned rows, but now returns an empty result. The fix is to apply the same null-split used for `in` to `not_in`, or to stop mapping `'null'`/`''` to null for array values."
+    }
+  ]
+}

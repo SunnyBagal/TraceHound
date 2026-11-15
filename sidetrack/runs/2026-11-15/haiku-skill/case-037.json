@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(medusa,file-local,file-s3,core-flows): fix csv parsing special characters",
+  "comments": [
+    {
+      "path": "packages/modules/providers/file-local/src/services/local-file.ts",
+      "line": 66,
+      "body": "The new fallback `content = Buffer.from(file.content, \"utf8\")` corrupts callers that pass a binary string, which is the documented contract. The docs at packages/core/core-flows/src/file/steps/upload-files.ts:25-27 and 51 say images use a binary string, and packages/core/types/src/file/service.ts:33 says the same. Any binary string with a byte above 0x7F fails the base64 round-trip check on line 63, so it reaches this branch. Each char 0x80-0xFF is then UTF-8 encoded into two bytes, so a JPEG or PNG written through uploadFilesStep (or the pattern at packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts:41) is stored with damaged bytes. Before this change the same input went through `Buffer.from(content, \"binary\")` and was correct. The same heuristic also misreads plain text: a 4-character ASCII string such as \"test\" is valid canonical base64, so line 64 decodes it to 3 bytes (b5 eb 2d) and writes those instead of the text."
+    },
+    {
+      "path": "packages/modules/providers/file-s3/src/services/s3-file.ts",
+      "line": 129,
+      "body": "Same defect as local-file.ts:66. The fallback `content = Buffer.from(file.content, \"utf8\")` re-encodes a binary-string upload as UTF-8, so every byte above 0x7F is doubled and the object is stored corrupted. Binary-string callers are the documented contract (packages/core/core-flows/src/file/steps/upload-files.ts:25-27 and 51, packages/core/types/src/file/service.ts:33). Line 127 can also decode a short ASCII text such as \"test\" as base64 and write different bytes. Before this change, `Buffer.from(file.content, \"binary\")` handled these inputs correctly."
+    }
+  ]
+}

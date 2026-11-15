@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(db-d1-sqlite): avoid bound parameter limit when querying relationships and inserting rows",
+  "comments": [
+    {
+      "path": "packages/drizzle/src/sqlite/insert.ts",
+      "line": 22,
+      "body": "The batched insert runs one INSERT per chunk with no transaction around the loop (insert.ts:18-26). The unbatched path was a single statement, so it was all-or-nothing. Now, if chunk k fails (for example a unique or foreign-key violation), chunks 1..k-1 stay committed and the caller gets an error. Transactions on D1 are opt-in: db-d1-sqlite/src/index.ts:137 uses `beginTransaction` only when `args.transactionOptions` is set, and otherwise uses `defaultBeginTransaction()`. With default config, multi-row array, block and hasMany inserts called from insertArrays.ts:82 and upsertRow/index.ts can leave partial rows behind. The chunk size is also derived from `Object.keys(values[0])`, which assumes every row has the same column set."
+    },
+    {
+      "path": "packages/drizzle/src/queries/parseParams.ts",
+      "line": 421,
+      "body": "The new validation rejects any string ID that does not match `/^[\\w-]+$/` (isValidStringID.ts:2), and throws APIError instead of querying (parseParams.ts:409-411 and 420-421). Before this change, `where: { id: { in: ['a.b'] } }` or `in: ['café']` ran as a bound-parameter query and matched any document whose custom text ID equals that value. Now the same query returns a 400 error on D1/SQLite. Payload allows arbitrary string IDs, so valid queries against custom-ID collections now fail. The limitedBoundParameters gate only covers this path for D1, but D1 is the adapter this PR targets."
+    }
+  ]
+}

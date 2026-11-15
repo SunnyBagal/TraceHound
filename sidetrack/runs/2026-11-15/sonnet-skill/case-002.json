@@ -1,0 +1,20 @@
+{
+  "pr_title": "feat: Add support for product imports",
+  "comments": [
+    {
+      "path": "packages/admin-next/dashboard/src/routes/products/product-import/product-import.tsx",
+      "line": 136,
+      "body": "Stale transaction on re-upload. The Import button is enabled when `data?.transaction_id && filename`. The `data` returned by `useImportProducts()` is never reset. The user uploads A, then picks Delete (line ~80, which only calls `setFilename(undefined)`), then uploads B. While B is preprocessing, `filename` is B's name and `data` still holds A's response. The button is therefore enabled, and `handleConfirm` calls `confirm(A.transaction_id)`, which confirms the wrong import. The old summary (line 107, `data?.summary && !!filename`) is also shown under B's filename. Disable the button while `isPending`, and call `reset()` on the mutation when the file is deleted."
+    },
+    {
+      "path": "packages/admin-next/dashboard/src/components/layout/notifications/notifications.tsx",
+      "line": 138,
+      "body": "Regression in the notification file display. The removed `NotificationFile` rendered `file?.filename ?? file.url`. The new code passes `filename={data.file.filename ?? \"\"}`, and `FilePreview` renders only `{filename}`. A notification with a `file.url` but no `filename` now shows an empty label. Because `\"\" ?? Date.now()` is never nullish, `download=\"\"` is also used instead of the old timestamp fallback. Pass `data.file.filename ?? data.file.url` instead."
+    },
+    {
+      "path": "packages/admin-next/dashboard/src/routes/products/product-import/components/upload-import.tsx",
+      "line": 39,
+      "body": "The CSV upload uses the product-media strings. `t(\"products.media.uploadImagesLabel\")` and `t(\"products.media.uploadImagesHint\")` are image-upload texts, so the CSV import drawer shows an image upload prompt. The PR adds no CSV-specific label or hint keys. Separately, `hasInvalidFiles` only accepts `f.file.type === \"text/csv\"`. Browsers often report `application/vnd.ms-excel` or an empty type for .csv files (for example on Windows with Excel installed). Those valid CSVs are rejected with an invalid-type error."
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "pr_title": "feat: adds support for both client-side and server-side remote URL uploads fetching",
+  "comments": [
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 174,
+      "body": "The allowList check only runs when `typeof config.upload?.pasteURL === 'object'`. The endpoint is registered by default for every collection (`endpoints/index.ts:50-54`). If `pasteURL` is `undefined` (the default) or `false`, the check is skipped and the server still fetches any `src` at line 182. The docs say `false` disables pasting, and the default is described as client-side only. So any logged-in user can call `GET /api/<any-collection>/paste-url?src=http://169.254.169.254/...` or an internal host, and the server fetches it and returns the body. That is SSRF. The handler should return an error unless `pasteURL` is an object whose allowList matches. It should also reject non-upload collections."
+    },
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 182,
+      "body": "`fetch` follows redirects by default, and the allowList is only checked against the initial URL. An allow-listed host that serves or can be made to serve a 30x to an internal address (for example `http://127.0.0.1` or a metadata IP) will have the redirect target fetched and returned. Use `redirect: 'manual'` or `'error'`, or re-validate each hop."
+    },
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 201,
+      "body": "The `catch` wraps everything in `throw new APIError(..., 500)`. This includes the deliberate `APIError(..., 400)` for a missing or invalid `src` or a disallowed URL, and the upstream `response.status` error from line 189. All of them become 500s, and the original status is lost. Clients and monitoring see server errors for plain user input errors. Rethrow `APIError` instances unchanged, and wrap only unexpected errors."
+    },
+    {
+      "path": "packages/payload/src/utilities/isURLAllowed.ts",
+      "line": 281,
+      "body": "Items with falsy values are skipped, so omitted fields match anything. That contradicts the documented behaviour. The docs say `protocol` defaults to `https` and an unspecified `port` uses the protocol default. With `{ hostname: 'example.com' }`, `http://example.com:8080/anything` is allowed. An empty `pathname: ''` or `port: ''`, as in the docs example, also matches any path or port. Default `protocol` to `https` and `port` to `''`, and compare them explicitly. Separately, `pathname` is interpolated into a RegExp without escaping, so `.` and `+` in a path act as regex metacharacters."
+    },
+    {
+      "path": "packages/ui/src/elements/Upload/index.tsx",
+      "line": 405,
+      "body": "Any client-side failure triggers the server fallback, including when the remote responded but with a non-OK status. The fallback then reports every server failure, such as a 401, a 500 or a network error, as 'The provided URL is not allowed.' (line 430). The client-side error is also replaced by a generic 'Failed to fetch the file.' at line 408. Users get a misleading message when the real cause is something else."
+    },
+    {
+      "path": "packages/ui/src/utilities/isURLAllowed.ts",
+      "line": 1,
+      "body": "This is a copy of `packages/payload/src/utilities/isURLAllowed.ts` and has already drifted. It lacks the trailing-slash handling (`.replace(/\\/$/, '(/)?')`). It is also unused: the affected set shows no references. It is dead code that will diverge further, so remove it or share one implementation."
+    }
+  ]
+}

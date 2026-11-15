@@ -1,0 +1,20 @@
+{
+  "pr_title": "perf(ui): skip rendering custom components hidden by admin.condition",
+  "comments": [
+    {
+      "path": "packages/ui/src/forms/fieldSchemasToFormState/addFieldStatePromise.ts",
+      "line": 190,
+      "body": "The new early return for `passesCondition === false` runs before the field-level `access.read` check (addFieldStatePromise.ts:203-226, which is the only place that returns early for a denied read). A field with `admin.condition` evaluating false and `access.read` returning false used to produce no form-state entry at all. Now it gets an entry: `passesCondition: false`, `fieldSchema` when `includeSchema` is set (line 183-185), and `value`/`initialValue` copied from `data[field.name]` (lines 191-193) whenever that key is defined. Whether the copied value is actually sensitive depends on whether the `data` passed in is already read-filtered upstream, which I did not confirm. The schema entry and the ordering change are confirmed. Fix: run the `access.read` check before the hidden short-circuit, or skip the value copy when read access is denied."
+    },
+    {
+      "path": "test/fields/payload-types.ts",
+      "line": 173,
+      "body": "The generated types in this file describe a `payload-mcp-api-keys` collection and a `PayloadMcpApiKey` type, but `test/fields` has no such collection in its config. The only match for `payload-mcp` under `test/fields` is this file. Line 173 also widens `Config.user` from `User` to `User | PayloadMcpApiKey`, which changes the inferred type of `req.user`/`payload.auth` results for every `test/fields` consumer. The file looks like it was generated from another branch and will be overwritten by `generate:types`. Regenerate it from this branch's config, or drop the hunks that do not belong to this change."
+    },
+    {
+      "path": "tsconfig.base.json",
+      "line": 35,
+      "body": "The `@payload-config` path changes from `./test/v4/config.ts` to `./test/_community/config.ts`. This is unrelated to the form-state change in the title and description. `test/testHooks.ts:23` rewrites this line per suite, so the committed default only matters for tooling that does not run through that hook (editor, root-level `tsc`). Any code that resolves `@payload-config` outside the hook now gets the community config instead of v4. Revert this hunk unless the community config is meant to be the default, and if so, say so in the description."
+    }
+  ]
+}

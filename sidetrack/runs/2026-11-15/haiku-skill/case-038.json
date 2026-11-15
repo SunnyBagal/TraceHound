@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(ui): exclude fields lacking permissions from bulk edit",
+  "comments": [
+    {
+      "path": "packages/ui/src/elements/FieldSelect/reduceFieldOptions.ts",
+      "line": 93,
+      "body": "Regression: fields inside a named group are dropped from the bulk-edit field selector even for users with full access. The group branch recurses with `permissions: fieldPermissions`, which is the group's own entry (e.g. `{create, read, update, fields}`). The recursive call then looks up each child at that level via `permissions?.[field.name]` (packages/ui/src/elements/FieldSelect/reduceFieldOptions.ts:66-69 calls getFieldPermissions, which reads `permissions?.[field.name]` at packages/payload/src/utilities/getFieldPermissions.ts:58-60 and 71-75). Child entries are stored under `.fields`: packages/ui/src/fields/Group/index.tsx:111 passes `permissions?.fields` to children, and packages/payload/src/utilities/getEntityPolicies.ts:220-232 builds them there. So for `group: { title }`, `title` gets `operation` and `read` false, and the new check at reduceFieldOptions.ts:79-80 skips it. Before this change 'Group > Title' was offered. The existing e2e test 'should bulk edit fields with subfields' (test/bulk-edit/e2e.spec.ts, around lines 427-460) selects that option, so by reading the code it should fail. Fix: recurse with `fieldPermissions === true ? true : fieldPermissions?.fields` (the same shape Group uses)."
+    },
+    {
+      "path": "packages/ui/src/elements/FieldSelect/reduceFieldOptions.ts",
+      "line": 111,
+      "body": "Same root cause at the tabs branch. The tabs field has no name, so `fieldPermissions` is the collection-level map, and that map is passed down. Named tabs store their children under `permissions[tab.name].fields` (packages/ui/src/fields/Tabs/index.tsx:229-236 reads that shape; packages/payload/src/utilities/getEntityPolicies.ts:327-346 builds it). So for `tabs: [{ name: 'meta', fields: [{ name: 'seo' }] }]`, a user with full access gets `seo` with operation and read false (getFieldPermissions.ts:58-60, 71-75), and it is removed at reduceFieldOptions.ts:79-80. Previously it was offered. The bulk-edit test collection has no named tabs, so no test covers this. Fix: for named tabs, recurse with `permissions[tab.name]` (then `.fields`), and keep the parent map for unnamed tabs."
+    }
+  ]
+}

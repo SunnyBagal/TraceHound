@@ -1,0 +1,10 @@
+{
+  "pr_title": "Fix multi select filtering",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-filter/utils/isMatchingMultiSelectFilter.ts",
+      "line": 15,
+      "body": "`containsAny` is matched with `.every(...)`, so the client requires every selected option to be present. The server has the opposite meaning: `computeWhereConditionParts` maps `containsAny` to `\"key\"::text[] && ARRAY[...]::text[]` (array overlap, i.e. any), and `computeViewRecordGqlOperationFilter.ts:623` sends the selected options as `containsAny`. Example: a MULTI_SELECT view filter Contains [A, B] and a record with value ['A']. The server returns the record. Here `['A','B'].every(i => ['A'].includes(i))` is false, so `isRecordMatchingFilter` (`isRecordMatchingFilter.ts:186`) says the record does not match. `triggerUpdateRecordOptimisticEffect.ts:68` then drops the record from the cached edges of that filtered query, and `triggerCreateRecordsOptimisticEffect.ts:90` will not add a newly created record with a partial match. The list is wrong until the next refetch. The fix is `.some(...)` in place of `.every(...)`."
+    }
+  ]
+}

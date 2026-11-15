@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(dashboard): Add FE validation for conditional prices",
+  "comments": [
+    {
+      "path": "packages/admin/dashboard/src/routes/locations/common/schema.ts",
+      "line": 371,
+      "body": "`refineDuplicates` compares every operator of one rule with every operator of the other (`gte`, `lte`, `eq`, `lt`, `gt`) and flags the pair whenever the numbers are equal. It never checks that the operators match. Adjacent, non-overlapping ranges are therefore rejected with \"Conditions must be unique across all price rules\". Example: rule 1 `{gte: 0, lte: 50}` and rule 2 `{gte: 50, lte: 100}`, or rule 1 `{lt: 100}` and rule 2 `{gte: 100}`. Here `lte` 50 equals `gte` 50 (or `lt` 100 equals `gte` 100), so `addOverlappingConditionError` is called at line 372. Because it runs as a `superRefine` on `CondtionalPriceRuleSchema` and `UpdateConditionalPriceRuleSchema`, `handleSubmit` in `conditional-price-form.tsx:114` never reaches `setFormValue`, so the user cannot save valid tiered pricing. Only the same operator type with the same value should count as a duplicate. Real overlaps, such as `[0,100]` against `[50,150]`, are not detected."
+    }
+  ]
+}

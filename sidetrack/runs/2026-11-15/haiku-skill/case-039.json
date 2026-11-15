@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(pricing): price list prices perf issues",
+  "comments": [
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 1826,
+      "body": "hashPrice now emits a `min:` / `max:` / `ps:` part only when the key is present (`\"min_quantity\" in price`, line 1826; `\"price_set_id\" in price`, line 1820). The old code always emitted these keys with null. Existing rows loaded from the DB always have the key (`models/price.ts:12-13` defines min_quantity/max_quantity as nullable), so `existingPricesMap` (line 908) keys them as `...|min:|max:|...`. An incoming update without min_quantity/max_quantity (or without price_set_id) at line 962 hashes without those parts, so it misses the map. `existing` is then undefined, `entry.id` stays unset (line 979-983 path), and `upsertWithReplace` in updatePriceListPrices_ (around line 1545) inserts a new price row instead of updating the existing one. Concrete case: updatePriceListPrices with `{ price_list_id, prices: [{ currency_code: \"EUR\", amount: 200, price_set_id }] }` against an existing EUR price with no min/max. The old hash matched; the new one does not, which produces a duplicate EUR price in the list. The existing test passes only because it supplies the price `id`, which bypasses the hash lookup."
+    },
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 1336,
+      "body": "In addPrices_, when no input price has an id or a constraint (for example `addPrices([{ priceSetId, prices: [] }])`), buildPreNormalizationPriceConstraintsFromData returns `{}` (lines 1896-1922 leave `query` empty, and `priceListIds` is undefined for this path). `priceService_.list({}, ...)` then loads every price in the table with its price_rules. The old code only loaded prices for the price sets named in the input. This is a performance regression on the path the PR is meant to speed up, and it is triggered by an empty prices array, which is valid input."
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(payment): round currency precision",
+  "comments": [
+    {
+      "path": "packages/modules/payment/src/services/payment-module.ts",
+      "line": 166,
+      "body": "`roundToCurrencyPrecision` derives the precision by splitting the formatted string on \".\". This fails silently in two cases.\n\n- **Zero-decimal currencies:** for `jpy`, `Intl.NumberFormat(..., {style:'currency', currency:'JPY'}).format(0.1111111)` returns \"¥0\". `split(\".\")[1]` is `undefined`, so `.length` throws a TypeError. The empty `catch` swallows it, `precision` stays `undefined`, and no rounding happens.\n- **Locales with a comma decimal separator:** `undefined` as the locale uses the runtime default, and a default such as de-DE formats as \"0,11 €\". The split again finds no \".\", so rounding is skipped.\n\nIn both cases the capture and authorize comparisons at lines ~723, 738, 970 and 985 fall back to exact comparison. This reintroduces the bug the PR set out to fix.\n\nSeparately, `MathBN.convert` uses `if (decimalPlaces)`, so a precision of 0 would also skip rounding. Use `resolvedOptions().maximumFractionDigits` with an explicit locale such as 'en-US', and test `decimalPlaces != null`."
+    },
+    {
+      "path": "packages/modules/payment/src/services/payment-module.ts",
+      "line": 983,
+      "body": "The completion check changed from `MathBN.eq(paymentCollection.amount, capturedAmount)` to `gte`. A collection is now marked COMPLETED with `completed_at` set whenever captured is at least the collection amount. This is not rounding tolerance. For example, a collection with amount 500 and authorized/captured 1000 used to stay `authorized`, and now becomes `completed`. The PR edited the existing test expectation in index.spec.ts from `authorized` to `completed` to match. It also overrides the AUTHORIZED/PARTIALLY_AUTHORIZED status computed just above. Keeping `eq` on the rounded values would preserve the old semantics."
+    }
+  ]
+}

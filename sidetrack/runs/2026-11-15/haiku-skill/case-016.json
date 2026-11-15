@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(dashboard): Add FE validation for conditional prices",
+  "comments": [
+    {
+      "path": "packages/admin/dashboard/src/routes/locations/common/schema.ts",
+      "line": 142,
+      "body": "`addOverlappingConditionError(ctx, j, condition2.type)` can attach an error to `prices.<j>.eq`, `prices.<j>.lt` or `prices.<j>.gt`, but the UI never renders those fields with an error message. `ReadOnlyConditions` (conditional-price-form.tsx:475-576) shows eq/lt/gt as disabled `CurrencyInput`s with no `Form.ErrorMessage`, and the `OperatorInput` error display covers only gte/lte. Those rules come from the API and cannot be edited in this UI. Trigger: two rules in the same shipping option price with the same `eq`, `lt` or `gt` value, e.g. both `eq: 500`. Before this change they saved. Now `handleSubmit` fails validation. The `onInvalid` handler (conditional-price-form.tsx:123-134) only expands the accordion item for index j, so Save does nothing and the user sees no message explaining why. The user cannot fix it from the UI. Either show the error on the read-only rows or skip the eq/lt/gt pairs in this check."
+    }
+  ]
+}

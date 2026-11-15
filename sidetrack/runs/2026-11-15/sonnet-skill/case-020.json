@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(ui): ensure that schedule publishing time picker can only be in the future",
+  "comments": [
+    {
+      "path": "packages/ui/src/elements/PublishButton/ScheduleDrawer/index.tsx",
+      "line": 295,
+      "body": "`minTime` ignores the timezone the user picked in the drawer, so the past-time check is wrong whenever that timezone differs from the browser's. `date` is stored as the wall-clock time in the selected timezone, because `onChangeDate` transposes it with `TZDate.tz(timezone)` (lines 264-282). `displayedValue` (lines 243-262) transposes it back to the user's timezone for the picker. The picker therefore compares wall-clock values that mean selected-timezone time against `new Date()`, which is the browser's local time. `isToday(date)` is evaluated in the selected timezone, while `new Date()` is used as the minimum in browser-local time. For example, with the browser in UTC and 'Asia/Tokyo' selected, it is 10:00 UTC and 19:00 in Tokyo. A time of 12:00 on the same calendar day is already past in Tokyo, but it is enabled because `minTime` is 10:00. Conversely, with 'America/Los_Angeles' selected, future times such as 05:00 are disabled. The same mismatch applies to `minDate={new Date()}` and to `maxTime={endOfToday()}` on line 342. A past time can still be scheduled, which is what this PR aims to prevent. The minimum should be computed as the current wall-clock time in the selected timezone."
+    }
+  ]
+}

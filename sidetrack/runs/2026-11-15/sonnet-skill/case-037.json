@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(medusa,file-local,file-s3,core-flows): fix csv parsing special characters",
+  "comments": [
+    {
+      "path": "packages/modules/providers/file-s3/src/services/s3-file.ts",
+      "line": 124,
+      "body": "The provider now guesses the encoding of `file.content`. It tries base64 first, then falls back to utf8. Two inputs break under that guess. (1) Plain-text content that is also canonical base64 gets decoded into garbage bytes. The check `decoded.toString(\"base64\") === file.content` passes for any string made only of base64 characters, with length divisible by 4 and correct padding, such as a CSV or text file whose content is `abcd` or `test`. `generate-product-csv.ts:126` passes `content: csvContent` as plain text, and so do other direct `createFiles` callers. (2) Callers that still send binary-encoded strings, like the S3 integration tests at `services.spec.ts:41-46` (`fileContent.toString(\"binary\")`), no longer match base64. They fall to `Buffer.from(content, \"utf8\")`, so every byte >= 0x80 is re-encoded as two bytes and images are corrupted. The same applies to any third-party code that calls the file module with binary strings. The `try/catch` never runs, because `Buffer.from` does not throw for these inputs, so the `binary` fallback is dead code. The provider contract changed silently. It should be explicit, for example a content-encoding field, or the content should be passed as a Buffer."
+    },
+    {
+      "path": "packages/modules/providers/file-local/src/services/local-file.ts",
+      "line": 65,
+      "body": "This has the same encoding-guessing problem as the S3 provider. A plain-text file whose content happens to be canonical base64 (for example `abcd`) is written as decoded bytes. A binary-string upload from a caller that still uses `toString(\"binary\")` is written as utf8, which doubles every byte >= 0x80 and corrupts the file. The `catch` branch can never be reached."
+    }
+  ]
+}

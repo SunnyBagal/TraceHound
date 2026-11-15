@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat: agent roleUniversalIdentifier for manifest-driven role assignment",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/engine/core-modules/application/application-manifest/services/compute-application-manifest-all-universal-flat-entity-maps.service.ts",
+      "line": 372,
+      "body": "Manifest sync fails with a raw unique-constraint error when an agent already has a role target that was not created by the manifest. This block always creates a roleTarget with the deterministic universalIdentifier from getRoleTargetUniversalIdentifier. The planner only checks universalIdentifier (flat-role-target-validator.service.ts:35-46), so it does not see the existing row. The DB table has UNIQUE (workspaceId, agentId) (role-target.entity.ts:25). Trigger: an app agent exists without a manifest role, an admin assigns a role to it through the agent UI, which writes a roleTarget with a random v4 universalIdentifier and agentId (from-update-agent-input-to-flat-agent-to-update.util.ts:78-86), and then the app is synced with roleUniversalIdentifier set on that agent. The INSERT for the manifest roleTarget then violates IDX_ROLE_TARGET_UNIQUE_AGENT and the whole sync fails. The create path needs to reconcile with an existing roleTarget for the same agent (update it, or reject with a clear error) instead of inserting."
+    }
+  ]
+}

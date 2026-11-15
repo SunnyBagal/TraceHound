@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(workflow): hide empty option for non-nullable select fields",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/ui/form-types/components/FormSelectFieldInput.tsx",
+      "line": 105,
+      "body": "The empty option is now shown only when `isNullable` is truthy (`const optionsWithEmptyOption = isNullable ? [emptyOption, ...options] : options;`), and `emptyOption` is no longer passed to `<Select>` at all (removed at the old line 96, see `Select options={optionsWithEmptyOption}` at line 147). `isNullable` is optional and undefined when callers omit it, so every existing `FormSelectFieldInput` caller that does not pass `isNullable` loses its \"No value\" entry. The PR text says the default is the previous behaviour (`isNullable !== false`), but the code does not implement that. Concrete case: `FormCountrySelectInput.tsx:57` renders `<FormSelectFieldInput>` without `isNullable`, so the country picker's clear entry disappears. The same applies to the other callers listed in affected.txt (`FormCallingCodeSelectInput.tsx:84`, `FormCurrencyFieldInput.tsx:60`, `WorkflowEditActionEmailBase.tsx:205`, `WorkflowEditActionFormFieldSettings.tsx:90`, `WorkflowFormFieldSettingsSelect.tsx:85/106`, `WorkflowEditActionCodeFields.tsx:129`). Fix: use `isNullable !== false` as the PR describes, or make the prop default to `true` so only callers that pass `false` lose the option."
+    }
+  ]
+}

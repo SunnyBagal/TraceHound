@@ -1,0 +1,20 @@
+{
+  "pr_title": "perf(ui): skip rendering custom components hidden by admin.condition",
+  "comments": [
+    {
+      "path": "packages/ui/src/forms/fieldSchemasToFormState/addFieldStatePromise.ts",
+      "line": 191,
+      "body": "The short-circuit copies the raw `data[field.name]` into `fieldState.value` and `initialValue` for every data-affecting field type. Several types use a different representation in form state. Array and blocks fields use a row count (`arrayValue.length`, lines 412-413 and 631-632) plus `rows`. Named groups have no value of their own (children carry the values). Relationship and upload fields use the normalized value built at lines 746-774. A hidden array or blocks field now gets the full array of row objects as its `value` and no `rows`. When the condition flips to true, the client merges a state whose `value` is an array and whose `rows` are missing. The client expects a number there, so rows can render empty or wrong."
+    },
+    {
+      "path": "packages/ui/src/forms/fieldSchemasToFormState/addFieldStatePromise.ts",
+      "line": 190,
+      "body": "This early return runs before the `access.read` check at lines 212-226. A field whose `access.read` denies the user used to be dropped from form state (`if (!hasPermission) return`). If the field is also hidden by `admin.condition`, it now gets `state[path]` with `value` and `initialValue` taken from `data`. The field's value can reach the client even though read access denies it. The read-permission check should come first."
+    },
+    {
+      "path": "packages/ui/src/forms/fieldSchemasToFormState/addFieldStatePromise.ts",
+      "line": 197,
+      "body": "Non-data container fields (row, collapsible, unnamed group) that fail their condition now reach this branch. Before, they were written as `{ disableFormData: true, passesCondition: false }` (the removed lines 827-833 area). Now `state[path]` is a bare `fieldState` with no `disableFormData`, and their children are never iterated. The children therefore have no `passesCondition: false` entries or values in form state, and the container loses its `disableFormData` flag. Anything that relied on a hidden row's children existing in state, or on the container being excluded from form data, no longer holds."
+    }
+  ]
+}

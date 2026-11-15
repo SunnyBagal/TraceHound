@@ -1,0 +1,20 @@
+{
+  "pr_title": "feat: Add support for product imports",
+  "comments": [
+    {
+      "path": "packages/admin-next/dashboard/src/routes/products/product-import/components/upload-import.tsx",
+      "line": 19,
+      "body": "The new client-side check rejects any file whose browser-reported MIME type is not exactly \"text/csv\". `SUPPORTED_FORMATS = [\"text/csv\"]` (upload-import.tsx:6) feeds both this check and the input's `accept` attribute, so the `(f) => !SUPPORTED_FORMATS.includes(f.file.type)` test at upload-import.tsx:19 fails for valid CSVs whose type the browser reports differently, for example an empty string or \"application/vnd.ms-excel\" on some Windows setups. For such a file, `hasInvalidFiles` sets an error and `onUploaded` is never called, so the user cannot import a valid CSV. The check should accept the extension (`.csv`) or allow the empty and excel types too."
+    },
+    {
+      "path": "packages/admin-next/dashboard/src/components/layout/notifications/notifications.tsx",
+      "line": 137,
+      "body": "Regression in the notification file row. The old `NotificationFile` rendered `{file?.filename ?? file.url}` (notifications.tsx:240 before this diff), so a file with a URL but no filename still showed a label. The new call passes `filename={data.file.filename ?? \"\"}` (notifications.tsx:137), so such a notification now renders an empty filename label next to the download button, and the fallback to the URL is lost."
+    },
+    {
+      "path": "packages/admin-next/dashboard/src/routes/products/product-import/product-import.tsx",
+      "line": 45,
+      "body": "`mutateAsync` rejects on failure, and the per-call `onError` does not catch that rejection. In `handleUploaded`, the `await importProducts(...)` at product-import.tsx:45 has no try/catch, and `UploadImport` calls `onUploaded` without handling the returned promise. A failed upload therefore produces an unhandled promise rejection in addition to the toast. The same applies to `await confirm(...)` in `handleConfirm` (product-import.tsx:71 in the new file). Wrapping these in try/catch, or using `mutate` instead of `mutateAsync`, avoids the unhandled rejection."
+    }
+  ]
+}

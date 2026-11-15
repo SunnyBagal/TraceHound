@@ -1,0 +1,20 @@
+{
+  "pr_title": "feat: adds support for both client-side and server-side remote URL uploads fetching",
+  "comments": [
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 51,
+      "body": "Unrestricted server-side fetch (SSRF). The allowList check at getFileFromURL.ts:51-53 only runs when `config.upload?.pasteURL` is an object. When `pasteURL` is unset (the documented default) or `false`, the check is skipped and the handler fetches any `src` URL. The endpoint is added to every collection through `defaultCollectionEndpoints` (collections/config/sanitize.ts:64), so any authenticated user with create or update access can call `GET /api/<any-collection>/paste-url?src=http://169.254.169.254/...` or an internal address and get the response body streamed back. Setting `pasteURL: false` only hides the button in the UI (ui/src/elements/Upload/index.tsx hunk at line 450); the endpoint does not check it, so the documented \"disable\" does not disable server-side fetching."
+    },
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 59,
+      "body": "allowList bypass via redirect. The allowList is checked once against the original URL (getFileFromURL.ts:53: `isURLAllowed(validatedUrl.href, ...)`). `fetch(validatedUrl.href, ...)` at line 59 uses the default `redirect: 'follow'`, so an allowed host that answers with a 3xx to a non-allowed host, such as `http://127.0.0.1:...` or a cloud metadata address, is followed without re-validation. The redirected body is then streamed to the client. Fix: use `redirect: 'manual'` and re-check each hop, or reject redirects."
+    },
+    {
+      "path": "packages/payload/src/utilities/isURLAllowed.ts",
+      "line": 22,
+      "body": "Wildcard `**` does not match multiple path segments. Line 21 turns `**` into `.*`, and line 22 then replaces every `*`, including the one inside `.*`, with `[^/]*`. So `/images/**` becomes `^/images/.[^/]*$`, which rejects `/images/2024/photo.jpg` even though the docs say pathname \"supports wildcards to match multiple paths\". The same bug is in packages/ui/src/utilities/isURLAllowed.ts:22. Fail-closed, so the impact is a broken allowList rather than a bypass. Fix: use a placeholder for `**` before replacing single `*`, or escape the pattern first."
+    }
+  ]
+}

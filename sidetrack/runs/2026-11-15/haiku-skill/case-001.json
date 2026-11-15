@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(address): populate street line from place details",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/ui/meta-types/input/components/AddressFieldInput.tsx",
+      "line": 29,
+      "body": "`convertToAddress` now passes `newAddress?.addressLat` straight into `castAsNumberOrNull`, which throws `Cannot cast to number or null` for `undefined` (packages/twenty-front/src/utils/cast-as-number-or-null.ts:52-57, and the test at cast-as-number-or-null.test.ts:70 asserts the throw). The old code used `?? null`, so an undefined input was safe. The new call is unsafe when the draft is null or undefined. `convertToAddress(draftValue)` is called from render (AddressFieldInput.tsx:72), and `null?.addressLat` evaluates to `undefined`. The draft comes from `computeDraftValueFromFieldValue`, which returns an address field value unchanged (computeDraftValueFromFieldValue.ts:61), so a null address value reaches the throw. The input then fails to render. I did not confirm whether the record store can actually hold a null address for a field the user edits. The lat/lng change is also unrelated to the stated street-line fix."
+    }
+  ]
+}
