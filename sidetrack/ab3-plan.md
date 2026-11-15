@@ -1,5 +1,10 @@
 # A/B 3: Sonnet pooled with a second model against Sonnet alone (side track C)
 
+**Status: deferred by Sunny's ruling of 16 Nov, not run.** Deferred until A/B 2 (`sidetrack/ab2-plan.md`) is
+scored. Two reasons: pooled Sonnet + Opus is estimated above the $0.25 per PR ceiling (Opus's cost is
+unmeasured), and the clean-case rule below makes a keep nearly impossible. The rule and the prediction below are
+unchanged from the pre-registration (`f827b23`); `scripts/track-c/pool-reviews.ts` stays.
+
 Written 2026-11-16, before any run. Dev cases only (the 40-case dev export, 31 bug and 9 clean); a selection set,
 not a test. Nothing here touches the frozen reviewer, the held-out run or `main`. Runs use Sunny's Claude
 subscription through Claude Code; the only paid step is judging.
