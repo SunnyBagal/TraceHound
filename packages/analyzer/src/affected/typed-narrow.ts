@@ -15,10 +15,14 @@ import { findTsconfigs, newDiagnostics, type TypedDiagnostic } from "../contract
 import { discoverPackages } from "../load/workspace.ts";
 import { computeAffected } from "./affected.ts";
 
-export const TYPED_NARROW_VERSION = "typed-narrow@0.1";
+export const TYPED_NARROW_VERSION = "typed-narrow@0.2";
 export const TYPED_NARROW_BUDGET_MS = 120_000;
 
-const CHECK: ts.CompilerOptions = { noEmit: true, composite: false, incremental: false, declaration: false, skipLibCheck: true, allowImportingTsExtensions: true };
+// rootDir and rootDirs are unset: workspace packages resolve to their sources here (no install), and a
+// package's rootDir would report every such file as TS6059, a fact about this setup and not about the code.
+const CHECK: ts.CompilerOptions = { noEmit: true, composite: false, incremental: false, declaration: false, skipLibCheck: true, allowImportingTsExtensions: true, rootDir: undefined, rootDirs: undefined };
+/** Diagnostics about project layout, which this check changes by design: never findings. */
+const LAYOUT_CODES = new Set([6059, 6307]);
 const FALLBACK: ts.CompilerOptions = { ...CHECK, target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.Preserve, moduleResolution: ts.ModuleResolutionKind.Bundler, jsx: ts.JsxEmit.Preserve, strict: true };
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -92,7 +96,7 @@ function checkSide(root: string, files: string[], deadline: number): { diagnosti
       const sf = program.getSourceFile(abs);
       if (!sf) continue;
       for (const d of [...program.getSyntacticDiagnostics(sf), ...program.getSemanticDiagnostics(sf)]) {
-        if (!d.file || d.start === undefined) continue;
+        if (!d.file || d.start === undefined || LAYOUT_CODES.has(d.code)) continue;
         const pos = d.file.getLineAndCharacterOfPosition(d.start);
         const flat = ts.flattenDiagnosticMessageText(d.messageText, "\n");
         diagnostics.push({
