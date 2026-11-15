@@ -4458,3 +4458,17 @@ touched: the protocol, the freeze, H1/H2, `docs/budget.md`'s held-out lines.
 **Touches:** artu1 this file, `docs/budget.md` (A/B 2 cap; the reading and the correction row when the values arrive),
 `.agents/STATE.md`, `.agents/LOG.md`; bunny `config/prices.json` (codex GO) once the rates are given; the side-track
 branch (A/B 2 runs after E1; A/B 3 parked). Not touched: the protocol, the freeze, H1/H2.
+- **Item 1–2 applied (artu1, 16 Nov 2026; Sunny's reading):** console **$16.35** (time not given; more than 2 h after the
+  last paid call), **unchanged** from the previous reading, so no drop beyond the $0.11 already seen: under item 2 the trip
+  was billing lag, and **E1 proceeds under its existing cap after P1 closes**. Listed rates (console catalog, Base flavor,
+  per 1M tokens, input / cached input / output): Nemotron 3.5 Super VL $0.30 / $0.06 / $0.90; Nemotron-3-Super-120b
+  $0.30 / $0.06 / $0.90; Nemotron-3-Ultra-550b $1.00 / $0.12 / $3.00; Nemotron-3-Nano-30B-A3B $0.06 / $0.012 / $0.24;
+  Qwen3-235B-A22B-Instruct $0.20 / $0.05 / $0.60, marked Deprecated. The Super rates equal `config/prices.json`'s
+  $0.30 / $0.90, so the ~15–17% gap (076k item 10) is not a wrong base price; bunny is checking the exact model ids
+  charged and whether cached input is priced or recorded (`run/out/bunny.076q-prices.md`). 076k item 10's deadline
+  (Sun 15 Nov 23:00 IST) has passed without a cause, so it goes to Sunny before F1, as that item says.
+- **bench-judge-x1's model is past its listed removal date (artu1, 16 Nov 2026):** Nebius's November 2026 deprecation
+  notice lists `Qwen/Qwen3-235B-A22B-Instruct-2507` for removal from Token Factory Serverless on **November 9, 2026**
+  (recommended replacement `Qwen/Qwen3-30B-A3B-Instruct-2507`); "Token Factory does not automatically reroute requests".
+  On 16 Nov it is still listed by us-central1's `GET /v1/models` (a $0 call) and served 076j's judging on 14 Nov, so it can
+  go at any time, before the held-out scoring. A ruling for Sunny.
