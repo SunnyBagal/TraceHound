@@ -100,6 +100,7 @@ Briefs use the template in `docs/plan/team-process.md` §2: `run/briefs/<lane>.<
 ## Models and keys
 
 - The product's model calls go to Nemotron on Nebius Token Factory (hackathon rule). Do not add calls to any other model provider in product code.
+- **After held-out scoring (decision 076p item 1):** the reviewer's provider and model become a setting; Claude and OpenAI models are allowed beside Nemotron. Until held-out scoring is done the rule above holds, apart from exception (1).
 - Never print, log or commit `NEBIUS_API_KEY` or any other secret. Tests never hit the network.
 
 ## Gates
@@ -139,6 +140,6 @@ Treat every rule below as P1 when it is broken.
 
 ### Build and safety
 - A new dependency in any package.json.
-- Product code that calls a model provider other than Nebius Token Factory.
+- Product code that calls a model provider other than Nebius Token Factory (until held-out scoring is done; after it, a provider other than Nebius, Anthropic or OpenAI, or one that is not selected by setting: decision 076p item 1).
 - A secret (`NEBIUS_API_KEY`, `GITHUB_TOKEN` or any token) that can reach a log, an error message, a file or a commit.
 - A test that can reach the network.

@@ -4416,3 +4416,20 @@ in `tracehound-testset/run/out/`. The held-out run is untouched.
   (Fable's model-free numbers, not received) and "on both models" (the Haiku half was not run). case-040: the short packet's
   draw-2 rerun review did not catch it (every other Sonnet draw did); it does not change the line. case-025: the typed fact
   gave 0 catches in both draws (parents 0 too). Proxy vs real: Haiku skill 25/31 agree, Sonnet skill 28/31.
+
+## 076p — Provider as a setting after held-out; A/B 1 adopted on the side track; typed facts killed (2026-11-16)
+
+**Status: ruled by Sunny (16 Nov 2026).** Nothing in the held-out plan changes: A0 (pool-verify-v1 on Nemotron) stays the
+registered primary.
+1. **Model rule:** after the held-out result, the reviewer's provider and model become a setting (Claude and OpenAI models
+   allowed). `AGENTS.md` "Models and keys" and its review rule say so, effective after held-out scoring.
+2. **A/B 1:** the short affected-set packet replaces the full one on the side track, on the Sonnet evidence alone. Cost
+   condition met: median list price per case $0.118 and $0.117 (short) against $0.119 and $0.127 (full). The Haiku half
+   was not run.
+3. **Typed facts are killed** (0 catches in both draws). The dev review folders under `sidetrack/runs/` stay until E1 is
+   done, then move to the private test-set repo and are removed from the branch in a normal commit; no history rewrite.
+
+**Touches:** artu1 this file, `AGENTS.md` ("Models and keys", "Build and safety" review rule), `.agents/STATE.md`,
+`.agents/LOG.md`; the side-track branch `claude/upbeat-lamport-b280zm` (short packet as its default, typed-facts path
+removed, `sidetrack/runs/` removed after E1); `tracehound-testset` (receives the dev review folders after E1). Not
+touched: the protocol, the freeze, H1/H2, `docs/budget.md`'s held-out lines.
