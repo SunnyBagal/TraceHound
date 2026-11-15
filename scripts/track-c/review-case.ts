@@ -4,7 +4,7 @@
  *
  *   node scripts/track-c/review-case.ts --id <case id> --repo <git checkout> --base <sha> --head <sha>
  *     --pr-text <json {id: {title, description}}> --out <dir> --model <haiku|sonnet|opus|model id>
- *     [--contracts <tracehound contracts --out file>] [--timeout-s 900] [--skip-checkout]
+ *     [--contracts <tracehound contracts --out file>] [--timeout-s 900] [--skip-checkout] [--packet full|capped]
  *
  * What it does, in order, with no model until step 3:
  * 1. checks the repo out at <head> (detached; the working tree is overwritten); with --skip-checkout it only
@@ -25,11 +25,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { computeAffected, formatAffected } from "../../packages/analyzer/src/affected/affected.ts";
+import { computeAffected, formatAffected, formatAffectedCapped } from "../../packages/analyzer/src/affected/affected.ts";
 import { PullReview } from "../../packages/analyzer/src/bench/types.ts";
 import { cleanGitEnv } from "../../packages/analyzer/src/git-env.ts";
 
-export const RUNNER_VERSION = "track-c-runner@0.1";
+export const RUNNER_VERSION = "track-c-runner@0.2";
 export const MAX_COMMENTS = 6;
 const SKILL = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../.claude/skills/tracehound-review/SKILL.md");
 
@@ -96,12 +96,16 @@ function main(): number {
   const { values } = parseArgs({
     options: {
       id: { type: "string" }, repo: { type: "string" }, base: { type: "string" }, head: { type: "string" }, "pr-text": { type: "string" },
-      out: { type: "string" }, model: { type: "string" }, contracts: { type: "string" }, "timeout-s": { type: "string", default: "900" }, "skip-checkout": { type: "boolean", default: false },
+      out: { type: "string" }, model: { type: "string" }, contracts: { type: "string" }, "timeout-s": { type: "string", default: "900" }, "skip-checkout": { type: "boolean", default: false }, packet: { type: "string", default: "full" },
     },
   });
   const { id, base, head, model } = values;
   if (!id || !values.repo || !base || !head || !values["pr-text"] || !values.out || !model) {
     console.error("usage: review-case.ts --id <case> --repo <dir> --base <sha> --head <sha> --pr-text <json> --out <dir> --model <m> [--contracts <json>] [--timeout-s 900]");
+    return 2;
+  }
+  if (values.packet !== "full" && values.packet !== "capped") {
+    console.error("--packet must be full or capped");
     return 2;
   }
   const repo = path.resolve(values.repo);
@@ -130,7 +134,7 @@ function main(): number {
   fs.writeFileSync(path.join(factsDir, "pr.md"), `# ${text.title}\n\n${text.description}\n`);
   fs.writeFileSync(path.join(factsDir, "diff.patch"), git(["diff", `${base}..${head}`]));
   const affected = computeAffected({ repo, diff: `${base}..${head}` });
-  fs.writeFileSync(path.join(factsDir, "affected.txt"), formatAffected(affected) + "\n");
+  fs.writeFileSync(path.join(factsDir, "affected.txt"), (values.packet === "capped" ? formatAffectedCapped(affected) : formatAffected(affected)) + "\n");
   const contracts = contractsText(values.contracts);
   if (contracts) fs.writeFileSync(path.join(factsDir, "contracts.txt"), contracts + "\n");
   const factsMs = Date.now() - factsStarted;
@@ -171,7 +175,7 @@ function main(): number {
   const hunks = new Set(affected.changedFiles.map((f) => f.path));
   if (review) fs.writeFileSync(reviewFile, JSON.stringify(review, null, 2) + "\n");
   const record = {
-    v: RUNNER_VERSION, id, model, status: review ? "ok" : attempts.at(-1)!.status, attempts, factsMs,
+    v: RUNNER_VERSION, id, model, packet: values.packet, status: review ? "ok" : attempts.at(-1)!.status, attempts, factsMs,
     comments: review?.comments.length ?? null,
     commentsOnFilesOutsideDiff: review ? review.comments.filter((c) => !hunks.has(c.path)).length : null,
     affected: { version: affected.version, ...affected.counts },

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { AffectedError, computeAffected, formatAffected } from "../src/affected/affected.ts";
+import { AffectedError, computeAffected, formatAffected, formatAffectedCapped } from "../src/affected/affected.ts";
 import { runAffected } from "../src/affected/cli.ts";
 import { cleanGitEnv } from "../src/git-env.ts";
 
@@ -91,6 +91,18 @@ describe("affected set", () => {
   it("refuses a working tree that is not the diff's head", () => {
     expect(() => computeAffected({ repo, diff: `${head}..${base}` })).toThrow(AffectedError);
     expect(() => runAffected(["--repo", repo])).toThrow(/usage:/);
+  });
+
+  it("tags how each reference uses the declaration, and prints the short form", () => {
+    const report = computeAffected({ repo, diff: `${base}..${head}` });
+    expect(report.declarations[0]!.references.map((r) => r.relation)).toEqual(["call", "call", "call", "call"]);
+    const text = formatAffectedCapped(report);
+    expect(text).toContain("1 changed declarations; 1 are referenced on lines the diff did not touch, 1 of them listed below");
+    expect(text).toContain("## core/src/pricing.ts#priceOf (function, exported) lines 1-3; changed lines 2; 4 references outside the diff in 4 files");
+    expect(text).toContain("  - core/src/invoice.ts:3 [call] in total: return priceOf(qty) + 99;");
+    expect(text).toContain("- 0 changed declarations with no reference outside the diff");
+    expect(text).toContain("- 1 changed files that are not TypeScript sources");
+    expect(text).not.toContain("more outside the diff, not shown");
   });
 
   it("prints the packet", () => {

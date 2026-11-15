@@ -16,7 +16,7 @@ import { indexTree, type Decl } from "../changes/declarations.ts";
 import { ChangesError, git, parseZeroContextDiff, type FileHunks } from "../changes/git.ts";
 import { discoverPackages, packageOf, relPath, type PackageInfo } from "../load/workspace.ts";
 
-export const AFFECTED_VERSION = "affected@0.3";
+export const AFFECTED_VERSION = "affected@0.4";
 export const DEFAULT_MAX_REFS = 12;
 export const DEFAULT_BUDGET_MS = 120_000;
 /** A changed name found in more files than this is not resolved: its candidate count is reported. */
@@ -39,9 +39,13 @@ const FALLBACK_OPTIONS: ts.CompilerOptions = {
   skipLibCheck: true,
 };
 
+/** How a reference uses the declaration, read from the syntax around it. */
+export type Relation = "call" | "new" | "jsx" | "type" | "re-export" | "value";
+
 export interface AffectedRef {
   file: string;
   line: number;
+  relation: Relation;
   /** "<file>#<name>" of the innermost named declaration that contains the reference */
   enclosing: string;
   text: string;
@@ -144,6 +148,20 @@ function enclosingName(node: Node): string {
     }
   }
   return MODULE_DECL;
+}
+
+function relationOf(ref: Node): Relation {
+  const parent = ref.getParent();
+  // obj.name(...): the reference is the name of a property access, and that access is what gets called
+  const target = parent && Node.isPropertyAccessExpression(parent) && parent.getNameNode() === ref ? parent : ref;
+  const up = target.getParent();
+  if (!up) return "value";
+  if (Node.isCallExpression(up) && up.getExpression() === target) return "call";
+  if (Node.isNewExpression(up) && up.getExpression() === target) return "new";
+  if (Node.isJsxOpeningElement(up) || Node.isJsxSelfClosingElement(up) || Node.isJsxClosingElement(up)) return "jsx";
+  if (Node.isTypeReference(up) || Node.isExpressionWithTypeArguments(up) || Node.isTypeQuery(up) || Node.isQualifiedName(up)) return "type";
+  if (Node.isExportSpecifier(up) || Node.isExportAssignment(up)) return "re-export";
+  return "value";
 }
 
 /** `git grep` over the tracked TypeScript files of the working tree; no match is not an error. */
@@ -301,6 +319,7 @@ export function computeAffected(input: AffectedInput): AffectedReport {
           refs.set(key, {
             file: refFile,
             line,
+            relation: relationOf(ref),
             enclosing: `${refFile}#${enclosingName(ref)}`,
             text: (linesOf(refFile)[line - 1] ?? "").trim().slice(0, 200),
             inDiff: hunks.get(refFile)?.added.has(line) ?? false,
@@ -381,5 +400,52 @@ export function formatAffected(r: AffectedReport): string {
     for (const ref of d.references) out.push(`  - ${ref.file}:${ref.line}${ref.inDiff ? " [in diff]" : ""}${ref.test ? " [test]" : ""} in ${ref.enclosing.split("#").at(-1)}: ${ref.text}`);
     if (d.referencesTotal > d.references.length) out.push(`  - (${d.referencesTotal - d.references.length} more not shown)`);
   }
+  return out.join("\n");
+}
+
+export const CAPPED_MAX_DECLARATIONS = 30;
+export const CAPPED_MAX_REFS = 5;
+
+/**
+ * The short packet (A/B 1, sidetrack/ab1-plan.md): only declarations with a reference on a line the diff did not
+ * touch, exported ones first and then by how many such references they have; at most CAPPED_MAX_DECLARATIONS
+ * blocks and CAPPED_MAX_REFS references each, every reference tagged with its relation. Everything left out is
+ * counted, and named where a name helps a search.
+ */
+export function formatAffectedCapped(r: AffectedReport): string {
+  const out: string[] = [];
+  const c = r.counts;
+  const withOutside = r.declarations
+    .filter((d) => d.status === "resolved" && d.referencesOutsideDiff > 0)
+    .sort((a, b) => Number(b.exported) - Number(a.exported) || b.referencesOutsideDiff - a.referencesOutsideDiff || cmp(a.id, b.id));
+  const shown = withOutside.slice(0, CAPPED_MAX_DECLARATIONS);
+  out.push(`AFFECTED SET, short form (${r.version}; compiler-resolved at ${r.head.slice(0, 7)}; no model)`);
+  out.push(
+    `${c.declarations} changed declarations; ${withOutside.length} are referenced on lines the diff did not touch, ${shown.length} of them listed below with at most ${CAPPED_MAX_REFS} such references each. ` +
+      "Relations: call, new, jsx, type, re-export, value (read or passed).",
+  );
+  for (const d of shown) {
+    const refs = d.references.filter((ref) => !ref.inDiff).slice(0, CAPPED_MAX_REFS);
+    out.push("");
+    out.push(`## ${d.id} (${d.kind}${d.exported ? ", exported" : ""}) lines ${d.startLine}-${d.endLine}; changed lines ${d.changedLines.join(",")}; ${d.referencesOutsideDiff} references outside the diff in ${d.referenceFiles} files`);
+    for (const ref of refs) out.push(`  - ${ref.file}:${ref.line} [${ref.relation}]${ref.test ? " [test]" : ""} in ${ref.enclosing.split("#").at(-1)}: ${ref.text}`);
+    if (d.referencesOutsideDiff > refs.length) out.push(`  - (${d.referencesOutsideDiff - refs.length} more outside the diff, not shown)`);
+  }
+  const names = (ds: AffectedDecl[]) => {
+    const list = ds.map((d) => d.name);
+    return list.slice(0, 15).join(", ") + (list.length > 15 ? `, and ${list.length - 15} more` : "");
+  };
+  const overCap = withOutside.slice(CAPPED_MAX_DECLARATIONS);
+  const common = r.declarations.filter((d) => d.status === "skipped-common");
+  const notComputed = r.declarations.filter((d) => d.status !== "resolved" && d.status !== "skipped-common");
+  const noOutside = r.declarations.filter((d) => d.status === "resolved" && d.referencesOutsideDiff === 0).length;
+  out.push("");
+  out.push("Not listed:");
+  out.push(`- ${noOutside} changed declarations with no reference outside the diff`);
+  if (overCap.length) out.push(`- ${overCap.length} more with references outside the diff, over the limit of ${CAPPED_MAX_DECLARATIONS}: ${names(overCap)}`);
+  if (common.length) out.push(`- ${common.length} whose name appears in more than ${r.limits.maxCandidateFiles} files, references not computed: ${names(common)}`);
+  if (notComputed.length) out.push(`- ${notComputed.length} not computed (budget, no name node or a compiler error): ${names(notComputed)}`);
+  const skippedFiles = r.changedFiles.filter((f) => !f.analyzed);
+  if (skippedFiles.length) out.push(`- ${skippedFiles.length} changed files that are not TypeScript sources`);
   return out.join("\n");
 }
