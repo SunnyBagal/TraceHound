@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat(medusa): Allow regexp in CORS configuration",
+  "comments": [
+    {
+      "path": "packages/medusa-core-utils/src/build-regexp-if-valid.ts",
+      "line": 62,
+      "body": "`new RegExp(m[2], m[3])` keeps the `g` and `y` flags, and the `[gimsuy]*` pattern and the spec (`/ab#/[c]/ig`) explicitly allow them. The `cors` middleware checks regexp origins with `origin.test(...)`. A `g` or `y` regexp keeps `lastIndex` between calls. Take `/https:\\/\\/.*\\.example\\.com/g` in `store_cors`. The first request from an allowed origin passes. The next test starts at the old `lastIndex` and fails, so the middleware returns no CORS headers and the browser rejects the request, which then alternates. Drop `g` and `y` from the flags, or don't accept them."
+    },
+    {
+      "path": "packages/medusa-core-utils/src/parse-cors-origins.ts",
+      "line": 4,
+      "body": "`str.split(\",\")` runs before regexp detection, so a regexp that contains a comma gets split into pieces. An example is `/^https:\\/\\/a{1,3}\\.example\\.com$/`, with the quantifier `{1,3}`. The pieces `/^https:\\/\\/a{1` and `3}\\.example\\.com$/` each fail `buildRegexpIfValid` and fall back to plain strings. The intended origin never matches and no error is raised. Split on commas outside a delimited regexp, or document that commas are unsupported."
+    }
+  ]
+}

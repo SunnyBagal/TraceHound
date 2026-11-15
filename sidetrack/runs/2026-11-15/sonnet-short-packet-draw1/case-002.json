@@ -1,0 +1,20 @@
+{
+  "pr_title": "feat: Add support for product imports",
+  "comments": [
+    {
+      "path": "packages/admin-next/dashboard/src/routes/products/product-import/helpers/import-template.ts",
+      "line": 450,
+      "body": "The downloadable template is semicolon-delimited, but the server parses imports with `csv2json(data, { preventCsvInjection: true })` (packages/core/utils/src/csv/csvtojson.ts:9). That call uses json-2-csv's default `,` field delimiter. A user who downloads this template and uploads it unchanged gets one giant column. The header row is never split, so the product fields are never recognised. The sweatpants description at line 452 also contains a literal comma (\"sweatpants, everyday essentials\"). That comma would split the field even if the delimiter were fixed. The template needs comma delimiters, with the description field quoted."
+    },
+    {
+      "path": "packages/admin-next/dashboard/src/routes/products/product-import/components/upload-import.tsx",
+      "line": 33,
+      "body": "The CSV uploader reuses the image-upload strings. The label is `products.media.uploadImagesLabel`, which en.json:380 defines as \"Upload images\". The hint is `products.media.uploadImagesHint`, which en.json:381 defines as \"Drag and drop images here or click to upload.\". The new `products.import.upload.*` keys were added for this drawer, but these two strings are never replaced. The import drawer therefore tells users to upload images."
+    },
+    {
+      "path": "packages/admin-next/dashboard/src/routes/products/product-import/components/upload-import.tsx",
+      "line": 7,
+      "body": "Validation accepts only `file.type === \"text/csv\"`. Browsers often report a `.csv` file as `application/vnd.ms-excel`, especially on Windows with Excel installed. Some report an empty type. Those valid CSVs are rejected with \"not a supported file type\". The `<input accept>` filter built from the same list (file-upload.tsx:134) also hides them in the file picker. Also accept the `.csv` extension and the other common MIME types."
+    }
+  ]
+}

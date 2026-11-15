@@ -1,0 +1,20 @@
+{
+  "pr_title": "feat: implement resend rest email adapter",
+  "comments": [
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 488,
+      "body": "Buffer attachments are serialized wrongly. `mapAttachments` returns `content` as a Buffer, in the string branch (`Buffer.from(attachment.content)`, line 488) and the Buffer branch (line 495). `sendEmail` then calls `JSON.stringify(sendEmailOptions)` (line 393). A Buffer serializes as `{\"type\":\"Buffer\",\"data\":[...]}`, not as the base64 string the Resend REST API expects for `content`. Any email with an attachment will therefore be rejected by Resend or sent corrupted. Encode the content as base64 (`.toString('base64')`) before building the body."
+    },
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 432,
+      "body": "Absent optional fields are sent as empty values. `mapAddresses` returns `''` when the input is undefined, so every email without cc or bcc sends `\"cc\": \"\"` and `\"bcc\": \"\"` (lines 432-433). Line 437 sends `html: ''` for text-only mail (the unit test in `email-resend.spec.ts` sends text only), and line 438 sends `text: ''` for HTML-only mail. Resend validates recipients, so an empty-string `cc` or `bcc` is likely to be rejected as an invalid address. An empty `html` alongside real `text` may also change which body is used. Omit these keys when undefined."
+    },
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 439,
+      "body": "Several `SendEmailOptions` fields are silently dropped. `replyTo` and `headers` are accepted by the Payload email type (it is nodemailer's `SendMailOptions`). `ResendSendEmailOptions` declares `reply_to` and `headers`, but the mapper never sets them. Reply-to addresses and custom headers passed to `payload.sendEmail` are lost with no error."
+    }
+  ]
+}

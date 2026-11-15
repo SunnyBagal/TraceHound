@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(dashboard): Add FE validation for conditional prices",
+  "comments": [
+    {
+      "path": "packages/admin/dashboard/src/routes/locations/common/schema.ts",
+      "line": 371,
+      "body": "`refineDuplicates` compares every condition on one price with every condition on another by value only, and ignores the operator. Any two prices that share a boundary number fail with `overlappingConditions`, even when the ranges are disjoint. For example, price A with `lt: 100` and price B with `gte: 100` (or A `lte: 100` and B `gt: 100`) don't overlap, but `condition1Value === condition2Value` is true at line 371 and the error is added at line 372. These adjacent-range setups are valid, and `lt`/`gt`/`eq` rules can be created through the API. The existing `hasEqLtGt` branch at schema.ts:25 assumes such rules should not be blocked. Opening the modal on an existing shipping option that has them makes the form unsubmittable through `handleSubmit` in conditional-price-form.tsx:114. The check also misses real overlaps whose boundaries differ, such as `gte 0, lte 100` against `gte 50, lte 150`. It needs proper interval-overlap logic, not value equality."
+    }
+  ]
+}

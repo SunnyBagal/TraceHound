@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(ui): ensure that schedule publishing time picker can only be in the future",
+  "comments": [
+    {
+      "path": "packages/ui/src/elements/PublishButton/ScheduleDrawer/index.tsx",
+      "line": 295,
+      "body": "`minTime` is built from the user's local clock, and `isToday(date)` is checked against `date`. But `date` is not the wall time the picker shows. `onChangeDate` (lines 264-280) transposes the picked wall time into the selected `timezone`, and `displayedValue` (lines 243-262) transposes it back for display. The picker's disabled-time logic therefore compares the user's local `new Date()` with a wall time that is later reinterpreted in another timezone. The future-only guarantee fails when a timezone other than the user's is selected. Example: the user is in New York at 10:00 and picks Tokyo. Tokyo wall time 10:30 today passes the `minTime` check, but it is 21:30 the previous day in New York, which is in the past. `isToday(date)` runs on the transposed value, so it can also pick the wrong day near midnight. The `minTime` memo depends only on `[date]`. It does not depend on `timezone`, so changing the timezone after choosing a time does not recompute it. `minTime` should be computed in the selected timezone, for example from `TZDate.tz(timezone)`, and `timezone` should be added to the dependency list."
+    }
+  ]
+}

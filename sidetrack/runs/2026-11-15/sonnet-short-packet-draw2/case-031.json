@@ -1,0 +1,20 @@
+{
+  "pr_title": "feat: Add support for authentication to the sdk, and plug it in the admin",
+  "comments": [
+    {
+      "path": "packages/admin-next/dashboard/src/hooks/api/auth.tsx",
+      "line": 10,
+      "body": "The login mutation now calls `sdk.auth.login`, which uses the js-sdk `Client`. On a non-2xx response, `normalizeResponse` throws a `FetchError` (`packages/core/js-sdk/src/client.ts:48`), not an axios error. The caller in `packages/admin-next/dashboard/src/v2-routes/login/login.tsx:45` still guards the 401 handling with `isAxiosError(error)`, which returns `error.isAxiosError` (`lib/is-axios-error.ts:4`) and is undefined for a `FetchError`. A wrong email or password therefore skips the `errors.invalidCredentials` branch and shows the generic server-error message instead."
+    },
+    {
+      "path": "packages/core/js-sdk/src/client.ts",
+      "line": 41,
+      "body": "`credentials` is now always set by `normalizeRequest`: `\"include\"` for session auth and `\"omit\"` otherwise. Before this change the SDK left it unset, so the browser used its default of `same-origin`. Any existing SDK consumer that relied on that default for same-origin cookie auth now has its cookies dropped. In addition, `\"include\"` sends cookies to whatever `baseUrl` is configured, as the added TODO notes."
+    },
+    {
+      "path": "packages/core/js-sdk/src/client.ts",
+      "line": 227,
+      "body": "`getTokenStorageInfo_` is called on every request via `getJwtHeader_` -> `getToken_`. It throws if `jwtTokenStorageMethod` is `\"local\"` or `\"session\"` and the matching storage is missing. Previously the throw happened only when the browser check failed, and the default fell back to `memory` outside the browser. `hasStorage` uses `storage in window`, which is true even when access to `localStorage` throws a SecurityError (for example with blocked cookies or in a sandboxed iframe). In that case the first request throws instead of falling back to memory. `setToken_` also calls `window.localStorage.setItem` with no guard."
+    }
+  ]
+}

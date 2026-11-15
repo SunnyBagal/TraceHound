@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat(utils): Introduce promiseAll util",
+  "comments": [
+    {
+      "path": "packages/medusa/src/subscribers/order.js",
+      "line": 37,
+      "body": "`promiseAll` is called here, but this file never imports it. The diff changes `Promise.all` to `promiseAll` at this line and adds no `import { promiseAll } from \"@medusajs/utils\"`. The file has no import or require of `@medusajs/utils`, and a grep for `promiseAll` in it matches only this call. It is a plain `.js` file, so `tsc` does not catch it. When the order subscriber's discount-usage handler runs, it will throw `ReferenceError: promiseAll is not defined`. Discount `usage_count` will then never be updated after an order is placed. Every other file that uses `promiseAll` imports it."
+    }
+  ]
+}

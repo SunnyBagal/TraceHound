@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(address): populate street line from place details",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/ui/meta-types/input/components/AddressFieldInput.tsx",
+      "line": 29,
+      "body": "`castAsNumberOrNull` throws `Error('Cannot cast to number or null')` when it gets `undefined` (`canBeCastAsNumberOrNull` returns false for undefined, `cast-as-number-or-null.ts:10-13` and `:55-57`). The old code `newAddress?.addressLat ?? null` tolerated `undefined`. `convertToAddress` takes `FieldAddressDraftValue | undefined`, so an undefined `newAddress` now makes `newAddress?.addressLat` undefined and the call throws. The same happens for a draft object with no lat/lng keys. Both cases can occur when enter, tab or click-outside fires on an empty or untouched address draft. The throw happens in the event handler, so the input can't be committed or closed. Use `newAddress?.addressLat ?? null` before the cast. The same applies to line 30 for `addressLng`."
+    },
+    {
+      "path": "packages/twenty-server/src/engine/core-modules/geo-map/utils/sanitize-place-details-results.util.ts",
+      "line": 769,
+      "body": "The `street_number` branch builds `street` as `long_name + ' ' + (address.street ?? '')`. If a place has a `street_number` but no `route`, the result keeps a trailing space, for example `\"48 \"`. That value is truthy, so on the front end `placeData?.street || addressStreet1 || ...` (`useAddressAutocomplete.ts:84`) prefers it over the autocomplete text. The user then gets a bare number with trailing whitespace as `addressStreet1`. Trim the result, or join the parts only when both exist."
+    }
+  ]
+}

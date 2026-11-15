@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix: download CSV exports on the authenticated API origin",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/record-export/utils/createRecordExportConnection.ts",
+      "line": 72,
+      "body": "`downloadUrl.pathname = pathname` replaces any path in `REACT_APP_SERVER_BASE_URL`. The subscription URL at line 25 keeps that path, because it is built as `${REACT_APP_SERVER_BASE_URL}/metadata`. Suppose the server base URL is `https://host/api`, for example behind a reverse-proxy sub-path. The subscription then goes to `https://host/api/metadata`, but the download goes to `https://host/file/record-export/export?...`, which drops the `/api` prefix and will likely 404. This is only a problem for deployments with a path prefix. Building the URL as `${REACT_APP_SERVER_BASE_URL}${pathname}${search}` would stay consistent with line 25 when the server returns an absolute URL whose path doesn't already include the prefix."
+    }
+  ]
+}

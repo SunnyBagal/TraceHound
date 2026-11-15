@@ -1,0 +1,20 @@
+{
+  "pr_title": "fix(db-d1-sqlite): avoid bound parameter limit when querying relationships and inserting rows",
+  "comments": [
+    {
+      "path": "packages/drizzle/src/queries/parseParams.ts",
+      "line": 426,
+      "body": "The raw SQL uses `resolvedColumn.name`, which is the bare column name (`id`) with no table or alias qualifier. The normal path uses `adapter.operators[...](resolvedColumn, ...)`, which drizzle renders as `\"table\".\"id\"`. Any query that joins other tables, such as a where or sort on a relationship path, or a `join` field query, also has an `id` column in scope. With `limitedBoundParameters` on, `where: { id: { in: [...] } }` then compiles to a bare `id IN (...)` and SQLite fails with 'ambiguous column name: id'. A collection alias or a parent/child table pair can trigger the same failure. Use the qualified column, for example `sql.raw` with the quoted table name and column name, or `sql.identifier`."
+    },
+    {
+      "path": "packages/drizzle/src/queries/parseParams.ts",
+      "line": 424,
+      "body": "The new branch drops the null handling built just above it (lines 381-390 and 444-447). For `in` with `null` in the array, the original code produced `id IS NULL OR id IN (...)`. This branch pushes `id IN (..., NULL, ...)` and then `break`s before `orConditions` is applied. In SQL, `NULL` inside `IN` never matches, so the null-matching behavior is lost when `limitedBoundParameters` is on. A query such as `where: { relation: { in: [null, 'x'] } }` is the shape this handling was written for. Likewise `NOT IN (..., NULL)` evaluates to NULL for every row, so `not_in` with a null element returns no rows. The null case needs the same `isNull` OR handling, or `NULL` must be filtered out of the literal list."
+    },
+    {
+      "path": "packages/drizzle/src/sqlite/insert.ts",
+      "line": 13,
+      "body": "`colsPerRow` is computed from `Object.keys(values[0])` only. Drizzle's multi-row SQLite insert emits a bound parameter for every table column that any row supplies, and for columns with `$defaultFn` (for example generated ids). Rows built in upsertRow can have different key sets, and `values[0]` can be the sparsest. In that case the real parameter count per row is higher than assumed, and batches can exceed the 100-variable D1 limit that this change targets. An empty array would also throw a TypeError on `Object.keys(undefined)`. Compute the column count as the union of keys over all rows, or batch by an actual parameter count."
+    }
+  ]
+}

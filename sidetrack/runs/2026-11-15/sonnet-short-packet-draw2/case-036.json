@@ -1,0 +1,15 @@
+{
+  "pr_title": "perf(ui): skip rendering custom components hidden by admin.condition",
+  "comments": [
+    {
+      "path": "packages/ui/src/forms/fieldSchemasToFormState/addFieldStatePromise.ts",
+      "line": 191,
+      "body": "The new early return for hidden fields (`passesCondition === false`) copies the raw `data[field.name]` into `fieldState.value` and `initialValue` for every data-affecting field type. The normal paths build a different shape. Array and blocks fields store a row count, not the rows: `fieldState.value = forceFullValue ? arrayValue : arrayValue.length` at line 412, and the blocks equivalent at line 631. A hidden array or blocks field with existing rows now gets its full array of row objects as `value`. The client treats `value` as a row count, so the state is malformed. The hidden field also gets none of the `rows` or child-path entries that the normal path creates. A named group or tab that is hidden now gets its whole object as `value` and loses `disableFormData`. The old code ran the full path for these. Handle only simple value fields in the short-circuit, or fall through to the type-specific branches without rendering or recursing."
+    },
+    {
+      "path": "packages/ui/src/forms/fieldSchemasToFormState/addFieldStatePromise.ts",
+      "line": 190,
+      "body": "The short-circuit runs before the field read-access check (`field.access.read` and the `hasPermission` return, around lines 203-226). A hidden-by-condition field with `access.read` that denies the current user is no longer dropped. Its value is copied from `data[field.name]` into form state, which is serialized to the client. The same early return also skips the `stripUnselectedFields` and `select` handling that the later branches apply. Do the permission check before the early return, or write the value only after it passes."
+    }
+  ]
+}

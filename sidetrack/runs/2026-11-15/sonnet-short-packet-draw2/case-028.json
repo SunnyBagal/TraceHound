@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat(workflow): periodic core-consistency check for workflows, versions and triggers",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/modules/workflow/workflow-core-consistency/services/workflow-core-consistency.service.ts",
+      "line": 417,
+      "body": "The workspace list comes from `SELECT DISTINCT \"workspaceId\" FROM core.\"workflow\"`, so the check only covers workspaces that already have at least one core.workflow row. The worst drift is a workspace whose dual-write never reached core. That workspace has workflow, workflowVersion and automated-trigger rows in its own schema, and every `coreWorkflowId` is NULL (the `unlinked` case). It has no core rows, so it is never selected. `checkWorkflowSync`, `checkWorkflowVersionSync` and `checkAutomatedTriggerSync` never run for it, and no drift metric or log is emitted. A workspace with a single core workflow row is checked and reported, while a workspace with none looks perfectly consistent. The query should enumerate active workspaces, or the union of workspaces with workflows in either place, instead of relying on core.workflow."
+    }
+  ]
+}

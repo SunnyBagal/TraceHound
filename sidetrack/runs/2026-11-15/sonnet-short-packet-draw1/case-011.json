@@ -1,0 +1,20 @@
+{
+  "pr_title": "fix(payment): round currency precision",
+  "comments": [
+    {
+      "path": "packages/modules/payment/src/services/payment-module.ts",
+      "line": 205,
+      "body": "Currency precision is read by formatting 0.1111111 and splitting on \".\". That breaks in two cases. (1) Zero-decimal currencies such as JPY or KRW format as \"¥0\", so `split(\".\")[1]` is undefined and `.length` throws. The empty `catch` swallows it, `precision` stays undefined, and nothing is rounded. A 100.4 capture against a 100 authorization is still compared at full precision and rejected, which is the problem this PR fixes. (2) `Intl.NumberFormat(undefined, …)` uses the server's default locale. In a locale with a decimal comma (de, fr) the output is \"0,11 €\", there is no \".\", and rounding is silently skipped. The result depends on the environment. Pass a fixed locale such as \"en-US\", and read the digits from `resolvedOptions().maximumFractionDigits` instead of parsing the string. Using `resolvedOptions()` also handles precision 0."
+    },
+    {
+      "path": "packages/core/utils/src/totals/math.ts",
+      "line": 42,
+      "body": "`if (decimalPlaces)` is falsy for 0, so `MathBN.convert(x, 0)` never rounds to an integer. A caller that passes a zero-decimal currency's precision gets no rounding. Use `decimalPlaces !== undefined` (or `isDefined`)."
+    },
+    {
+      "path": "packages/modules/payment/src/services/payment-module.ts",
+      "line": 978,
+      "body": "The completion check changed from `eq(paymentCollection.amount, capturedAmount)` to `gte(round(captured), round(amount))`. A collection whose captured total exceeds its amount now becomes COMPLETED instead of staying AUTHORIZED. The updated integration test shows this: amount 500, captured 1000 now gives status \"completed\". This changes status semantics beyond rounding, because over-capture is treated as completion. If the intent was only to tolerate rounding, keep equality on the rounded values."
+    }
+  ]
+}

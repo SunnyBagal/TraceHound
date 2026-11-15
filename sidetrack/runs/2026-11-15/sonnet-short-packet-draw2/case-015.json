@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat(medusa): Allow regexp in CORS configuration",
+  "comments": [
+    {
+      "path": ".changeset/wild-squids-watch.md",
+      "line": 3,
+      "body": "The changeset only bumps `@medusajs/medusa`. It doesn't bump `medusa-core-utils`, where `parseCorsOrigins` and `buildRegexpIfValid` are added (packages/medusa-core-utils/src/index.ts:2,9). It also doesn't bump the plugins that now import `parseCorsOrigins`: webshipper, adyen, mailchimp, restock-notification and wishlist. Those plugins declare `medusa-core-utils` as `^1.1.31` (for example packages/medusa-plugin-wishlist/package.json:40). Without a release of core-utils, an install that resolves an already-published 1.1.x gets `parseCorsOrigins === undefined`. The call at e.g. packages/medusa-plugin-wishlist/src/api/index.js:11 then throws `TypeError: parseCorsOrigins is not a function` when the plugin loads. Add changesets for `medusa-core-utils` and each touched plugin, and raise the minimum dependency version."
+    },
+    {
+      "path": "packages/medusa-core-utils/src/build-regexp-if-valid.ts",
+      "line": 60,
+      "body": "The flag class `[gimsuy]*` accepts `g` and `y`. The resulting RegExp is stateful: `test()` advances `lastIndex`. The `cors` middleware calls `regex.test(origin)` on each request. With an origin entry like `/\\.example\\.com$/g`, the first request from an allowed origin matches and sets `lastIndex`. The next request from the same origin starts matching at that offset and fails, so no CORS header is sent. Allowed origins are then rejected on every other request. Drop `g` and `y` from the accepted flags, or strip them when building the RegExp."
+    }
+  ]
+}

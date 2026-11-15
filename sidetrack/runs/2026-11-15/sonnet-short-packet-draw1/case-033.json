@@ -1,0 +1,30 @@
+{
+  "pr_title": "feat: adds support for both client-side and server-side remote URL uploads fetching",
+  "comments": [
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 175,
+      "body": "SSRF. The allowList check only runs when `config.upload.pasteURL` is an object. The `/paste-url/:id?` endpoint is registered for every collection in `defaultCollectionEndpoints` (`collections/endpoints/index.ts:50-54`). When `pasteURL` is `undefined`, which is the documented default and means client-side only, the check is skipped. The same happens when `pasteURL` is `false`. In both cases the handler still calls `fetch(validatedUrl.href)` at line 182. Any logged-in user with create or update access can request `/api/<upload-collection>/paste-url?src=http://169.254.169.254/...` or `http://localhost:...` and the server fetches it and streams the body back. This also defeats `pasteURL: false` on the server. The handler should return an error unless `pasteURL` is an object with an allowList."
+    },
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 182,
+      "body": "The allowList is checked only against the initial URL, and `fetch` follows redirects by default. Take an allowed host such as `example.com/images/*` that has an open redirect, or a redirect to `http://127.0.0.1/...`. The server follows it to a non-allowlisted target and returns the body, bypassing the allowList. Use `redirect: 'manual'`, or re-validate each hop."
+    },
+    {
+      "path": "packages/payload/src/utilities/isURLAllowed.ts",
+      "line": 281,
+      "body": "Falsy values are treated as wildcards, so omitting a field or setting it to `''` matches anything. The docs say `protocol` 'Defaults to `https`', but an item with only `hostname` also matches `http://` URLs, because no protocol check runs. The docs also say that if `search` is specified the URL must match it exactly. `search: ''`, as in the docs example, therefore allows any query string. The docs example also sets `port: ''`, which allows any port on that host. The allowList is looser than documented, so URLs on unintended ports, protocols and queries pass the server-side check."
+    },
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 201,
+      "body": "The catch-all wraps every error, including the intentional 400 APIErrors (missing or invalid `src`, URL not allowed) and the upstream `response.status`. It rethrows them all as `APIError(..., 500)`. Clients therefore always see a 500 for user errors such as a disallowed URL. The paste-URL error path is also muddied. The UI treats any non-ok response as 'The provided URL is not allowed.'"
+    },
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 196,
+      "body": "The filename is `decodeURIComponent` of the last path segment, interpolated unescaped into the `Content-Disposition` header. A URL path ending in `%22` or `%0d%0a` puts a quote or control characters into the header value. This breaks the header, and `new Response` can throw on invalid header values, which surfaces as a 500. The filename should be sanitized or encoded."
+    }
+  ]
+}

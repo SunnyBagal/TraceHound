@@ -1,0 +1,20 @@
+{
+  "pr_title": "fix(payment): round currency precision",
+  "comments": [
+    {
+      "path": "packages/modules/payment/src/services/payment-module.ts",
+      "line": 205,
+      "body": "`roundToCurrencyPrecision` works out the currency's decimal places by formatting 0.1111111 with `Intl.NumberFormat(undefined, …)` and splitting the result on \".\". That gives wrong results in two cases. (1) The locale is the process default, and many locales use a comma as the decimal separator. With `de-DE` and EUR the output is \"0,11 €\", so `split(\".\")[1]` is undefined and `.length` throws. The `catch` then leaves `precision` undefined, and no rounding happens. (2) Zero-decimal currencies such as JPY format as \"¥0\", which has no \".\", so they also skip rounding. Where the locale puts the symbol after the number (e.g. \"0.11 $\"), the symbol and space are counted as decimals. The result is that rounding depends on the server's locale and the currency, and the status checks can still fail on provider-rounded amounts. Use `resolvedOptions().maximumFractionDigits`, or `formatToParts` and count the `fraction` part, with a fixed locale such as `\"en-US\"`."
+    },
+    {
+      "path": "packages/core/utils/src/totals/math.ts",
+      "line": 42,
+      "body": "`if (decimalPlaces)` is false for `0`, so `MathBN.convert(x, 0)` returns the value without rounding. Zero-decimal currencies need to round to 0 places, so this guard skips exactly the case where rounding matters. Check `decimalPlaces !== undefined` (or `!= null`) instead."
+    },
+    {
+      "path": "packages/modules/payment/src/services/payment-module.ts",
+      "line": 983,
+      "body": "The completion check changed from `MathBN.eq(paymentCollection.amount, capturedAmount)` to `gte`. A collection whose captured total exceeds its amount now becomes COMPLETED. The test edit at index.spec.ts:1108 shows this: amount 500 with captured 1000 moves from `authorized` to `completed`. Rounding tolerance only needed the comparison to be equal after rounding. Because of `gte`, any over-capture, including one that leaves the collection at the authorized amount, now completes it and sets `completed_at`. Use `eq` on the rounded values."
+    }
+  ]
+}

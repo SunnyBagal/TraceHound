@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix: normalize date-time field input on backend to prevent timeline crash",
+  "comments": [
+    {
+      "path": "packages/twenty-shared/src/utils/date/parseToInstantOrThrow.ts",
+      "line": 653,
+      "body": "This narrows what the write validator accepts, which the PR doesn't mention. `validateDateTimeFieldOrThrow` used to accept every `ACCEPTED_DATE_TIME_FORMATS` entry through date-fns, and the PR says lenient input is preserved. Now only strings that Temporal parses strictly (`getIsoInstant`), plus the `NON_ISO_DATE_FORMATS` list, are accepted. The ISO-like date-fns formats are no longer tried as a fallback: `yyyy-MM-dd`, `yyyy-MM-dd HH:mm[:ss[.SSS]]`, `yyyy-MM-dd'T'HH:mm:ss.SSS`, and the `X`/`xxx` offset variants. date-fns `MM`, `dd` and `HH` accept 1–2 digits, so inputs such as '2025-1-3', '2025-01-13 9:30' or '2025-01-13T10:30:00+0200' passed before. Temporal rejects them and none of the `NON_ISO_DATE_FORMATS` match, so `validateDateTimeFieldOrThrow` (called from data-arg-processor.service.ts:197) now throws INVALID_ARGS_DATA for them. The new tests only cover zero-padded inputs, so this isn't caught. Fix: fall back to the ISO date-fns formats and convert the parsed value as UTC."
+    },
+    {
+      "path": "packages/twenty-server/src/engine/api/common/common-args-processors/data-arg-processor/validator-utils/validate-date-time-field-or-throw.util.ts",
+      "line": 36,
+      "body": "The PR description says the crash is also fixed on the frontend: `DateTimeDisplay` is meant to use a new `parseStringToInstantOrNull` helper, with a story and a test. None of that is in this diff, and `parseStringToInstantOrNull` doesn't exist anywhere under packages/. This change only normalizes new writes. Date-only values already stored in events and records still reach `Temporal.Instant.from(value)` in `DateTimeDisplay`. The reporting customer's timeline will therefore still show 'Invalid Configuration' after this change."
+    }
+  ]
+}

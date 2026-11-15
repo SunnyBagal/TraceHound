@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(ui): exclude fields lacking permissions from bulk edit",
+  "comments": [
+    {
+      "path": "packages/ui/src/elements/FieldSelect/reduceFieldOptions.ts",
+      "line": 93,
+      "body": "Nested fields are checked against the wrong permissions object. In the recursive call, `permissions: fieldPermissions` passes the parent field's own `SanitizedFieldPermissions`, which has the shape `{create, read, update, fields: {...}}`. The children's per-field permissions sit under `.fields`, not at the top level of that object. `Group` (`packages/ui/src/fields/Group/index.tsx:111`) unwraps this with `permissions === true ? permissions : permissions?.fields`, but this code does not. The checks in `getFieldPermissions` therefore go wrong for any group, array or named-tab field whose permissions are an object rather than `true`. `permissions?.read === true` and `permissions?.update === true` match the parent's flags, so every child passes the read and operation checks. A nested field with `read: () => false` or `update: () => false` stays selectable, which is the bug this PR is meant to fix. Separately, `permissions[field.name]` is `undefined` for the children, so the `fieldPermissions` stored on each option is `undefined`. `EditMany/DrawerContent.tsx` and `BulkUpload/EditMany/DrawerContent.tsx` pass that value to `RenderField`, so the field renders without its permissions. The array and tab recursion at about line 109 has the same problem. Pass `fieldPermissions === true ? true : fieldPermissions?.fields` instead."
+    }
+  ]
+}

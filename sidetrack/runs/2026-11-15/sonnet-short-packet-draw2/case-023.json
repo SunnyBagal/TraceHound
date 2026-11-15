@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(workflow): hide empty option for non-nullable select fields",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/ui/form-types/components/FormSelectFieldInput.tsx",
+      "line": 105,
+      "body": "The empty option is now added only when `isNullable` is truthy (`isNullable ? [emptyOption, ...options] : options`). The PR says an unset prop keeps the old behaviour (`isNullable !== false`), but an undefined prop is now treated as non-nullable. Callers that never pass `isNullable` lose their \"No value\" choice. These include `FormCountrySelectInput.tsx:57`, `FormCallingCodeSelectInput.tsx:84`, `FormCurrencyFieldInput.tsx:60`, the cron form, and the other `FormSelectFieldInput` call sites. `FormCountrySelectInput.tsx:49` still handles `country === null` by calling `onChange('')`, but a user can no longer select that option, so they can't clear an already-chosen country, calling code or currency. `FormFieldInput` also passes `field.metadata?.isNullable`, which can be undefined. The fix is to use `isNullable !== false`."
+    }
+  ]
+}

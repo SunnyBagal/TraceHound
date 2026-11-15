@@ -1,0 +1,20 @@
+{
+  "pr_title": "perf(ui): skip rendering custom components hidden by admin.condition",
+  "comments": [
+    {
+      "path": "packages/ui/src/forms/fieldSchemasToFormState/addFieldStatePromise.ts",
+      "line": 190,
+      "body": "The early return now runs before the `fieldAffectsData && !fieldIsHiddenOrDisabled` block at line 203. That block runs `field.access.read`, and `if (!hasPermission) return` is at lines 224-226. A field with `admin.condition` evaluating to false and `access.read` returning false used to be dropped from form state. It now reaches line 191-198 and is written to `state[path]` with `value` and `initialValue` taken from `data[field.name]`. So a value the user may not read is sent to the client whenever the field is hidden by its condition. Run the read-access check before short-circuiting, or skip the value copy."
+    },
+    {
+      "path": "packages/ui/src/forms/fieldSchemasToFormState/addFieldStatePromise.ts",
+      "line": 192,
+      "body": "A hidden array or blocks field takes this branch with the raw `data[field.name]`. For an array that is a list of row objects. The normal array branch stores a numeric row count, a `rows` array and `disableFormData: true` (see fieldReducer.ts:280 and `disableFormData` in the array/blocks cases). The hidden state therefore holds an object array as `value`, with no `rows` and no `disableFormData`. Submit-side code such as reduceFieldsToValues (utilities/reduceFieldsToValuesWithValidation.ts:32) only skips entries with `disableFormData`, so the raw array goes into submitted data. When the condition later flips to true, the server rebuilds the state with `rows`, which clashes with the stale hidden state. Hidden arrays and blocks should keep the same state shape as visible ones (value as count, `disableFormData`), or leave `value` unset."
+    },
+    {
+      "path": "packages/ui/src/forms/fieldSchemasToFormState/addFieldStatePromise.ts",
+      "line": 197,
+      "body": "This replaces the old behaviour for hidden unnamed layout fields (row, collapsible, unnamed group, tabs). Previously they wrote `state[path] = { disableFormData: true, passesCondition: false }` (old lines 823-831 and 950-955). Now `state[path] = fieldState` is written with `passesCondition: false` and no `disableFormData`. The `_index-N` entry is then treated as a normal data field when form values are reduced. The old code is removed in the diff at the `passesCondition === false` blocks."
+    }
+  ]
+}

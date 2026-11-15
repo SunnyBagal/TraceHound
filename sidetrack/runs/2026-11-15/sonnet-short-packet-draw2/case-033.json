@@ -1,0 +1,25 @@
+{
+  "pr_title": "feat: adds support for both client-side and server-side remote URL uploads fetching",
+  "comments": [
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 174,
+      "body": "Server-side request forgery. The allowList check only runs when `config.upload?.pasteURL` is an object (lines 174-177). The default is `pasteURL` undefined, and `false` means 'disabled'. In both cases this handler skips the check and still runs `fetch(validatedUrl.href)` at line 182 on any `src`. The endpoint is added to `defaultCollectionEndpoints` (`collections/endpoints/index.ts:51-55`) for every collection, not only upload ones. Any logged-in user with `create` or `update` access can call `GET /api/<any-collection>/paste-url?src=http://169.254.169.254/...` or an internal host. They get the full response body back. The handler should return 403 or 404 when `pasteURL` is false or unset, or when the collection has no upload config. It should require a non-empty allowList before fetching."
+    },
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 182,
+      "body": "`fetch` follows redirects by default, and the allowList is only checked against the initial URL. An allowed host that redirects (an open redirect, or a user-controlled path on an allowed domain) to `http://127.0.0.1/...` or a metadata IP is fetched and streamed back. This bypasses the allowList. Use `redirect: 'manual'` and re-validate each hop, or `redirect: 'error'`."
+    },
+    {
+      "path": "packages/payload/src/utilities/isURLAllowed.ts",
+      "line": 291,
+      "body": "The `pathname` value is turned into a RegExp without escaping regex metacharacters. A literal entry such as `/images/photo.png` has `.` match any character. An entry containing `(`, `+` or `[` throws inside `RegExp`. The surrounding `catch` then returns false for every URL, so the rule silently never matches. Escape everything except `*` before building the pattern. Empty-string values (`pathname: ''`, `port: ''`, `search: ''`, as in the docs example) are skipped by the `!value` check at line 281. That means they match any path, port or query, not 'none' as a reader would expect."
+    },
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 202,
+      "body": "The catch-all wraps every error, including the deliberate 400 `APIError`s ('A valid URL string is required', 'URL is not allowed') and upstream status errors, into a 500 `APIError`. Clients cannot tell a validation failure from a server fault. It also double-prefixes the message with 'Error fetching file:'. Rethrow errors that are already an `APIError`. Also, `Content-Length: ''` at line 197 is sent when the upstream response has no content-length, which is invalid. Omit the header in that case."
+    }
+  ]
+}

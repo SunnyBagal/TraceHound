@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(sdk): link dev UI to workspace application detail page",
+  "comments": [
+    {
+      "path": "packages/twenty-sdk/src/cli/utilities/dev/orchestrator/steps/check-server-orchestrator-step.ts",
+      "line": 96,
+      "body": "`state.frontendUrl` is now filled in lazily on each `execute()` poll until a lookup succeeds. `this.notify()` at line 101 only runs when `!wasReady`. Suppose the first lookup returns null, for example because the `/metadata` query and the OAuth discovery both fail while the server is still starting. A later poll then finds the URL, but `wasReady` is already true, so nothing is notified. `getApplicationUrl` in `dev-ui-constants.ts:160`, which feeds `dev-ui-application-panel.tsx:70`, is not re-rendered until some unrelated state change. The application link can stay missing. Call `notify()` when `frontendUrl` changes. While the URL stays null, every poll also makes two extra HTTP requests."
+    }
+  ]
+}

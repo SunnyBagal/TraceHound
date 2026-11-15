@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat: add FormData, text, and none body types to HTTP request workflow",
+  "comments": [
+    {
+      "path": "packages/twenty-shared/src/workflow/index.ts",
+      "line": 10,
+      "body": "The new export reads `./constants/ContentTypeValuesHttpRequest`, but the file the diff adds is `packages/twenty-shared/src/workflow/constants/contentTypeValuesHttpRequest.ts`, with a lowercase `c`. On case-sensitive filesystems (Linux CI, Docker builds) this module can't be resolved. The build of `twenty-shared/workflow` fails, and so does every importer of `CONTENT_TYPE_VALUES_HTTP_REQUEST`. That includes `BodyInput.tsx` and `getBodyTypeFromHeaders.ts`. It works on macOS, where the filesystem is case-insensitive, so it can pass locally and break in CI or production."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/workflow/workflow-steps/workflow-actions/http-request-action/hooks/useHttpRequestForm.ts",
+      "line": 54,
+      "body": "This change removes the old behaviour that set `content-type: application/json` when the method changed to one with a body. The body type is now derived only from an exact lowercase `content-type` header, via `getBodyTypeFromHeaders` (`utils/getBodyTypeFromHeaders.ts:705-716`). Existing saved actions have a body but either no `content-type` header or a capitalised `Content-Type` key, which the stories had to be edited to avoid. `BodyInput` now shows these actions as 'None' with a 'No body' message. The stored body can't be seen or edited, and the body type isn't set until the user re-selects one. Selecting a type changes the header and clears `body` (the `field === 'headers'` branch below). There is no migration or case-insensitive lookup for existing actions."
+    }
+  ]
+}

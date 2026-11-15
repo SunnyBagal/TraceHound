@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(ui): ensure that schedule publishing time picker can only be in the future",
+  "comments": [
+    {
+      "path": "packages/ui/src/elements/PublishButton/ScheduleDrawer/index.tsx",
+      "line": 295,
+      "body": "`minTime` is derived from `isToday(date)`, but `date` is not the value the picker shows. `onChangeDate` (lines 264-282) transposes the picked wall-clock time into the selected timezone and stores that instant. `displayedValue` (lines 243-262) transposes it back to the user's timezone before passing it to react-datepicker. `isToday` tests the stored instant against the browser's local day. If the selected timezone differs from the user's, the day the picker displays can differ from the day `isToday` sees. Example: the user is in UTC and picks 'today 10:00' with Asia/Tokyo selected. The stored instant is 01:00 UTC today, so it may still pass. Pick 'today 02:00' and the stored instant is the previous day (yesterday 17:00 UTC), so `isToday` is false. `minTime` then becomes `startOfDay(new Date())`, and past times on the displayed day stay selectable. The reverse case wrongly disables valid times. The minimum is also compared against the browser's clock, not 'now' in the chosen timezone, so the 'future only' guarantee doesn't hold once a non-local timezone is chosen. `minDate={new Date()}` at line 343 has the same problem."
+    },
+    {
+      "path": "packages/ui/src/elements/PublishButton/ScheduleDrawer/index.tsx",
+      "line": 296,
+      "body": "`new Date()` is captured inside `useMemo([date])`. The minimum time is therefore fixed at the moment the date last changed, and it is never refreshed while the drawer stays open. If the user picks today, waits, then opens the time list, times that have since passed are still enabled. Selecting one schedules a publish in the past. On the first selection, the clicked time (for example 'today 3:05pm') is not re-validated against the current time either."
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "pr_title": "chore(): Improve workflows sdk tooling",
+  "comments": [
+    {
+      "path": "packages/core/orchestration/src/transaction/distributed-transaction.ts",
+      "line": 315,
+      "body": "The temporary storage is now a `WeakMap` keyed by a fresh object literal. `setTemporaryData` stores under `{ key }` (line 315). `getTemporaryData` (line 319) and `hasTemporaryData` (line 323) look up with a different `{ key }` literal. Object identity never matches, so `get` always returns `undefined` and `has` always returns `false`. The stored entry is also immediately garbage-collectable. Any caller that does `setTemporaryData('x', v)` and then reads it back loses the data. Keep the `Map<string, unknown>`. A `WeakMap` cannot be keyed by strings."
+    },
+    {
+      "path": "packages/core/workflows-sdk/src/utils/composer/helpers/resolve-value.ts",
+      "line": 155,
+      "body": "Async results are told apart from the `{ key, value }` wrapper by the check `\"key\" in resolved`. The wrapper is only produced at line ~129 (`unwrapped.then((r) => ({ key, value: r }))`). Plain promises from `resolveProperty` are pushed unwrapped. If an async-resolved property, such as an async transformer or a nested workflow response, returns an object that has its own `key` field (for example `{ key: 'abc', ... }`), it is misread as the wrapper. The code then runs `parentRef[resolved.key] = resolved.value`. The real property is never set, and a bogus property named after the data's `key` is written with `undefined`. Use a distinct marker, or wrap every promise result consistently."
+    }
+  ]
+}

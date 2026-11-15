@@ -1,0 +1,25 @@
+{
+  "pr_title": "fix(pricing): price list prices perf issues",
+  "comments": [
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 1813,
+      "body": "The new `hashPrice` only adds a part when the key exists on the object (`\"min_quantity\" in price`, `\"price_list_id\" in price`, and so on). The old version used `?? null` or falsy-to-null for every field, so absent and null hashed the same. The two sides now have different shapes:\n- Existing prices come from `priceService_.list` (lines 1344, 1513 and 1576). They are full DB rows, so `min_quantity`, `max_quantity`, `price_list_id` and `price_set_id` are always present, often as null. They produce parts such as `min:`, `max:` and `pl:`.\n- Incoming entries from the caller usually omit those keys, so they produce no such parts.\n\nThe hashes then never match. For example, `addPrices` (`addPrices_`, line 1355) with `{currency_code, amount}` and no `min_quantity` hashes without `min:`, `max:` or `pl:`. The existing row hashes with them.\n\n`existingPricesMap.get(entryHash)` (about line 971) misses, so `existing.id` and `existing.price_rules` are not carried over. Re-adding an identical price with no id now inserts a duplicate. Before, it updated the existing row. The same applies to `addPriceListPrices`, whose entries get `price_list_id` but often lack `min_quantity` and `max_quantity`.\n\nIn `addPrices_` the entry has no `price_list_id` key, while the DB row has `pl:`. That alone makes every lookup miss."
+    },
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 1816,
+      "body": "Rule hashing is now order-dependent. `price_rules.map(...).join(\",\")` keeps array order, and only the outer `parts` are sorted. The old code folded the rules into an object and sorted the entries by key.\n\nExisting rules come from the DB relation, which has no guaranteed order. Incoming rules follow `Object.entries(cleanRules)` order. The same rule set in a different order, such as `{a, b}` against `{b, a}`, gives a different hash. The existing price is not matched, so a duplicate is created instead of an update (see the `normalizePrices` lookup at `existingPricesMap.get(entryHash)`)."
+    },
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 952,
+      "body": "`normalizePrices` now mutates the caller's price objects. `const entry = price as ServiceTypes.UpsertPriceDTO` is followed by `entry.price_list_id = ...`, `entry.price_rules = ...`, `entry.rules_count = ...` and `delete entry.rules` on the input object. `addPrices_` (line 1330) also writes `price_set_id` onto the input prices.\n\nThe old code built a new object with a spread. Callers that reuse their input after the call now see `rules` deleted and `price_rules` and `rules_count` added. This includes `createPriceLists_` (line 1397), which passes `priceListData.prices`. It also includes any retry or reuse of the same DTO. A later pass over the same object sees `rules` missing, so `hasRulesInput` is false, and the stale `price_rules` is kept."
+    },
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 1883,
+      "body": "In `buildPreNormalizationPriceConstraintsFromData`, a price without an id and with none of the checked fields produces an empty `{}` constraint. This happens when the input has only `amount` or only `rules`. With a single such price and no `priceListIds`, which is the `addPrices_` case, the query becomes `{}` and `priceService_.list` loads every price in the table. That removes the intended optimization and can pull a large table into memory.\n\nWhen `priceListIds` is set, the same constraint still returns all prices in those lists."
+    }
+  ]
+}

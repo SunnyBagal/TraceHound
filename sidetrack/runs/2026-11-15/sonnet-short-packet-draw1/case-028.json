@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat(workflow): periodic core-consistency check for workflows, versions and triggers",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/modules/workflow/workflow-core-consistency/services/workflow-core-consistency.service.ts",
+      "line": 173,
+      "body": "The trigger query reads every row of `workflowAutomatedTrigger` and never filters `\"deletedAt\" IS NULL`. The workflow and version queries do filter it. Deleting a workflow soft-deletes its triggers and versions (`workflow-common.workspace-service.ts:301-311`). The cache is built only from ACTIVE versions in core (`workspace-workflow-automated-trigger-map-cache.service.ts:29-32`), so a soft-deleted trigger never appears in it. Every soft-deleted workflow that had a trigger therefore counts as `inTableNotCache` on every run. That adds permanent false positives to `workflow-core-consistency/automated-trigger/drift`. Add `WHERE \"deletedAt\" IS NULL`."
+    },
+    {
+      "path": "packages/twenty-server/src/modules/workflow/workflow-core-consistency/services/workflow-core-consistency.service.ts",
+      "line": 39,
+      "body": "The sweep picks workspaces with `SELECT DISTINCT \"workspaceId\" FROM core.\"workflow\"`. A workspace whose dual-write never reached core has workspace workflows but no `core.workflow` rows, so it is never selected. Its workflows would be `unlinked` or `missingCore`, which are the main drift cases this job exists to find. The check only covers workspaces that are already partly synced. The workspace list should come from the workspace side, for example active workspaces in `core.workspace`."
+    }
+  ]
+}

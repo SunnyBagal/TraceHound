@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(pricing): price list prices perf issues",
+  "comments": [
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 1826,
+      "body": "The new `hashPrice` only adds a part when the key exists on the object (`\"min_quantity\" in price`, and the same for `max_quantity`, `price_list_id` and `price_set_id`). The old version normalized absent and null values to null. Existing prices now come from `priceService_.list(...)` (lines ~1514 and ~1566 in the diff), so they have every column, with `min_quantity: null`, `max_quantity: null` and `price_list_id: null` where unset. Input entries usually omit those keys. The existing price hashes as `...|min:|max:|...` and the input entry has no `min:` or `max:` part, so `existingPricesMap.get(entryHash)` in `normalizePrices` (around line 962) misses. The `price_list_id` and `price_set_id` keys have the same asymmetry. An `addPrices` or `addPriceListPrices` call that re-sends an existing price without those fields no longer matches it. The code then inserts a duplicate, or fails on a unique constraint, instead of reusing the existing id and rules."
+    },
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 1834,
+      "body": "The old hash sorted the rules by attribute. The new hash joins `price_rules` in array order (`rules:a=1,b=2`), and `parts.sort()` only orders the top-level parts, not the rules inside the `rules:` part. The order of input rules comes from `Object.entries(cleanRules)`. The order of existing rules comes from DB load order. The same rule set in a different order, such as `{region_id, customer_group}` against stored rows in another order, produces different hashes. The existing price is then not matched, which gives duplicate prices instead of an update."
+    }
+  ]
+}

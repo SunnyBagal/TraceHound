@@ -1,0 +1,15 @@
+{
+  "pr_title": "Fix multi select filtering",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-filter/utils/isMatchingMultiSelectFilter.ts",
+      "line": 610,
+      "body": "`containsAny` is evaluated with `.every(...)`, so it means \"contains all\". The server runs `containsAny` as `&&` (overlap), which means any match (compute-where-condition-parts.ts, `case 'containsAny'`). `isRecordMatchingFilter` calls this for optimistic cache updates (triggerCreateRecordsOptimisticEffect.ts:90, triggerUpdateRecordOptimisticEffect.ts:68). Take a filter \"Contains A, B\" and a record whose value is [A]. The server returns the record, but the client matcher says it doesn't match. A newly created or updated record is then wrongly left out of the cached list. Use `.some(...)`."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-filter/utils/isMatchingArrayFilter.ts",
+      "line": 22,
+      "body": "`computeViewRecordGqlOperationFilter` sends `containsIlike` as `%${filter.value}%`, including the SQL wildcards. This matcher lowercases that string and then runs a literal `includes(searchTerm)`, so it looks for the characters `%foo%` inside each item. For a filter value `foo` and a record value `['foo']`, the match is false. The server's ILIKE does match, so optimistic-effect filtering disagrees with the server for ARRAY fields. Strip the `%` characters, or turn the pattern into a regex, before comparing."
+    }
+  ]
+}

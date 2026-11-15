@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(ui): exclude fields lacking permissions from bulk edit",
+  "comments": [
+    {
+      "path": "packages/ui/src/elements/FieldSelect/reduceFieldOptions.ts",
+      "line": 93,
+      "body": "When recursing into a non-array, non-blocks field that has subfields, such as a group, this passes the parent's `fieldPermissions` as `permissions`. For a group with field-level access control, that value is `{create, read, update, fields: {...}}`, because `SanitizedFieldPermissions` nests children under `.fields`. The child lookup in `getFieldPermissions` (`packages/payload/src/utilities/getFieldPermissions.ts:53-75`) does not descend into `.fields`. It reads `permissions.update === true` and `permissions.read === true` on the group object, which are both true. So every child of such a group gets operation and read permission regardless of its own `access.read` or `access.update`. A `noRead` or `noUpdate` text field inside a group therefore still shows up in the bulk-edit selector, which is the bug this PR sets out to fix. The child's own `fieldPermissions` also comes back as `permissions?.[field.name]`, which is `undefined`. Pass `fieldPermissions === true ? true : fieldPermissions?.fields` when recursing. The same applies to the tabs recursion at line 111, where a named tab should use its own permission entry."
+    },
+    {
+      "path": "packages/ui/src/elements/BulkUpload/EditMany/DrawerContent.tsx",
+      "line": 163,
+      "body": "`collectionPermissions.fields` drops the optional chaining that the old code used (`collectionPermissions?.fields` in the removed `RenderFields` call). `collectionPermissions` is `permissions?.collections?.[collection.slug]` (line 117) and can be `undefined`, for example while permissions are still loading or when the collection has no permission entry. In that case rendering the drawer now throws a TypeError instead of rendering. Use `collectionPermissions?.fields`."
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat: Add github authentication provider",
+  "comments": [
+    {
+      "path": "packages/modules/providers/auth-github/src/services/github.ts",
+      "line": 109,
+      "body": "The token exchange assumes `expires_in` and `refresh_token_expires_in` are always present. GitHub only returns them when token expiration is enabled for the app. OAuth Apps, and GitHub Apps with expiring user tokens turned off, return neither field. In that case `Date.now() + undefined * 1000` is `NaN`, and `new Date(NaN).toISOString()` throws `RangeError: Invalid time value`. The surrounding try/catch turns that into `{ success: false, error: \"Invalid time value\" }`, so the login fails even though GitHub issued a valid access token. The same problem applies to `refresh_token_expires_at` on line 112. Guard both fields and leave the expiry or refresh values undefined when GitHub omits them."
+    },
+    {
+      "path": "packages/modules/providers/auth-github/src/services/github.ts",
+      "line": 122,
+      "body": "`validateCallback` destructures only `{ authIdentity, success }` from `upsert_` and returns those. When `upsert_` returns `{ success: false, error }`, that error is discarded. This happens for \"No access token found\" and for any non-NOT_FOUND error from `authIdentityService.update`. GitHub returns HTTP 200 with a body like `{error: \"bad_verification_code\"}` for an invalid or expired code. `callback/route.ts:79-82` then falls back to the generic \"Authentication failed\" message. Pass `error` through in the returned object."
+    }
+  ]
+}

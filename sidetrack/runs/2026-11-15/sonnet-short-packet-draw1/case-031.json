@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat: Add support for authentication to the sdk, and plug it in the admin",
+  "comments": [
+    {
+      "path": "packages/admin-next/dashboard/src/lib/client/client.ts",
+      "line": 60,
+      "body": "The SDK base URL is `__BACKEND_URL__ || \"http://localhost:9000\"`. The admin build defines `__BACKEND_URL__` as `\"\"` for same-origin deployments (`packages/admin-next/admin-sdk/src/lib/config.ts:37`). The other clients use `??` and keep the empty string (`lib/client/common.ts:3`, `lib/medusa.ts:4`). `||` turns `\"\"` into `http://localhost:9000`. Login via `sdk.auth.login` then posts to localhost instead of the real backend, so every production login fails. The SDK also builds URLs with `new URL(input, this.config.baseUrl)` (`js-sdk/src/client.ts` around line 140), and that throws on an empty base. The SDK therefore needs a same-origin fallback, such as `window.location.origin`, rather than a bare empty string."
+    },
+    {
+      "path": "packages/core/js-sdk/tsconfig.json",
+      "line": 8,
+      "body": "`module` changed from `commonjs` to `ES2020`, but `package.json` still has `main: dist/index.js` and no `\"type\": \"module\"`. The built `dist/*.js` files are now ESM `import`/`export` syntax in `.js` files. Any CJS consumer, such as Node `require` or a jest run against `dist`, fails with a syntax error on `import`. This should stay `commonjs`, or the package needs `type: module` or `exports` entries."
+    }
+  ]
+}

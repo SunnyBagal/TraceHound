@@ -1,0 +1,20 @@
+{
+  "pr_title": "fix(medusa,file-local,file-s3,core-flows): fix csv parsing special characters",
+  "comments": [
+    {
+      "path": "packages/modules/providers/file-local/src/services/local-file.ts",
+      "line": 66,
+      "body": "Base64 or UTF-8 is guessed from the content, and the guess can be wrong. The check `decoded.toString(\"base64\") === file.content` is true for any plain-text string that happens to be valid base64. The CSV export path passes raw text (`content: csvContent` at packages/core/core-flows/src/product/steps/generate-product-csv.ts:126). The same applies to any workflow caller that passes text such as \"test\" (the documented examples in packages/core/core-flows/src/file/steps/upload-files.ts:51 and packages/modules/file/integration-tests/__tests__/module.spec.ts). Those strings are decoded as base64 and written as garbage bytes. In the other direction, legacy callers that still send a binary string with high bytes fail the check and are re-encoded as UTF-8. That inflates and corrupts the file. The `catch` is dead code, because `Buffer.from` does not throw on bad input. The provider contract should be explicit (always base64), not inferred."
+    },
+    {
+      "path": "packages/modules/providers/file-s3/src/services/s3-file.ts",
+      "line": 125,
+      "body": "This has the same ambiguous base64-or-UTF-8 guess as in local-file.ts. Plain-text content that is valid base64 is silently decoded into the wrong bytes before `PutObjectCommand`. Binary-string content from existing callers, such as the file module or workflow callers and third-party code following the documented `content: binary string` contract in packages/core/types/src/file/service.ts:33, is re-encoded as UTF-8 and corrupted. The `catch` can never run."
+    },
+    {
+      "path": "packages/medusa/src/api/admin/uploads/route.ts",
+      "line": 27,
+      "body": "The upload route now sends base64 through `uploadFilesWorkflow` to whichever file provider is configured. Only the local and S3 providers were changed to decode it. Any other or custom `AbstractFileProviderService` still treats `content` as a binary string (the documented contract in packages/core/types/src/file/service.ts:33 and the JS SDK docs at packages/core/js-sdk/src/admin/upload.ts:38). Those providers will now store base64 text instead of the file bytes, which breaks admin uploads of images."
+    }
+  ]
+}

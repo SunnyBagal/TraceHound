@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(address): populate street line from place details",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/ui/meta-types/input/components/AddressFieldInput.tsx",
+      "line": 29,
+      "body": "`castAsNumberOrNull` throws `Error('Cannot cast to number or null')` when it gets `undefined`. See `packages/twenty-front/src/utils/cast-as-number-or-null.ts:10-13` and `:55-56`. The old code was `newAddress?.addressLat ?? null`, which turned `undefined` into `null`. The new code passes `newAddress?.addressLat` straight in. `convertToAddress` takes `FieldAddressDraftValue | undefined`, so `newAddress` can be undefined, and `addressLat` and `addressLng` can be missing on a draft. In either case, pressing Enter, Tab, Shift+Tab, Escape or clicking outside the address field now throws instead of saving. The same applies to line 30 for `addressLng`. Keep the `?? null` fallback: `castAsNumberOrNull(newAddress?.addressLat ?? null)`."
+    }
+  ]
+}

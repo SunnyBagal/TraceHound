@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat: Add support for stats query",
+  "comments": [
+    {
+      "path": "packages/modules/search/src/providers/search-medusa/utils/facets.ts",
+      "line": 137,
+      "body": "The stats `count` is computed with `filters: base`. The min and max sub-queries use `present`, which adds `[field, \"NotEq\", null]` (lines 101 and 111). So `count` includes documents that have no value for the field, while min, max and sum cover only documents that do. For example, if 10 documents match and 4 have a null `price`, the result is `count: 10` but min, max and sum come from 6 documents. Anyone computing an average as `sum / count` gets a wrong figure. For date fields, where `count` is the only aggregate, `count` also overstates how many dates went into min and max. Using `present` for the aggregation query would make all four values describe the same set of documents."
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(dashboard): Add FE validation for conditional prices",
+  "comments": [
+    {
+      "path": "packages/admin/dashboard/src/routes/locations/common/schema.ts",
+      "line": 371,
+      "body": "The overlap check compares condition values across rules without looking at the operator. `condition1Value === condition2Value` is true whenever any bound of rule i equals any bound of rule j, whatever the operators are. Example: rule A is `lt 100` (or `lte 100`) and rule B is `gte 100`. A user enters adjacent, non-overlapping tiers such as 0–100 and 100+. That input is flagged as `overlappingConditions` on rule B's `gte`, which blocks saving a valid configuration. The same happens for `lte: 100` in one rule and `gte: 100` in another. The check should compare ranges or the same operator, not raw values across all operator pairs. It also never catches real overlaps such as 0–100 and 50–150, because it only tests for equal bounds."
+    },
+    {
+      "path": "packages/admin/dashboard/src/routes/locations/common/schema.ts",
+      "line": 333,
+      "body": "Amount equality is flagged on its own. It is not combined with the conditions, so two rules with the same price and different, non-overlapping ranges are rejected as `duplicateAmount`. Example: 0–50 costs 5 and 100–200 costs 5. A customer-facing price ladder can legitimately repeat a price, and the user cannot save it. Because `amount` is cast with `castNumber`, `\"5\"` and `5` also collide, as intended, but the rule is still stricter than the data model requires."
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat(core, event-bus): Compensate emit event step utility",
+  "comments": [
+    {
+      "path": "packages/modules/event-bus-redis/src/services/event-bus-redis.ts",
+      "line": 735,
+      "body": "The partial clear is a read-modify-write that isn't atomic. It does `lrange` at line 735, filters in JS, then `del` and `rpush` in a plain `pipeline()` at lines 744-753. A plain pipeline is not MULTI/EXEC. If another step or workflow pushes onto `staging:<groupId>` after the `lrange` and before the `del`, that event is deleted and never re-added, so it is silently lost. The same group can receive events from parallel steps, so this is reachable during compensation. Use `multi()`, a Lua script, or `lrem` per matching entry. Also, when every event matches `eventNames`, `eventsToKeep` is empty. `rpush(key)` is then sent with no values, which Redis rejects with a wrong-number-of-arguments error. `pipeline.exec()` doesn't throw on per-command errors and the code never checks the results, so this fails silently. Only add the `rpush` when `eventsToKeep.length > 0`."
+    }
+  ]
+}

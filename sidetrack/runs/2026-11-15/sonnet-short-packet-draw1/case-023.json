@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(workflow): hide empty option for non-nullable select fields",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/ui/form-types/components/FormSelectFieldInput.tsx",
+      "line": 105,
+      "body": "The empty option is now added only when `isNullable` is truthy (`isNullable ? [emptyOption, ...options] : options`). The PR description says the prop \"defaults to the previous behaviour\", but an omitted `isNullable` is `undefined`, so the empty option is dropped. Before this change, `emptyOption` was always passed to `<Select>`. Callers that don't pass `isNullable` are `FormCallingCodeSelectInput.tsx:84`, `FormCurrencyFieldInput.tsx:60` and the cron, email, code-field and form-field-settings callers. They no longer get a 'No value' choice, so users can't clear those selects. When the draft value is empty, `selectedOption` is also undefined, so `Select` shows `options[0]` as if it were selected. The intended semantics, `isNullable !== false`, are in the PR text but not in the code."
+    }
+  ]
+}

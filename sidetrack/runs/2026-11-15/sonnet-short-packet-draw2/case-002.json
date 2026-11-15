@@ -1,0 +1,20 @@
+{
+  "pr_title": "feat: Add support for product imports",
+  "comments": [
+    {
+      "path": "packages/admin-next/dashboard/src/routes/products/product-import/helpers/import-template.ts",
+      "line": 3,
+      "body": "The downloadable template is delimited with semicolons (`Product Id;Product Handle;...`). The backend parses the upload with `convertCsvToJson` (packages/core/utils/src/csv/csvtojson.ts:9), which calls `csv2json` with no `delimiter` option, so it expects commas. A user who downloads this template, fills it in and uploads it gets one giant header named `Product Id;Product Handle;...`. `product[\"Product Handle\"]` is then undefined, and `parseProductCsvStep` (packages/core/core-flows/src/product/steps/parse-product-csv.ts:12) throws \"Product handle is required when importing products\". The template fails the import it is meant to demonstrate. The header and all rows need to be comma-separated."
+    },
+    {
+      "path": "packages/admin-next/dashboard/src/components/layout/notifications/notifications.tsx",
+      "line": 220,
+      "body": "The old `NotificationFile` showed `file?.filename ?? file.url`. The new code passes `filename={data.file.filename ?? \"\"}` to `FilePreview`, which renders only `{filename}`. When a notification has a `file.url` but no `filename`, the row now shows empty text. The download anchor gets `download=\"\"` instead of the `Date.now()` fallback, because `\"\" ?? ...` never falls through. This is a regression from the previous fallback to the URL."
+    },
+    {
+      "path": "packages/admin-next/dashboard/src/routes/products/product-import/components/upload-import.tsx",
+      "line": 420,
+      "body": "The CSV import uploader reuses the image-upload strings `products.media.uploadImagesLabel` and `products.media.uploadImagesHint`. The dropzone will say \"upload images\" while asking for a CSV file. The change also adds `products.import.*` translation keys, but none of them is used here."
+    }
+  ]
+}

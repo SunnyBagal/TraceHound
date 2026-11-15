@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(db-d1-sqlite): avoid bound parameter limit when querying relationships and inserting rows",
+  "comments": [
+    {
+      "path": "packages/drizzle/src/queries/parseParams.ts",
+      "line": 426,
+      "body": "The raw SQL uses `resolvedColumn.name`, which is the bare, unquoted column name (`id IN (...)`). The normal path goes through `adapter.operators[...]` with the Drizzle column object, which renders a table-qualified, quoted reference. When the query also joins other tables, the bare `id` is ambiguous. Examples are a sort or where on a relationship field, or a join to a table with its own `id` or to a locales table. SQLite then fails with `ambiguous column name: id`. This only affects D1 with `limitedBoundParameters: true`. Qualify the column with its table, or build the SQL from the column object instead of `sql.raw`."
+    },
+    {
+      "path": "packages/drizzle/src/sqlite/insert.ts",
+      "line": 14,
+      "body": "`colsPerRow` is computed from `Object.keys(values[0])` only. Payload's row objects can have different key sets. For example, rows for different block types or locales, or rows where some optional fields are omitted. If later rows have more keys than the first, a batch of `floor(100 / colsPerRow)` rows binds more than 100 parameters. D1 then fails, which is the error this PR is meant to prevent. Use the maximum key count across all rows, or the table's column count. An empty `values` array also throws a TypeError here, because `Object.keys(undefined)` fails. Previously the call went straight to drizzle."
+    }
+  ]
+}

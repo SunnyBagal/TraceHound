@@ -1,0 +1,20 @@
+{
+  "pr_title": "Feature : Adding percentage option to Input Number",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/engine/metadata-modules/field-metadata/field-metadata-validation.service.ts",
+      "line": 42,
+      "body": "`validateSettingsOrThrow` is now `async`, but its only caller doesn't await it. That call is at `field-metadata.service.ts:764`: `this.fieldMetadataValidationService.validateSettingsOrThrow({...})`. The `FieldMetadataException` is now thrown inside a promise nobody handles. So a NUMBER field created with `settings: {decimals: -1}`, `{decimals: 1.5}` or `{type: 'foo'}` passes validation and is saved. The rejection surfaces as an unhandled promise rejection instead of an INVALID_FIELD_INPUT error. Before this change the same input threw synchronously and was rejected. The caller needs `await`."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/meta-types/display/components/NumberFieldDisplay.tsx",
+      "line": 12,
+      "body": "The old `NumberDisplay` did `value && formatNumber(...)`. A numeric `0` rendered as \"0\". The new code uses `fieldValue ? formatNumber(...) : null`, and both branches, including the percentage one at line 10, are falsy-checked. A stored value of 0 (or \"0\") now renders as blank instead of \"0\" or \"0%\". This breaks every Number field that holds zero."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/utils/computeDraftValueFromFieldValue.ts",
+      "line": 53,
+      "body": "For percentage fields the draft is built with `(fieldValue * 100).toString()`, which exposes floating-point error. For example, a stored 0.07 gives \"7.000000000000001\" and 0.29 gives \"28.999999999999996\". The edit input shows these ugly values. Saving without changes persists `7.000000000000001/100`, which drifts the stored value. The result should be rounded before it is stringified."
+    }
+  ]
+}

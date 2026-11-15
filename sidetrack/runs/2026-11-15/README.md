@@ -31,3 +31,13 @@ at one of the two directories.
 - `sonnet-skill-typed-facts-draw2/` = `sonnet-skill-draw2/` with `case-025.json` replaced the same way.
 
 The other 39 files in each folder are byte-identical copies. Compare the pairs on case-025 only.
+
+## A/B 1: short affected-set packet (plan: `sidetrack/ab1-plan.md`, committed before these runs)
+
+- Arm A (full packet): `sonnet-skill/` and `sonnet-skill-draw2/`.
+- Arm B (short packet): `sonnet-short-packet-draw1/` and `sonnet-short-packet-draw2/`, runner and lookup at `783da5c`,
+  `--packet capped`. Same skill text, tools, cases and diffs as arm A. 40 of 40 reviews in each; in draw 2 one case
+  (case-040) failed at the account's usage limit with no review and was run once after it reset.
+- Sonnet only (ruling of 15 Nov); the plan's Haiku half was not run.
+- Not judged here. Model-free numbers are in the session report; judged catches and the paired counts come from the
+  scorer of record.

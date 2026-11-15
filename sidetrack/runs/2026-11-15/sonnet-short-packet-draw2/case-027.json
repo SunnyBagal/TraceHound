@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat: add FormData, text, and none body types to HTTP request workflow",
+  "comments": [
+    {
+      "path": "packages/twenty-shared/src/workflow/index.ts",
+      "line": 10,
+      "body": "The new export imports './constants/ContentTypeValuesHttpRequest', but the file this diff adds is `packages/twenty-shared/src/workflow/constants/contentTypeValuesHttpRequest.ts`, with a lowercase 'c'. On a case-sensitive filesystem (Linux CI, Docker builds) the module can't be resolved. That breaks the twenty-shared build, and every consumer of `twenty-shared/workflow` with it. `BodyInput.tsx` imports `CONTENT_TYPE_VALUES_HTTP_REQUEST` from there, and so does `getBodyTypeFromHeaders.ts`. It will probably work on macOS and fail elsewhere. The import path and the file name need to match."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/workflow/workflow-steps/workflow-actions/http-request-action/hooks/useHttpRequestForm.ts",
+      "line": 54,
+      "body": "The old code added `'content-type': 'application/json'` whenever the method was changed to one with a body. This change removes that, and the body type is now read only from `headers['content-type']` through `getBodyTypeFromHeaders` (exact, case-sensitive match). Existing saved actions are affected in two ways. Some have a body but no content-type header, or a `Content-Type` header with different casing (the stories were edited from `Content-Type` to `content-type` to hide this). `BodyInput` now shows these as \"None\" with a \"No body\" message. The stored body is still sent at run time, because `http-tool.ts` and `useTestHttpRequest.ts` only check that a body exists. The editor hides a body that still gets sent. Selecting \"None\" in the dropdown also does nothing for these actions: `handleModeChange` in `BodyInput.tsx` only acts if `content-type` is present. There is no migration or fallback for existing data."
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "pr_title": "feat: implement resend rest email adapter",
+  "comments": [
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 488,
+      "body": "Attachments are sent as Node `Buffer` objects (`Buffer.from(attachment.content)` here, and `attachment.content` at line 495). The request body is built with `JSON.stringify(sendEmailOptions)` at line 393. `JSON.stringify` turns a Buffer into `{\"type\":\"Buffer\",\"data\":[...]}`. The Resend REST API expects `content` to be a base64 string, so every email with an attachment will be rejected or will carry a corrupted attachment. Encode the content as base64 (`.toString('base64')`) before serializing."
+    },
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 439,
+      "body": "`replyTo` is never mapped. `mapPayloadEmailToResendEmail` doesn't set `reply_to`, although `ResendSendEmailOptions` declares it. Any `replyTo` passed to `sendEmail` is silently dropped, so replies go to the from address. `headers` from the message options is dropped as well."
+    },
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 432,
+      "body": "When `bcc` or `cc` is not provided, `mapAddresses` returns `''` (line 460). The payload then contains `\"bcc\":\"\"` and `\"cc\":\"\"`, and `html` and `text` can also be `''`. The request now includes empty recipient fields instead of omitting them. Resend validates these fields and can reject them as invalid email addresses, which would make ordinary sends fail. Return `undefined` for missing cc/bcc so the keys are left out of the JSON."
+    }
+  ]
+}

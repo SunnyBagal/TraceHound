@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat: Add github authentication provider",
+  "comments": [
+    {
+      "path": "packages/core/js-sdk/src/auth/index.ts",
+      "line": 68,
+      "body": "`login` was widened to `actor: string, method: string`, but `callback` still types `method` as the literal `\"emailpass\"`. The PR description says OAuth users must call `sdk.auth.callback()` from the frontend callback page. A call like `sdk.auth.callback(\"customer\", \"github\", query)` or `callback(\"user\", \"google\", query)` therefore fails to compile. Because `successRedirectUrl` was also removed, the SDK is now the only supported way to finish a Google or GitHub login. `callback` needs the same widening as `login`: `actor: string, method: string`."
+    },
+    {
+      "path": "packages/modules/providers/auth-github/src/services/github.ts",
+      "line": 755,
+      "body": "`response.expires_in` and `response.refresh_token_expires_in` are used unconditionally. GitHub only returns them when token expiration is enabled (GitHub Apps with expiring user tokens). For OAuth Apps, or GitHub Apps with expiration turned off, both are undefined. In that case `Date.now() + undefined * 1000` is `NaN`, and `new Date(NaN).toISOString()` throws `RangeError: Invalid time value`. The surrounding try/catch turns this into `{ success: false, error: \"Invalid time value\" }`, so every login fails even though the code exchange succeeded. The expiry fields should be computed only when the values are present."
+    }
+  ]
+}

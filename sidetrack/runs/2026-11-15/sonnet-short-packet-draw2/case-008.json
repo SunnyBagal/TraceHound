@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat(utils): Introduce promiseAll util",
+  "comments": [
+    {
+      "path": "packages/medusa/src/subscribers/order.js",
+      "line": 37,
+      "body": "`Promise.all` was replaced with `promiseAll`, but this file has no import of it. The diff adds no import here, and a grep of the file finds only the call at line 37. In the same diff, `packages/medusa/src/subscribers/order.js` is a plain JS module, so `tsc` does not check it. When this subscriber handles an order event, `await promiseAll(order.discounts.map(...))` throws `ReferenceError: promiseAll is not defined`. The discount `usage_count` update never runs, so usage counts stop incrementing after an order is placed. Add `import { promiseAll } from \"@medusajs/utils\"`, or use `require` if the file is CommonJS."
+    }
+  ]
+}

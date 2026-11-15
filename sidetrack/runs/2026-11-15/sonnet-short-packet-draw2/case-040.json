@@ -1,0 +1,15 @@
+{
+  "pr_title": "chore(): Improve workflows sdk tooling",
+  "comments": [
+    {
+      "path": "packages/core/orchestration/src/transaction/distributed-transaction.ts",
+      "line": 315,
+      "body": "`#temporaryStorage` is now a `WeakMap` keyed by a fresh object literal: `set({ key }, value)` here, `get({ key })` at line 319 and `has({ key })` at line 323. A WeakMap compares keys by identity, so each `{ key }` is a new object that never matches an earlier one. Nothing is ever retrievable. After `setTemporaryData('x', 1)`, `getTemporaryData('x')` returns `undefined` and `hasTemporaryData('x')` returns `false`. Any caller that stores temporary data on a transaction and reads it back silently loses it. Keep the `Map<string, unknown>`. A WeakMap can't be keyed by strings."
+    },
+    {
+      "path": "packages/core/workflows-sdk/src/helper/workflow-export.ts",
+      "line": 37,
+      "body": "`cachedLoadedModules` is a module-level cache that is filled on the first call and never invalidated. `getCachedLoadedModules()` (used at line 106) stores the result of `MedusaModule.getLoadedModules()`, even when that is an empty array. If a workflow runs without a container before all modules have loaded, or after modules are reloaded, as in tests or multiple app instances in one process, every later run gets the stale or empty module list as its `executionContainer`. Before this change the list was computed on each run."
+    }
+  ]
+}

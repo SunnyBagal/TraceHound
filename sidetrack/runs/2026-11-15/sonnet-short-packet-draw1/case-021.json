@@ -1,0 +1,20 @@
+{
+  "pr_title": "feat(core, event-bus): Compensate emit event step utility",
+  "comments": [
+    {
+      "path": "packages/modules/event-bus-redis/src/services/event-bus-redis.ts",
+      "line": 251,
+      "body": "The partial-clear path rewrites the list with `del` followed by `rpush`. That drops the TTL on the `staging:<groupId>` key. The TTL is set by the expire call at event-bus-redis.ts:190 (`expire(\\`staging:${eventGroupId}\\`, ttl)`). After a compensation that keeps some events, the recreated key has no expiry. If the group is never released or cleared, its staged events stay in Redis forever. The previous `unlink` path removed the key entirely, so this leak is new. Re-apply the TTL after the rpush, or remove only the matching entries with `LREM`."
+    },
+    {
+      "path": "packages/modules/event-bus-redis/src/services/event-bus-redis.ts",
+      "line": 239,
+      "body": "The partial clear reads the list (`lrange`), filters it in memory, then replaces it with `del` and `rpush` in a plain pipeline, which is neither atomic nor a MULTI transaction. Another step in the same group can call `groupEvents` (rpush, line 197) between the `lrange` and the `del`, for example parallel steps or a concurrent emit. That event is then deleted and never released. When `eventsToKeep` is empty, `rpush` is also sent with no values. Redis rejects that command. The pipeline reports the error in the exec results instead of throwing, so it is silently ignored. Use `LREM` per matching serialized entry, or a MULTI/Lua script."
+    },
+    {
+      "path": "packages/modules/event-bus-local/src/services/event-bus-local.ts",
+      "line": 134,
+      "body": "With `eventNames`, the method always calls `groupedEventsMap_.set(eventGroupId, eventsToKeep)`. Even when the group is missing or ends up empty, it stores an empty array instead of deleting the key. Every compensated `emitEventStep` therefore leaves an entry in `groupedEventsMap_` that nothing removes, and the map grows for the life of the process. Delete the key when `eventsToKeep` is empty."
+    }
+  ]
+}

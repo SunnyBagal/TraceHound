@@ -1,0 +1,20 @@
+{
+  "pr_title": "Feature : Adding percentage option to Input Number",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/engine/metadata-modules/field-metadata/field-metadata-validation.service.ts",
+      "line": 42,
+      "body": "`validateSettingsOrThrow` is now `async` (and `validateNumberSettings` is awaited inside it). Its only caller doesn't await it: `field-metadata.service.ts:764` calls `this.fieldMetadataValidationService.validateSettingsOrThrow({...})` with no `await` or `return`. The validation used to throw synchronously. Now the rejection becomes an unhandled promise rejection, and the create path carries on without validating. Creating a NUMBER field with `settings: { decimals: -1 }`, `{ decimals: 1.5 }` or `{ type: 'foo' }` is therefore saved, and the server may log an unhandled rejection. Add `await` at `field-metadata.service.ts:764`."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/meta-types/display/components/NumberFieldDisplay.tsx",
+      "line": 8,
+      "body": "Zero values now render blank. The old `NumberDisplay` did `value && formatNumber(...)`, so `0` rendered as \"0\". The new code uses `type === 'percentage' && fieldValue ? ... : fieldValue ? formatNumber(...) : null`, and `0` is falsy. A number field holding 0 therefore shows nothing, and a percentage field holding 0 shows nothing instead of \"0%\". Use an `isDefined`/null check instead of truthiness."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/utils/computeDraftValueFromFieldValue.ts",
+      "line": 51,
+      "body": "`(fieldValue * 100).toString()` leaks floating-point error into the edit input. For example, a stored 0.29 gives \"28.999999999999996\" and 0.07 gives \"7.000000000000001\". The user then sees and re-saves these values, and `persistNumberField` divides them by 100 again. Round the result, for example with `Number((fieldValue * 100).toFixed(10))`, or use decimal-safe math. The same issue affects `formatNumber(Number(fieldValue) * 100, ...)` in `NumberFieldDisplay.tsx:11`, but display rounding hides it there."
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(medusa,file-local,file-s3,core-flows): fix csv parsing special characters",
+  "comments": [
+    {
+      "path": "packages/modules/providers/file-s3/src/services/s3-file.ts",
+      "line": 123,
+      "body": "The upload route now sends base64, but the provider guesses the encoding by checking whether `content` round-trips through base64 (lines 124-129). That guess misclassifies some inputs. Any plain-text or binary-string content made only of base64 characters, with length divisible by 4 and valid padding, round-trips. For example, `content: \"test\"` or a short single-token string passed to `createFiles` or `uploadFilesWorkflow` is decoded as base64 and stored as garbage bytes. Callers that still send a binary string (as the docs say: `packages/core/types/src/file/service.ts:33`, `packages/core/js-sdk/src/admin/upload.ts:38`) now go down the `utf8` branch. Any char >0x7F is re-encoded as 2 bytes, which corrupts binary data such as images. The `try/catch` never runs, because `Buffer.from` doesn't throw here. This needs an explicit encoding contract, not a heuristic. The same problem is in file-local."
+    },
+    {
+      "path": "packages/modules/providers/file-local/src/services/local-file.ts",
+      "line": 65,
+      "body": "Same encoding heuristic as in the S3 provider. `Buffer.from(file.content, \"base64\")` is accepted whenever it round-trips. Short alphanumeric text content, such as `\"test\"`, is silently written as decoded garbage bytes. Binary-string content from other callers (`generate-product-csv.ts:126` passes plain text; the docs say \"binary string\") falls into the `utf8` branch and is corrupted for bytes >0x7F."
+    }
+  ]
+}
