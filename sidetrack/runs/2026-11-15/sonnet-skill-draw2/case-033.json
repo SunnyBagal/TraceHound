@@ -1,0 +1,30 @@
+{
+  "pr_title": "feat: adds support for both client-side and server-side remote URL uploads fetching",
+  "comments": [
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 174,
+      "body": "The allowList is only checked when `config.upload?.pasteURL` is an object. The `/paste-url/:id?` endpoint is registered for every collection in `defaultCollectionEndpoints` (`index.ts:51-54`). It also runs when `pasteURL` is `undefined` or `false`, and when the collection has no `upload` config at all. In those cases the check is skipped and line 182 fetches any `src`. Any logged-in user can call `GET /api/<any-collection>/paste-url?src=http://169.254.169.254/...` or an internal host. The server then fetches it and streams the body back, which is an SSRF and open proxy. `pasteURL: false` and the default (client-side only) are documented as not using server fetching, so the endpoint should return 403 or 404 unless `pasteURL` is an object with an allowList. Create and update access is only checked for any logged-in user with that access."
+    },
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 182,
+      "body": "`fetch` follows redirects by default, and the allowList is checked only against the initial URL. An allowed host with an open redirect, or any redirect to an internal address, bypasses the allowList and the server fetches the redirect target. Use `redirect: 'manual'` or re-validate each hop."
+    },
+    {
+      "path": "packages/payload/src/collections/endpoints/getFileFromURL.ts",
+      "line": 201,
+      "body": "The catch block wraps every error, including the `APIError(..., 400)` thrown at lines 162, 169 and 178 and the upstream-status error at line 189, into `APIError(..., 500)`. A disallowed URL, a missing `src` and an upstream 404 all come back as HTTP 500. The statuses the code tries to set are lost."
+    },
+    {
+      "path": "packages/payload/src/utilities/isURLAllowed.ts",
+      "line": 281,
+      "body": "Falsy allowList fields are skipped, so an omitted `protocol` matches any protocol, including `http`. The docs and PR description say it defaults to `https` (docs/upload/overview.mdx:~379 `Defaults to https`). An entry like `{hostname:'example.com'}` therefore also allows `http://example.com`. Likewise `port: ''` and `search: ''` act as wildcards rather than 'no port' or 'no query string'. The pathname value is also put into a RegExp without escaping, so `.` and other regex characters in the config are treated as regex syntax."
+    },
+    {
+      "path": "packages/ui/src/elements/Upload/index.tsx",
+      "line": 416,
+      "body": "The server-side fallback runs for any client-side failure, including a non-OK response, and then reports 'The provided URL is not allowed.' for every error at line 430. A 404 or a network error on an allowed URL shows this wrong message. Separately, `useServerSideFetch` (line 122) is true whenever the allowList is non-empty. The URL is not checked against the allowList on the client before the request is sent. As a result, every pasted URL that fails client-side is sent to the server endpoint."
+    }
+  ]
+}

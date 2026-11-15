@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat: Add support for authentication to the sdk, and plug it in the admin",
+  "comments": [
+    {
+      "path": "packages/admin-next/dashboard/src/lib/client/client.ts",
+      "line": 61,
+      "body": "The new SDK base URL uses `__BACKEND_URL__ || \"http://localhost:9000\"`. The rest of the dashboard uses `??`: `lib/client/common.ts:3` and `lib/medusa.ts:4`. The admin-sdk build defines `__BACKEND_URL__` as `JSON.stringify(\"\")` (`packages/admin-next/admin-sdk/src/lib/config.ts:37`), meaning same-origin. `\"\"` is falsy, so `||` replaces it with `http://localhost:9000`. In a same-origin build, `useEmailPassLogin` (`hooks/api/auth.tsx`) now calls `sdk.auth.login`, which posts to `http://localhost:9000/auth/admin/emailpass` instead of the server's own origin. Login fails for any deployment that is not on localhost:9000. Use `??` to match the other call sites."
+    }
+  ]
+}

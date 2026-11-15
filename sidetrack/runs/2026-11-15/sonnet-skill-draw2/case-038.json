@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(ui): exclude fields lacking permissions from bulk edit",
+  "comments": [
+    {
+      "path": "packages/ui/src/elements/FieldSelect/reduceFieldOptions.ts",
+      "line": 93,
+      "body": "Permissions are threaded into nested fields at the wrong level. For a named group or array, `fieldPermissions` is `permissions[field.name]`, which has the shape `{create, read, update, fields: {...}}`. It is passed unchanged to the recursive `reduceFieldOptions` call. The recursive `getFieldPermissions` then looks up `permissions[childName]` on that object instead of on `permissions.fields`. The real components unwrap it first: `fields/Group/index.tsx:111` and `fields/Array/ArrayRow.tsx:160` pass `permissions === true ? permissions : permissions?.fields`.\n\nExample: group `g` has the normal permission object and its child `g.secret` has `read: () => false`. In the recursive call `permissions.read === true` and `permissions.update === true` hold for the group object. So `hasReadPermission` and `hasOperationPermission` are both true, and `g > secret` is still offered in the selector. The recursion also computes `fieldPermissions = permissions?.[child.name]`, which is `undefined`. The `RenderField` in the two drawers (`EditMany/DrawerContent.tsx:306`, `BulkUpload/EditMany/DrawerContent.tsx:185`) therefore receives `permissions={undefined}`. The PR's goal is not met for fields nested in groups. The same applies at line 111 for named tabs. Pass `fieldPermissions === true ? true : fieldPermissions?.fields` for fields that have their own permission entry."
+    },
+    {
+      "path": "packages/ui/src/elements/BulkUpload/EditMany/DrawerContent.tsx",
+      "line": 163,
+      "body": "`collectionPermissions` is `permissions?.collections?.[collection.slug]` (line 52) and can be undefined, for example while auth permissions are not yet loaded. The old code used `collectionPermissions?.fields`. The new `<FieldSelect permissions={collectionPermissions.fields} />` dereferences it without optional chaining and throws a TypeError at render."
+    }
+  ]
+}

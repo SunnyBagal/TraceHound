@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat: agent roleUniversalIdentifier for manifest-driven role assignment",
+  "comments": [
+    {
+      "path": "packages/twenty-sdk/src/sdk/define/agents/define-agent.ts",
+      "line": 34,
+      "body": "The UUID check is skipped for an empty string. With `roleUniversalIdentifier: ''`, `isNonEmptyString('')` is false, so `defineAgent` reports success and adds no error. The server then treats it as set: `compute-application-manifest-all-universal-flat-entity-maps.service.ts:370` uses `isDefined(agentManifest.roleUniversalIdentifier)`, which is true for `''`. It builds a roleTarget with `roleUniversalIdentifier: ''`, and the sync fails later with an unhelpful \"Role not found\" validation error. Validate with `isDefined(...)` so `''` is rejected locally, or have the server check `isNonEmptyString` as well."
+    }
+  ]
+}

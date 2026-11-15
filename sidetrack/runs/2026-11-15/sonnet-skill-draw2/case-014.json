@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(db-sqlite): convert Date to ISO 8601 string in queries",
+  "comments": [
+    {
+      "path": "packages/drizzle/src/queries/sanitizeQueryValue.ts",
+      "line": 124,
+      "body": "`item.toISOString()` throws a `RangeError` when the `Date` is invalid. For example, a local-API query like `where: { createdAt: { less_than: new Date('garbage') } }` now throws. The string and number branches in the same helper guard against this: the string branch checks `Number.isNaN(date.getTime())` and returns `undefined` (line 120). `Date` instances get no such check. The same crash happens for an invalid `Date` inside an `in` or `not_in` array through the map at line 132. `parseParams.ts:241` calls `sanitizeQueryValue` and does not catch the error, so the whole query fails. Before this change `Date` objects were passed through to the driver untouched. Fix: return `undefined` when `Number.isNaN(item.getTime())`."
+    },
+    {
+      "path": "packages/drizzle/src/queries/sanitizeQueryValue.ts",
+      "line": 132,
+      "body": "Invalid items are now silently dropped from the array with `.filter((item) => item !== undefined)`, whereas the scalar path returns `{ value: undefined }` for an invalid date. If every item is invalid, for example `in: ['garbage']`, `formattedValue` becomes `[]`. That empty array goes on to `adapter.operators.in` and `not_in` in `parseParams.ts`, where `inArray` or `notInArray` with an empty list can throw or generate invalid SQL in some drizzle versions. For `not_in`, dropping an invalid item also silently widens the result set."
+    }
+  ]
+}

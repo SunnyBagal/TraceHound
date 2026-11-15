@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix: normalize date-time field input on backend to prevent timeline crash",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/engine/api/common/common-args-processors/data-arg-processor/validator-utils/validate-date-time-field-or-throw.util.ts",
+      "line": 41,
+      "body": "This narrows the formats the write path accepts. Before the change, `validateDateTimeFieldOrThrow` ran the input through date-fns `parse` with `'yyyy-MM-dd'`, `'yyyy-MM-dd HH:mm'` and the other ISO formats. date-fns accepts 1-2 digit month and day fields, so a value like `'2024-1-5'` or `'2024-01-5'` was valid. `parseToInstantOrThrow` (`packages/twenty-shared/src/utils/date/parseToInstantOrThrow.ts:30-52`) now sends ISO-like strings only to `Temporal.Instant.from` and `Temporal.PlainDateTime.from`, which require zero-padded fields. The date-fns fallback loop uses `NON_ISO_DATE_FORMATS`, which leaves out `yyyy-MM-dd`, so `'2024-1-5'` no longer parses. It now throws INVALID_ARGS_DATA on create and update, where it used to succeed. The PR description says lenient input is preserved, but this case is not. The fix is to try the ISO date-fns formats in the fallback as well. `filter-arg-processor` still accepts these values through `ACCEPTED_DATE_TIME_FORMATS`, so filtering and writing now disagree."
+    }
+  ]
+}

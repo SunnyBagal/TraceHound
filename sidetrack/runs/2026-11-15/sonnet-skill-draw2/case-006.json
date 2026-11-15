@@ -1,0 +1,15 @@
+{
+  "pr_title": "Fix multi select filtering",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-filter/utils/isMatchingMultiSelectFilter.ts",
+      "line": 14,
+      "body": "`containsAny` is matched with `.every(...)`, which means \"contains all\". The server runs `containsAny` as `col::text[] && ARRAY[...]` (`compute-where-condition-parts.ts`), which means \"contains at least one\". `computeViewRecordGqlOperationFilter.ts:~620` sends every selected option in `containsAny`. Suppose a user filters a multi-select field for Contains [A, B], and a record with only [A] is created or updated. The server returns it, but this client-side matcher returns false. `isRecordMatchingFilter` is used by the optimistic effects (`triggerCreateRecordsOptimisticEffect.ts:90`, `triggerUpdateRecordOptimisticEffect.ts:68`), so the cache drops or omits records that should be in the list. Use `.some`."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-filter/utils/isMatchingArrayFilter.ts",
+      "line": 22,
+      "body": "The client builds `containsIlike` as `` `%${filter.value}%` `` (`computeViewRecordGqlOperationFilter.ts:~695`), which is an SQL ILIKE pattern. This matcher lowercases that string and checks `item.toLowerCase().includes(searchTerm)`, so it looks for the literal `%foo%`, including the percent signs. It never matches, and `Contains` filters on ARRAY fields give wrong optimistic-cache results: newly created or updated records that match the filter are excluded. Strip the `%` wildcards, or translate the pattern, before comparing."
+    }
+  ]
+}

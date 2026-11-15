@@ -1,0 +1,25 @@
+{
+  "pr_title": "chore(): Improve workflows sdk tooling",
+  "comments": [
+    {
+      "path": "packages/core/orchestration/src/transaction/distributed-transaction.ts",
+      "line": 315,
+      "body": "Temporary storage no longer works. `#temporaryStorage` is now a `WeakMap` keyed by a fresh `{ key }` literal on every call (lines 315, 319 and 323). A WeakMap matches keys by object identity, so `getTemporaryData(k)` and `hasTemporaryData(k)` never find what `setTemporaryData(k, v)` stored. `get` always returns `undefined` and `has` always returns `false`. Each stored entry can also be garbage-collected immediately, because nothing else references its key object. Any caller that relies on this per-transaction scratch data silently loses it. Keep the `Map<string, unknown>`."
+    },
+    {
+      "path": "packages/core/workflows-sdk/src/utils/composer/helpers/resolve-value.ts",
+      "line": 155,
+      "body": "Async results are told apart by `\"key\" in resolved`, which is ambiguous. Line 140 wraps nested async results as `{key, value}`. The branch at line 155 also tests every plain value returned by `resolveProperty` (line 125), such as a step output or a payload. If that value is an object with its own `key` property (for example `{ key: 'abc', ... }`), it is treated as a wrapper. The code then runs `parentRef[resolved.key] = resolved.value`. That writes the value to the wrong property and drops the real one. This happens whenever an object input has a promise-returning property (a transform or nested workflow response) whose result has a `key` field. Use an unambiguous marker, such as a class or symbol, or carry the key index alongside each promise."
+    },
+    {
+      "path": "packages/core/workflows-sdk/src/utils/composer/helpers/resolve-value.ts",
+      "line": 168,
+      "body": "`return unwrapped.then(...)` inside the `for` loop exits the whole `.then` callback after the first async nested result. Any later entries in `promises` are never assigned to `parentRef`. Example: an input object with two keys that both resolve asynchronously to objects containing further async references. The first key is resolved. The second key is left unresolved or missing, or still holds its raw reference. Collect these promises and await them all instead of returning early."
+    },
+    {
+      "path": "packages/core/workflows-sdk/src/helper/workflow-export.ts",
+      "line": 43,
+      "body": "`cachedLoadedModules` is a module-level cache that is never invalidated. `MedusaModule.getLoadedModules()` changes as modules are bootstrapped. It can also differ between app instances, and it is reset in tests. A workflow run before all modules have loaded, or in a different app or container context, permanently freezes a partial or stale module list. Every later run that takes the `!container_` path at line 106 then uses that stale list, so modules registered afterwards are missing."
+    }
+  ]
+}

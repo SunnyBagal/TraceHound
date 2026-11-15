@@ -1,0 +1,10 @@
+{
+  "pr_title": "Polish settings page titles and admin tables",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/settings/admin-panel/components/SettingsAdminServerAdmins.tsx",
+      "line": 18,
+      "body": "The grid template changed from '2fr 1fr 1fr 36px' to '1fr 2fr 1fr 36px'. The first column holds the administrator name or email (`OverflowingTextWithTooltip`, lines 72-77). The second column holds only 'Yes' or '—' for `canAccessFullAdminPanel` (lines 78-80). The name column now gets half the width it had, and the short boolean column gets double. Long names or emails will truncate when they didn't before. The same constant drives the header and body rows, so the columns stay aligned and only the widths are wrong. Restore '2fr 1fr 1fr 36px', or change the template deliberately."
+    }
+  ]
+}

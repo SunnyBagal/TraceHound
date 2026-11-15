@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat: Add support for stats query",
+  "comments": [
+    {
+      "path": "packages/modules/providers/search-postgres/integration-tests/__tests__/postgres-search.spec.ts",
+      "line": 173,
+      "body": "The test now expects `/Unknown field \"embedding\"/`, but nothing in search-postgres produces that message, and this PR does not change the provider source. The grep for `Unknown field` across the package matches only this test line. The provider rejects `search_options.vector` on the native engine in `assertQuerySupported` (`packages/modules/providers/search-postgres/src/utils/plan.ts:170-173`). That throws `Vector search requires engine: \"lakebase\"...`. The test builds a default (native) engine, so the assertion will fail. The old `/lakebase/` regex matched the real error. This edit is also unrelated to the stats facet feature."
+    },
+    {
+      "path": "packages/modules/search/src/providers/search-medusa/utils/facets.ts",
+      "line": 400,
+      "body": "A stats facet reports `min: 0, max: 0` when no document has a value for the field. Examples are a filter or query that matches nothing, or an all-null column. The rows are empty, so `toStatsNumber(undefined)` returns 0. The caller cannot tell this apart from a real min/max of 0. For a price or date field this gives wrong data: a date min/max of epoch 0. The `count` comes from the `agg` query filtered by `base` only, not `present`. So `count` can be greater than 0 while min/max are fabricated zeros, because documents missing the field are counted. Consider omitting min/max when no row is returned, or counting only documents where the field is present."
+    }
+  ]
+}

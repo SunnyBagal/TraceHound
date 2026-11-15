@@ -1,0 +1,20 @@
+{
+  "pr_title": "feat: Add github authentication provider",
+  "comments": [
+    {
+      "path": "packages/modules/providers/auth-github/src/services/github.ts",
+      "line": 755,
+      "body": "`access_token_expires_at` and `refresh_token_expires_at` are computed as `Date.now() + response.expires_in * 1000` and `Date.now() + response.refresh_token_expires_in * 1000`, then `.toISOString()` is called on each. GitHub only returns `expires_in` and `refresh_token_expires_in` when token expiration is enabled. For OAuth Apps, and for GitHub Apps with expiring user tokens turned off, both fields are missing. Then `undefined * 1000` is NaN, `new Date(NaN).toISOString()` throws `RangeError: Invalid time value`, and the surrounding catch returns `{success:false, error:'Invalid time value'}`. Login always fails for those apps even when the code exchange succeeded. Guard each expiry field and only compute it when the value is present."
+    },
+    {
+      "path": "packages/modules/providers/auth-github/src/services/github.ts",
+      "line": 726,
+      "body": "The token exchange URL is built by string interpolation, and `code` comes from `req.query.code ?? req.body.code` without `encodeURIComponent`. `clientId` and `clientSecret` are not encoded either. A caller can send `code=x&redirect_uri=...` and inject or override parameters in the request to github.com that carries the client secret. An array or object `code` is also stringified. Use `URLSearchParams` or encode every value. Separately, GitHub answers a bad or expired code with HTTP 200 and `{error, error_description}`. That case reaches `upsert_`, which returns 'No access token found'. `validateCallback` drops the `error` field (line 763), so the route reports only the generic 'Authentication failed'."
+    },
+    {
+      "path": "packages/medusa/src/api/auth/[actor_type]/[auth_provider]/route.ts",
+      "line": 50,
+      "body": "For OAuth providers, `GET /auth/:actor/:provider` used to answer with `res.redirect(location)`. It now returns a 200 JSON body `{ location }`. A browser navigating or linking to this endpoint, which was the documented Google flow, no longer redirects and just shows JSON. Only callers that use `sdk.auth.login` (POST) and handle `location` keep working. The PR description lists three breaking changes and this one is not among them."
+    }
+  ]
+}

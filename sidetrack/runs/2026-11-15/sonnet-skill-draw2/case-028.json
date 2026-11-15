@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat(workflow): periodic core-consistency check for workflows, versions and triggers",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/modules/workflow/workflow-core-consistency/services/workflow-core-consistency.service.ts",
+      "line": 39,
+      "body": "The workspace list is built with `SELECT DISTINCT \"workspaceId\" FROM core.\"workflow\"`. That makes the check blind to the worst drift. A workspace that has workflows or versions but no row in `core.workflow` is never visited. This happens when the best-effort dual-write has never succeeded for it, or when the backfill hasn't run. In that case every workspace workflow is `unlinked` or `missingCore`, but `checkWorkspace` is never called, so `checkWorkflowSync` (the unlinked/missingCore counts) and `checkWorkflowVersionSync` never run. Workspaces whose core rows were all deleted are skipped the same way. The `unlinked` and `missingCore` metrics therefore only fire for workspaces that already have at least one core workflow. The list should come from workspaces that have workflows (for example, active workspaces joined to their workspace-schema tables), not from the core mirror whose consistency is being checked. The workflow-version and automated-trigger checks are also skipped for these workspaces, because they sit behind the same gate."
+    }
+  ]
+}

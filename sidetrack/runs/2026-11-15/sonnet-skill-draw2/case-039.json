@@ -1,0 +1,20 @@
+{
+  "pr_title": "fix(pricing): price list prices perf issues",
+  "comments": [
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 1826,
+      "body": "The new `hashPrice` only adds `min:`/`max:` (and `ps:`/`pl:`) parts when the key exists on the object (`\"min_quantity\" in price`). The old code treated a missing value and null as the same. Existing prices come from `priceService_.list` (lines ~1514, 1507, 1572), so they always have `min_quantity: null` and `max_quantity: null`, which hash to `min:` and `max:`. The incoming entry in `normalizePrices` (hash at line ~962) is the caller's object. It has no `min_quantity` key when the caller omits it, so it hashes without those parts. The two hashes differ, so `existingPricesMap.get(entryHash)` misses. Example: `addPriceListPrices` or `addPrices` with `{currency_code, amount, rules}` and no quantities, for a price that already exists. The existing price's `id` and `price_rules` are not reused, so a duplicate price is created or the rule rows are replaced. Normalize with `?? ''` and include every part unconditionally, or only add the part when the value is non-null."
+    },
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 1836,
+      "body": "Rule parts are joined in the order of `price.price_rules`. The old code sorted all entries by attribute name, so the hash did not depend on rule order. Now `parts.sort()` only sorts the top-level parts, not the rules inside `rules:a=1,b=2`. The incoming entry's rules follow `Object.entries(cleanRules)` order, which is the caller's key order. The existing rules come from the DB relation, in whatever order it returns them. The same logical price with rules `{region_id, customer_group}` in a different order therefore hashes differently and is not matched to the existing price. This produces duplicates or loses the existing rule ids. Sort the rule strings before joining them."
+    },
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 1325,
+      "body": "In `addPrices_`, `buildPreNormalizationPriceConstraintsFromData` returns `{}` when `prices` is empty, or when no price yields any constraint. Examples are an input whose `prices` arrays are all empty, or prices with no id and no fields. `priceService_.list({}, ...)` then loads every price in the table, with `price_rules`. This is worse than the old per-price-set load, and it is unbounded. Skip the query when there are no constraints."
+    }
+  ]
+}

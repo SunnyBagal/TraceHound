@@ -13,3 +13,11 @@ No labels, no judge output.
 
 To score with the scorer of record, point `tracehound bench score --reviews` (and `scripts/testset/score-testset.ts --tool`)
 at one of the two directories.
+
+## Added later on 15 Nov
+
+- `sonnet-skill-draw2/`: a second draw of `sonnet-skill`, same code (`ba8de49`), same inputs. 32 cases completed before the
+  account's usage limit was reached; the other 8 (cases 023, 025, 027, 028, 032, 037, 039, 040) failed at the limit with no
+  review and were run once after it reset. 40 of 40 reviews, each from a single completed attempt.
+- `proxy-judge-caught.json`: the case ids the proxy judge (bench-judge-v1's prompt on Claude Sonnet) counted as caught in
+  the two draw-1 folders. Not the scorer of record; kept so the proxy can be compared with the real judge.
