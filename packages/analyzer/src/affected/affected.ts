@@ -9,6 +9,10 @@
 // and ran out of memory on another. A reference to a name has to contain that name, so the
 // programs here hold only the changed files, the files `git grep -w` finds a changed name in, and
 // the files with `export *` (re-export chains); every other import is left unresolved.
+//
+// affected@0.5: a declaration the diff only removes lines from (a deleted guard, a dropped call) is
+// listed too. Before, a declaration counted as changed only when it had an added or changed line at
+// head, so a deletion-only edit was not in the set at all.
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Node, Project, ts, type SourceFile } from "ts-morph";
@@ -16,7 +20,7 @@ import { indexTree, type Decl } from "../changes/declarations.ts";
 import { ChangesError, git, parseZeroContextDiff, type FileHunks } from "../changes/git.ts";
 import { discoverPackages, packageOf, relPath, type PackageInfo } from "../load/workspace.ts";
 
-export const AFFECTED_VERSION = "affected@0.4";
+export const AFFECTED_VERSION = "affected@0.5";
 export const DEFAULT_MAX_REFS = 12;
 export const DEFAULT_BUDGET_MS = 120_000;
 /** A changed name found in more files than this is not resolved: its candidate count is reported. */
@@ -64,6 +68,8 @@ export interface AffectedDecl {
   endLine: number;
   /** head line numbers inside the declaration that the diff added or changed */
   changedLines: number[];
+  /** head line numbers inside the declaration after which the diff removed lines and added none */
+  removedAfter: number[];
   status: "resolved" | "skipped-budget" | "skipped-common" | "no-name-node" | "compiler-error";
   /** files (other than its own) in which `git grep -w` finds the declaration's name */
   candidateFiles: number;
@@ -104,6 +110,7 @@ export const LIMITATIONS = [
   "References are what the TypeScript language service resolves at the head commit: dynamic access (obj[name]), string keys, reflection and code generated at build time are not found.",
   "Only files that contain a changed name as a word are searched, so a use under another name is missed: a default export imported under a different name, or `export { a as b }` used as `b`.",
   "A declaration removed by the diff has no node at head and is not listed; `tracehound changes` reports removed declarations that are still referenced.",
+  "Lines removed with nothing added count for a declaration only when the head lines on both sides of them are inside it: removing the trailing lines of a declaration that has no closing line of its own (a multi-line expression), or lines just before its first line, does not list it.",
   "Whole-file <module> declarations are skipped: every import of the file would be a reference.",
   "Dependencies are not installed: an import of a workspace package by name is resolved to that package's source directory (src/index.ts, src/index.tsx or index.ts); a package that exposes other entry points, and anything reached only through node_modules, is not followed.",
 ];
@@ -124,6 +131,31 @@ export class AffectedError extends Error {
 }
 
 const simpleName = (decl: Decl) => decl.name.split(".").at(-1)!;
+
+/**
+ * Per file of a `git diff -U0` text: the head line numbers after which a hunk removed lines and added none
+ * (`@@ -a,b +c,0 @@` gives c, the last head line before the removed ones; 0 at the top of a file).
+ * `parseZeroContextDiff` keeps only the added head lines, so these hunks leave no trace in it.
+ */
+export function deletionPoints(diff: string): Map<string, number[]> {
+  const files = new Map<string, number[]>();
+  let current: number[] | undefined;
+  for (const line of diff.split("\n")) {
+    const header = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
+    if (header) {
+      current = [];
+      files.set(header[2]!, current);
+      continue;
+    }
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+),0 @@/.exec(line);
+    if (hunk && current) current.push(Number(hunk[1]));
+  }
+  return files;
+}
+
+/** "changed lines 2,3; lines removed after 7": the part of a packet header that says where a declaration changed. */
+const changeText = (d: Pick<AffectedDecl, "changedLines" | "removedAfter">) =>
+  [d.changedLines.length ? `changed lines ${d.changedLines.join(",")}` : "", d.removedAfter.length ? `lines removed after ${d.removedAfter.join(",")}` : ""].filter(Boolean).join("; ");
 
 function nameNodeOf(sf: SourceFile, decl: Decl): Node | undefined {
   const simple = simpleName(decl);
@@ -185,7 +217,9 @@ export function computeAffected(input: AffectedInput): AffectedReport {
   const head = git(repo, ["rev-parse", range[2]!]).trim();
   const checkedOut = git(repo, ["rev-parse", "HEAD"]).trim();
   if (head !== checkedOut) throw new AffectedError(`the working tree is at ${checkedOut.slice(0, 7)}, not the diff's head ${head.slice(0, 7)}: check out the head first`);
-  const hunks = parseZeroContextDiff(git(repo, ["diff", "-U0", "--no-renames", input.diff]));
+  const diffText = git(repo, ["diff", "-U0", "--no-renames", input.diff]);
+  const hunks = parseZeroContextDiff(diffText);
+  const deletions = deletionPoints(diffText);
   const started = now();
 
   const rel = (abs: string) => relPath(repo, abs);
@@ -206,13 +240,16 @@ export function computeAffected(input: AffectedInput): AffectedReport {
   });
   const scan = new Project({ compilerOptions: FALLBACK_OPTIONS, resolutionHost: () => ({ resolveModuleNames: (names: string[]) => names.map(() => undefined) }) });
   const scanIndex = indexTree(analyzed.map((file) => scan.addSourceFileAtPath(abs(file))), rel, []);
-  const changed: { decl: Decl; changedLines: number[] }[] = [];
+  const changed: { decl: Decl; changedLines: number[]; removedAfter: number[] }[] = [];
   for (const file of analyzed) {
     const added = hunks.get(file)!.added;
+    const cuts = deletions.get(file) ?? [];
     for (const decl of scanIndex.byFile.get(file) ?? []) {
       if (decl.name === MODULE_DECL) continue;
       const changedLines = [...added].filter((l) => l >= decl.startLine && l <= decl.endLine).sort((a, b) => a - b);
-      if (changedLines.length) changed.push({ decl, changedLines });
+      // the removed lines sat between head lines n and n + 1: inside the declaration when both are
+      const removedAfter = cuts.filter((n) => n >= decl.startLine && n < decl.endLine).sort((a, b) => a - b);
+      if (changedLines.length || removedAfter.length) changed.push({ decl, changedLines, removedAfter });
     }
   }
 
@@ -281,10 +318,10 @@ export function computeAffected(input: AffectedInput): AffectedReport {
 
   // 4. References, declaration by declaration, inside the time budget.
   const declarations: AffectedDecl[] = [];
-  for (const { decl, changedLines } of changed) {
+  for (const { decl, changedLines, removedAfter } of changed) {
     const simple = simpleName(decl);
     const { count: candidateFiles, ok } = resolvable(simple, decl.file);
-    const base = { id: decl.id, name: decl.name, file: decl.file, kind: decl.kind, exported: decl.exported, startLine: decl.startLine, endLine: decl.endLine, changedLines, candidateFiles };
+    const base = { id: decl.id, name: decl.name, file: decl.file, kind: decl.kind, exported: decl.exported, startLine: decl.startLine, endLine: decl.endLine, changedLines, removedAfter, candidateFiles };
     const empty = { references: [], referencesTotal: 0, referencesOutsideDiff: 0, referenceFiles: 0 };
     if (!ok) {
       declarations.push({ ...base, status: "skipped-common", ...empty });
@@ -383,7 +420,7 @@ export function formatAffected(r: AffectedReport): string {
   if (skippedFiles.length) out.push(`Not analyzed (${skippedFiles.length}): ${skippedFiles.map((f) => `${f.path} [${f.status}]`).join(", ")}`);
   for (const d of r.declarations) {
     out.push("");
-    out.push(`## ${d.id} (${d.kind}${d.exported ? ", exported" : ""}) lines ${d.startLine}-${d.endLine}; changed lines ${d.changedLines.join(",")}`);
+    out.push(`## ${d.id} (${d.kind}${d.exported ? ", exported" : ""}) lines ${d.startLine}-${d.endLine}; ${changeText(d)}`);
     if (d.status === "skipped-common") {
       out.push(`  references: not computed, the name appears in ${d.candidateFiles} other files (search for the uses that matter)`);
       continue;
@@ -427,7 +464,7 @@ export function formatAffectedCapped(r: AffectedReport): string {
   for (const d of shown) {
     const refs = d.references.filter((ref) => !ref.inDiff).slice(0, CAPPED_MAX_REFS);
     out.push("");
-    out.push(`## ${d.id} (${d.kind}${d.exported ? ", exported" : ""}) lines ${d.startLine}-${d.endLine}; changed lines ${d.changedLines.join(",")}; ${d.referencesOutsideDiff} references outside the diff in ${d.referenceFiles} files`);
+    out.push(`## ${d.id} (${d.kind}${d.exported ? ", exported" : ""}) lines ${d.startLine}-${d.endLine}; ${changeText(d)}; ${d.referencesOutsideDiff} references outside the diff in ${d.referenceFiles} files`);
     for (const ref of refs) out.push(`  - ${ref.file}:${ref.line} [${ref.relation}]${ref.test ? " [test]" : ""} in ${ref.enclosing.split("#").at(-1)}: ${ref.text}`);
     if (d.referencesOutsideDiff > refs.length) out.push(`  - (${d.referencesOutsideDiff - refs.length} more outside the diff, not shown)`);
   }
