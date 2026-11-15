@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat(workflow): scaffold core workflowVersion entity + trigger cache (phase 0)",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/engine/workspace-cache/types/workspace-cache-key.type.ts",
+      "line": 66,
+      "body": "Adding `workflowAutomatedTriggerMaps` here breaks type checking at `packages/twenty-server/src/engine/workspace-cache/services/workspace-cache.service.ts:527`. The deterministic contract check reports TS7053 there: `WORKSPACE_CACHE_KEYS_V2[keyName]` is indexed with `string | number`, which means `WorkspaceCacheKeyName` (`keyof WorkspaceCacheDataMap`) no longer resolves to a plain string-literal union. The likely cause is the new `WorkflowAutomatedTriggerMaps` import. It pulls in the workflow entity and trigger types, so a circular or unresolved type may be widening the key type. I could not confirm that cause from the code. The `twenty-server` typecheck/build will fail until it is resolved."
+    },
+    {
+      "path": "packages/twenty-server/src/engine/core-modules/workflow/utils/compute-automated-trigger-from-workflow-version.util.ts",
+      "line": 314,
+      "body": "`computeCronPatternFromSchedule(trigger)` throws a `WorkflowTriggerException` for an invalid cron pattern or an unsupported schedule type (`packages/twenty-server/src/modules/workflow/workflow-trigger/utils/compute-cron-pattern-from-schedule.ts:29-61`). The call is not guarded, and `computeForCache` in `workspace-workflow-automated-trigger-map-cache.service.ts:248-255` runs it in a loop over all active versions. A single ACTIVE version with a bad CUSTOM pattern, or an unknown schedule type in stored JSONB, makes `computeForCache` reject. The cache for the whole workspace then cannot be built, so every other active workflow's trigger is lost too. Catch the error per version and skip or log that version."
+    }
+  ]
+}

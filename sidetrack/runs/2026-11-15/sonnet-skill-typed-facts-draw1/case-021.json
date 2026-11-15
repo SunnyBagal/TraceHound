@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat(core, event-bus): Compensate emit event step utility",
+  "comments": [
+    {
+      "path": "packages/modules/event-bus-redis/src/services/event-bus-redis.ts",
+      "line": 747,
+      "body": "The partial clear deletes `staging:<id>` and recreates it with `rpush`. A re-created key has no TTL. `emit` sets the TTL only through `setExpire(groupId, groupedEventsTTL)` (lines 175 and 190) when events are staged. After a compensation that clears one event name, the remaining events in the group stay in Redis forever if the group is never released or cleared, for example in a long-running workflow. The 600s stale-data protection is lost. The pipeline should re-apply `expire`, or the matching entries should be removed in place with `lrem`. The pipeline also isn't atomic (`pipeline()` rather than `multi()`). An `emit` that `rpush`es between the `lrange` at line 735 and the `del` is silently dropped. When every event matches, `rpush` is called with no values, which Redis rejects. The error is swallowed in the `exec()` results."
+    },
+    {
+      "path": "packages/core/core-flows/src/common/steps/emit-event.ts",
+      "line": 106,
+      "body": "Compensation clears every event in the group whose name equals `data.eventName`, not just the events this step emitted. Several steps or nested workflows can share an `eventGroupId` and emit the same name. For example, a parent workflow calls a sub-workflow that emits `cart.updated`, and the sub-workflow is compensated. The parent's earlier `cart.updated` events (staged by the call sites in `cart/workflows/*.ts`) are cleared too, even though that step was not rolled back. Those events are never released. The step response should identify the staged messages, or the clear should be scoped to what this step added."
+    }
+  ]
+}

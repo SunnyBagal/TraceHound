@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat: Add support for stats query",
+  "comments": [
+    {
+      "path": "packages/modules/search/src/providers/search-medusa/utils/facets.ts",
+      "line": 334,
+      "body": "`emptyStatsResult()` returns `min: 0, max: 0`, and `toStatsNumber` (facets.ts:314-316) maps a missing row or null to 0. When no document matches the query, or every match has a null value for the field, the min and max queries return no rows. The facet then reports `{min: 0, max: 0, count: 0}`. A caller can't tell that from a real field range whose minimum is 0. For example, a price slider built from this facet would show a 0 lower bound for an empty result. The same applies to a date field, which would report epoch 0. Returning `undefined` or omitting min/max when `count` is 0 would avoid this. `utils.spec.ts` asserts the 0 behavior (the test 'treats missing min/max rows as zero'), so the choice is deliberate. The result is still ambiguous."
+    }
+  ]
+}

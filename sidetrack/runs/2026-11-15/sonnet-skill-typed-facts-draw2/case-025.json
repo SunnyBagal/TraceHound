@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat(workflow): scaffold core workflowVersion entity + trigger cache (phase 0)",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/engine/core-modules/workflow/utils/compute-automated-trigger-from-workflow-version.util.ts",
+      "line": 314,
+      "body": "`computeCronPatternFromSchedule` throws a `WorkflowTriggerException` on an invalid or unsupported cron schedule (see `packages/twenty-server/src/modules/workflow/workflow-trigger/utils/compute-cron-pattern-from-schedule.ts:10-22` and `:54`). It is called here unguarded. `WorkspaceWorkflowAutomatedTriggerMapCacheService.computeForCache` loops over every ACTIVE version (`workspace-workflow-automated-trigger-map-cache.service.ts:248-255`). One active version with a bad cron pattern, for example a CUSTOM pattern that fails validation or a MINUTES schedule with a non-numeric value, makes the whole workspace's trigger map fail to compute. Every other workflow's trigger is then lost too. Catch the error per version and skip or log that version."
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "pr_title": "feat: add FormData, text, and none body types to HTTP request workflow",
+  "comments": [
+    {
+      "path": "packages/twenty-shared/src/workflow/index.ts",
+      "line": 10,
+      "body": "The export path is `./constants/ContentTypeValuesHttpRequest`, but the file added in this PR is `packages/twenty-shared/src/workflow/constants/contentTypeValuesHttpRequest.ts`, with a lowercase `c`. On a case-sensitive filesystem (Linux CI, Docker builds) this import doesn't resolve. `CONTENT_TYPE_VALUES_HTTP_REQUEST` then can't be loaded, which breaks the twenty-shared build and every consumer, including `BodyInput.tsx` and `getBodyTypeFromHeaders.ts`. It only works on macOS and Windows. Fix the casing of the path or the file name."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/workflow/workflow-steps/workflow-actions/http-request-action/hooks/useHttpRequestForm.ts",
+      "line": 62,
+      "body": "The old code set `content-type: application/json` whenever the method changed to one with a body. That is removed, and nothing replaces it. Existing HTTP actions with no `content-type` header, or with a capitalized `Content-Type`, now resolve to `getBodyTypeFromHeaders(...) === null` (`getBodyTypeFromHeaders.ts:12-23`, exact lowercase key and exact value match). `BodyInput.tsx:172` then shows 'None' and renders 'No body', and the existing body is hidden and can't be edited. The stored `body` is still sent at run time through `parseDataFromContentType` in `http-tool.ts:30`. The stories were edited to the lowercase key for this reason. Existing workflows need a migration, or the lookup should be case-insensitive and fall back to JSON."
+    },
+    {
+      "path": "packages/twenty-shared/src/workflow/utils/parseDataFromContentType.ts",
+      "line": 5,
+      "body": "`parseUrlEncoded` passes the parsed value straight to `new URLSearchParams(parsedData)`. The body is often a JSON string that parses to an array (for example the stories' `[\"frontend\", ...]` bodies, which this PR now pairs with `application/x-www-form-urlencoded`), to a nested object, or to a non-JSON string. An array makes URLSearchParams throw, because its elements aren't pairs. Nested values come out as `[object Object]`. A plain non-JSON string is parsed as a query string. In `useTestHttpRequest.ts:54` and `http-tool.ts:33` this throws or sends corrupt data instead of the previous JSON body."
+    },
+    {
+      "path": "packages/twenty-shared/src/workflow/utils/parseDataFromContentType.ts",
+      "line": 26,
+      "body": "In the non-string branch, `form.append(key, val)` is passed `val` without `String()`. The string branch does use `String(val)`. The body type is `Record<string, any>`, so a number, boolean or object value goes to `FormData.append` untyped. A non-string, non-Blob value is coerced to `[object Object]`, or in Node's FormData may be treated inconsistently. Also, if the JSON string parses to `null`, `Object.entries(null)` throws, and the `catch` then reports 'String data for FormData must be valid JSON', which is misleading."
+    }
+  ]
+}

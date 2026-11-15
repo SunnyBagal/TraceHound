@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat: Add support for product imports",
+  "comments": [
+    {
+      "path": "packages/admin-next/dashboard/src/routes/products/product-import/helpers/import-template.ts",
+      "line": 4,
+      "body": "The downloadable template is semicolon-delimited (`Product Id;Product Handle;...`). The backend parses uploads with `convertCsvToJson` (packages/core/utils/src/csv/csvtojson.ts:9), which calls `csv2json` with only `preventCsvInjection` set. The delimiter is therefore json-2-csv's default, a comma. A user who downloads this template and uploads it unchanged gets each row parsed as a single column named `Product Id;Product Handle;...`. The summary will be wrong, or the product-parsing step will fail. The header and rows should be comma-separated, which is also what the export produces."
+    },
+    {
+      "path": "packages/admin-next/dashboard/src/components/layout/notifications/notifications.tsx",
+      "line": 137,
+      "body": "Behaviour regression: the removed `NotificationFile` showed `file?.filename ?? file.url` and used `download={file.filename ?? Date.now()}`. The new call passes `filename={data.file.filename ?? \"\"}`. When a notification has a `url` but no `filename`, the label is now blank. In `FilePreview` (file-preview.tsx:78) `filename ?? Date.now()` never falls back, because `\"\"` is not nullish, so the link gets `download=\"\"`. The fallback to the URL for display and a timestamp for the download name is lost."
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat(workflow): periodic core-consistency check for workflows, versions and triggers",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/modules/workflow/workflow-core-consistency/services/workflow-core-consistency.service.ts",
+      "line": 551,
+      "body": "The trigger query reads every row in `workflowAutomatedTrigger` and has no `\"deletedAt\" IS NULL` filter. The workflow and version queries above it do filter on `deletedAt IS NULL`. Deleting a workflow soft-deletes its triggers: `workflow-common.workspace-service.ts:301` calls `workflowAutomatedTriggerRepository.softDelete({ workflowId })`. The cache is built from ACTIVE core versions only (`workspace-workflow-automated-trigger-map-cache.service.ts:29-42`), so it has no entry for a soft-deleted workflow. Every soft-deleted workflow that had an automated trigger therefore lands in `tableByWorkflowId` but not in the cache. The loop at line 565 then counts it as `inTableNotCache`. This emits a permanent false-positive `automated-trigger/drift` metric and warning log on every 3-hour run, for each deleted workflow with a trigger, until the rows are destroyed. Fix: add `WHERE \"deletedAt\" IS NULL` to this query."
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "pr_title": "fix(db-d1-sqlite): avoid bound parameter limit when querying relationships and inserting rows",
+  "comments": [
+    {
+      "path": "packages/drizzle/src/queries/parseParams.ts",
+      "line": 426,
+      "body": "The raw SQL uses the bare column name (`${resolvedColumn.name} IN (...)`), where the normal path passes the Drizzle column and gets a table-qualified reference. If the query also joins a table that has an `id` column, SQLite fails with `ambiguous column name: id`. Payload adds such joins for relationship paths in the same `where` or in the sort. Use a qualified, quoted reference such as `sql`${resolvedColumn} IN (...)`` or `sql.join` over raw literals."
+    },
+    {
+      "path": "packages/drizzle/src/queries/parseParams.ts",
+      "line": 441,
+      "body": "This branch `break`s before the `orConditions` handling at lines 444-447, and it emits `NULL` as a literal inside the list. `id IN (NULL, 1)` never matches a NULL row, so the earlier `isNull(column)` OR behaviour for `in` with null values is lost when `limitedBoundParameters` is on. `id NOT IN (..., NULL)` evaluates to NULL for every row, so a `not_in` query containing null returns no documents. Handle null separately, with `OR id IS NULL` for `in` and by dropping nulls for `not_in`."
+    },
+    {
+      "path": "packages/drizzle/src/sqlite/insert.ts",
+      "line": 105,
+      "body": "`colsPerRow` is taken only from `Object.keys(values[0])`. Payload's rows for array, block and hasMany tables don't all have the same keys, because some rows omit optional columns. If a later row has more keys than the first, a batch can exceed the 100 bound-parameter limit that D1 enforces. The limit is also exactly 100, and the `onConflictDoUpdate` set values add more bound parameters that aren't counted. Compute the maximum key count across all rows, and leave headroom for the conflict parameters."
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "pr_title": "feat(medusa): Allow regexp in CORS configuration",
+  "comments": [
+    {
+      "path": "packages/medusa-core-utils/src/parse-cors-origins.ts",
+      "line": 96,
+      "body": "`parseCorsOrigins` splits on every comma before it tries to parse a regexp (`str.split(\",\")`). Any regexp that contains a comma gets cut into pieces. For example, `store_cors=\"/^https:\\/\\/a{1,3}\\.example\\.com$/\"` becomes `/^https:\\/\\/a{1` and `3}\\.example\\.com$/`. The first piece doesn't parse as a regexp, so it falls back to a plain string. The second piece is also a string. The intended pattern never matches, and neither fragment is a valid origin, so requests from the intended origins are silently rejected. The same happens with `(a|b),c` style patterns. Use a splitter that respects regexp delimiters, or document that commas aren't supported."
+    },
+    {
+      "path": "packages/medusa-core-utils/src/build-regexp-if-valid.ts",
+      "line": 60,
+      "body": "The flag class `[gimsuy]*` accepts `g` and `y`. The `cors` middleware checks regexp origins with `regex.test(origin)`, and a global or sticky `RegExp` keeps `lastIndex` between calls. The same regexp object is reused for every request, so with `/.../g` the matches alternate. One request matches, the next fails, and so on. Valid origins then get intermittent CORS rejections. Either drop `g` and `y` from the accepted flags or strip them before building the `RegExp`. The test at build-regexp-if-valid.spec.ts:7 (`\"/ab#/[c]/ig\"`) shows `g` being accepted."
+    }
+  ]
+}

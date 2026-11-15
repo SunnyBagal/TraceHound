@@ -1,0 +1,15 @@
+{
+  "pr_title": "perf(ui): skip rendering custom components hidden by admin.condition",
+  "comments": [
+    {
+      "path": "packages/ui/src/forms/fieldSchemasToFormState/addFieldStatePromise.ts",
+      "line": 192,
+      "body": "The new early return for `passesCondition === false` (line 190) runs before the `field.access.read` check at lines 212-226. On the old path, a data field the user could not read hit `if (!hasPermission) return` and was left out of form state. Now a field hidden by `admin.condition` that also has `access.read` denying the user gets `fieldState.value` and `fieldState.initialValue` set from `data[field.name]` (lines 192-193). It is then written to `state[path]` at line 197. Example: a field with `condition: () => false` and `access.read: () => false` now sends its raw value to the client in the form-state response. The read-access check needs to run before this short-circuit, or the value should not be copied here."
+    },
+    {
+      "path": "packages/ui/src/forms/fieldSchemasToFormState/addFieldStatePromise.ts",
+      "line": 197,
+      "body": "The short-circuit also applies to non-data container fields that have subfields (row, collapsible, unnamed group). For these, `state[path]` is now the bare `fieldState`. The removed code at old lines 826-832 and 951-957 always set `disableFormData: true` on that entry. A hidden row or collapsible therefore no longer carries `disableFormData`. This is the same state entry that the visible case marks to be excluded from submitted data."
+    }
+  ]
+}

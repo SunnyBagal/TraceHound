@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(dashboard): Add FE validation for conditional prices",
+  "comments": [
+    {
+      "path": "packages/admin/dashboard/src/routes/locations/common/schema.ts",
+      "line": 371,
+      "body": "The overlap check only tests whether two operator values are numerically equal, and it ignores which operator each value belongs to. That gives false positives and false negatives.\n\nFalse positive: price A `{lt: 100}` and price B `{gte: 100}` are adjacent and do not overlap. The check sees 100 === 100 and adds an `overlappingConditions` error on B's `gte`. `lt`, `gt` and `eq` are the operators the dashboard otherwise leaves to the API (see the `hasEqLtGt` comment at schema.ts:25). Rules that were valid there now can't be saved when the user opens the modal.\n\nFalse negative: A `{gte: 0, lte: 100}` and B `{gte: 50, lte: 150}` overlap, but no two values are equal, so nothing is flagged.\n\nThe check is therefore wrong in both directions. It needs real interval comparison that accounts for each operator's inclusivity."
+    },
+    {
+      "path": "packages/admin/dashboard/src/routes/locations/common/schema.ts",
+      "line": 333,
+      "body": "Two conditional prices with the same amount are now rejected as `duplicateAmount`, even when their conditions are completely different. Example: `{amount: 10, gte: 0, lte: 50}` and `{amount: 10, gte: 100, lte: 200}` fail validation on the second row's `amount`. Nothing in the existing schema or the API requires amounts to be unique across rules. This blocks legitimate configurations, such as the same price for two separate cart-total bands. The uniqueness check is on the wrong field, because the conflict is in the conditions, not the amount."
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "pr_title": "fix(payment): round currency precision",
+  "comments": [
+    {
+      "path": "packages/modules/payment/src/services/payment-module.ts",
+      "line": 984,
+      "body": "The completion check in `maybeUpdatePaymentCollection_` changed from `MathBN.eq(paymentCollection.amount, capturedAmount)` to `MathBN.gte(round(captured), round(amount))`. The PR describes a rounding fix, but this also changes the rule. A collection now becomes `COMPLETED` and gets `completed_at` set whenever captured is greater than the collection amount. Before, only an exact match did that. For example, take a collection with amount 500 and sessions authorized for 1000, then capture 1000. Before the change this stayed `authorized`. It now becomes `completed`. The PR flips the expectation in `index.spec.ts` (around line 1108) from `authorized` to `completed` to match. That hides the behavior change instead of rounding-only. Callers that treat `completed` as 'paid exactly the collection amount' now see over-captured collections as completed. If only rounding tolerance is wanted, keep `eq` on the rounded values."
+    }
+  ]
+}

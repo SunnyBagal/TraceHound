@@ -1,0 +1,20 @@
+{
+  "pr_title": "fix(medusa,file-local,file-s3,core-flows): fix csv parsing special characters",
+  "comments": [
+    {
+      "path": "packages/modules/providers/file-s3/src/services/s3-file.ts",
+      "line": 124,
+      "body": "The provider now guesses the content encoding. It treats `file.content` as base64 if `Buffer.from(content,'base64').toString('base64') === content`. Otherwise it falls back to UTF-8. The `catch` can never run, because `Buffer.from` doesn't throw for these encodings. This has two failure modes.\n\n1. Any caller that still passes a binary string (`buffer.toString('binary')`) now gets its bytes corrupted. The documented contract in `packages/core/types/src/file/service.ts:33` and the SDK docs in `packages/core/js-sdk/src/admin/upload.ts:38` still say 'binary string'. `packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts:41-46` uploads `fileContent.toString('binary')` for a JPEG. That string isn't valid base64, so it is re-encoded as UTF-8. Every byte above 0x7F becomes two bytes, and the image is corrupted.\n2. Plain-text content that happens to be valid canonical base64 is decoded as base64 instead of stored as text. Examples are a short alphanumeric string such as `abcd`, or a file whose length is a multiple of 4 and which uses only base64 characters. The stored file is then garbage.\n\nThe heuristic is ambiguous. The provider contract should be explicit, for example an encoding flag or base64 everywhere, rather than inferred from the content."
+    },
+    {
+      "path": "packages/modules/providers/file-local/src/services/local-file.ts",
+      "line": 65,
+      "body": "This has the same ambiguous base64 sniffing as the S3 provider. Binary-string content from other callers of the file service (`uploadFilesWorkflow`, whose docs say 'binary-string') fails the base64 round-trip check and is written as UTF-8, which corrupts non-ASCII bytes. Text content that happens to be valid base64 is silently decoded into the wrong bytes. The `try/catch` fallback to `binary` is dead code because `Buffer.from` doesn't throw."
+    },
+    {
+      "path": "packages/medusa/src/api/admin/uploads/route.ts",
+      "line": 27,
+      "body": "The route now sends base64, but the file provider contract is still documented as a 'binary string'. Third-party file providers (`AbstractFileProviderService` implementations) still decode `content` as binary. The change silently breaks them: uploaded images are stored as base64 text. Only the built-in local and S3 providers were updated, and only with a guessing heuristic."
+    }
+  ]
+}

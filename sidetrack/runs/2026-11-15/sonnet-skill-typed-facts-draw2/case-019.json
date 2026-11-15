@@ -1,0 +1,20 @@
+{
+  "pr_title": "feat: implement resend rest email adapter",
+  "comments": [
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 136,
+      "body": "Attachment content is turned into a `Buffer` (line 136 for strings, line 143 for Buffers), and the whole payload is then sent with `JSON.stringify(sendEmailOptions)` at line 41. `JSON.stringify` turns a Buffer into `{\"type\":\"Buffer\",\"data\":[...]}`. The Resend REST API expects `content` to be a base64 string. Any email with an attachment will be rejected by Resend, or the attachment will be corrupt. Encode with `.toString('base64')` instead of passing the Buffer."
+    },
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 108,
+      "body": "`mapAddresses` returns `''` when the input is undefined. `mapPayloadEmailToResendEmail` (lines 80-81) uses it for `bcc` and `cc`, so every email without cc/bcc sends `\"cc\":\"\",\"bcc\":\"\"`. `to` goes through the same path. Resend validates these fields as email addresses, so an empty string is likely to be rejected with a validation error. The spec test only mocks `fetch`, so it can't catch this. Return `undefined` and omit the field when no addresses are given."
+    },
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 85,
+      "body": "`html` and `text` fall back to `''` (lines 85-86), so a text-only email is sent with `html: \"\"`, and an html-only email is sent with `text: \"\"`. An empty `html` field can override or invalidate the real body, and an empty `text` can suppress Resend's auto-generated plain-text part. Omit these fields when they are not provided."
+    }
+  ]
+}

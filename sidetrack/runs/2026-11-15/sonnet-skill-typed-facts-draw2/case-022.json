@@ -1,0 +1,20 @@
+{
+  "pr_title": "Feature : Adding percentage option to Input Number",
+  "comments": [
+    {
+      "path": "packages/twenty-server/src/engine/metadata-modules/field-metadata/field-metadata-validation.service.ts",
+      "line": 51,
+      "body": "`validateSettingsOrThrow` is now `async`, but its only caller doesn't await it. `field-metadata.service.ts:764` calls `this.fieldMetadataValidationService.validateSettingsOrThrow({...})` as a bare statement in the non-async `validateFieldMetadata`. The validation therefore no longer blocks anything. A NUMBER field created or updated with `decimals: -1`, `decimals: 1.5` or `type: 'foo'` is saved anyway. The `FieldMetadataException` is thrown inside a floating promise, so it becomes an unhandled promise rejection instead of an INVALID_FIELD_INPUT response. That can crash the Node process, depending on its unhandled-rejection settings. The caller needs to await it, and `validateFieldMetadata` needs to become async, with its callers at lines 172 and 404 updated to match."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/meta-types/display/components/NumberFieldDisplay.tsx",
+      "line": 11,
+      "body": "The new code checks `fieldValue` for truthiness before formatting, so a stored value of `0` falls through to `null` and the cell renders blank. Before this change `NumberDisplay` rendered `{value && formatNumber(...)}`. For `0` that rendered `0`, not nothing. This affects plain number fields too, and a 0% percentage field also shows blank. Test for null or undefined instead, for example `isDefined(fieldValue)`."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/utils/computeDraftValueFromFieldValue.ts",
+      "line": 51,
+      "body": "`(fieldValue * 100).toString()` produces floating-point artifacts. A stored 0.07 becomes `'7.000000000000001'`, and 0.29 becomes `'28.999999999999996'`. That string is what the percentage input shows when editing, and what `persistNumberField` divides by 100 and saves on blur. The user sees ugly values, and unrelated saves can drift the stored value. Round the product, or use `toFixed` or `parseFloat(x.toPrecision(12))`."
+    }
+  ]
+}

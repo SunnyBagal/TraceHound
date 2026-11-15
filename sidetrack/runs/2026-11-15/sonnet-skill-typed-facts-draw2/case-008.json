@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat(utils): Introduce promiseAll util",
+  "comments": [
+    {
+      "path": "packages/medusa/src/subscribers/order.js",
+      "line": 37,
+      "body": "`Promise.all` was replaced with `promiseAll`, but this file has no import for it. The file has no `import` or `require` at all, and `promiseAll` appears only on this line. `handleOrderPlaced` is subscribed to `order.placed` (line 27), so every placed order throws `ReferenceError: promiseAll is not defined` here. Discount `usage_count` is then never incremented, and the event handler fails. Add `import { promiseAll } from \"@medusajs/utils\"`."
+    }
+  ]
+}

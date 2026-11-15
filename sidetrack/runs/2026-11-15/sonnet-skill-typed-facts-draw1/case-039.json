@@ -1,0 +1,20 @@
+{
+  "pr_title": "fix(pricing): price list prices perf issues",
+  "comments": [
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 1839,
+      "body": "`hashPrice` no longer sorts price rules by attribute. It maps them in array order and joins them into one `rules:` part, and `parts.sort()` only reorders the top-level parts. An incoming entry builds its rules from `Object.entries(cleanRules)`, which follows the caller's key order. Existing prices come from `priceService_.list(..., {relations:[\"price_rules\"]})`, which follows DB order. The same price with rules `{region_id, customer_group}` in one order and `{customer_group, region_id}` in the other now gets different hashes. `existingPricesMap.get(entryHash)` then misses (`normalizePrices`, around line 962), the existing id and rules are not reused, and a duplicate price is upserted. The old code sorted entries by attribute, so it did not have this problem."
+    },
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 1826,
+      "body": "The new `hashPrice` only adds a part when the key is present (`\"min_quantity\" in price`, and the same check for `max_quantity`, `price_set_id` and `price_list_id`). Existing prices loaded from the DB always carry these keys, with `null` when unset, so they hash as `min:|max:`. Incoming DTOs that omit `min_quantity`, `max_quantity` or `currency_code` hash without those parts. The old code normalised absent and null values to the same value. Re-adding or updating a price-list price with no quantity bounds therefore no longer matches the existing row (`existingPricesMap.get(entryHash)` in `normalizePrices`). `id` and `price_rules` are not carried over, and a duplicate or conflicting price is upserted. A `min_quantity` of 0 is also now hashed as `min:0`, where it used to be treated as null."
+    },
+    {
+      "path": "packages/modules/pricing/src/services/pricing-module.ts",
+      "line": 955,
+      "body": "`normalizePrices` now mutates the caller's input objects: `const entry = price as UpsertPriceDTO`, then `entry.price_list_id = ...`, `entry.price_rules = ...`, `entry.id = existing.id`. `addPrices_` also writes `price_set_id` into the caller's price objects. When `price.rules` is present but empty, `delete entry.rules` is skipped because it is now inside `if (hasRulesInput)`, so a raw `rules` field is passed through to the upsert. The old code built a fresh copy and always deleted `rules`. Any caller that reuses the same price object, for example one DTO passed to several price lists, will see the earlier `price_list_id`, `id` and `price_rules` leak into later entries."
+    }
+  ]
+}

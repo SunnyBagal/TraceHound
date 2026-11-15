@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat(): Add modules options autocomplete to medusa config",
+  "comments": [
+    {
+      "path": ".changeset/great-lies-decide.md",
+      "line": 2,
+      "body": "The diff adds `declare module \"@medusajs/types\" { interface ModuleOptions ... }` to `packages/modules/fulfillment/src/types/index.ts` and `packages/modules/cache-inmemory/src/types/index.ts`. Neither `@medusajs/fulfillment` nor `@medusajs/cache-inmemory` is listed in this changeset. Changesets only bumps and publishes packages it lists, so neither package will be released with the new typings. Config autocomplete will then be missing for those two modules. Add both packages to the changeset."
+    }
+  ]
+}

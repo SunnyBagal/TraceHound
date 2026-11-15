@@ -21,3 +21,13 @@ at one of the two directories.
   review and were run once after it reset. 40 of 40 reviews, each from a single completed attempt.
 - `proxy-judge-caught.json`: the case ids the proxy judge (bench-judge-v1's prompt on Claude Sonnet) counted as caught in
   the two draw-1 folders. Not the scorer of record; kept so the proxy can be compared with the real judge.
+
+## Typed facts (narrow typed check)
+
+`src/affected/typed-narrow.ts` (`typed-narrow@0.2`) completed on 40 of 40 cases and produced one finding, in one case
+(case-025). Only that case's input changed, so only that case was reviewed again, twice, with the finding given as a fact:
+
+- `sonnet-skill-typed-facts-draw1/` = `sonnet-skill/` with `case-025.json` replaced by the review made with the fact;
+- `sonnet-skill-typed-facts-draw2/` = `sonnet-skill-draw2/` with `case-025.json` replaced the same way.
+
+The other 39 files in each folder are byte-identical copies. Compare the pairs on case-025 only.

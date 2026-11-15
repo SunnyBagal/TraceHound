@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(ui): ensure that schedule publishing time picker can only be in the future",
+  "comments": [
+    {
+      "path": "packages/ui/src/elements/PublishButton/ScheduleDrawer/index.tsx",
+      "line": 295,
+      "body": "`minTime` is computed from `date`, which is the timezone-transposed state. The picker shows `displayedValue` (lines 243-262), which is a different wall-clock value when a timezone is selected. `new Date()` and `startOfDay(new Date())` are also in the user's local timezone, but the picker's wall-clock time is in the selected timezone's frame (`onChangeDate` at 264-279 transposes it). Take a user in UTC+0 who selects `Asia/Tokyo`. `isToday(date)` can be false or true for a different calendar day than the one the picker shows. The disabled time range then won't match the selected day, so past times can still be picked, or valid future times are disabled. Base `isToday` and `minTime` on the value the picker displays, with 'now' converted to the same frame."
+    },
+    {
+      "path": "packages/ui/src/elements/PublishButton/ScheduleDrawer/index.tsx",
+      "line": 296,
+      "body": "`minTime` is memoized on `[date]` only, so `new Date()` is frozen when the date is last changed. If the drawer stays open, the minimum drifts into the past. Times that are now in the past stay selectable, and the memo never updates. Also, `date` is not re-validated when the user moves from a future day to today. A previously chosen time earlier than now stays selected and can be submitted."
+    }
+  ]
+}

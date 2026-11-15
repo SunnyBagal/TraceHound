@@ -1,0 +1,20 @@
+{
+  "pr_title": "feat: add FormData, text, and none body types to HTTP request workflow",
+  "comments": [
+    {
+      "path": "packages/twenty-shared/src/workflow/index.ts",
+      "line": 10,
+      "body": "The import path `./constants/ContentTypeValuesHttpRequest` doesn't match the file name. The new file is `constants/contentTypeValuesHttpRequest.ts` (lowercase c), added in this diff. On case-sensitive file systems (Linux CI, Docker) this module can't be resolved, so the `twenty-shared/workflow` build fails. The front end and server both import `CONTENT_TYPE_VALUES_HTTP_REQUEST` or `parseDataFromContentType` from this barrel, so both break. Rename the import or the file so the case matches."
+    },
+    {
+      "path": "packages/twenty-server/src/engine/core-modules/tool/tools/http-tool/http-tool.ts",
+      "line": 33,
+      "body": "`parseDataFromContentType(body, contentType)` returns a JSON string when `content-type` is undefined or unrecognised. Before, an object body went to axios as an object, and axios sent it as `application/json`. Now axios gets a string and, with no content-type header, defaults it to `application/x-www-form-urlencoded`. A request with a `Content-Type` header (capitalised, which this code doesn't match because it reads only `headers?.['content-type']`) or with no content-type at all would therefore send a JSON body with the wrong content type. This PR also stops auto-adding `content-type: application/json` when the method changes (`useHttpRequestForm.ts` lines 54-58 removed that). That makes headerless POST steps more likely, and existing saved workflows already have no `content-type` header. Normalise the header name case, and set `application/json` when the header is missing."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/workflow/workflow-steps/workflow-actions/http-request-action/utils/getBodyTypeFromHeaders.ts",
+      "line": 15,
+      "body": "`getBodyTypeFromHeaders` reads only the lowercase `content-type` key and requires an exact match with the value. Existing saved steps may have `Content-Type: application/json`, or `application/json; charset=utf-8`, or no content-type header. All of these now give `null`. `BodyInput` then shows 'None' and 'No body' (`BodyInput.tsx` line 172 and the final ternary branch), and the editor hides the saved body even though it is still in the action. The body can't be edited until the user picks a type, and changing the type clears it (`useHttpRequestForm` sets `body: undefined`). There is no migration or case-insensitive fallback."
+    }
+  ]
+}

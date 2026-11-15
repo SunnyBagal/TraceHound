@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(workflow): hide empty option for non-nullable select fields",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/ui/form-types/components/FormSelectFieldInput.tsx",
+      "line": 105,
+      "body": "The empty option is now added only when `isNullable` is truthy. `isNullable` is optional and undefined by default, so every caller that doesn't pass it loses the \"No value\" option. The PR description says it \"defaults to the previous behaviour\" and describes `isNullable !== false`, but this code does not do that. The callers that don't pass `isNullable` are FormCountrySelectInput.tsx:57, FormCallingCodeSelectInput.tsx:84, FormCurrencyFieldInput.tsx:60, WorkflowEditActionCodeFields.tsx:129, WorkflowEditActionEmailBase.tsx:205, WorkflowEditActionFormFieldSettings.tsx:90 and WorkflowFormFieldSettingsSelect.tsx:85 and :106. Before this change each of them could clear its value; now they can't. FormFieldInput.tsx:124 also passes `field.metadata.isNullable`, which is undefined when the metadata doesn't set it. Fix: use `isNullable !== false`, or pass `isNullable` explicitly from those callers."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/ui/components/FormFieldInput.tsx",
+      "line": 124,
+      "body": "The surrounding code reads `field.metadata?.options`, using optional chaining on `metadata`. This line reads `field.metadata.isNullable` without it, which is inconsistent and throws if `metadata` is ever undefined. The PR description says it passes `field.metadata?.isNullable`. Use `field.metadata?.isNullable`."
+    }
+  ]
+}

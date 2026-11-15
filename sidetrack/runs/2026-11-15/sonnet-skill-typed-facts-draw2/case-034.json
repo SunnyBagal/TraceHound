@@ -1,0 +1,4 @@
+{
+  "pr_title": "fix(ui): query preset crash with empty filters in postgres/sqlite",
+  "comments": []
+}

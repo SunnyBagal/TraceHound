@@ -1,0 +1,15 @@
+{
+  "pr_title": "fix(workflow): hide empty option for non-nullable select fields",
+  "comments": [
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/ui/form-types/components/FormSelectFieldInput.tsx",
+      "line": 105,
+      "body": "The PR description says `isNullable` is optional and \"defaults to the previous behaviour\" (`isNullable !== false`). The code does not do that: `isNullable ? [emptyOption, ...options] : options` treats `undefined` as non-nullable. The old code always passed `emptyOption`, so every caller that doesn't pass `isNullable` loses its \"No value\" choice. Callers affected include FormCountrySelectInput.tsx:57, FormCallingCodeSelectInput.tsx:84, FormCurrencyFieldInput.tsx:60 (`<FormSelectFieldInput ... options={currencies}>` with no `isNullable`), WorkflowEditActionEmailBase.tsx:205 and WorkflowEditActionCodeFields.tsx:129. Country and calling code already handle `null` in their `onChange` (FormCountrySelectInput.tsx:49), and currency maps null to `currencyCode: null` (FormCurrencyFieldInput.tsx:51). So users can no longer clear those inputs. Opening one with an empty `defaultValue` (e.g. `defaultValue={... ?? ''}` in FormCurrencyFieldInput.tsx:62) now shows the first option, because `Select` falls back to `options[0]` (Select.tsx:120-122), while the stored value stays ''. Fix: use `isNullable !== false`."
+    },
+    {
+      "path": "packages/twenty-front/src/modules/object-record/record-field/ui/components/FormFieldInput.tsx",
+      "line": 124,
+      "body": "`field.metadata.isNullable` is read without the `?.` used on the line above (`field.metadata?.options`). More importantly, `isNullable` is probably `undefined` for select fields created before this flag was set, or for fields built from partial metadata. With the strict `isNullable ?` check in FormSelectFieldInput.tsx:105, `undefined` removes the empty option on nullable fields as well. Confirm that `FieldSelectMetadata.isNullable` is always populated here, or default `undefined` to nullable."
+    }
+  ]
+}

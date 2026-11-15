@@ -1,0 +1,10 @@
+{
+  "pr_title": "feat(utils): Introduce promiseAll util",
+  "comments": [
+    {
+      "path": "packages/medusa/src/subscribers/order.js",
+      "line": 37,
+      "body": "`promiseAll` is called here but never imported. The file (`packages/medusa/src/subscribers/order.js:1-50`) has no `import` or `require` at all, and the PR only swapped `Promise.all` for `promiseAll` on this line. The `.js` file isn't type-checked, so `tsc` won't flag it. When the `order.placed` event fires, `handleOrderPlaced` throws `ReferenceError: promiseAll is not defined`. Discount `usage_count` is then never incremented for any placed order. Fix: add `import { promiseAll } from \"@medusajs/utils\"`."
+    }
+  ]
+}

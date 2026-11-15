@@ -1,0 +1,25 @@
+{
+  "pr_title": "feat: implement resend rest email adapter",
+  "comments": [
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 488,
+      "body": "Attachment content is turned into a `Buffer` (line 488 for strings, line 495 for buffers). The request body is then built with `JSON.stringify(sendEmailOptions)` at line 393. `JSON.stringify` turns a Buffer into `{\"type\":\"Buffer\",\"data\":[...]}`. Resend's REST API takes attachment `content` as a base64 string or a byte array, so it will most likely reject this shape. Any email with an attachment, for example `payload.sendEmail({ attachments: [{ filename: 'a.txt', content: 'hi' }] })`, would then fail or send corrupted content. Encode the content as base64 before serializing."
+    },
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 432,
+      "body": "`mapAddresses` returns `''` for a missing value (line 459), and `bcc` and `cc` always go through it (lines 432-433). Every email without cc/bcc is therefore sent with `\"bcc\":\"\",\"cc\":\"\"`. Resend validates these fields as email addresses, so it will likely reject or mishandle empty strings, and plain `sendEmail({to, subject, text})` calls could fail. Omit the fields when they are undefined. The same applies to `html: ''` and `text: ''` at lines 437-438."
+    },
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 439,
+      "body": "`mapPayloadEmailToResendEmail` never maps `message.replyTo` or `message.headers`, although `ResendSendEmailOptions` declares `reply_to` and `headers`. Any caller that passes `replyTo` or custom headers, such as a reply-to on a form notification, has them silently dropped. Other Payload email adapters honor these fields."
+    },
+    {
+      "path": "packages/email-resend-rest/src/index.ts",
+      "line": 482,
+      "body": "An attachment with no `content` throws a 400 `APIError`, which rejects attachments that only have a `path`. The local `Attachment` type declares `path` as valid, and Nodemailer-style `SendEmailOptions` attachments allow it. Any email with a path-based attachment fails entirely instead of being sent."
+    }
+  ]
+}
