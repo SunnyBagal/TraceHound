@@ -1,0 +1,42 @@
+{
+  "what": "proxy judge verdicts for the two folders of sidetrack/runs/2026-11-15 (draw 1)",
+  "judge": "bench-judge-v1's prompt and reply check on Claude Sonnet via headless Claude Code; not the scorer of record",
+  "note": "second judging pass, 31 of 31 bug cases judged, 0 JUDGE_FAILED. A case with no comment was not sent to the judge and counts as not caught. Only caught case ids are listed; every other case is not caught or not a bug case.",
+  "pass1": "the first pass ran two judge processes at once and 9 calls failed in each folder; on the case-reviews both passes judged (15 Haiku, 14 Sonnet) the verdicts were the same",
+  "haiku-skill": {
+    "caught": [
+      "case-006",
+      "case-011",
+      "case-022",
+      "case-023",
+      "case-030",
+      "case-033",
+      "case-037",
+      "case-038",
+      "case-039",
+      "case-040"
+    ],
+    "caught_count": 10,
+    "judge_failed": []
+  },
+  "sonnet-skill": {
+    "caught": [
+      "case-006",
+      "case-011",
+      "case-015",
+      "case-016",
+      "case-021",
+      "case-022",
+      "case-023",
+      "case-027",
+      "case-030",
+      "case-033",
+      "case-036",
+      "case-037",
+      "case-038",
+      "case-040"
+    ],
+    "caught_count": 14,
+    "judge_failed": []
+  }
+}
