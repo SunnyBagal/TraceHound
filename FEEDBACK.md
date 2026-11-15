@@ -828,3 +828,10 @@ was re-run.
 Token Factory chat completions, `nvidia/nemotron-3-super-120b-a12b` (bench-judge-v1, reasoning on): 47 requests, 47
 succeeded, 0 failed; about 1 s per call (two sequential processes of 49 s and 58 s). Ledger $0.02581 at
 `config/prices.json`'s $0.30 / $0.90, which decision 076k item 10 suspects runs about 15% low; the console check is pending.
+
+## 2026-11-15 (bunny, decision 076o)
+Token Factory chat completions, `nvidia/nemotron-3-super-120b-a12b` (bench-judge-v1, reasoning on): 82 requests, 82
+succeeded, 0 failed. Five sequential processes, 16:08:50Z to 16:12:21Z: three full folders took 83 s, 50 s and 56 s (24 to
+30 calls each, about 2 s per call); two needed 1 fresh call each (the rest came from the response cache). Ledger $0.04832 at
+`config/prices.json`'s $0.30 / $0.90, which decision 076k item 10 suspects runs about 15% low; the console check is pending.
+No errors; nothing wrong or missing in the docs or console seen this session.

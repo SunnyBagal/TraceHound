@@ -4407,3 +4407,12 @@ in `tracehound-testset/run/out/`. The held-out run is untouched.
   per-case catches against the real judge's for $0.
 
 **Touches:** artu1 this file, `docs/budget.md`, `.agents/LOG.md`, the brain inbox; bunny's report in `run/out/`.
+- **Results (bunny, 2026-11-15, `run/out/bunny.076o.md`; added to 076o):** 5 unjudged folders at `ccf6c01`, not 7
+  (`haiku-skill/` and `sonnet-skill/` were scored under 076n, trees unchanged). bench-judge-v1, 82 calls, 0 failed,
+  0 `JUDGE_FAILED`, **$0.04832** of $0.25. Catches of 31: `sonnet-skill-draw2` 17, short packet draw 1 17, draw 2 17,
+  typed facts draw 1 17, draw 2 17 (A0 12); against A0 each is 2–3 A0-only vs 7–8 folder-only, exact sign test p 0.18–0.23
+  (dev, report-only). **A/B 1:** arm A mean 17.0, arm B mean 17.0; union 19 each; A-only 1, B-only 1 (p 1.0); **B meets
+  "no loss of 4+ catches"**; mean clean-case comments B 2 vs A 3. Still open under the plan's rule: the cost condition
+  (Fable's model-free numbers, not received) and "on both models" (the Haiku half was not run). case-040: the short packet's
+  draw-2 rerun review did not catch it (every other Sonnet draw did); it does not change the line. case-025: the typed fact
+  gave 0 catches in both draws (parents 0 too). Proxy vs real: Haiku skill 25/31 agree, Sonnet skill 28/31.

@@ -219,3 +219,4 @@ computed value, the difference is unexplained spend and the reserve absorbs it f
 | 2026-11-15 | **076n approved by Sunny:** bunny scores the side track's 2026-11-15 review folders with bench-judge-v1, sequential, dev only; estimate ≈ $0.05, **hard cap $0.10** (run cap $0.10, total = job-start ledger + $0.10); from unallocated | $0.10 | — | **$16.46** (console) |
 | 2026-11-15 | **076n scoring done** (bunny): bench-judge-v1, 47 calls, 0 failed; **$0.02581** of $0.10 (L0 $47.90907) | $0.10 | $0.02581 | computed $16.46 − $0.02581 = **$16.43** |
 | 2026-11-15 | **076o approved by Sunny:** bunny scores the side track's unjudged 2026-11-15 folders (≈ 7) with bench-judge-v1, sequential, dev only; **hard cap $0.25**, stop at the cap; from unallocated | $0.25 | — | computed **$16.43** |
+| 2026-11-15 | **076o scoring done** (bunny): 5 folders, 82 calls, 0 failed; **$0.04832** of $0.25 (L0 $47.93488) | $0.25 | $0.04832 | computed $16.43 − $0.04832 = **$16.38** |
