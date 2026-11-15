@@ -4363,3 +4363,22 @@ It amends 076k items 8–9 for this track only.
 
 **Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`, the brain inbox; the side-track branch (new paths only).
 Nothing in the held-out run, its freeze, the protocol or `docs/budget.md` changes.
+
+## 076n — Side-track scoring spend; tonight's side-track result (2026-11-15)
+
+**Status: ruled by Sunny (15 Nov 2026).**
+- **Spend:** about **$0.05** of Nebius money, **hard cap $0.10**, for bunny (Terry) to score the side track's 2026-11-15
+  review folders (`sidetrack/runs/2026-11-15/` on `claude/upbeat-lamport-b280zm`) with the real bench-judge-v1, one judge
+  process after the other (parallel judging hits a limit). Dev cases only. Caps per 076c item 1: a job-start ledger value
+  in the job file, `TRACEHOUND_BUDGET_RUN_USD=0.10`, total = that value + $0.10. From unallocated; it is not L1's.
+- **Tonight's side-track result (076m), recorded as reported:** the skill reviewer against the pipeline shows **no
+  detectable change** (a difference under 4 catches of 31); the lookup speed fix landed; the contract check produced
+  **0 facts** (its typed stage finished on 3 of 40 cases), so contracts-as-facts is **untested**. These are proxy-scored
+  numbers until bunny's real-judge scores exist.
+- **Checks:** bunny reports judged catches of 31 and comments on the 9 clean cases per folder beside the proxy numbers,
+  flagging every case where the real judge and the proxy disagree; codex ($0, read-only, dev only) reports for the 40
+  dev cases whether the case-head tree equals the "original commit" the side track reviewed (tree hashes), with the count
+  and any that differ.
+
+**Touches:** artu1 this file, `docs/budget.md` (approval row), `.agents/LOG.md`, the brain inbox; bunny and codex reports
+in `tracehound-testset/run/out/`. The held-out run is untouched.
