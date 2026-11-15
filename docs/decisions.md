@@ -4433,3 +4433,28 @@ registered primary.
 `.agents/LOG.md`; the side-track branch `claude/upbeat-lamport-b280zm` (short packet as its default, typed-facts path
 removed, `sidetrack/runs/` removed after E1); `tracehound-testset` (receives the dev review folders after E1). Not
 touched: the protocol, the freeze, H1/H2, `docs/budget.md`'s held-out lines.
+
+## 076q — Console reading and listed rates; the 1.08 trip; A/B 2 approved; A/B 3 deferred; dev exposure count (2026-11-16)
+
+**Status: ruled by Sunny (16 Nov 2026).** The held-out plan does not change; A0 on Nemotron stays the registered primary.
+1. **Console reading and listed rates:** Sunny's message carried placeholders, not values ("$[READING] at [TIME IST]";
+   "[MODEL: input $/MTok, output $/MTok]"), so **the reading, its time and the listed rates are not given** and are
+   recorded when Sunny sends them. The ruling as given: the reading is taken more than 2 hours after the last paid call;
+   bunny (Terry) fixes `config/prices.json` from the listed rates (codex/Amy GOs), and a correction row re-prices R1, 076j,
+   076n and 076o without rewriting history.
+2. **The 1.08 stop:** if that reading shows no drop beyond the $0.11 already seen, the trip was billing lag and E1
+   proceeds under its existing cap after P1 closes. If it has dropped further, nothing paid runs and artu1 brings Sunny the
+   numbers. **Until the reading arrives, the stop holds:** no paid Nebius call, E1 included.
+3. **A/B 2 approved** (`sidetrack/ab2-plan.md`, committed at `f827b23` before any run): Sonnet only, side track only,
+   reviews on Sunny's subscription, run by bunny after E1 is done. Judging with bench-judge-v1, one process at a time,
+   **cap $0.15 from unallocated**.
+4. **A/B 3 deferred** (`sidetrack/ab3-plan.md`) until A/B 2 is scored; no run and no judging. Reasons: pooled Sonnet +
+   Opus is estimated above Sunny's $0.25 per PR ceiling (Opus cost unmeasured), and its clean-case rule makes a keep
+   nearly impossible.
+5. **Dev exposure count (Fable; counts only):** 0 of 31 dev fix commits are dated before 1 July 2026; 24 of 31
+   bug-introducing commits are. Limits: the model cutoff is published to the month only, and earlier bug reports or
+   discussion were not checked.
+
+**Touches:** artu1 this file, `docs/budget.md` (A/B 2 cap; the reading and the correction row when the values arrive),
+`.agents/STATE.md`, `.agents/LOG.md`; bunny `config/prices.json` (codex GO) once the rates are given; the side-track
+branch (A/B 2 runs after E1; A/B 3 parked). Not touched: the protocol, the freeze, H1/H2.
