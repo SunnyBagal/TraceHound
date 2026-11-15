@@ -41,10 +41,18 @@ function judge(input: JudgeInput, model: string): { ok: true; caught: boolean } 
       { encoding: "utf8", timeout: 300_000, maxBuffer: 64 * 1024 * 1024, cwd: "/", stdio: ["ignore", "pipe", "pipe"] },
     );
     let reply = "";
+    let cliError = "";
     try {
-      reply = (JSON.parse(run.stdout || "null") as { result?: string } | null)?.result ?? "";
+      const parsed = JSON.parse(run.stdout || "null") as { result?: string; is_error?: boolean } | null;
+      reply = parsed?.result ?? "";
+      if (!parsed || parsed.is_error) cliError = `claude CLI: ${(reply || run.stderr || "no output").slice(0, 160)}`;
     } catch {
-      /* not JSON: counted as an invalid reply */
+      cliError = `claude CLI: ${(run.error?.message ?? run.stderr ?? "output was not JSON").slice(0, 160)}`;
+    }
+    if (cliError) {
+      why = cliError;
+      spawnSync("sleep", [String(20 * (attempt + 1))]); // a limit or a transient error: wait before the one retry
+      continue;
     }
     const start = reply.indexOf("{");
     const checked = validateJudgeReply(start >= 0 ? reply.slice(start, reply.lastIndexOf("}") + 1) : reply, input);
@@ -104,16 +112,18 @@ function main(): number {
     const hit = locationHit(comments, targets);
     if (hit) hits++;
     let caught: boolean | "judge-failed" | null = null;
+    let judgeWhy: string | undefined;
     if (!values["no-judge"]) {
       if (comments.length === 0) caught = false;
       else {
         const verdict = judge({ prTitle: c.title, golden: [{ id: "G1", text: expected.description }], tool: comments.map((t, i) => ({ id: `T${i + 1}`, ...t })) }, values["judge-model"]!);
         caught = verdict.ok ? verdict.caught : "judge-failed";
+        if (!verdict.ok) judgeWhy = verdict.why;
       }
       if (caught === true) catches++;
       if (caught === "judge-failed") judgeFailed++;
     }
-    rows.push({ case: c.id, label: "bug", comments: comments.length, locationHit: hit, judged: caught });
+    rows.push({ case: c.id, label: "bug", comments: comments.length, locationHit: hit, judged: caught, ...(judgeWhy && { judgeWhy }) });
   }
   const w = (k: number, n: number) => { const i = wilson(k, n); return i ? `[${(100 * i[0]).toFixed(0)}%, ${(100 * i[1]).toFixed(0)}%]` : "n/a"; };
   fs.writeFileSync(values.detail, JSON.stringify({ run: path.resolve(values.run), judge: values["no-judge"] ? null : `bench-judge-v1 prompt on claude ${values["judge-model"]} (proxy)`, rows }, null, 2) + "\n");
