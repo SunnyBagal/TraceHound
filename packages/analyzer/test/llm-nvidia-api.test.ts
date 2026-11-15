@@ -158,10 +158,11 @@ describe("routing", () => {
 });
 
 describe("price and ledger", () => {
-  it("prices the NVIDIA API id at 0 and leaves the Token Factory placeholder alone", () => {
+  it("prices the NVIDIA API id at 0 and the Token Factory Ultra id at its listed rate (076q), never at 0", () => {
     const table = loadPriceTable(REPO_PRICES);
     expect(priceFor(table, NVIDIA_API_MODEL)).toEqual({ inputPer1M: 0, outputPer1M: 0, estimated: false });
-    expect(table.models[ULTRA_TF]).toEqual({ inputPer1M: null, outputPer1M: null, placeholder: true });
+    expect(table.models[ULTRA_TF]).toEqual({ inputPer1M: 1, outputPer1M: 3, placeholder: false });
+    expect(priceFor(table, ULTRA_TF)).toEqual({ inputPer1M: 1, outputPer1M: 3, estimated: false });
   });
 
   it("ledgers an Ultra call at $0 with its real token counts", async () => {
