@@ -4382,3 +4382,8 @@ Nothing in the held-out run, its freeze, the protocol or `docs/budget.md` change
 
 **Touches:** artu1 this file, `docs/budget.md` (approval row), `.agents/LOG.md`, the brain inbox; bunny and codex reports
 in `tracehound-testset/run/out/`. The held-out run is untouched.
+- **Real-judge scores (bunny, 2026-11-15, `run/out/bunny.076n.md`; added to 076n):** bench-judge-v1, sequential, 47 calls,
+  0 `JUDGE_FAILED`, $0.02581 of $0.10. Haiku skill **12/31** catches (A0 v1 12/31; paired 4 vs 4, p 1.0), 2 comments on
+  the 9 clean cases; Sonnet skill **17/31** (paired vs A0 7 vs 2, exact sign test p 0.18, dev, report-only), 2 comments on
+  clean cases. So "no detectable change (under 4 of 31)" holds for Haiku but not for Sonnet, which is +5 over A0 and not
+  significant. The per-case proxy comparison is not done: the proxy's per-case scores are not on the branch.

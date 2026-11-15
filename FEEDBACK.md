@@ -823,3 +823,8 @@ was re-run.
   receive 429 with the same message)"); our reply's text was "worker overloaded", not the documented "System is
   overloaded". The docs give no retry advice for 529 (the 429 example says "Retry the request after 30 sec").
 - **What would have helped (opinion):** a `Retry-After` header or a stated backoff for 529.
+
+## 2026-11-15 (bunny, decision 076n)
+Token Factory chat completions, `nvidia/nemotron-3-super-120b-a12b` (bench-judge-v1, reasoning on): 47 requests, 47
+succeeded, 0 failed; about 1 s per call (two sequential processes of 49 s and 58 s). Ledger $0.02581 at
+`config/prices.json`'s $0.30 / $0.90, which decision 076k item 10 suspects runs about 15% low; the console check is pending.
