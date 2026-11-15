@@ -4387,3 +4387,23 @@ in `tracehound-testset/run/out/`. The held-out run is untouched.
   the 9 clean cases; Sonnet skill **17/31** (paired vs A0 7 vs 2, exact sign test p 0.18, dev, report-only), 2 comments on
   clean cases. So "no detectable change (under 4 of 31)" holds for Haiku but not for Sonnet, which is +5 over A0 and not
   significant. The per-case proxy comparison is not done: the proxy's per-case scores are not on the branch.
+
+## 076o — Scoring the side track's unjudged folders; A/B 1 (short packet) logged (2026-11-15)
+
+**Status: ruled by Sunny (15 Nov 2026).**
+- **Spend:** up to **$0.25** of Nebius money (hard cap; stop at the cap) for bunny (Terry) to score, with the real
+  bench-judge-v1 and one judge process after the other, every folder under `sidetrack/runs/2026-11-15/` on
+  `claude/upbeat-lamport-b280zm` (at `ccf6c01` or later) that has no real-judge score yet: per Fable, 7 folders, including
+  `sonnet-short-packet-draw1/`, `-draw2/` and the two `sonnet-skill-typed-facts-*` folders. Dev cases only; caps per 076c
+  item 1 (job-start ledger value in the job file, run cap $0.25, total = that value + $0.25). From unallocated.
+- **Per folder:** catches of 31, comments on the 9 clean cases, paired counts vs A0 (A0-only vs folder-only).
+- **A/B 1 decision line** (plan `sidetrack/ab1-plan.md`, committed before arm B ran): arm A's two draws (`sonnet-skill/`,
+  `sonnet-skill-draw2/`) vs arm B's two (`sonnet-short-packet-draw1/`, `-draw2/`): union catches, paired counts, and whether
+  B meets "no loss of 4+ catches". case-040 is flagged: its draw-2 review failed at the account's usage limit and was run
+  once after the reset. Sonnet only; the plan's Haiku half was not run (15 Nov ruling).
+- **Arm B model-free results:** logged as Fable reported them, pending judged catches. The numbers are in Fable's session
+  report, which is not on the branch; artu1 has not received them, so they are recorded when Sunny passes them on.
+- **Proxy vs real:** `sidetrack/runs/2026-11-15/proxy-judge-caught.json` is now on the branch, so bunny diffs the proxy's
+  per-case catches against the real judge's for $0.
+
+**Touches:** artu1 this file, `docs/budget.md`, `.agents/LOG.md`, the brain inbox; bunny's report in `run/out/`.
