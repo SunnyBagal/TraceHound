@@ -54,7 +54,7 @@ further.
 **Prediction, recorded before the runs (the author's):** no detectable change.
 
 **Training exposure, counted on 2026-11-16 from the export's fix shas and the dev clones (no model).** Of the 31
-bug cases, the fix commit is dated before 1 July 2026 in 0 and after it in 31 (committer and author date agree);
+bug cases, the fix commit is dated before 1 July 2026 in 0 and after it in 31 (the cutoff classifications agree for 31 of 31 fixes; the exact calendar dates agree for 30 of 31);
 the earliest fix is 1 day after that date and the latest 126 days after. The bug-introducing commit is dated
 before 1 July 2026 in 24 of 31. Claude Sonnet 5.5's training-data cutoff is published as June 2026, to the month.
 So no fix commit predates the published cutoff, the margin is one day for the earliest, and the buggy code itself
