@@ -4472,3 +4472,13 @@ branch (A/B 2 runs after E1; A/B 3 parked). Not touched: the protocol, the freez
   (recommended replacement `Qwen/Qwen3-30B-A3B-Instruct-2507`); "Token Factory does not automatically reroute requests".
   On 16 Nov it is still listed by us-central1's `GET /v1/models` (a $0 call) and served 076j's judging on 14 Nov, so it can
   go at any time, before the held-out scoring. A ruling for Sunny.
+- **Prices check (bunny, 16 Nov 2026, `run/out/bunny.076q-prices.md`, $0):** since 14 Nov the one Nebius ledger charged three
+  ids: `nvidia/Nemotron-3.5-Super-VL` (192 calls, $2.80987), `nvidia/nemotron-3-super-120b-a12b` (192, $0.10538),
+  `Qwen/Qwen3-235B-A22B-Instruct-2507` (61, $0.00768). The listed rates equal `config/prices.json` for all three, so
+  re-pricing changes $0.00000 and **no correction row is needed**. No cached-input pricing on the Nebius path (the ledger
+  reads prompt and completion tokens only; cached input can only lower real cost, so it cannot explain the gap);
+  reasoning tokens are inside completion tokens; no default price used. Latent: the Ultra entry is still a placeholder
+  ($5/$15 against the listed $1/$3): bunny fixes it on a branch, codex GO. **The gap stays unexplained:** 0.94 as written,
+  1.17 with the $0.57054 outage charges apart. The outage requests do not cover it: 15 of the 17 failed on DNS and 1 never
+  connected, so at most the one read time-out (≈ $0.034) could have been billed. The per-model console usage for 14 Nov
+  around 08:00–08:10Z would settle whether anything was billed then.
