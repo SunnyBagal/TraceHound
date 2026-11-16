@@ -1,7 +1,7 @@
 # Runbook H2: scoring the held-out window and the blind hand-check
 
 For codex (operator), Sunny (the hand-check, one sitting of 2–3 hours), artu1 (receives counts; lifts the firewall at
-the end). Planner A, 2026-11-11; brought to decision 076d and to decision 076e (item 4, the tag-worktree citation) on 2026-11-13, and to decision 076g (items 1, 4, 5) on 2026-11-13. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md`
+the end). Planner A, 2026-11-11; brought to decision 076d and to decision 076e (item 4, the tag-worktree citation) on 2026-11-13, and to decision 076g (items 1, 4, 5) on 2026-11-13, and to decision 076k (items 1, 2) on 2026-11-14. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md`
 §4, §10 (it wins over this runbook). Budget line: **H2, cap $0.40**. Starts after H1's snapshot is hashed.
 
 **Order fixed by decision 076a §13.7:** sheet hashed → unblind → score files hashed and committed → the firewall lifts.
@@ -10,7 +10,8 @@ Nothing in a later step may be seen before the earlier one is done.
 ```sh
 TH=~/Projects/th-h1; HO=~/Projects/tracehound-ho-window; S=$HO/score; mkdir -p $S
 export TH_MAIN=~/Projects/TraceHound TH_TAG=$TH      # names used by docs/eval/tag-worktree.md (codex, 775c3d6)
-ledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | sed -n 's/^Total est. spend: \$\([0-9.]*\).*/\1/p'; }
+ledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | sed -n 's/^Nebius est\. spend: \$\([0-9.]*\).*/\1/p'; }   # Nebius only
+[ -n "$(ledger)" ] || { echo "STOP: ledger printed no number"; exit 1; }   # before the first judge call (artu1's operator ruling, 14 Nov)
 POLICY=$TH/scripts/testset/policy.076c.json      # the 076a choices plus registered_tests (two pairs, 0.05, floor 15)
 POLICY2=$TH/scripts/testset/policy.076a.json     # for the secondary rows only: no registered test, so no p-value
 G=$HO/goldens                                    # goldens built and hashed at F1 §4.3
@@ -33,17 +34,25 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
    copied or merged (`F1-freeze.md` §4.2). No other paid process runs during §2 (076c item 1).
 1. Official TraceHound records: `mkdir $S/official`; per case copy `<id>.r2.json` where a rerun exists, else `<id>.json`,
    from `$HO/th`. A case with no record stays absent (it is a miss by policy `unstarted_case: miss`).
+   **The Haiku row's two draws the same way** (decision 076k item 1; `H1-window.md` §4): `$S/official-haiku-1` from
+   `$HO/th-haiku-1` and `$S/official-haiku-2` from `$HO/th-haiku-2`, the rerun's record where there is one. A Haiku
+   case with no record, or still failing after its one rerun, stays absent and is a miss. If H1 did not run the row
+   (its precondition), these steps are skipped and the report says "Haiku row not run" with the reason.
 2. `node scripts/testset/replay-arms.ts --records $S/official --out $S/arms` → exit 0. Exit 1 (A0 differs from the
-   posted comments): stop and tell Sunny; do not score.
+   posted comments): stop and tell Sunny; do not score. For each Haiku draw: `--records $S/official-haiku-<d> --out
+   $S/arms-haiku-<d>`; the row is `$S/arms-haiku-<d>/pool-verify-v1`. An exit 1 there stops only that draw's scoring
+   (it is reported); it never stops A0's.
 3. External tools: merge the per-repository collections of H1 §6 (for each repository the last complete one, and
    the `-untriggered` directory if H1 made one with `--bound window-start`; decision 076d item 4) into one directory and one status file per tool:
    `mkdir -p $S/coderabbit $S/greptile; cp $HO/tools-*/coderabbit/*.json $S/coderabbit/; jq -s add $HO/tools-*/coderabbit.status.json > $S/coderabbit.status.json`
    (and the same for greptile).
 4. Rows. **Primary (these three make the claim):** `tracehound` = `$S/arms/$ARM`, `coderabbit`, `greptile`.
    **Secondary (report only, judges only, not hand-checked):** the two other TraceHound arms, A1 (`pool-raw`) and A2
-   (`review-diff-v1`). **A Claude row is a third secondary row only if decision 078 says Sunny registered one**
-   (decision 076g item 4): then it is scored exactly like A1 and A2 (both judges, `$POLICY2`, never on the sheet,
-   never in a registered pair), from `$HO/th-claude/`, unless 078 words it otherwise. Nemotron A0 stays the primary.
+   (`review-diff-v1`), and **the registered Haiku 5.5 row, two draws, `haiku1` and `haiku2`** (decision 076k item 1;
+   protocol revision 12 §5). Haiku is scored like A1 and A2: both judges, `$POLICY2`, never on the sheet, never in a
+   registered pair, no hand-check, including for judge disagreements and `JUDGE_FAILED` cases. **Its comparison with
+   A0 uses judge v1 for both rows** (A0's v1 catches, not A0's hand-checked ones): §6 step 4c. Nemotron A0 stays the
+   primary and A0's hand-checked score stays the headline.
    **Registered pairs (decision 076c item 4): TraceHound vs CodeRabbit and TraceHound vs Greptile**, each an exact
    two-sided sign test at 0.05, uncorrected, exact p reported. CodeRabbit vs Greptile is counts only. A secondary row
    is never tested.
@@ -78,7 +87,9 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
 `L0=$(ledger); echo "H2 L0=$L0 $(date -u +%FT%TZ)" >> $S/job.md` (the job-start value lives in the job file; every
 later judge process reads it back with `L0=$(sed -n 's/^H2 L0=\([0-9.]*\) .*/\1/p' $S/job.md | head -1)` and never
 measures it again; gap G19, decision 076c item 1). `$L0 + 0.40` must not exceed the main `.env`'s hard stop. **Order (gap G13): the three primary rows first** (tracehound,
-coderabbit, greptile), each with bench-judge-v1 and then bench-judge-x1; **then** the two secondary rows the same way.
+coderabbit, greptile), each with bench-judge-v1 and then bench-judge-x1; **then** the secondary rows the same way, in
+this order: Haiku draw 1, Haiku draw 2 (registered in the protocol), then A1, A2 (report-only). The order is Planner
+A's: if the cap cuts, it cuts the unregistered rows first.
 One process after the other:
 ```sh
 E="TRACEHOUND_BUDGET_RUN_USD=0.40 TRACEHOUND_BUDGET_TOTAL_USD=$(echo "$L0 + 0.40" | bc)"
@@ -86,7 +97,8 @@ env $E node $TH/packages/analyzer/src/bin.ts bench score --golden $G/bench-golde
 env $E node $TH/packages/analyzer/src/bin.ts bench score --golden $G/bench-golden.json --reviews <row dir> --detail $S/judge/<row>.x1.json --concurrency 1 \
   --model Qwen/Qwen3-235B-A22B-Instruct-2507 --reasoning off
 ```
-At most 5 rows × 20 bug cases × 2 judges = 200 calls (a clean case or an empty review makes none,
+At most 7 rows × 20 bug cases × 2 judges = 280 calls (at the 14 Nov dev rates, about $0.0005 a v1 call and $0.00012 an
+x1 call, about $0.09 in all; estimate) (a clean case or an empty review makes none,
 `packages/analyzer/src/bench/score.ts:125-126`). A refused call (cap) or a `JUDGE_FAILED` entry: note the count; rerun
 that one process once into a new detail file name (`…v1.b.json`) if money is left under the $0.40; never edit a detail
 file. At most one re-run per judge process (question U9 of `run/comms/planner.b.d1-review.md`, adopted by 076c item 5). **When a row has two detail files for one judge, the later one is the official one** and is the one passed to
@@ -159,8 +171,9 @@ When done, Sunny sends `decisions.json` back and says "final".
    It prints one line, `hand-check guess: right R of G guessed (U unsure, N items, K tools; uniform chance 1/K; always
    naming the commonest tool: M of N)`, and writes the same counts as `handcheckGuess` into the summary (`main` in
    `scripts/testset/score-testset.ts` as of `595707f`).
-4. Secondary rows: one more `score-testset.ts` run with the two other arms (and the Claude row, if 078 registered
-   one), their v1 and x1 details, no `--handcheck`,
+4. Secondary rows: one more `score-testset.ts` run with the two other arms and the two Haiku draws
+   (`--tool haiku1=$S/arms-haiku-1/pool-verify-v1 --tool haiku2=$S/arms-haiku-2/pool-verify-v1`, `--records` from the
+   two official directories), their v1 and x1 details, no `--handcheck`,
    `--policy $POLICY2` (a policy that registers a tool which is not a `--tool` refuses, and a secondary row is never
    tested), `--out $S/summary.secondary.json`.
 4b. **The pooled secondary analysis (decision 076g item 5).** It pools dev and held-out for A0 (31 + 20 = 51 bugs).
@@ -171,6 +184,14 @@ When done, Sunny sends `decisions.json` back and says "final".
    "secondary", with grok's dev exposure count beside it. **If revision 10 is not on `main` at the tag, or its
    merge is later than E1's first judge call, the analysis is not pre-registered and is not run** (`F1-freeze.md`
    §1 row 3). The headline, the registered pairs and every sentence of `W1-writeup.md` §3 stay on the 20 held-out bugs.
+4c. **Haiku against A0 on judge v1 (decision 076k items 1 and 2), counts only.** From the v1 details of A0
+   (`tracehound`), `haiku1` and `haiku2`, over the 20 bug cases: per draw, caught K of 20 by v1 beside A0's K by v1,
+   and the per-case matrix (both / A0 only / Haiku only / neither); then the mean of the two draws' v1 K and its
+   difference from A0's v1 K. **No test and no p-value** (a secondary row is never tested). The same table by x1 is
+   reported beside it and changes nothing. Then the product-default reading of 076k item 2, as a fact and not a
+   test claim: "the mean of Haiku's two draws under v1 is / is not more than 2 behind A0's v1 count". It goes into
+   the report and decision 079; it never enters the three result sentences. bunny counts nothing here; codex
+   computes it and grok re-derives it from the same files (gap G7).
 5. `( cd $S && find . -type f | sort | xargs shasum -a 256 > ../hashes.score.txt ); shasum -a 256 $HO/hashes.score.txt`
 5b. **A second run of the final score (gap G7).** grok, from the same hashed inputs and the same command line, runs
    step 3's `score-testset.ts` into its own directory (`$HO/score-grok/summary.final.json`). `cmp` of the two
@@ -183,7 +204,7 @@ When done, Sunny sends `decisions.json` back and says "final".
    has `p: null`). Check: `jq '[.pairs[]|select(.p!=null)|[.a,.b]]' $S/summary.final.json` lists at most the two
    registered pairs, and the same on `summary.secondary.json` prints `[]`. Anything else: report it and stop.
 7. codex commits to `TraceHound/docs/bench/`: `ts-heldout.summary.json` (a copy of `summary.final.json`),
-   `ts-heldout.secondary.json`, `ts-heldout.pooled.json` if step 4b ran, and `ts-heldout.hashes.md` with the three single-line hashes (window, blank sheet +
+   `ts-heldout.secondary.json` (with step 4c's counts), `ts-heldout.pooled.json` if step 4b ran, and `ts-heldout.hashes.md` with the three single-line hashes (window, blank sheet +
    filled sheet, score) and the counts of §7. Push.
 8. **The firewall lifts** for artu1 and bunny when that commit is on `main`. artu1 records the time in STATE. The lift
    does not allow changing the frozen reviewer or the scored protocol (protocol §10).
@@ -205,6 +226,11 @@ items on the sheet, `same-bug` count, judge-matched items Sunny rejected, locati
 length. **Guess (gap G3), one line, copied from the kit's output:** "hand-check guess: right R of G guessed (U unsure, N
 items, 3 tools; uniform chance 1/3; always naming the commonest tool: M of N)". No adjective is added to it. Judging: calls, `JUDGE_FAILED`, spend. TraceHound cost per PR (mean, median, max, total) from the records.
 
+**Haiku row (decision 076k item 1), per draw:** coverage (official records of 29: ok, misses by rule, with each
+cause), failures (cases, chunks, requests, `JUDGE_FAILED`), comments per PR and on the 9 clean cases, Anthropic cost
+per PR and in total of the $1.00, caught K of 20 by v1 and by x1, and step 4c's lines. Label: "secondary,
+registered, judges only, not hand-checked, Sunny's own money".
+
 ## 8. Failures and rules
 | failure | rule |
 |---|---|
@@ -223,7 +249,8 @@ items, 3 tools; uniform chance 1/3; always naming the commonest tool: M of N)". 
 1. **Unblinding early.** Running `resolve`, or showing any per-tool table to Sunny, before his filled sheet's hash is
    confirmed, makes the hand-check an interested party's check again (plan v1 M10).
 2. **Scoring a different arm than the frozen one.** `$ARM` is A0, `pool-verify-v1`, frozen by decision 076g item 1
-   before any TypeScript dev number existed, not whichever arm looks best in `summary.judges.json`. A1, A2 and a
-   registered Claude row are secondary rows whatever they score.
+   before any TypeScript dev number existed, not whichever arm looks best in `summary.judges.json`. A1, A2 and the
+   two Haiku draws are secondary rows whatever they score, and Haiku is compared with A0 on judge v1 only, never with
+   A0's hand-checked score.
 3. **Committing private content.** Only the three files of step 6.7 go to the repo, and only after the check of step
    6.6. Records, details, the sheet and the mapping stay in `$HO`.

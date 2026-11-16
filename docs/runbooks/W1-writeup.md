@@ -1,7 +1,7 @@
 # Runbook W1: the write-up, with the claim wording for every outcome
 
 For artu1 (writes), codex (checks every sentence against a count), Sunny (reads before it is public). Planner A,
-2026-11-11; brought to decision 076e (item 5, addendum d) on 2026-11-13 and to decision 076g (items 1, 4, 5) on 2026-11-13. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §2. Protocol: `docs/eval/ts-protocol.md` §6, §11 (it wins
+2026-11-11; brought to decision 076e (item 5, addendum d) on 2026-11-13, to decision 076g (items 1, 4, 5) on 2026-11-13, and to decision 076k (items 1, 2, 9) on 2026-11-14. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §2. Protocol: `docs/eval/ts-protocol.md` §6, §11 (it wins
 over this runbook). Cost: $0. Starts after H2's commit (`docs/bench/ts-heldout.summary.json`) and the firewall lift.
 
 The wording in §3 is copied into decision 078 at F1, **before** the window. W1 only fills the placeholders. A sentence
@@ -51,9 +51,15 @@ that is not one of these templates, or a placeholder filled from anything but th
    `ts-heldout.summary.json` and nothing added: "After deciding every item, the checker guessed which tool had written
    each comment: right for R of the G items he guessed (U marked unsure, N items in all); naming the commonest tool
    every time would have been right for M of N.
-7. **Secondary rows** (the two other TraceHound arms, and a Claude row only if decision 078 registered one; judges
-   only, not hand-checked), marked report-only. Counts only; no test and no p-value on a secondary row, against
-   anything. **Then the pooled secondary analysis** (decision 076g item 5), if `H2-scoring.md` §6 step 4b ran: dev
+7. **Secondary rows** (the two other TraceHound arms, report-only; and **the registered Haiku 5.5 row, two draws**,
+   decision 076k item 1; all judges only, not hand-checked). Counts only; no test and no p-value on a secondary row,
+   against anything. **Haiku is compared with A0 on judge v1 for both rows** (`H2-scoring.md` §6 step 4c), never with
+   A0's hand-checked score; the page says which judge every Haiku number comes from. Beside the Haiku row, the
+   disclosure of 076k item 1, as written there: "Planner B drafted the thresholds before 076j's results existed; they
+   were adopted after. Dev: v1 14 and 11 vs A0 12; second judge 15 and 12 vs 13; clean-case comments 1 and 0; draws
+   differ by 3." **The product default (076k item 2) is not a test claim** and is never in the three result sentences:
+   one line under the row says whether the mean of Haiku's two draws under v1 is more than 2 behind A0's v1 count, and
+   that this decides only the product's default model, with A0 the headline. **Then the pooled secondary analysis** (decision 076g item 5), if `H2-scoring.md` §6 step 4b ran: dev
    and held-out pooled for A0 (51 bugs), under the heading "Secondary", with protocol revision 10's wording, the
    dev table's label and grok's dev exposure count beside it. It is never in the three result sentences.
 8. **Predictions.** The table of decision 078, each scored right / wrong / too vague to score.
@@ -129,6 +135,17 @@ frozen by decision 076g item 1, so it is not used.)
 labelled bugs", any sentence about Augment, Cursor, Copilot or Bugbot on this set, any sentence about other languages,
 any combination of this result with the earlier 50-PR benchmark into one number or one ranking. The earlier benchmark
 may be cited next to it as a separate result with its own wording (`docs/bench/results.md`).
+
+### 3.4b Facts about other tools (decision 076k item 9)
+- **A vendor fact** (what a tool does, reads, offers or costs) **is used on the page, in the README or in a post only
+  if the 14 Nov research's verified table labels it D.** A fact without that label is left out, not reworded. This
+  holds for the facts already in limits 6 and 7 too: each is checked against that table before the page is merged,
+  and one that is not labelled D is cut from the limit, with nothing put in its place. (The table's path is to be
+  named by artu1; this runbook could not find it on 14 Nov.)
+- **The benchmark line reads, word for word: "none of the five I could check has a blind held-out set".** No other
+  wording, no named exception, no claim about tools beyond those five.
+- The 14 Nov research changes nothing else before the write-up; the post-test order it proposed goes in the brain
+  only, never on the page.
 
 ### 3.5 README (two to four sentences, in this order)
 Sentence 3.1 shortened to the three counts with intervals; the pair sentence(s) for TraceHound's two pairs in their
@@ -219,7 +236,8 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
 1. codex: every number in `ts-heldout.md`, `results.md`, the viewer and the README equals `ts-heldout.summary.json` (or
    `ts-heldout.secondary.json`, or a dev file for §2.9); every sentence in the summary and README is a §3 template;
    `git grep -n -i -E "beats|outperform|on par|as many|matches|equivalent" -- docs/bench/ts-heldout.md README.md` shows
-   nothing outside a quoted "never written" list.
+   nothing outside a quoted "never written" list. Every vendor fact on the page is labelled D in the verified table
+   (§3.4b), and the benchmark line is §3.4b's, word for word.
 2. `pnpm test` (the viewer's benchmark test), `pnpm typecheck`, the viewer build.
 3. Sunny reads the page and the README section and says yes.
 
