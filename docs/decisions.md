@@ -4525,3 +4525,11 @@ lines, artu1 under exception 2); Planner A's E1 `$X1`, F1 row 10/§3 model ids, 
   tag** (1 Greptile credit, 1 CodeRabbit hour): codex repeats the 076k item 6 procedure on the bullmq fork, waits at
   least 2 minutes between opening and triggering, and records any bot object posted before the trigger (with its first
   wording). Held-out trees and the forks carry no root `.coderabbit.yaml` (codex 29/29; artu1).
+- **The first probe explained (artu1, 17 Nov 2026; read-only timeline and edit history of the bullmq probe PR):** PR opened
+  20:50:54Z (base `master`, no label, no reviewer, description without any mention). CodeRabbit's comment at 20:51:03Z has
+  four edits; its **first version is "Review skipped: Auto reviews are disabled on this repository"**, the same notice
+  the dev forks got on opening (37/37), and "Source mode: Auto" is a line in that notice's run-configuration block (it
+  appears in the dev forks' saved notice too). The "Currently processing" text is the edit at 20:51:39Z, after the
+  20:51:13Z trigger; the review followed at 20:52:24Z. So CodeRabbit did **not** auto-review on bullmq: the probe behaved
+  as on the dev forks, which is the re-probe's pass condition. codex's re-probe is on hold (no PR opened, no credit spent)
+  until Sunny decides whether it still runs.
