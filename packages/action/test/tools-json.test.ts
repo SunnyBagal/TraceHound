@@ -18,7 +18,15 @@ const CR_NOT_COMPLETION = {
   limitReached: "> [!WARNING]\n> ## Review limit reached\n> \n> You've used all free OSS reviews for now. Wait for the free limit to reset to keep reviewing this public repository.\n> \n> **Next included review available in 59 minutes.**",
   processing: "> [!NOTE]\n> \n> \n> Currently processing new changes in this PR. This may take a few minutes, please wait...",
   triggered: reply("Action performed", "Full review triggered."),
+  // decision 076l: the first wording of CodeRabbit's summary comment while auto reviews are off, copied unchanged from P1's saved
+  // reading (tracehound-runs/dev/p1/not-completion/coderabbit.review-skipped.1.txt; a dev PR, no case text)
+  reviewSkipped: readFileSync(path.join(import.meta.dirname, "fixtures", "coderabbit.review-skipped.1.txt"), "utf8"),
 };
+// the same comment once CodeRabbit edits it into a real summary (076l: matched on the current body at reading time): the skip-review
+// block is replaced by the walkthrough; everything else in the saved comment is kept
+const SKIP_BLOCK = /<!-- This is an auto-generated comment: skip review by coderabbit\.ai -->[\s\S]*<!-- end of auto-generated comment: skip review by coderabbit\.ai -->/;
+const reviewSkippedEdited = CR_NOT_COMPLETION.reviewSkipped.replace(SKIP_BLOCK,
+  "<!-- review_stack_entry_start -->\n<!-- review_stack_entry_end -->\n<!-- walkthrough_start -->\n\n## Walkthrough\n\nModule entry points import their type declarations.\n\n<!-- walkthrough_end -->");
 // what the same comments became once a review ran, and Greptile's review comment and check-run text
 const COMPLETED = {
   finishedReply: reply("Action performed", "Full review finished."),
@@ -26,20 +34,22 @@ const COMPLETED = {
     "**Included review availability:** This review used your included allowance. Your plan provides up to 1 included review per hour; 0 remain after this review.",
   greptile: "<h2>Confidence Score: 5/5</h2>\n**[Medium impact]** The PR appears safe to merge; no actionable issues were found.\n<h3>Summary</h3>",
   greptileCheck: "Greptile has reviewed the Pull Request.\n\n3 files reviewed, 0 comments added.",
+  reviewSkippedEdited,
 };
 
 describe("tools.json (decision 076h): logins and notCompletion patterns observed in S1", () => {
   const cfg = JSON.parse(readFileSync(TOOLS, "utf8"));
   const patterns = (tool: string) => (cfg.tools[tool].notCompletion as string[]).map((x) => new RegExp(x, "i")); // as the collector compiles them
 
-  it("has tools.s1.json's schema and tool order, the observed logins, 4 CodeRabbit patterns and an explicit [] for Greptile, and no held-out or case details", () => {
+  it("has tools.s1.json's schema and tool order, the observed logins, 5 CodeRabbit patterns and an explicit [] for Greptile, and no held-out or case details", () => {
     const raw = readFileSync(TOOLS, "utf8");
     expect(cfg).toEqual({ v: 1, tools: {
       coderabbit: { logins: ["coderabbitai[bot]"], notCompletion: [
         "Review rate limited\\.",
         "You've used all free OSS reviews for now\\. Wait for the free limit to reset to keep reviewing this public repository\\.",
         "Currently processing new changes in this PR\\. This may take a few minutes, please wait\\.\\.\\.",
-        "Full review triggered\\."] },
+        "Full review triggered\\.",
+        "## Review skipped[\\s>]*Auto reviews are disabled on this repository\\."] },
       greptile: { logins: ["greptile-apps[bot]"], notCompletion: [] } } });
     expect(Object.keys(cfg.tools)).toEqual(Object.keys(JSON.parse(readFileSync(TOOLS_S1, "utf8")).tools));
     expect(readTools(TOOLS)).toEqual(["coderabbit", "greptile"]);
@@ -52,6 +62,15 @@ describe("tools.json (decision 076h): logins and notCompletion patterns observed
     cr.forEach((re, i) => expect(texts.map((t) => re.test(t))).toEqual(texts.map((_, j) => j === i)));
     for (const t of Object.values(COMPLETED)) expect(cr.some((re) => re.test(t))).toBe(false);
     expect(patterns("greptile")).toEqual([]);
+  });
+
+  it("076l: the review-skipped pattern matches the saved first wording, and not that comment once edited into a real summary", () => {
+    const cr = patterns("coderabbit");
+    expect(CR_NOT_COMPLETION.reviewSkipped).toContain("Auto reviews are disabled on this repository.");
+    expect(cr[4]!.test(CR_NOT_COMPLETION.reviewSkipped)).toBe(true);
+    expect(reviewSkippedEdited).not.toBe(CR_NOT_COMPLETION.reviewSkipped);
+    expect(reviewSkippedEdited).toContain("<!-- walkthrough_start -->");
+    expect(cr.some((re) => re.test(reviewSkippedEdited))).toBe(false);
   });
 
   describe("the collector reads it (main, fake gh, no network)", () => {
@@ -68,6 +87,10 @@ describe("tools.json (decision 076h): logins and notCompletion patterns observed
       12: { pr, comments: [], reviews: [], issueComments: [ic(me, "@coderabbitai full review"), ic(cr, CR_NOT_COMPLETION.triggered), ic(cr, CR_NOT_COMPLETION.processing)] },
       // c3: both reviews ran with no inline comment (all four S1 reviews looked like this) → completed by issue comments, 0 counted
       13: { pr, comments: [], reviews: [], issueComments: [ic(me, "@coderabbitai full review"), ic(cr, COMPLETED.finishedReply), ic(cr, COMPLETED.walkthrough), ic(gr, COMPLETED.greptile)] },
+      // c4 (076l): CodeRabbit's summary comment still reads "Review skipped" at the reading → no-review
+      14: { pr, comments: [], reviews: [], issueComments: [ic(cr, CR_NOT_COMPLETION.reviewSkipped), ic(me, "@coderabbitai full review"), ic(cr, CR_NOT_COMPLETION.triggered)] },
+      // c5 (076l): the same comment, edited into a real summary by the reading → completed
+      15: { pr, comments: [], reviews: [], issueComments: [ic(cr, reviewSkippedEdited), ic(me, "@coderabbitai full review"), ic(cr, COMPLETED.finishedReply)] },
     };
     function run(tool: string) {
       const d = mkdtempSync(path.join(os.tmpdir(), "tools-json-"));
@@ -77,8 +100,8 @@ describe("tools.json (decision 076h): logins and notCompletion patterns observed
       writeFileSync(path.join(dev, "gh"), `#!/bin/sh\nexec "${process.execPath}" "$(dirname "$0")/gh.mjs" "$@"\n`, { mode: 0o755 });
       writeFileSync(path.join(dev, "gh.json"), JSON.stringify({ pulls }));
       writeFileSync(path.join(dev, "gh.log"), "");
-      writeFileSync(path.join(dev, "manifest.json"), JSON.stringify(["c1", "c2", "c3"].map((id) => ({ id, title: id, base_sha: BASE, case_head_sha: HEAD }))));
-      writeFileSync(path.join(dev, "prmap.json"), JSON.stringify({ c1: 11, c2: 12, c3: 13 }));
+      writeFileSync(path.join(dev, "manifest.json"), JSON.stringify(["c1", "c2", "c3", "c4", "c5"].map((id) => ({ id, title: id, base_sha: BASE, case_head_sha: HEAD }))));
+      writeFileSync(path.join(dev, "prmap.json"), JSON.stringify({ c1: 11, c2: 12, c3: 13, c4: 14, c5: 15 }));
       const out = path.join(d, "out");
       const lines: string[] = [];
       const code = collectMain(["--side", "dev", "--tool", tool, "--config", TOOLS, "--repo", "SunnyBagal/twenty", "--manifest", path.join(dev, "manifest.json"),
@@ -87,17 +110,17 @@ describe("tools.json (decision 076h): logins and notCompletion patterns observed
       return { code, lines, status: JSON.parse(readFileSync(path.join(out, `${tool}.status.json`), "utf8")) };
     }
 
-    it("CodeRabbit: rate-limit and in-progress messages are not completions; a finished review with no inline comment is", () => {
+    it("CodeRabbit: rate-limit, in-progress and still-skipped messages are not completions; a finished review with no inline comment is", () => {
       const r = run("coderabbit");
       expect(r.code).toBe(0);
-      expect(r.status).toEqual({ c1: "no-review", c2: "no-review", c3: "completed" });
-      expect(r.lines.join("\n")).toMatch(/completed 1, no-review 2[\s\S]*0 counted comment[\s\S]*review 0, inline 0, issue comment 2; not completion \(pattern\) 4/);
+      expect(r.status).toEqual({ c1: "no-review", c2: "no-review", c3: "completed", c4: "no-review", c5: "completed" });
+      expect(r.lines.join("\n")).toMatch(/completed 2, no-review 3[\s\S]*0 counted comment[\s\S]*review 0, inline 0, issue comment 4; not completion \(pattern\) 6/);
     });
 
     it("Greptile: its review comment completes the case; a PR with only the trigger comment stays no-review", () => {
       const r = run("greptile");
       expect(r.code).toBe(0);
-      expect(r.status).toEqual({ c1: "no-review", c2: "no-review", c3: "completed" });
+      expect(r.status).toEqual({ c1: "no-review", c2: "no-review", c3: "completed", c4: "no-review", c5: "no-review" });
       expect(r.lines.join("\n")).toMatch(/issue comment 1; not completion \(pattern\) 0/);
     });
   });
