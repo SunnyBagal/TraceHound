@@ -51,7 +51,7 @@ a. **P1 done (16 Nov):** scheduler ended 20:47Z (61 slots, 0 re-triggers); offic
 b. **pa-076g merged** (2a5f6c2, Sunny GO after codex 24/24 and grok range GO): RETHINK gate + refusing guards on main.
 c. **Protocol rev 13 merged** (c48ce79, grok GO): x1 30B + fallback (d), f = 1.17, dev exposure split. No held-out details (artu1 scan).
 d. **E1 (bunny) after b + c:** v1 rows first; x1 (30B) on every dev row needs a `config/prices.json` 30B entry (Sunny's listed rate; the fallback $5/$15 would not fit L1's $0.37); `--exposure` from `run/out/grok.dev-exposure.ids.json`.
-e. **Before the tag:** Sunny's bullmq screenshot; Planner A's F1/H2 items (`run/comms/artu1-to-planner-a.devin-f1.md`); 077 (H1 cap); 078; F1 dry run (18 rows); **disk ~0.7 GiB free**.
+e. **Before the tag:** CodeRabbit auto-review off on all 4 forks (Sunny) and no root YAML in any held-out push tree (codex 29/29); Planner A's F1/H2 items (`run/comms/artu1-to-planner-a.devin-f1.md`); 077 (H1 cap); 078; F1 dry run (18 rows); **disk ~0.7 GiB free**.
 f. **Done 14–16 Nov:** R1 ($2.82), Claude rows, 076j comparison, prices (Ultra fix), x1 reporting fix, bullmq probe, side-track 076m–076p (A/B 2 after E1, $0.15).
 
 ## Where things are
