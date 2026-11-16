@@ -16,7 +16,9 @@
  * Judge evidence is bound, never assumed: without --handcheck, every completed bug case needs its entry in the tool's
  * judge detail, and the judged comments must be that tool's review comments, in order (the same check as
  * handcheck-sheet.ts). A missing entry or a mismatch refuses the run (exit 2) instead of becoming a scored miss.
- * JUDGE_FAILED is counted and is never a catch. --judge-x1, when given, is bound the same way. Every completed case
+ * JUDGE_FAILED is counted and is never a catch. --judge-x1, when given, is bound the same way; its JUDGE_FAILED cases
+ * are counted beside the judge's (judgeFailedX1), and with no SCORED x1 entry on a completed bug case its catches are
+ * "unavailable", never 0 (devin pre-F1 finding 2). Every completed case
  * needs its review file in every mode. With --handcheck (resolve's output), every completed bug case's current review
  * must be in its `reviewed` list with the same sha256, and every decision must be bound to a completed case's current
  * review; otherwise refuse: no catch stands without the review that was scored.
@@ -94,7 +96,11 @@ export interface ToolScore {
   /** cases of noReview that the collector marked invalid-binding (U6) */
   invalidBinding: number;
   caughtOfCompleted: string; caughtOfCompletedWilson: [number, number] | null;
-  caughtX1: number | null; handchecked: boolean;
+  /**
+   * x1's catches on completed bug cases: null without --judge-x1; "unavailable" when no completed bug case has a SCORED
+   * x1 entry (an x1 that failed everywhere is not "caught 0"). judgeFailedX1 counts x1's JUDGE_FAILED completed bug cases.
+   */
+  caughtX1: number | "unavailable" | null; judgeFailedX1: number | null; handchecked: boolean;
   comments: { total: number; perAttempted: { mean: number | null; median: number | null }; perCompleted: { mean: number | null; median: number | null }; clean: number };
   locationHits: number;
   costUSD: { total: number; perAttemptedMean: number | null; median: number | null; max: number | null } | null;
@@ -188,6 +194,8 @@ export function score(o: {
     const K = [...caught.values()].filter(Boolean).length;
     const n = completedBug.length;
     const x1 = o.judgeX1.get(tool);
+    const judgeFailedX1 = x1 ? completedBug.filter((c) => x1.get(c.case)?.verdict === "judge-failed").length : null;
+    const scoredX1 = x1 ? completedBug.filter((c) => x1.has(c.case) && x1.get(c.case)!.verdict !== "judge-failed").length : 0;
     const costs = rec ? o.cases.map((c) => rec.get(c.case)?.costUSD ?? 0) : null;
     tools[tool] = {
       attempted: o.cases.length, bugCases: bug.length, cleanCases: o.cases.length - bug.length,
@@ -196,7 +204,8 @@ export function score(o: {
       noReview: [...st.values()].filter((s) => s === "no-review").length, misses: [...st.values()].filter((s) => s === "miss").length,
       invalidBinding: o.invalidBinding?.get(tool)?.size ?? 0,
       judgeFailed, caughtOfCompleted: `${K}/${n}`, caughtOfCompletedWilson: wilson(K, n),
-      caughtX1: x1 ? completedBug.filter((c) => x1.get(c.case)?.verdict === true).length : null,
+      caughtX1: !x1 ? null : scoredX1 === 0 ? "unavailable" : completedBug.filter((c) => x1.get(c.case)?.verdict === true).length,
+      judgeFailedX1,
       handchecked: !!o.handcheck,
       comments: { total: per.reduce((a, b) => a + b, 0), perAttempted: { mean: mean(per), median: median(per) },
         perCompleted: { mean: mean(completed.map((c) => comments(c.case).length)), median: median(completed.map((c) => comments(c.case).length)) },
@@ -306,7 +315,7 @@ export function main(argv: string[], log: (line: string) => void = console.log):
       ...(hc?.guess ? { handcheckGuess: hc.guess } : {}) }, null, 1) + "\n");
     for (const [t, s] of Object.entries(r.tools)) {
       log(`${t}: caught ${s.caught}/${s.bugCases} (Wilson ${pct(s.caughtWilson)})${s.handchecked ? " [hand-checked]" : ""} · completed bug ${s.completedBug}/${s.bugCases}, clean ${s.completedClean}/${s.cleanCases}`
-        + ` · caught of completed ${s.caughtOfCompleted} · no-review ${s.noReview}${s.invalidBinding ? ` (invalid-binding ${s.invalidBinding})` : ""} · miss ${s.misses} · judge-failed ${s.judgeFailed}${s.caughtX1 === null ? "" : ` · x1 caught ${s.caughtX1}`}`);
+        + ` · caught of completed ${s.caughtOfCompleted} · no-review ${s.noReview}${s.invalidBinding ? ` (invalid-binding ${s.invalidBinding})` : ""} · miss ${s.misses} · judge-failed ${s.judgeFailed}${s.caughtX1 === null ? "" : ` · x1 judge-failed ${s.judgeFailedX1} · x1 caught ${s.caughtX1}`}`);
       log(`${t}: comments ${s.comments.total} · per attempted PR mean ${num(s.comments.perAttempted.mean)} median ${num(s.comments.perAttempted.median)}`
         + ` · per completed PR mean ${num(s.comments.perCompleted.mean)} median ${num(s.comments.perCompleted.median)} · on clean cases ${s.comments.clean}`
         + ` · location hits ${s.locationHits}/${s.bugCases}${s.costUSD ? ` · cost $${s.costUSD.total.toFixed(4)} (mean $${num(s.costUSD.perAttemptedMean, 4)}, median $${num(s.costUSD.median, 4)}, max $${num(s.costUSD.max, 4)})` : ""}`);
