@@ -4482,3 +4482,7 @@ branch (A/B 2 runs after E1; A/B 3 parked). Not touched: the protocol, the freez
   1.17 with the $0.57054 outage charges apart. The outage requests do not cover it: 15 of the 17 failed on DNS and 1 never
   connected, so at most the one read time-out (≈ $0.034) could have been billed. The per-model console usage for 14 Nov
   around 08:00–08:10Z would settle whether anything was billed then.
+- **076l hand check done (artu1, 2026-11-16 ~17:50Z, before the collection closes):** read-only gh over all 40 PRs on the
+  forks (P1's 38 plus S1's 2), with `b13-review-skipped`'s pattern at `1d07c82` applied to each comment's current body.
+  37 PRs carry a CodeRabbit comment posted before the trigger; all **37 were edited into a real summary; 0 are still a
+  "Review skipped" notice**, so none is listed as not-completion.
