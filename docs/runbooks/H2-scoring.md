@@ -11,7 +11,7 @@ Nothing in a later step may be seen before the earlier one is done.
 TH=~/Projects/th-h1; HO=~/Projects/tracehound-ho-window; S=$HO/score; mkdir -p $S
 export TH_MAIN=~/Projects/TraceHound TH_TAG=$TH      # names used by docs/eval/tag-worktree.md (codex, 775c3d6)
 ledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | sed -n 's/^Nebius est\. spend: \$\([0-9.]*\).*/\1/p'; }   # Nebius only
-[ -n "$(ledger)" ] || echo "STOP: ledger printed no number"   # before the first judge call (artu1's operator ruling, 14 Nov)
+[ -n "$(ledger)" ] || { echo "STOP: ledger printed no number"; exit 1; }   # before the first judge call (artu1's operator ruling, 14 Nov)
 POLICY=$TH/scripts/testset/policy.076c.json      # the 076a choices plus registered_tests (two pairs, 0.05, floor 15)
 POLICY2=$TH/scripts/testset/policy.076a.json     # for the secondary rows only: no registered test, so no p-value
 G=$HO/goldens                                    # goldens built and hashed at F1 §4.3

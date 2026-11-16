@@ -68,7 +68,7 @@ export TH_MAIN=~/Projects/TraceHound TH_TAG=$TH      # names used by docs/eval/t
 TS=~/Projects/tracehound-testset; HO=~/Projects/tracehound-ho-window
 ledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | sed -n 's/^Nebius est\. spend: \$\([0-9.]*\).*/\1/p'; }      # Nebius only
 aledger() { ( cd $TH && node --env-file=.env packages/analyzer/src/spend.ts ) | sed -n 's/^Anthropic est\. spend ([^)]*): \$\([0-9.]*\).*/\1/p'; }  # Haiku row, §4
-[ -n "$(ledger)" ] && [ -n "$(aledger)" ] || echo "STOP: a ledger helper printed no number"   # before any paid call
+{ [ -n "$(ledger)" ] && [ -n "$(aledger)" ]; } || { echo "STOP: a ledger helper printed no number"; exit 1; }   # before any paid call
 CAP=<H1 cap from decision 077>
 MAN=<held-out manifest>; CL=<held-out clones dir: one clone per fork name>          # private paths; codex knows them
 sched() { node $TH/scripts/testset/window-scheduler.ts --side heldout --heldout-ok --cases $HO/cases.json --plan $HO/plan.json \
