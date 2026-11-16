@@ -165,6 +165,16 @@ describe("price and ledger", () => {
     expect(priceFor(table, ULTRA_TF)).toEqual({ inputPer1M: 1, outputPer1M: 3, estimated: false });
   });
 
+  it("prices bench-judge-x1's Qwen3-30B at its listed rate (076r), not at the fallback", () => {
+    const table = loadPriceTable(REPO_PRICES);
+    const QWEN_30B = "Qwen/Qwen3-30B-A3B-Instruct-2507";
+    expect(table.models[QWEN_30B]).toEqual({ inputPer1M: 0.1, outputPer1M: 0.3, placeholder: false });
+    const price = priceFor(table, QWEN_30B);
+    expect(price).toEqual({ inputPer1M: 0.1, outputPer1M: 0.3, estimated: false });
+    expect(costUSD(price, 1_000_000, 1_000_000)).toBeCloseTo(0.4, 10);
+    expect(priceFor(table, "Qwen/Qwen3-30B-A3B-Instruct")).toEqual({ ...table.placeholderFallback, estimated: true });
+  });
+
   it("ledgers an Ultra call at $0 with its real token counts", async () => {
     const f = recordingFetch();
     const { client: c, ledger } = client(f.impl, nvidia());
