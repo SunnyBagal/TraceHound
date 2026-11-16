@@ -835,3 +835,11 @@ succeeded, 0 failed. Five sequential processes, 16:08:50Z to 16:12:21Z: three fu
 30 calls each, about 2 s per call); two needed 1 fresh call each (the rest came from the response cache). Ledger $0.04832 at
 `config/prices.json`'s $0.30 / $0.90, which decision 076k item 10 suspects runs about 15% low; the console check is pending.
 No errors; nothing wrong or missing in the docs or console seen this session.
+
+## 2026-11-16 (bunny, judge-availability probe)
+Token Factory chat completions, one minimal request each to `Qwen/Qwen3-235B-A22B-Instruct-2507`,
+`Qwen/Qwen3-30B-A3B-Instruct-2507` and `nvidia/nemotron-3-super-120b-a12b`: 3 requests, 3 HTTP 200 with usage reported,
+0 failures; latency 1,028 / 762 / 405 ms. `GET /models` listed all three. Missing: the price page marks
+Qwen3-235B-A22B-Instruct-2507 "Deprecated", and the November 2026 deprecation notice lists it for removal on 9 Nov 2026,
+yet it still answers on 16 Nov; neither the price page nor `/models` gives a retirement date. A date (or a
+`deprecated`/`sunset` field in `/models`) would have let us plan the judge switch.
