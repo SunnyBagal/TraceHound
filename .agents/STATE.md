@@ -48,7 +48,7 @@ artu1 `t9` · bunny `t15` (dev side) · codex `t14` · grok `t1g` (trust its .do
 
 ## OPEN TASKS (in order)
 a. **P1 done (16 Nov):** scheduler ended 20:47Z (61 slots, 0 re-triggers); official collection 20:49Z: CodeRabbit 40/40, Greptile 40/40 completed, 123 / 114 counted comments; 076l hand check 37/37 notices edited; dev exposure 10/31 (grok); 80 dev branches deleted, forks clean (0 case branches, 0 open PRs; refs/pull remain); `hashes.p1.txt` sha256 `80ebed61…`. **Left:** the §4 report `run/out/artu1.dev-coderabbit.md` (counts).
-b. **pa-076g → main:** guard commit `2a5f6c2` (codex GO, 24/24); **waiting: grok's whole-range pass** (`run/out/grok.pa-076g-range.md`), then merge.
+b. **pa-076g merged** (2a5f6c2, Sunny GO after codex 24/24 and grok range GO): RETHINK gate + refusing guards on main.
 c. **Protocol rev 13 (codex):** x1 30B + fallback, f = 1.17, dev table on 31 and 21 unexposed → grok pass → merge. **Before any E1 judging.**
 d. **E1 (bunny) after b + c:** v1 rows first; x1 (30B) on every dev row needs a `config/prices.json` 30B entry (Sunny's listed rate; the fallback $5/$15 would not fit L1's $0.37); `--exposure` from `run/out/grok.dev-exposure.ids.json`.
 e. **Before the tag:** Sunny's bullmq screenshot; Planner A's F1/H2 items (`run/comms/artu1-to-planner-a.devin-f1.md`); 077 (H1 cap); 078; F1 dry run (18 rows); **disk ~0.7 GiB free**.
