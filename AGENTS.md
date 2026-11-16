@@ -51,6 +51,9 @@ config, never the default, mocked tests only, for report-only Claude rows on dev
 and, since 2026-11-14 (decision 076k item 1), for the registered secondary held-out Haiku 5.5 row (two draws, after A0, on
 A0's cases); never in `packages/action/`, `.github/actions/` or the held-out primary (A0); until Sunny withdraws it. It overrides "Models and
 keys" and the "Build and safety" review rule for that provider only.
+(2) 2026-11-17, decision 076r item 4 (Sunny): artu1 makes five one-line changes on `pa-076g`, the empty-ledger guard after
+`ledger()` in `docs/specs/R1.md`, `docs/specs/S1.md`, `docs/specs/E1.md`, `docs/runbooks/H1-window.md` and
+`docs/runbooks/H2-scoring.md` (Planner A's files), so that an empty reading stops the paid command; until `pa-076g` merges.
 
 ## Process (decision 076c item 14; `docs/plan/team-process.md` §1)
 

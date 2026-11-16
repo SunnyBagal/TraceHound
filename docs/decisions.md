@@ -4486,3 +4486,37 @@ branch (A/B 2 runs after E1; A/B 3 parked). Not touched: the protocol, the freez
   forks (P1's 38 plus S1's 2), with `b13-review-skipped`'s pattern at `1d07c82` applied to each comment's current body.
   37 PRs carry a CodeRabbit comment posted before the trigger; all **37 were edited into a real summary; 0 are still a
   "Review skipped" notice**, so none is listed as not-completion.
+
+## 076r — x1 switched to Qwen3-30B; money stop factor 1.17; bullmq auto-review off; guard fix; pa-076g GO; dev exposure split; branch deletion (2026-11-17)
+
+**Status: ruled by Sunny (17 Nov 2026).** Aim: the tag today, T0 Wed 18 Nov 10:00 IST. A0 on Nemotron stays the
+registered primary.
+1. **Second judge (x1): option (b).** x1 becomes `Qwen/Qwen3-30B-A3B-Instruct-2507` (Nebius's named replacement for the
+   deprecated `Qwen/Qwen3-235B-A22B-Instruct-2507`), same frozen prompt, reasoning off. E1 re-judges **every** dev row with
+   it. Protocol revision 13 says so before any held-out data is touched. If Qwen3-30B becomes unavailable mid-run, fall
+   back to option (d): every comment on a reviewed bug case goes on Sunny's sheet. No third model. Reason: the only
+   option with one second judge on dev and held-out and a dev baseline, chosen by a rule (Nebius's named replacement),
+   not by results.
+2. **Money stop: option (b).** The measured console ÷ ledger factor **f = 1.17** is frozen at F1; a job's console check
+   trips above **1.08 × 1.17 ≈ 1.26**; at F1 the `.env` hard stop is reset to ledger_now + (console − $1.00) ÷ 1.17. The
+   hard stop stays on. The cause of the 1.17 is still sought at $0, and a reading that moves away from it is reported.
+   Reason: a working tripwire matched to how Nebius actually bills; no planned job is cut.
+3. **CodeRabbit on the bullmq fork: option (a).** Sunny turns auto-review off for bullmq, checks the other forks, and
+   sends a screenshot. No re-probe (the Greptile credit is kept). Reason: bullmq then behaves like the dev forks P1 measured.
+4. **Ledger-helper guard:** artu1 makes the five one-line changes on `pa-076g` itself, as a dated exception in
+   `AGENTS.md`. Codex's check runs each of the five guards with an empty helper and confirms that **the paid command does
+   not run**, not only that STOP prints.
+5. **GO to merge `pa-076g`** (the RETHINK gate and the guard fix together) once codex passes item 4 and grok has done its
+   one pass on the whole range. If either says NO-GO, stop and tell Sunny.
+6. **Dev exposure: 10 of 31 is the label** (grok, `run/out/grok.dev-exposure.md`). Before E1 runs, the dev table reports
+   each tool on all 31 bug cases **and** on the 21 unexposed ones separately; protocol revision 13 says so, before any
+   judging.
+7. **Branch deletion: GO**, after artu1 confirms that every dev branch tip in the manifest exists in a local clone or a
+   git bundle, so the branches can be restored.
+8. Every ruling and GO is recorded in the brain with the date and reason; grok's exposure note is committed; STATE is
+   brought up to date. Then E1 starts.
+
+**Touches:** artu1 this file, `AGENTS.md` (exception 2), `docs/budget.md` (f = 1.17, hard stop at F1), STATE, LOG, the
+brain; codex protocol revision 13 (x1 model, fallback (d), stop factor, dev exposure split); `pa-076g` (five guard
+lines, artu1 under exception 2); Planner A's E1 `$X1`, F1 row 10/§3 model ids, H2 §2 (follow revision 13);
+`config/prices.json` (a Qwen3-30B entry from Nebius's listed rate); the four forks (dev branches deleted).
