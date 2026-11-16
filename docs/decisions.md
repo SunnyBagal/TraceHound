@@ -4520,3 +4520,8 @@ registered primary.
 brain; codex protocol revision 13 (x1 model, fallback (d), stop factor, dev exposure split); `pa-076g` (five guard
 lines, artu1 under exception 2); Planner A's E1 `$X1`, F1 row 10/§3 model ids, H2 §2 (follow revision 13);
 `config/prices.json` (a Qwen3-30B entry from Nebius's listed rate); the four forks (dev branches deleted).
+- **Item 3 amended (Sunny, 17 Nov 2026):** bullmq's automatic review was already off, or Sunny cannot confirm it was on,
+  so the first probe's pre-trigger "in progress" post (source mode Auto) is unexplained. **The re-probe runs before the
+  tag** (1 Greptile credit, 1 CodeRabbit hour): codex repeats the 076k item 6 procedure on the bullmq fork, waits at
+  least 2 minutes between opening and triggering, and records any bot object posted before the trigger (with its first
+  wording). Held-out trees and the forks carry no root `.coderabbit.yaml` (codex 29/29; artu1).
