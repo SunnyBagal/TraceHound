@@ -54,6 +54,8 @@ keys" and the "Build and safety" review rule for that provider only.
 (2) 2026-11-17, decision 076r item 4 (Sunny): artu1 makes five one-line changes on `pa-076g`, the empty-ledger guard after
 `ledger()` in `docs/specs/R1.md`, `docs/specs/S1.md`, `docs/specs/E1.md`, `docs/runbooks/H1-window.md` and
 `docs/runbooks/H2-scoring.md` (Planner A's files), so that an empty reading stops the paid command; until `pa-076g` merges.
+(3) 2026-11-17, decision 076s item 1 (Sunny): artu1 adds one paragraph to `docs/runbooks/H1-window.md` §5 failure 2
+(Planner A's file): a pre-trigger object is classified from its first version and creation time, not its current text.
 
 ## Process (decision 076c item 14; `docs/plan/team-process.md` §1)
 

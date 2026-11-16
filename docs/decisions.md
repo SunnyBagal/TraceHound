@@ -4521,7 +4521,7 @@ brain; codex protocol revision 13 (x1 model, fallback (d), stop factor, dev expo
 lines, artu1 under exception 2); Planner A's E1 `$X1`, F1 row 10/§3 model ids, H2 §2 (follow revision 13);
 `config/prices.json` (a Qwen3-30B entry from Nebius's listed rate); the four forks (dev branches deleted).
 - **Item 3 amended (Sunny, 17 Nov 2026):** bullmq's automatic review was already off, or Sunny cannot confirm it was on,
-  so the first probe's pre-trigger "in progress" post (source mode Auto) is unexplained. **The re-probe runs before the
+  so the first probe's pre-trigger "in progress" post (source mode Auto) is unexplained. [Corrected the same day (076s): that post was first "Review skipped"; the "in progress" text was a post-trigger edit, read off the edited comment.] **The re-probe runs before the
   tag** (1 Greptile credit, 1 CodeRabbit hour): codex repeats the 076k item 6 procedure on the bullmq fork, waits at
   least 2 minutes between opening and triggering, and records any bot object posted before the trigger (with its first
   wording). Held-out trees and the forks carry no root `.coderabbit.yaml` (codex 29/29; artu1).
@@ -4533,3 +4533,21 @@ lines, artu1 under exception 2); Planner A's E1 `$X1`, F1 row 10/§3 model ids, 
   20:51:13Z trigger; the review followed at 20:52:24Z. So CodeRabbit did **not** auto-review on bullmq: the probe behaved
   as on the dev forks, which is the re-probe's pass condition. codex's re-probe is on hold (no PR opened, no credit spent)
   until Sunny decides whether it still runs.
+
+## 076s — Re-probe cancelled; CodeRabbit cleared; auto-reviewed flag from first version and creation time (2026-11-17)
+
+**Status: ruled by Sunny (17 Nov 2026).** The re-probe is cancelled: CodeRabbit is cleared for the tag on the first
+probe's timeline (its pre-trigger comment was first "Review skipped", as on the dev forks; "Currently processing" was a
+post-trigger edit). No Greptile credit spent; codex deletes its prepared, never-opened probe branch.
+1. **The auto-reviewed flag (076i item 3) is decided from a comment's first version and its creation time against the
+   trigger time, never from its current text.** H1 §5 failure 2 did not say how a pre-trigger object is classified; artu1
+   added the rule (first version from GitHub's edit history; `created_at` against GitHub's time of the tool's trigger
+   comment, since the local resume record ran about 6 s behind GitHub in P1) under `AGENTS.md` exception (3).
+2. **The record is corrected** wherever "in progress before the trigger" was written as a finding: LOG (two lines of
+   16 Nov), 076r item 3's amendment, codex's probe journal and report, and the brain. The reading came from an edited
+   comment. Reason for the ruling: the probe's pass condition was already met; the error was in how the comment was read.
+- The held-out-side YAML check is done (codex, `run/out/codex.coderabbit-yaml.md`, 16–17 Nov): 29/29 cases, 58/58 push
+  trees, 0 root `.coderabbit.yaml`/`.yml`. It no longer gates the tag.
+
+**Touches:** artu1 this file, `AGENTS.md` (exception 3), `docs/runbooks/H1-window.md` §5 failure 2 (one paragraph),
+`.agents/LOG.md`, the brain; codex's probe journal and report; the bullmq fork (prepared branch deleted).
