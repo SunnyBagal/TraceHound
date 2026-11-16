@@ -238,12 +238,14 @@ describe("score-testset", () => {
     const s = JSON.parse(readFileSync(out, "utf8"));
     // th: c1 and c2 caught; c3 failed twice → a miss (its G1 match does not count)
     expect(s.tools.th).toMatchObject({ caught: 2, bugCases: 3, completedBug: 2, completedClean: 1, misses: 1, noReview: 0, caughtOfCompleted: "2/2",
-      caughtX1: 0, locationHits: 2, comments: { total: 4, clean: 1 } }); // a miss contributes no comments
+      caughtX1: 0, judgeFailedX1: 0, locationHits: 2, comments: { total: 4, clean: 1 } }); // a miss contributes no comments
     expect(s.tools.th.costUSD.total).toBeCloseTo(0.21, 10); // every attempt's ledger delta, the rerun included
     expect(s.tools.th.costUSD.max).toBeCloseTo(0.07, 10);
     expect(s.tools.th.caughtWilson).toEqual(wilson(2, 3));
     // cr: c2 has no review file → no-review; c3 caught
-    expect(s.tools.cr).toMatchObject({ caught: 1, completedBug: 2, noReview: 1, misses: 0, locationHits: 1 });
+    expect(s.tools.cr).toMatchObject({ caught: 1, completedBug: 2, noReview: 1, misses: 0, locationHits: 1, caughtX1: null, judgeFailedX1: null });
+    expect(r.out).toMatch(/th: caught 2\/3 .* · judge-failed 0 · x1 judge-failed 0 · x1 caught 0\n/);
+    expect(r.out).not.toMatch(/cr: caught .*x1/);
     // pair: c2 is out (cr no-review); c1 th only, c3 cr only (th's miss counts as not caught)
     // no registered test in this policy: counts only, no p (decision 076c item 4); reviewed by both: c1 only
     expect(s.pairs).toEqual([{ a: "th", b: "cr", registered: false, n: 2, reviewedByBoth: 1, onlyA: 1, onlyB: 1, both: 0, neither: 0, p: null }]);
@@ -255,6 +257,33 @@ describe("score-testset", () => {
     expect(r.out).not.toMatch(/sign test p/);
     expect(r.out).toContain("policy: approved by synthetic test on 2026-11-11 (test fixture)");
     expect(s.policy.no_review_in_pairs).toBe("exclude");
+  });
+
+  it("x1 that failed on every completed bug case prints 'unavailable', not 'caught 0'; a partial x1 counts its failures beside its catches (devin finding 2)", () => {
+    const f = scoringFixture();
+    const x1 = (failed: string[], matched: string[]) => json(f.dir("th-x1.detail.json"), { detail: ["P1", "P2"].map((t) => ({ prTitle: t,
+      status: failed.includes(t) ? "JUDGE_FAILED" : "SCORED",
+      comments: JSON.parse(readFileSync(f.dir(`th/c${t.slice(1)}.json`), "utf8")).comments.map((c: object, i: number) => ({ ...c, matched: matched.includes(t) && i === 0 ? "G1" : null })) })) });
+    const score = (out: string) => run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`,
+      "--judge", `th=${f.dir("th.detail.json")}`, "--judge-x1", `th=${f.dir("th-x1.detail.json")}`, "--records", `th=${f.dir("th-records")}`, "--out", out]);
+    // every completed bug case (c1, c2) JUDGE_FAILED under x1
+    x1(["P1", "P2"], []);
+    const all = score(f.dir("all-failed.json"));
+    expect(all.code).toBe(0);
+    expect(JSON.parse(readFileSync(f.dir("all-failed.json"), "utf8")).tools.th).toMatchObject({ caught: 2, judgeFailed: 0, caughtX1: "unavailable", judgeFailedX1: 2 });
+    expect(all.out).toContain("· judge-failed 0 · x1 judge-failed 2 · x1 caught unavailable");
+    expect(all.out).not.toMatch(/x1 caught 0/);
+    // one failed, one scored with a G1 match: a number again, failures beside it
+    x1(["P1"], ["P2"]);
+    const part = score(f.dir("partial.json"));
+    expect(part.code).toBe(0);
+    expect(JSON.parse(readFileSync(f.dir("partial.json"), "utf8")).tools.th).toMatchObject({ caughtX1: 1, judgeFailedX1: 1 });
+    expect(part.out).toContain("· x1 judge-failed 1 · x1 caught 1");
+    // scored everywhere, nothing matched: a real 0
+    x1([], []);
+    const zero = score(f.dir("zero.json"));
+    expect(JSON.parse(readFileSync(f.dir("zero.json"), "utf8")).tools.th).toMatchObject({ caughtX1: 0, judgeFailedX1: 0 });
+    expect(zero.out).toContain("· x1 judge-failed 0 · x1 caught 0");
   });
 
   it("pending policies apply only through --policy, with each choice's effect", () => {
