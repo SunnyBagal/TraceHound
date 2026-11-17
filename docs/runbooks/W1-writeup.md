@@ -87,7 +87,7 @@ mean comments per PR; `D` = TraceHound's measured cost per PR on this set.
 > two model judges and confirmed by hand without knowing which tool wrote each comment.
 
 If H2 used x1's fallback (d) (decision 076r item 1; protocol rev 13), the last sentence becomes: "Matches were proposed
-by one model judge, the second being unavailable for N of the 20 bug cases, and every comment on every bug case was
+by one model judge, the second being unavailable for N of the 20 bug cases, and every counted comment on every reviewed bug case was
 checked by hand without knowing which tool wrote it."
 
 If a tool completed fewer than 29 reviews, add: "X reviewed N of the 29 pull requests; its count is over the 20 bugs,
