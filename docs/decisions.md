@@ -4568,3 +4568,25 @@ hand-checked; dev exposure 10 of 31 (grok).
   Greptile's 2.850; comments on the 9 clean cases A0 1, CodeRabbit 8, Greptile 9.
 
 **Touches:** artu1 this file, LOG, STATE, the brain; Sunny is told today. Nothing in the held-out plan changes.
+
+## 077 — H1 cap reset from R1's measured costs (2026-11-17)
+
+**Status: computed and recorded by artu1 under 076a item 3 and 076g item 1 (077 is only the cap reset); one grok pass.**
+- **Frozen, as before (076g item 1):** the arm is A0, pool-verify-v1 on Nemotron 3.5 Super, attempts 2, comment cap 15.
+  No arm is chosen on dev; R2 was cut.
+- **H1 cap: $2.94** (ledger dollars). Method: the caps check's, made empirical (`run/out/bunny.caps-077-recipe.py`, run by
+  artu1 with `python3 -I`; self-test passes): R1's 40 per-case costs (every attempt summed per case, from
+  `~/Projects/tracehound-runs/dev/r1/th`: median $0.0511, mean $0.0702); for N = 29 under 076a's rolling rule,
+  cap_95 = q95(sum of 28 draws) + the $0.40 case cap, 20,000 draws, seed 77: lognormal $2.915, bootstrap $2.945, the larger
+  rounded up → **$2.94**. H1's judging is H2's line, not H1's.
+- The per-case costs include R1's $0.54 of outage upper-bound charges on six cases, so the cap leans high. The cap is in
+  ledger dollars, which run about 17% under the console; a constant factor cancels in the completion probability
+  (devin's review, finding 4), and the money stop uses f = 1.17 (076r item 2). At the cap, about $3.44 at console prices.
+- **Funding (076a item 3):** H1's line was $3.15 until this decision; the cap is $2.94, so **$0.21 returns to unallocated**.
+  Unallocated: $6.05 (076g) − $0.07434 side-track and probe spend (076n $0.02581, 076o $0.04832, the judge probe $0.00012,
+  the region check $0.00009) − $0.15 committed to A/B 2 (076q) + $0.21 = **$6.04**. Unstarted held-out cases still run from
+  the reserve (076a item 4). The Haiku held-out row is Anthropic money, its own $1.00 line (076k item 1).
+- **Stop/go:** the dev reading is **RETHINK** (076t); under 076k item 4 it does not gate the tag.
+
+**Touches:** artu1 this file, `docs/budget.md` (H1 line $2.94; unallocated $6.04); H1's `CAP=` (`docs/runbooks/H1-window.md`
+reads it from 077); F1 row 2.
