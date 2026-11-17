@@ -86,6 +86,10 @@ mean comments per PR; `D` = TraceHound's measured cost per PR on this set.
 > on K_T of the 20 bugs (95% interval L–U), CodeRabbit on K_C (L–U) and Greptile on K_G (L–U). Matches were proposed by
 > two model judges and confirmed by hand without knowing which tool wrote each comment.
 
+If H2 used x1's fallback (d) (decision 076r item 1; protocol rev 13), the last sentence becomes: "Matches were proposed
+by one model judge, the second being unavailable for N of the 20 bug cases, and every comment on every bug case was
+checked by hand without knowing which tool wrote it."
+
 If a tool completed fewer than 29 reviews, add: "X reviewed N of the 29 pull requests; its count is over the 20 bugs,
 and pairs use only the pull requests both tools reviewed."
 
@@ -126,7 +130,8 @@ then the test.
 > labelled bug they posted c_T, c_C and c_G comments in total. TraceHound ran on an open model (Nemotron 3.5 on Nebius)
 > at $D per pull request.
 
-`$D` is the cost **paid** per pull request. (The second figure of 076b item 5 was for an adopted A1 or A2; A0 is
+`$D` is the **ledger** cost per pull request, with the console-reconciled figure (× H1's console ratio) beside it
+(decision 076u item 4). (The second figure of 076b item 5 was for an adopted A1 or A2; A0 is
 frozen by decision 076g item 1, so it is not used.)
 
 ### 3.4 Never written, whatever the numbers
@@ -234,7 +239,7 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
 
 ## 5. Checks before merge
 1. codex: every number in `ts-heldout.md`, `results.md`, the viewer and the README equals `ts-heldout.summary.json` (or
-   `ts-heldout.secondary.json`, or a dev file for §2.9); every sentence in the summary and README is a §3 template;
+   `ts-heldout.secondary.json`, or `docs/bench/ts-dev.md` or `l1.summary.json` for §2.9); every sentence in the summary and README is a §3 template;
    `git grep -n -i -E "beats|outperform|on par|as many|matches|equivalent" -- docs/bench/ts-heldout.md README.md` shows
    nothing outside a quoted "never written" list. Every vendor fact on the page is labelled D in the verified table
    (§3.4b), and the benchmark line is §3.4b's, word for word.
@@ -255,7 +260,8 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
      to 0.20 that at least one rejects by chance".
    - Not "fixed before any result on the 40 TS dev cases existed" but "pool-verify-v1 was fixed before any catch
      count of it on the dev cases existed; contracts off was chosen by a model-free dev audit".
-   - No Claude or side-track dev number stands next to the held-out counts as if comparable (decision 076m).
+   - The only Claude dev numbers on the page are the registered Haiku row's, in its disclosure, labelled dev; no
+     side-track (decision 076m) number appears on the page, the README, the viewer or a post.
    - If H2 used x1's fallback (d), §3.1's "two model judges" sentence uses its fallback variant.
 
 ## 6. The three most likely ways to get this wrong
