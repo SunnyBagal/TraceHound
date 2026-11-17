@@ -4813,5 +4813,13 @@ reading is RETHINK, and the held-out run answers the registered question once.
    sittings" row applies (partial file hashed and kept at the end of Saturday; the report says "two sittings").
    Sunny's blindness rule now covers Saturday evening to Sunday: no dashboard, logs, or GitHub mail about the forks.
 
+**Dates after the missed tag (no ruling; 076k item 5, F1 §1 row 5 and line 47):** the tag was not pushed by 20:00 IST on
+Tue 17 Nov (the held-out clone fetch was still running at 02:15 IST on 18 Nov), so the tag and T0 move by one day:
+**scheduled T0 Thu 19 Nov 2026 10:00 IST = 04:30 UTC**, snapshot **Sun 22 Nov 10:00 IST**, hand-check **about 150
+minutes Sun 22 Nov afternoon IST, the rest Mon 23 Nov**, H2's result **Mon 23 Nov evening**. Sunny starts `caffeinate`
+at about 09:00 IST on Thu 19 Nov. Greptile's expiry (27 Nov) is still after the last sitting. This is the last free
+move: a further miss puts T0 at Fri 20 Nov, still within 076k item 5's limit (Sun 22 Nov) but the second sitting would
+then fall on Tue 24 Nov. The slot list (F1 row 14) is rebuilt at T0 2026-11-19T04:30:00Z.
+
 **Touches:** artu1 this file (078 field 6 and the sitting line, 076w), `.agents/STATE.md`, `.agents/LOG.md`, the brain;
 codex the held-out clones (fetch only, under the brief); grok `run/out/grok.ho-identity.md`.
