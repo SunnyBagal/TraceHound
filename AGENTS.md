@@ -91,7 +91,8 @@ Briefs use the template in `docs/plan/team-process.md` §2: `run/briefs/<lane>.<
 - Never open `~/Projects/tracehound-bench`, `~/Projects/tracehound-ops`, `~/Projects/TraceHound-eval`, `~/Projects/tracehound-heldout` or `~/Projects/Recall`.
 - Never copy text from the benchmark dataset into code, tests or docs. Counts only.
 - **Track B held-out (tracehound-testset):** artu1 and bunny (the tuning side) never open, list, grep or diff
-  `tracehound-testset/heldout/`, `labels/heldout/` or any held-out case note; never run git on `heldout/repos/` (including
+  `tracehound-testset/heldout/`, `labels/heldout/`, the held-out window directory `~/Projects/tracehound-ho-window`
+  (F1 §4.1, added 2026-11-17) or any held-out case note; never run git on `heldout/repos/` (including
   as an alternate object store); never pass `--heldout-ok` or a held-out side flag; never `hc read` the pane of an agent
   doing held-out work. Numbers-only files in `run/out/` are their only held-out input. codex, grok (and devin) may read
   held-out; their held-out reports are counts only.
