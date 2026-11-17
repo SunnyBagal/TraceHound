@@ -4,7 +4,7 @@
 // crashed run (061a). Invented data in temp
 // dirs and a fake fetch; no network, no dataset text. The open test-set gate is not exercised here.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -238,8 +238,22 @@ function priorCalRuns(bench: string) {
   for (const run of [1, 2, 3] as const) put(path.join(runDir(bench, "cal_dot_com", run), "run.json"), { status: "complete", costUSD: 1 });
 }
 
+/**
+ * A fresh copy of one invented bench per call. The git work (init, two commits, four bare clones:
+ * eleven process spawns) runs once per file and each call copies the result. Built per call, it
+ * made the tests that need two or three benches run past vitest's 5 s timeout under the full
+ * workspace's parallel load (flaky-061a: 4 of 20 full runs failed, 0 of 25 alone).
+ */
+let benchTemplate: string | null = null;
 function inventedBench(): string {
+  benchTemplate ??= buildInventedBench();
   const bench = tmp("tracehound-061-bench-");
+  cpSync(benchTemplate, bench, { recursive: true });
+  return bench;
+}
+
+function buildInventedBench(): string {
+  const bench = tmp("tracehound-061-template-");
   const src = path.join(bench, "src-repo");
   mkdirSync(src);
   const git = (...args: string[]) => execFileSync("git", ["-C", src, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { encoding: "utf8", env: cleanGitEnv() });
