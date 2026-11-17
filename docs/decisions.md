@@ -4591,10 +4591,10 @@ hand-checked; dev exposure 10 of 31 (grok).
 **Touches:** artu1 this file, `docs/budget.md` (H1 line $2.94; unallocated $6.04); H1's `CAP=` (`docs/runbooks/H1-window.md`
 reads it from 077); F1 row 2.
 
-## 078 — Predictions, claim wording and window dates for the held-out run (DRAFT, 2026-11-17)
+## 078 — Predictions, claim wording and window dates for the held-out run (2026-11-17)
 
-**Status: DRAFT by artu1 (F1 §5). Not in force until Sunny writes "go" below and the open fields are filled; committed and
-pushed before the first held-out action.** Basis: E1 (`run/out/bunny.e1.md`, grok's recount `run/out/grok.e1-check.md`;
+**Status: FINAL. Sunny's "go", 17 Nov 2026 (076v item 1); written by artu1 (F1 §5); committed and pushed before the first
+held-out action.** Basis: E1 (`run/out/bunny.e1.md`, grok's recount `run/out/grok.e1-check.md`;
 `docs/bench/ts-dev.md` when merged), decision 076t (dev reading RETHINK), plan-v2 §2's power statement. Dev numbers are
 "dev, selection set, one draw, one judge of record, not hand-checked; dev exposure 10 of 31". Held-out ranges below scale
 dev rates from 31 bugs to 20 and widen them by the Wilson interval; they are predictions, not targets.
@@ -4616,8 +4616,10 @@ dev rates from 31 bugs to 20 and widen them by the Wilson interval; they are pre
    about 0.19 for Greptile** (20,000 draws of 20 cases, seed 78). No prediction and no test on CodeRabbit vs Greptile or
    on a secondary row.
 6. Hand-check sheet: **about 61 items** (dev sheet 95 items over 31 bugs and three tools, scaled to 20 bugs: bunny, E1
-   step 4). Sunny's minutes per item: **[open: Sunny]**. If items × minutes is over 3 hours, Sunny says before the tag
-   whether he books a longer sitting.
+   step 4). Sunny's minutes per item: **4, an estimate, not a measurement** (Sunny, 17 Nov; the practice sheet's
+   decisions were drafted by Claude and untimed, and are not data, 076v item 1). About 61 × 4 ≈ **244 minutes** against
+   Sunny's limit of **150 minutes** for Saturday's sitting: how the sheet fits is Sunny's ruling before the tag (076v
+   item 1; options there). Under fallback (d) the sheet would be about 169 items. The sitting is Sunny's, by hand.
 7. Test-sentence floor (076c item 6): **15** bug cases reviewed by both tools of a pair; copied, not a prediction.
 8. Pooled secondary analysis (076g item 5): secondary, A0 only, defined in protocol revision 10 §4 "Secondary pooled
    analysis: A0 only" (still §4 in revision 13); no choice added here.
@@ -4635,7 +4637,7 @@ of the scheduled T0. Greptile credits: **59** (Sunny's reading, 17 Nov; needs at
 cap $2.94 (077). Haiku held-out row as 076k item 1 and protocol revision 12 §5 (two draws after A0; $1.00 Anthropic).
 `ts-freeze.md` sha256: **[open: at F1]**.
 
-**Go:** [open: Sunny writes "go" for the window here, with the date].
+**Go:** Sunny, 17 Nov 2026: "'Go' on 078; make it final." 
 
 ## 076u — 078's inputs; "Full review finished." stays off the list; Planner A's edits by artu1; product rule registered; devin's pre-F1 review triaged (2026-11-17)
 
@@ -4729,3 +4731,55 @@ counts. `D_31` and `D_21` are the same on all 31 dev bugs and on the 21 unexpose
 than the set resolves. **Dev at registration (076t, for the record):** v1 on all 31, A0 12, CodeRabbit 19, Greptile 18,
 so `D_31` = −7 (the CodeRabbit pair); `D_21` is in `docs/bench/ts-dev.md`. Modifier 1 is read only after H2. Who computes the band: artu1 from H2's counts-only summary, after the
 firewall lifts; codex checks.
+
+## 076v — 078 made final; minutes per item an estimate; console trip option (b); A/B 2 cancelled; PRs #77/#78 timing (2026-11-17)
+
+**Status: ruled by Sunny (17 Nov 2026), applied by artu1.**
+
+1. **Practice sheet.** `run/out/practice-decisions.*` was filled by Claude, not by Sunny, and not timed: renamed
+   `practice-decisions.CLAUDE-DRAFTED-NOT-DATA.json` with `practice-decisions.NOT-DATA.md` beside it (testset `ea4b8cb`);
+   never data, never a human label. **078 uses 4 minutes per item, labelled an estimate.** Saturday's sheet must fit in
+   **150 minutes**; at about 61 items that is about 244 minutes, so it does not fit, and artu1 brings Sunny the cut before
+   the tag (options below). **078 is final** on Sunny's "go". Saturday's hand-check is Sunny's, by hand.
+   *Options for the fit (artu1; dev numbers from E1's stripped sheet, 95 items, 57 tool–case groups, scaled by 20/31):*
+   - (a) **Two sittings, no rule change:** 150 minutes on Saturday, the rest (about 95 minutes) on Sunday, nothing else
+     seen in between (H2 §8 already allows it; the report says "two sittings"). This doesn't cut the sheet. It is
+     artu1's recommendation.
+   - (b) **Stop at the first confirmed comment per tool and bug case** (the measure counts distinct bugs, so later
+     comments of that tool on that case cannot change it): expected 157–185 minutes on the dev proxy, still over 150.
+     It needs a kit change to a file hashed at the tag and a protocol revision tonight, and grouping shows Sunny which
+     comments share a tool.
+   - (c) **Hand-check only where the two judges disagree, plus location-only items:** about 25 items, about 100 minutes.
+     It fits, but the headline changes from "confirmed by hand" to "two judges agreed, or confirmed by hand", and it
+     needs a protocol revision (codex) and new W1 §3.1 wording before the tag.
+   Under fallback (d), about 169 items (about 11 hours) cannot fit any single sitting; Sunny rules then.
+2. **Console trip: option (b).** Only the tag's one-request model checks are allowed (F1 row 15; at T0 − 24 h and H2 step 0
+   as written). **Planned real spend at 1.39** (the top of the rounding range): H1 cap $2.94 + H2 $0.40 = $3.34 ledger →
+   **$4.64**; with the whole $3.00 reserve used too, $6.34 → **$8.81**; model checks < $0.003. Against $16.20 − $1.00 =
+   $15.20, it fits, with $6.39 left even with the reserve spent. (The F1 hard stop at f = 1.17 allows about $12.99
+   of ledger, about $18.06 real at 1.39. The job caps, not the hard stop, are what keep spend inside the balance.)
+   Sunny's console reading tonight is recorded as a data point, not a gate. **A/B 2 is cancelled:** W1 does not depend
+   on it (no reference in `W1-writeup.md` or `H2-scoring.md`; W1 §5 item 4 keeps side-track numbers off the page); its
+   $0.15 returns to unallocated.
+3. **PRs:** #78 (flaky 061a test) merges before the tag if codex gives GO in time, otherwise after H2. #77 (viewer
+   inspector width) waits until after H2.
+
+**Touches:** artu1 this file, `docs/budget.md`, `.agents/STATE.md`, `.agents/LOG.md`, the brain; testset `run/out/practice-*`.
+
+## 080 — Scope after the held-out result: reviewer work stops; maintenance after W1 (2026-11-17)
+
+**Status: ruled by Sunny (17 Nov 2026).** After H2 and the W1 write-up, **TraceHound reviewer work stops**: no new arms, no
+tuning, no model switches. The dev table's gap of 7 is RETHINK under the registered rule (076t), and **company work is
+paused from today**. After W1 the repo goes into **maintenance: fixes only**, plus the pricing (§2) and kill-date (§5)
+items of the product note that decision 079 registers by hash, applied as written. Reason: Sunny's ruling. The dev
+reading is RETHINK, and the held-out run answers the registered question once.
+
+**What this changes (artu1's reading; Sunny corrects it if it is wrong):**
+- 076p's plan to make the provider and model a setting after held-out scoring is withdrawn ("no model switches").
+- The model test in the product note's §3 (arms M2–M4) and the side track (076m) get no further work; the side-track
+  branch stays unmerged as it is.
+- 079's band is still computed and reported after H2, as registered. Under 080 it decides only what the note's §2 and §5
+  say (paid tiers only in band A; the kill dates).
+- The held-out run, H2, the hand-check and W1 go ahead unchanged.
+
+**Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`, the brain.
