@@ -4841,7 +4841,10 @@ codex the held-out clones (fetch only, under the brief); grok `run/out/grok.ho-i
    mismatched object → rebuild those clones from upstream instead, and it comes to Sunny.** If fsck is clean, it is
    recorded here, next to the deviation. Then stage 2 (dry runs, goldens, F1 §4, freeze GO) and the tag go ahead.
    Briefs `run/briefs/codex.ho-fsck.md`, `run/briefs/grok.ho-fsck.md`.
-   **fsck result:** [open: filled when grok's check is in].
+   **fsck result (18 Nov): clean.** `git fsck --full` on clones 1 and 2: exit 0 each, stdout and stderr empty, 0 error,
+   missing, corrupt, hash-mismatch, dangling, unreachable or warning lines; refs, HEAD, index and config unchanged,
+   FETCH_HEAD absent (`run/out/codex.ho-fsck.md`). grok's independent rerun: the same, **GO** (`run/out/grok.ho-fsck.md`).
+   The 22,241 objects stay; the deviation stands as recorded. Stage 2 goes ahead.
 3. **Dates:** T0 **Thu 19 Nov 10:00 IST**, window ends **Sun 22 Nov 10:00 IST**; sittings about 150 minutes **Sun 22
    Nov afternoon** and the rest **Mon 23 Nov**; the no-unblinding rule holds until Sunny finishes the last item. 078's
    window and sitting lines updated.
