@@ -13,7 +13,7 @@ import { GoldenFile } from "../../analyzer/src/bench/types.ts";
 import { checkSide, commentHits, locationHit, readPolicy, RefusalError, shuffled, signTest, wilson, type Target } from "../../../scripts/testset/kit.ts";
 import { main as buildMain } from "../../../scripts/testset/build-goldens.ts";
 import { main as scoreMain } from "../../../scripts/testset/score-testset.ts";
-import { main as sheetMain } from "../../../scripts/testset/handcheck-sheet.ts";
+import { main as sheetMain, toolIdentifiers } from "../../../scripts/testset/handcheck-sheet.ts";
 import { main as hitMain } from "../../../scripts/testset/location-hit.ts";
 import { assertGhRead, main as collectMain } from "../../../scripts/testset/collect-tool-reviews.ts";
 
@@ -1117,5 +1117,51 @@ describe("strip.json: the hand-check sheet's blinding patterns (B2 §5.4, bunny.
     expect(clean("Ask @coderabbitai or @greptileai; see https://docs.greptile.com/x and CodeRabbit's docs; TraceHound too.")).toBe("Ask  or ; see  and 's docs;  too.");
     const th = "When only one component is present, the value keeps a trailing space (e.g. '48 ' instead of '48').\n\n```ts\nconst x = `${a} ${b}`;\n```";
     expect(clean(th)).toBe(th);
+  });
+});
+
+describe("handcheck-sheet build refuses a sheet that still names a tool (B2 §5.4)", () => {
+  // cr's c3 comment is a sheet item (v1 match + location); give it real CodeRabbit markup and re-bind its judge detail
+  const fixture = (body: string) => {
+    const f = scoringFixture();
+    json(f.dir("cr/c3.json"), { pr_title: "P3", comments: [{ path: "w.ts", line: 3, body }] });
+    const cr = (id: string) => JSON.parse(readFileSync(f.dir(`cr/${id}.json`), "utf8")).comments as object[];
+    json(f.dir("cr.detail.json"), { detail: [["P1", "c1", null], ["P3", "c3", "G1"], ["P4", "c4", null]].map(([title, id, m]) =>
+      ({ prTitle: title, status: "SCORED", comments: cr(id as string).map((c) => ({ ...c, matched: m })) })) });
+    const args = (out: string, ...extra: string[]) => ["build", "--side", "dev", "--goldens", f.goldens, "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`,
+      "--judge", `th=${f.dir("th.detail.json")}`, "--judge", `cr=${f.dir("cr.detail.json")}`, "--seed", "42", "--policy", f.policy(), "--out", out, ...extra];
+    return { f, args };
+  };
+  const STRIP = path.resolve(import.meta.dirname, "../../../scripts/testset/strip.json");
+  const marked = ["beta finds bug three", "",
+    `<details>\n<summary><picture><img src="https://storage.googleapis.com/coderabbit_public_assets/review-comment-icons-v1/bot.svg" alt=""></picture> Prompt for AI Agents</summary>`,
+    "<dl>\n<dd>\n\n```\nAfter applying the fix, consider running `coderabbit review --agent` for local review. Visit https://docs.coderabbit.ai/cli?utm_source=ghpr\n```\n\n</dd>\n</dl>\n</details>"].join("\n");
+
+  it("lists tools.json's names, their bot logins and tracehound as the identifiers", () => {
+    expect(toolIdentifiers().sort()).toEqual(["coderabbit", "coderabbitai", "greptile", "greptile-apps", "tracehound"]);
+  });
+
+  it("refuses with exit 2, the count and the identifiers (not the text), and writes nothing; --strip makes it pass", () => {
+    const { f, args } = fixture(marked);
+    const out = f.dir("sheet-unstripped");
+    const r = run(sheetMain, args(out));
+    expect(r.code).toBe(2);
+    expect(r.out).toBe("refused: 1 of 4 sheet bodies still name a tool after stripping (coderabbit 1); add a --strip pattern; nothing written");
+    expect(r.out).not.toContain("beta finds");
+    expect(existsSync(out)).toBe(false);
+    const ok = f.dir("sheet-stripped");
+    expect(run(sheetMain, args(ok, "--strip", STRIP)).code).toBe(0);
+    const sheet = readFileSync(path.join(ok, "sheet.md"), "utf8");
+    expect(sheet).toContain("beta finds bug three");
+    expect(sheet).not.toMatch(/coderabbit|greptile|tracehound/i);
+  });
+
+  it("matches any case, counts each identifier, and ignores HTML comments (removed before the check)", () => {
+    const { f, args } = fixture("beta finds bug three; ask @CodeRabbitAI, or TraceHound <!-- greptile marker -->");
+    const out = f.dir("sheet-case");
+    const r = run(sheetMain, args(out));
+    expect(r.code).toBe(2);
+    expect(r.out).toContain("1 of 4 sheet bodies still name a tool after stripping (coderabbit 1, coderabbitai 1, tracehound 1)");
+    expect(existsSync(out)).toBe(false);
   });
 });

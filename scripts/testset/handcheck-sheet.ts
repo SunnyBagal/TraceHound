@@ -13,6 +13,9 @@
  * shows no tool name and no reason the item is there. Whether it shows a judge cue is policy `sheet_judge_cues`
  * (`--policy`, required: pending Sunny in ts-protocol §13). Bodies lose HTML comments (tool markers) and
  * any `--strip` regexes (a JSON array of patterns, frozen with the sheet); the finding text is otherwise unchanged.
+ * Blinding check (B2 §5.4): after stripping, if any sheet body still contains a tool identifier (the keys of
+ * scripts/testset/tools.json, their bot logins without `[bot]`, and `tracehound`; case-insensitive), build refuses (exit 2)
+ * and writes nothing; it prints how many bodies and which identifiers, never the text. The fix is a --strip pattern.
  * Files: sheet.md (for Sunny), decisions.json (blank, item order), mapping.json (private: item → tool, case, comment,
  * reasons; never shown to the checker), hashes.json (sha256 of all three and the recipe: seed and strip patterns).
  * resolve: a case is caught by a tool when the checker marked any of that tool's items for that case `same-bug`; every
@@ -68,6 +71,8 @@ export function buildSheet(o: {
   v1: Map<string, Map<string, Set<number> | "failed">>; x1: Map<string, Map<string, Set<number> | "failed">>; seed: number; strip: RegExp[];
   /** policy sheet_judge_cues (ts-protocol §13, pending): "shown" adds whether a judge proposed a match; "hidden" does not */
   judgeCues: "hidden" | "shown";
+  /** tool identifiers no stripped body may contain (B2 §5.4), matched case-insensitively; a hit refuses the build */
+  forbidden?: string[];
 }): { sheet: string; decisions: { item: string; decision: null; guess: null; reason: string }[]; mapping: Item[]; reviewed: Reviewed[] } {
   const raw: Omit<Item, "item">[] = [];
   const reviewed: Reviewed[] = [];
@@ -94,6 +99,18 @@ export function buildSheet(o: {
   const mapping: Item[] = order.map((r, i) => ({ item: `H${String(i + 1).padStart(Math.max(3, width), "0")}`, ...r }));
   const golden = new Map(o.cases.map((c) => [c.case, c]));
   const clean = (body: string) => o.strip.reduce((b, re) => b.replace(re, ""), body.replace(/<!--[\s\S]*?-->/g, "")).trim();
+  const forbidden = [...new Set((o.forbidden ?? []).map((f) => f.toLowerCase()).filter(Boolean))];
+  if (forbidden.length) {
+    const hits = new Map<string, number>();
+    let bodies = 0;
+    for (const m of mapping) {
+      const body = clean(o.reviews.get(m.tool)!.get(m.case)!.comments[m.comment]!.body).toLowerCase();
+      const found = forbidden.filter((f) => body.includes(f));
+      if (found.length) bodies++;
+      for (const f of found) hits.set(f, (hits.get(f) ?? 0) + 1);
+    }
+    if (bodies) throw new RefusalError(`${bodies} of ${mapping.length} sheet bodies still name a tool after stripping (${[...hits].map(([f, n]) => `${f} ${n}`).join(", ")}); add a --strip pattern; nothing written`);
+  }
   const parts = ["# Hand-check sheet (blind)", "",
     "For each item: is the comment about the labelled bug? Write `same-bug` or `not` and a short reason in decisions.json.",
     "Which tool wrote a comment, and why an item is listed, are hidden on purpose.",
@@ -135,6 +152,14 @@ export function resolve(mapping: Item[], decisions: { item: string; decision: un
   if (decisions.some((d) => !mapping.some((m) => m.item === d.item))) throw new RefusalError("decisions name an item the mapping does not have");
   guess.commonestToolItems = Math.max(0, ...perTool.values());
   return { decided: [...out.values()], guess };
+}
+
+/** B2 §5.4: the identifiers a blind sheet must not show: tools.json's tool names and bot logins (without `[bot]`), and tracehound. */
+export function toolIdentifiers(toolsFile: string = path.join(import.meta.dirname, "tools.json")): string[] {
+  const t = readJson(toolsFile) as { tools?: Record<string, { logins?: unknown }> };
+  if (!t?.tools || typeof t.tools !== "object" || !Object.keys(t.tools).length) throw new RefusalError(`${toolsFile} has no tools`);
+  const logins = Object.values(t.tools).flatMap((v) => (Array.isArray(v.logins) ? v.logins.filter((l): l is string => typeof l === "string") : []));
+  return [...new Set([...Object.keys(t.tools), ...logins.map((l) => l.replace(/\[bot\]$/, "")), "tracehound"].map((s) => s.toLowerCase()))];
 }
 
 export function main(argv: string[], log: (line: string) => void = console.log): number {
@@ -181,6 +206,7 @@ export function main(argv: string[], log: (line: string) => void = console.log):
     const stripSrc = values.strip ? readJson(values.strip) as string[] : [];
     if (!Array.isArray(stripSrc) || stripSrc.some((s) => typeof s !== "string")) throw new RefusalError("--strip must be a JSON array of regex strings");
     const built = buildSheet({ cases: g.cases, reviews, reviewSha, seed, strip: stripSrc.map((s) => new RegExp(s, "g")), judgeCues: policy.sheet_judge_cues!,
+      forbidden: toolIdentifiers(),
       v1: new Map([...v1].map(([t, f]) => [t, judgeMatches(f, g.cases, reviews.get(t)!)])),
       x1: new Map([...x1].map(([t, f]) => [t, judgeMatches(f, g.cases, reviews.get(t)!)])) });
     const sheet = built.sheet, decisions = JSON.stringify(built.decisions, null, 1) + "\n";
