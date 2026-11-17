@@ -56,6 +56,10 @@ keys" and the "Build and safety" review rule for that provider only.
 `docs/runbooks/H2-scoring.md` (Planner A's files), so that an empty reading stops the paid command; until `pa-076g` merges.
 (3) 2026-11-17, decision 076s item 1 (Sunny): artu1 adds one paragraph to `docs/runbooks/H1-window.md` §5 failure 2
 (Planner A's file): a pre-trigger object is classified from its first version and creation time, not its current text.
+(4) 2026-11-17, decision 076u item 2 (Sunny): artu1 makes Planner A's 076r–076u edits itself (`run/comms/artu1-to-planner-a.076r-076s.md`
+items 1–5, and 076u item 4) in `docs/runbooks/F1-freeze.md`, `docs/specs/E1.md`, `docs/specs/S1.md`,
+`docs/runbooks/H1-window.md`, `docs/runbooks/H2-scoring.md` and `docs/runbooks/W1-writeup.md`; codex checks them,
+then grok does one pass on the range; artu1 merges on both GOs. For that branch only.
 
 ## Process (decision 076c item 14; `docs/plan/team-process.md` §1)
 

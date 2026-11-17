@@ -1,7 +1,7 @@
 # Runbook W1: the write-up, with the claim wording for every outcome
 
 For artu1 (writes), codex (checks every sentence against a count), Sunny (reads before it is public). Planner A,
-2026-11-11; brought to decision 076e (item 5, addendum d) on 2026-11-13, to decision 076g (items 1, 4, 5) on 2026-11-13, and to decision 076k (items 1, 2, 9) on 2026-11-14. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §2. Protocol: `docs/eval/ts-protocol.md` §6, §11 (it wins
+2026-11-11; brought to decision 076e (item 5, addendum d) on 2026-11-13, to decision 076g (items 1, 4, 5) on 2026-11-13, and to decision 076k (items 1, 2, 9) on 2026-11-14, and to decision 076u (item 4) on 2026-11-17 (artu1, AGENTS.md exception (4)). Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §2. Protocol: `docs/eval/ts-protocol.md` §6, §11 (it wins
 over this runbook). Cost: $0. Starts after H2's commit (`docs/bench/ts-heldout.summary.json`) and the firewall lift.
 
 The wording in §3 is copied into decision 078 at F1, **before** the window. W1 only fills the placeholders. A sentence
@@ -240,6 +240,23 @@ set (p = P)" / "X caught more … (p = P)"); sentence 3.3's cost clause; the lin
    (§3.4b), and the benchmark line is §3.4b's, word for word.
 2. `pnpm test` (the viewer's benchmark test), `pnpm typecheck`, the viewer build.
 3. Sunny reads the page and the README section and says yes.
+4. **Wording checklist (decision 076u item 4; devin's pre-F1 review, findings 5–8). None of it blocks the tag.** codex
+   ticks each line:
+   - Haiku disclosure: cite the commit or file and time of Planner B's pre-result draft of the thresholds; if none
+     exists, write "stated by Planner B as drafted before 076j's results; no dated draft is on record". Add "draw 2
+     met the dev condition with no margin".
+   - Haiku product rule: "a pre-set product threshold; at 20 bugs it does not show that Haiku is as good as A0"; after
+     a default switch, the 29 held-out cases are spent for Haiku (its held-out count chose it). The row is described as
+     "registered (pre-specified), descriptive, no test".
+   - The README names the measured configuration: "TraceHound as frozen at `review-freeze-3` (pool-verify-v1 on
+     Nemotron 3.5 Super)" (A0), not "TraceHound" alone.
+   - "$D" is called the ledger cost, with the console-reconciled figure (× the H1 ratio) beside it.
+   - If the pooled tests are shown: "with the two pooled secondary tests, four tests at 0.05 with no correction; up
+     to 0.20 that at least one rejects by chance".
+   - Not "fixed before any result on the 40 TS dev cases existed" but "pool-verify-v1 was fixed before any catch
+     count of it on the dev cases existed; contracts off was chosen by a model-free dev audit".
+   - No Claude or side-track dev number stands next to the held-out counts as if comparable (decision 076m).
+   - If H2 used x1's fallback (d), §3.1's "two model judges" sentence uses its fallback variant.
 
 ## 6. The three most likely ways to get this wrong
 1. **Softening outcome C into a tie claim.** "No detectable difference" is about the test's power, not about the

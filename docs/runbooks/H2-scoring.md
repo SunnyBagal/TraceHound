@@ -1,7 +1,7 @@
 # Runbook H2: scoring the held-out window and the blind hand-check
 
 For codex (operator), Sunny (the hand-check, one sitting of 2–3 hours), artu1 (receives counts; lifts the firewall at
-the end). Planner A, 2026-11-11; brought to decision 076d and to decision 076e (item 4, the tag-worktree citation) on 2026-11-13, and to decision 076g (items 1, 4, 5) on 2026-11-13, and to decision 076k (items 1, 2) on 2026-11-14. Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md`
+the end). Planner A, 2026-11-11; brought to decision 076d and to decision 076e (item 4, the tag-worktree citation) on 2026-11-13, and to decision 076g (items 1, 4, 5) on 2026-11-13, and to decision 076k (items 1, 2) on 2026-11-14, and to decisions 076r (items 1, 2) and 076u on 2026-11-17 (artu1, AGENTS.md exception (4)). **H2 judging completes before 2026-12-09** (Nebius lists v1's model, `nvidia/nemotron-3-super-120b-a12b`, for removal on 9 Dec 2026). Plan: [`plan-v2`](../plan/2026-11-11-plan-v2.md) §6. Protocol: `docs/eval/ts-protocol.md`
 §4, §10 (it wins over this runbook). Budget line: **H2, cap $0.40**. Starts after H1's snapshot is hashed.
 
 **Order fixed by decision 076a §13.7:** sheet hashed → unblind → score files hashed and committed → the firewall lifts.
@@ -84,6 +84,9 @@ Every kit command below carries `--side heldout --heldout-ok` (written once here
    set is fixed.
 
 ## 2. Judging (the only paid step)
+**Step 0 (decision 076u item 4b):** before the first judge process, one minimal completion request per judge model
+(v1 `nvidia/nemotron-3-super-120b-a12b`, x1 `Qwen/Qwen3-30B-A3B-Instruct-2507`) through `src/llm/client.ts`, on the
+ledger. Both HTTP 200: go on. v1 failing: stop, Sunny rules. x1 failing: §8's x1 row.
 `L0=$(ledger); echo "H2 L0=$L0 $(date -u +%FT%TZ)" >> $S/job.md` (the job-start value lives in the job file; every
 later judge process reads it back with `L0=$(sed -n 's/^H2 L0=\([0-9.]*\) .*/\1/p' $S/job.md | head -1)` and never
 measures it again; gap G19, decision 076c item 1). `$L0 + 0.40` must not exceed the main `.env`'s hard stop. **Order (gap G13): the three primary rows first** (tracehound,
@@ -95,7 +98,7 @@ One process after the other:
 E="TRACEHOUND_BUDGET_RUN_USD=0.40 TRACEHOUND_BUDGET_TOTAL_USD=$(echo "$L0 + 0.40" | bc)"
 env $E node $TH/packages/analyzer/src/bin.ts bench score --golden $G/bench-golden.json --reviews <row dir> --detail $S/judge/<row>.v1.json --concurrency 1
 env $E node $TH/packages/analyzer/src/bin.ts bench score --golden $G/bench-golden.json --reviews <row dir> --detail $S/judge/<row>.x1.json --concurrency 1 \
-  --model Qwen/Qwen3-235B-A22B-Instruct-2507 --reasoning off
+  --model Qwen/Qwen3-30B-A3B-Instruct-2507 --reasoning off        # x1, decision 076r item 1
 ```
 At most 7 rows × 20 bug cases × 2 judges = 280 calls (at the 14 Nov dev rates, about $0.0005 a v1 call and $0.00012 an
 x1 call, about $0.09 in all; estimate) (a clean case or an empty review makes none,
@@ -243,6 +246,7 @@ registered, judges only, not hand-checked, Sunny's own money".
 | Sunny wants to change a decision after unblinding | Not allowed. It is recorded as a note next to the result. |
 | Sunny sent the file with guesses left blank | `resolve` refuses. He fills them before unblinding (§6 step 2). If anything was unblinded first, the guesses are not collected afterwards: the report line says "guess not collected" and why. |
 | The two judges disagree on many items | Nothing to do: the hand-check decides, and the disagreement count is reported. |
+| x1's model (`Qwen/Qwen3-30B-A3B-Instruct-2507`) is unavailable at step 0 or fails during judging (decision 076r item 1) | Fallback (d): every comment on a reviewed bug case of the affected rows goes on Sunny's sheet (`handcheck-sheet.ts` takes all comments of a case whose x1 entry is `JUDGE_FAILED`). No third model. `score-testset.ts` prints x1's judge-failed count beside caught, and "unavailable" when no x1 entry is `SCORED`. The report names the rows and the count of cases affected; W1 §3.1 uses its fallback wording. |
 | A label looks wrong to Sunny during the sitting | He writes it in the reason. No relabelling, no dropped case (protocol §9). It is listed under limits in the write-up. |
 
 ## 9. The three most likely ways to get this wrong

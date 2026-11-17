@@ -119,8 +119,8 @@ order (a rebased or back-dated commit breaks it), which is why §1 item 3 has gr
    `.env`'s hard stop in both; `envSha256` equals the value in `ts-freeze.md`. `git -C $TH_MAIN diff --quiet review-freeze-3 -- pnpm-lock.yaml`
    exits 0. A refusal, or any difference: stop. **The same verifier is run again before every paid invocation of §4
    and of H2** ("repeat the verification before every paid job", same document).
-   **Models still served (gap G11):** the models-list read of `F1-freeze.md` §1 row 15 again: the three frozen ids are
-   present. One missing: the window does not open.
+   **Models still served (gap G11; decision 076u item 4b):** the one-request check of `F1-freeze.md` §1 row 15 again: one
+   minimal completion per frozen id, each HTTP 200 (on the ledger). One failing: the window does not open.
 2. **The forks hold no case branch (decision 076d items 1b and 1c).**
    `for R in medusa payload twenty bullmq; do echo "$R $(git ls-remote --heads https://github.com/SunnyBagal/$R.git 'refs/heads/cases/*' | wc -l | tr -d ' ') $(gh pr list --repo SunnyBagal/$R --state open --json number --jq length)"; done`
    prints four lines ending `0 0`: no dev case branch is left (P1 deleted them, `docs/specs/P1.md` §3b), no held-out
@@ -434,7 +434,7 @@ After each batch: exit code, status per case, `review.chunksFailed`, `usage.ledg
   invocation per repository; failure 9 says when). The rerun's record is official. Two failures: a miss.
 - Never `--post`. Never `--cache read`.
 - ≥ 2 hours after the last Nemotron call of H1: Sunny reads the console; ratio = console drop ÷ (`ledger − L0`). Above
-  1.08: log it and tell artu1 the number; **H1 continues** (it is never cut). The Haiku row below makes no Nebius call.
+  1.26 (1.08 × f, f = 1.17 frozen at F1; decision 076r item 2): log it and tell artu1 the number; **H1 continues** (it is never cut). The Haiku row below makes no Nebius call.
 
 **The Haiku 5.5 row (decision 076k item 1; protocol revision 12 §5, "Registered secondary held-out row").** A
 registered **secondary** row: two draws, judges only, no hand-check. A0 stays the primary, and A0's hand-checked score
