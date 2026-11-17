@@ -3,13 +3,16 @@
  * handcheck-sheet.ts (B2): the blind hand-check (docs/eval/ts-protocol.md §10).
  *
  * build:   node scripts/testset/handcheck-sheet.ts build --side dev --goldens <goldens.json> --tool <name>=<reviews dir> …
- *            --judge <name>=<v1 detail> … [--judge-x1 <name>=<x1 detail> …] --seed <int> [--strip <json>] --out <dir>
+ *            --judge <name>=<v1 detail> … [--judge-x1 <name>=<x1 detail> …] --seed <int> [--strip <json>] [--x1-fallback] --out <dir>
  * resolve: node scripts/testset/handcheck-sheet.ts resolve --side dev --mapping <mapping.json> --decisions <decisions.json>
  *            --out <handcheck.json>
  *
  * Candidates: every eligible comment either judge matched to the case's golden, and every comment within ±10 lines of
  * any target (primary or alternate). A judge disagreement is a comment one judge matched and the other did not, so it
- * is in the set already. Items from every tool and case are shuffled together with the recorded seed, and the sheet
+ * is in the set already. --x1-fallback (ts-protocol rev 13 fallback (d), decision 076r item 1: the second judge is
+ * unavailable): every comment of every reviewed bug case of every --tool goes on the sheet, each with reason `fallback-d`
+ * beside any other reason; x1 details become optional (also on held-out, which otherwise requires them); the flag is
+ * written to mapping.json, hashes.json (and its recipe) and resolve's output. Without the flag nothing changes. Items from every tool and case are shuffled together with the recorded seed, and the sheet
  * shows no tool name and no reason the item is there. Whether it shows a judge cue is policy `sheet_judge_cues`
  * (`--policy`, required: pending Sunny in ts-protocol §13). Bodies lose HTML comments (tool markers) and
  * any `--strip` regexes (a JSON array of patterns, frozen with the sheet); the finding text is otherwise unchanged.
@@ -73,6 +76,8 @@ export function buildSheet(o: {
   judgeCues: "hidden" | "shown";
   /** tool identifiers no stripped body may contain (B2 §5.4), matched case-insensitively; a hit refuses the build */
   forbidden?: string[];
+  /** fallback (d): every comment of every reviewed bug case goes on the sheet, reason `fallback-d` */
+  x1Fallback?: boolean;
 }): { sheet: string; decisions: { item: string; decision: null; guess: null; reason: string }[]; mapping: Item[]; reviewed: Reviewed[] } {
   const raw: Omit<Item, "item">[] = [];
   const reviewed: Reviewed[] = [];
@@ -89,7 +94,7 @@ export function buildSheet(o: {
       reviewed.push({ tool, case: c.case, review_sha256: sha });
       review.comments.forEach((cm, i) => {
         const reasons = [...judged(o.v1.get(tool), c.case, i, "judge-v1"), ...judged(o.x1.get(tool), c.case, i, "judge-x1"),
-          ...(commentHits(cm, c.targets) ? ["location"] : [])];
+          ...(commentHits(cm, c.targets) ? ["location"] : []), ...(o.x1Fallback ? ["fallback-d"] : [])];
         if (reasons.length) raw.push({ tool, case: c.case, comment: i, reasons, review_sha256: sha });
       });
     }
@@ -170,18 +175,19 @@ export function main(argv: string[], log: (line: string) => void = console.log):
       side: { type: "string" }, "heldout-ok": { type: "boolean", default: false }, goldens: { type: "string" },
       tool: { type: "string", multiple: true }, judge: { type: "string", multiple: true }, "judge-x1": { type: "string", multiple: true },
       seed: { type: "string" }, strip: { type: "string" }, out: { type: "string" }, mapping: { type: "string" }, decisions: { type: "string" },
-      policy: { type: "string" },
+      policy: { type: "string" }, "x1-fallback": { type: "boolean", default: false },
     } });
     if (mode === "resolve") {
       checkSide(values.side, values["heldout-ok"]!, [values.mapping, values.decisions, values.out]);
       if (!values.mapping || !values.decisions || !values.out) throw new RefusalError("usage: handcheck-sheet.ts resolve --side dev --mapping <f> --decisions <f> --out <f>");
       if (fs.existsSync(values.out)) throw new RefusalError(`${values.out} exists; never overwritten`);
-      const mapFile = readJson(values.mapping) as { items: Item[]; reviewed?: Reviewed[]; tools?: unknown };
+      const mapFile = readJson(values.mapping) as { items: Item[]; reviewed?: Reviewed[]; tools?: unknown; x1Fallback?: unknown };
       if (!Array.isArray(mapFile.reviewed)) throw new RefusalError("the mapping has no reviewed list (rebuild the sheet)");
       if (!Array.isArray(mapFile.tools) || mapFile.tools.some((t) => typeof t !== "string")) throw new RefusalError("the mapping has no tools list (rebuild the sheet)");
       const mapping = mapFile.items;
       const { decided, guess } = resolve(mapping, readJson(values.decisions) as { item: string; decision: unknown }[], mapFile.tools as string[]);
-      writeNew(values.out, JSON.stringify({ v: 1, decisions: decided, reviewed: mapFile.reviewed, guess,
+      if (mapFile.x1Fallback !== undefined && mapFile.x1Fallback !== true) throw new RefusalError("the mapping's x1Fallback is not true");
+      writeNew(values.out, JSON.stringify({ v: 1, decisions: decided, reviewed: mapFile.reviewed, guess, ...(mapFile.x1Fallback ? { x1Fallback: true } : {}),
         inputs: { mapping: sha256(fs.readFileSync(values.mapping)), decisions: sha256(fs.readFileSync(values.decisions)) } }, null, 1) + "\n");
       log(`resolved ${mapping.length} item(s) into ${decided.length} (tool, case) decision(s), ${decided.filter((d) => d.caught).length} caught -> ${values.out}`);
       return 0;
@@ -192,10 +198,12 @@ export function main(argv: string[], log: (line: string) => void = console.log):
     const seed = Number(values.seed);
     if (!values.goldens || !tools.size || !values.out || !Number.isSafeInteger(seed)) throw new RefusalError("usage: handcheck-sheet.ts build --side dev --goldens <f> --tool name=dir … --judge name=detail … --seed <int> --out <dir>");
     for (const m of [v1, x1]) for (const k of m.keys()) if (!tools.has(k)) throw new RefusalError(`${k} is not a --tool`);
-    // judge evidence is required: v1 for every tool, and on held-out x1 as well (both judges propose matches there)
+    // judge evidence is required: v1 for every tool, and on held-out x1 as well (both judges propose matches there),
+    // unless --x1-fallback puts every comment of every reviewed bug case on the sheet (fallback (d))
+    const x1Fallback = values["x1-fallback"]!;
     for (const t of tools.keys()) {
       if (!v1.has(t)) throw new RefusalError(`${t} has no --judge (v1) detail`);
-      if (side === "heldout" && !x1.has(t)) throw new RefusalError(`${t} has no --judge-x1 detail (held-out uses both judges)`);
+      if (side === "heldout" && !x1Fallback && !x1.has(t)) throw new RefusalError(`${t} has no --judge-x1 detail (held-out uses both judges)`);
     }
     for (const f of ["sheet.md", "decisions.json", "mapping.json", "hashes.json"]) if (fs.existsSync(path.join(values.out, f))) throw new RefusalError(`${path.join(values.out, f)} exists; never overwritten`);
     const g = readGoldens(values.goldens);
@@ -206,17 +214,18 @@ export function main(argv: string[], log: (line: string) => void = console.log):
     const stripSrc = values.strip ? readJson(values.strip) as string[] : [];
     if (!Array.isArray(stripSrc) || stripSrc.some((s) => typeof s !== "string")) throw new RefusalError("--strip must be a JSON array of regex strings");
     const built = buildSheet({ cases: g.cases, reviews, reviewSha, seed, strip: stripSrc.map((s) => new RegExp(s, "g")), judgeCues: policy.sheet_judge_cues!,
-      forbidden: toolIdentifiers(),
+      forbidden: toolIdentifiers(), x1Fallback,
       v1: new Map([...v1].map(([t, f]) => [t, judgeMatches(f, g.cases, reviews.get(t)!)])),
       x1: new Map([...x1].map(([t, f]) => [t, judgeMatches(f, g.cases, reviews.get(t)!)])) });
     const sheet = built.sheet, decisions = JSON.stringify(built.decisions, null, 1) + "\n";
-    const mapping = JSON.stringify({ v: 1, side, seed, strip: stripSrc, policy, tools: [...tools.keys()], reviewed: built.reviewed, items: built.mapping }, null, 1) + "\n";
+    const fb = x1Fallback ? { x1Fallback: true } : {};
+    const mapping = JSON.stringify({ v: 1, side, seed, strip: stripSrc, policy, ...fb, tools: [...tools.keys()], reviewed: built.reviewed, items: built.mapping }, null, 1) + "\n";
     writeNew(path.join(values.out, "sheet.md"), sheet);
     writeNew(path.join(values.out, "decisions.json"), decisions);
     writeNew(path.join(values.out, "mapping.json"), mapping);
     writeNew(path.join(values.out, "hashes.json"), JSON.stringify({ v: 1, "sheet.md": sha256(sheet), "decisions.json": sha256(decisions),
-      "mapping.json": sha256(mapping), recipe: sha256(JSON.stringify({ seed, strip: stripSrc, judgeCues: policy.sheet_judge_cues })) }, null, 1) + "\n");
-    log(`hand-check sheet: ${built.mapping.length} item(s) from ${tools.size} tool(s), seed ${seed} -> ${values.out} (keep mapping.json away from the checker)`);
+      "mapping.json": sha256(mapping), ...fb, recipe: sha256(JSON.stringify({ seed, strip: stripSrc, judgeCues: policy.sheet_judge_cues, ...fb })) }, null, 1) + "\n");
+    log(`hand-check sheet: ${built.mapping.length} item(s) from ${tools.size} tool(s), seed ${seed}${x1Fallback ? ", x1 fallback (d): every comment of every reviewed bug case" : ""} -> ${values.out} (keep mapping.json away from the checker)`);
     return 0;
   } catch (e) {
     log(`refused: ${e instanceof RefusalError || String((e as { code?: string }).code).startsWith("ERR_PARSE_ARGS") ? (e as Error).message : "an input could not be read"}`);
