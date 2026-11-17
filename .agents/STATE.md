@@ -51,7 +51,7 @@ a. **P1 done (16 Nov):** scheduler ended 20:47Z (61 slots, 0 re-triggers); offic
 b. **pa-076g merged** (2a5f6c2, Sunny GO after codex 24/24 and grok range GO): RETHINK gate + refusing guards on main.
 c. **Protocol rev 13 merged** (c48ce79, grok GO): x1 30B + fallback (d), f = 1.17, dev exposure split. No held-out details (artu1 scan).
 d. **E1 done:** L1 $0.14367; grok recount MATCH; **076t reading RETHINK** (dev v1: A0 12, CodeRabbit 19, Greptile 18 of 31; d = 7); not a tag gate (076k item 4), told to Sunny 17 Nov; company work paused. strip.json merged (5e87b77); bunny: B2 §5.4 refusal before F1. A/B 2 waits for Sunny's E1 console reading (≥ 07:11 IST).
-e. **Before the tag:** CodeRabbit auto-review off on all 4 forks (Sunny) and no root YAML in any held-out push tree (codex 29/29); Planner A's F1/H2 items (`run/comms/artu1-to-planner-a.devin-f1.md`); 077 (H1 cap); 078; F1 dry run (18 rows); **disk ~0.7 GiB free**.
+e. **077 done** (H1 cap $2.94, grok GO 60cd693); **078 DRAFT** (a2c157b; open: Sunny minutes/item, hand-check date, Greptile reading, ts-freeze sha, go); ts-dev.md merged (e994606). **Before the tag:** CodeRabbit auto-review off on all 4 forks (Sunny) and no root YAML in any held-out push tree (codex 29/29); Planner A's F1/H2 items (`run/comms/artu1-to-planner-a.devin-f1.md`); 077 (H1 cap); 078; F1 dry run (18 rows); **disk ~0.7 GiB free**.
 f. **Done 14–16 Nov:** R1 ($2.82), Claude rows, 076j comparison, prices (Ultra fix), x1 reporting fix, bullmq probe, side-track 076m–076p (A/B 2 after E1, $0.15).
 
 ## Where things are
