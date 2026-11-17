@@ -145,10 +145,12 @@ spend so far; unstarted ids roll into the next batch** (this replaced "min(batch
 | H1 held-out run | 29 cases, from the freeze tag | **$2.94** (decision 077, 17 Nov; was $3.15) | recomputed once from R1's measured costs (95% completion), funded from unallocated first; an unstarted held-out case at the cap runs from the reserve | never cut |
 | H2 scoring | 3 tools + 2 secondary rows × 29 × v1 + x1 | **$0.40** | ≈ $0.20 | never cut |
 | reserve | infrastructure reruns (held-out first), a console-check correction, unstarted held-out cases (076a), the canary (≤ $0.40, 076b) | **$3.00** | owner | held; never cut |
-| unallocated | needs a new line here before use | **$6.04** (077, 17 Nov; was $6.05) | $1.71 − $0.53 to R1 − $0.18 (balance correction) + $5.05 freed by 076g (R2 $4.15, L2 $0.80, L4 $0.10) | held; funds the 077 cap reset (H1 first) |
+| unallocated | needs a new line here before use | **$6.04** (077, 17 Nov; was $6.05) | $6.05 (076g: $1.71 − $0.53 to R1 − $0.18 balance correction + $5.05 freed by 076g) + $0.21 from H1 (077: $3.15 → $2.94) − $0.07434 to the side-track and probe line − $0.15 to the A/B 2 line = $6.03566 | held; nothing further drawn without a line |
+| side-track judging and probes | 076n $0.02581, 076o $0.04832, the judge probe $0.00012, the region check $0.00009 (all spent) | **$0.07434** | measured (ledger) | spent; from unallocated |
+| A/B 2 judging | bench-judge-v1 on the side track's A/B 2 folders, after E1 (076q item 3) | **$0.15** | Sunny's cap; bunny's estimate ≈ $0.07 | approved; not started |
 | CI review runs | manual Action runs | **$0.00** | none planned; each needs a line first | none since 2026-11-01 |
 | safety margin | never spent (outside the global hard stop) | $1.00 | rule 3 | — |
-| **total** | | **$19.13** | $18.13 usable + $1.00 margin | |
+| **total** | | **$19.13** | $18.13 usable + $1.00 margin (since 077: lines sum to $18.13 usable with unallocated at its exact $6.03566) |
 
 **Anthropic, Sunny's own money (076g item 4; outside the Nebius $19.13; report-only dev rows):**
 
