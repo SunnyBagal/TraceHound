@@ -1,0 +1,15 @@
+[
+ "<details>\\s*<summary>(?:(?!</summary>)[\\s\\S])*Prompt for AI Agents\\s*</summary>[\\s\\S]*?</details>",
+ "<details>\\s*<summary>(?:(?!</summary>)[\\s\\S])*\\bTools\\s*</summary>\\s*<dl>\\s*<dd>\\s*(?:<br>\\s*)?(?:<details>[\\s\\S]*?</details>\\s*)*</dd>\\s*</dl>\\s*</details>",
+ "<details>\\s*<summary>\\s*Prompt To Fix With AI\\s*</summary>[\\s\\S]*?</details>",
+ "<picture>(?:(?!</picture>)[\\s\\S])*coderabbit_public_assets(?:(?!</picture>)[\\s\\S])*</picture>",
+ "<a\\b[^>]*>\\s*<img\\b[^>]*greptile-static-assets[^>]*>\\s*</a>",
+ "<img\\b[^>]*(?:coderabbit_public_assets|greptile-static-assets)[^>]*>",
+ ">[^\\n]*\\*\\*IMPORTANT\\*\\*[^\\n]*\\n>\\s*Review the replacement and indentation, then test before committing\\.",
+ "After applying the fix, consider running `[^`\\n]*` for local review\\.[^\\n]*",
+ "_Source: [^_\\n]+_",
+ "\\*\\*Context Used:\\*\\*[^\\n]*",
+ "Note: If this suggestion doesn[’']t match your team[’']s coding style, reply to this and let me know\\. I[’']ll remember it for next time!",
+ "https?://[^\\s)\\]>\"'`]*(?:[Cc][Oo][Dd][Ee][Rr][Aa][Bb][Bb][Ii][Tt]|[Gg][Rr][Ee][Pp][Tt][Ii][Ll][Ee]|[Tt][Rr][Aa][Cc][Ee][Hh][Oo][Uu][Nn][Dd])[^\\s)\\]>\"'`]*",
+ "@?(?:[Cc][Oo][Dd][Ee][Rr][Aa][Bb][Bb][Ii][Tt](?:[Aa][Ii])?|[Gg][Rr][Ee][Pp][Tt][Ii][Ll][Ee](?:[Aa][Ii])?|[Tt][Rr][Aa][Cc][Ee][Hh][Oo][Uu][Nn][Dd])"
+]
