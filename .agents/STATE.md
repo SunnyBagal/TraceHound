@@ -1,5 +1,5 @@
 # .agents/STATE.md: read first; rewrite (never append) at the end of every session; ≤ 60 lines
-HEAD: `main` after decision 076r, 2026-11-17 (076j–076k model comparison and held-out Haiku row; 076l–076r below). Aim: the tag today, **T0 Wed 18 Nov 10:00 IST**. After 076k, no rulings before 077 except blockers.
+HEAD: `main` after decision 076t, 2026-11-17 (076j–076k model comparison and held-out Haiku row; 076l–076r below). Aim: the tag today, **T0 Wed 18 Nov 10:00 IST**. After 076k, no rulings before 077 except blockers.
 
 ## Goal
 (076g) 1) a viability read from the dev table by 15–17 Nov; 2) a credible held-out result (A0, Nemotron pool-verify-v1, registered primary, vs CodeRabbit and Greptile on fresh held-out TS PRs); 3) low spend. Fable access ends 17 Nov.
@@ -50,7 +50,7 @@ artu1 `t9` · bunny `t15` (dev side) · codex `t14` · grok `t1g` (trust its .do
 a. **P1 done (16 Nov):** scheduler ended 20:47Z (61 slots, 0 re-triggers); official collection 20:49Z: CodeRabbit 40/40, Greptile 40/40 completed, 123 / 114 counted comments; 076l hand check 37/37 notices edited; dev exposure 10/31 (grok); 80 dev branches deleted, forks clean (0 case branches, 0 open PRs; refs/pull remain); `hashes.p1.txt` sha256 `80ebed61…`. **Left:** the §4 report `run/out/artu1.dev-coderabbit.md` (counts).
 b. **pa-076g merged** (2a5f6c2, Sunny GO after codex 24/24 and grok range GO): RETHINK gate + refusing guards on main.
 c. **Protocol rev 13 merged** (c48ce79, grok GO): x1 30B + fallback (d), f = 1.17, dev exposure split. No held-out details (artu1 scan).
-d. **E1 (bunny) after b + c:** v1 rows first; x1 (30B) on every dev row needs a `config/prices.json` 30B entry (Sunny's listed rate; the fallback $5/$15 would not fit L1's $0.37); `--exposure` from `run/out/grok.dev-exposure.ids.json`.
+d. **E1 done:** L1 $0.14367; grok recount MATCH; **076t reading RETHINK** (dev v1: A0 12, CodeRabbit 19, Greptile 18 of 31; d = 7); not a tag gate (076k item 4), told to Sunny 17 Nov; company work paused. strip.json merged (5e87b77); bunny: B2 §5.4 refusal before F1. A/B 2 waits for Sunny's E1 console reading (≥ 07:11 IST).
 e. **Before the tag:** CodeRabbit auto-review off on all 4 forks (Sunny) and no root YAML in any held-out push tree (codex 29/29); Planner A's F1/H2 items (`run/comms/artu1-to-planner-a.devin-f1.md`); 077 (H1 cap); 078; F1 dry run (18 rows); **disk ~0.7 GiB free**.
 f. **Done 14–16 Nov:** R1 ($2.82), Claude rows, 076j comparison, prices (Ultra fix), x1 reporting fix, bullmq probe, side-track 076m–076p (A/B 2 after E1, $0.15).
 
