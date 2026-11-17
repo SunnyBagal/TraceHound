@@ -4551,3 +4551,20 @@ post-trigger edit). No Greptile credit spent; codex deletes its prepared, never-
 
 **Touches:** artu1 this file, `AGENTS.md` (exception 3), `docs/runbooks/H1-window.md` §5 failure 2 (one paragraph),
 `.agents/LOG.md`, the brain; codex's probe journal and report; the bullmq fork (prepared branch deleted).
+
+## 076t — E1 stop/go reading: RETHINK (dev, report to Sunny; does not gate the tag) (2026-11-17)
+
+**artu1's one reading of E1 §2 (076g item 6, 076i item 2), from grok's independent recount (`run/out/grok.e1-check.md`,
+every row MATCH with bunny's `run/out/bunny.e1.md`).** Dev, selection set, one draw, scorer of record bench-judge-v1, not
+hand-checked; dev exposure 10 of 31 (grok).
+- A0 caught **12** of 31 bug cases; CodeRabbit **19**; d = **7**. CodeRabbit completed 40 of 40.
+- GO needs A0 ≥ CodeRabbit − 3 (12 ≥ 16: **no**) and A0 comments per case ≤ 2 × CodeRabbit's (1.075 ≤ 6.150: yes).
+- **RETHINK holds: CodeRabbit leads by 6 or more (7 ≥ 6).** Coverage does not change a RETHINK (076i item 2).
+- **Reading: RETHINK.** Under 076k item 4 it does **not** gate the tag or the held-out run; it is told to Sunny the same
+  day with the table, and pauses company work (pricing, demo) until the held-out result.
+- Beside the rule, not inputs to it: under x1 (Qwen3-30B) d = 22 − 14 = 8; on the 21 unexposed cases d = 15 − 10 = 5
+  under v1 and 16 − 12 = 4 under x1. Greptile caught 18 (x1 18). Paired on the 31 under v1: A0-only 1 vs CodeRabbit-only 8;
+  A0-only 1 vs Greptile-only 7. A1 13, A2 13 (report-only). A0's comments per case 1.075 against CodeRabbit's 3.075 and
+  Greptile's 2.850; comments on the 9 clean cases A0 1, CodeRabbit 8, Greptile 9.
+
+**Touches:** artu1 this file, LOG, STATE, the brain; Sunny is told today. Nothing in the held-out plan changes.
