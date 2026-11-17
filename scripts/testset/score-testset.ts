@@ -49,7 +49,9 @@ import { checkSide, locationHit, mean, median, pairs, readGoldens, readJson, rea
 export type Status = "completed" | "no-review" | "miss";
 export interface HandCheck { decisions: { tool: string; case: string; caught: boolean; review_sha256?: string }[]; reviewed: { tool: string; case: string; review_sha256: string }[];
   /** resolve's guess counts (decision 076c item 7) */
-  guess?: { items: number; guessed: number; unsure: number; right: number; tools: number; commonestToolItems: number } }
+  guess?: { items: number; guessed: number; unsure: number; right: number; tools: number; commonestToolItems: number };
+  /** the sheet was built with --x1-fallback (fallback (d)); copied to the summary as handcheckX1Fallback */
+  x1Fallback?: boolean }
 type JudgeEntry = { verdict: boolean | "judge-failed"; comments: { path: string; line: number | null; body: string }[] };
 interface Detail { detail?: { prTitle: string; status: string; comments: { path: string; line: number | null; body: string; matched: string | null }[] }[] }
 
@@ -312,7 +314,7 @@ export function main(argv: string[], log: (line: string) => void = console.log):
     writeNew(values.out, JSON.stringify({ v: 1, side, policy, policySha256: sha256(fs.readFileSync(values.policy!)), tools: r.tools, pairs: r.pairs,
       registeredTests: reg ? { ...reg, test: "exact two-sided sign test on the discordant bug cases, uncorrected" } : null,
       ...(exposed ? { exposure: { sha256: sha256(fs.readFileSync(values.exposure!)), exposedBugCases: exposed.size, unexposedBugCases: nBug - exposed.size } } : {}),
-      ...(hc?.guess ? { handcheckGuess: hc.guess } : {}) }, null, 1) + "\n");
+      ...(hc?.guess ? { handcheckGuess: hc.guess } : {}), ...(hc?.x1Fallback === true ? { handcheckX1Fallback: true } : {}) }, null, 1) + "\n");
     for (const [t, s] of Object.entries(r.tools)) {
       log(`${t}: caught ${s.caught}/${s.bugCases} (Wilson ${pct(s.caughtWilson)})${s.handchecked ? " [hand-checked]" : ""} · completed bug ${s.completedBug}/${s.bugCases}, clean ${s.completedClean}/${s.cleanCases}`
         + ` · caught of completed ${s.caughtOfCompleted} · no-review ${s.noReview}${s.invalidBinding ? ` (invalid-binding ${s.invalidBinding})` : ""} · miss ${s.misses} · judge-failed ${s.judgeFailed}${s.caughtX1 === null ? "" : ` · x1 judge-failed ${s.judgeFailedX1} · x1 caught ${s.caughtX1}`}`);

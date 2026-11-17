@@ -10,7 +10,7 @@ import { symlinkSync } from "node:fs";
 import { afterAll, describe, expect, it } from "vitest";
 import { cleanGitEnv } from "../../analyzer/src/git-env.ts";
 import { GoldenFile } from "../../analyzer/src/bench/types.ts";
-import { checkSide, commentHits, locationHit, readPolicy, RefusalError, shuffled, signTest, wilson, type Target } from "../../../scripts/testset/kit.ts";
+import { checkSide, commentHits, locationHit, readPolicy, RefusalError, sha256, shuffled, signTest, wilson, type Target } from "../../../scripts/testset/kit.ts";
 import { main as buildMain } from "../../../scripts/testset/build-goldens.ts";
 import { main as scoreMain } from "../../../scripts/testset/score-testset.ts";
 import { main as sheetMain, toolIdentifiers } from "../../../scripts/testset/handcheck-sheet.ts";
@@ -1163,5 +1163,88 @@ describe("handcheck-sheet build refuses a sheet that still names a tool (B2 §5.
     expect(r.code).toBe(2);
     expect(r.out).toContain("1 of 4 sheet bodies still name a tool after stripping (coderabbit 1, coderabbitai 1, tracehound 1)");
     expect(existsSync(out)).toBe(false);
+  });
+});
+
+describe("handcheck-sheet build --x1-fallback (ts-protocol rev 13 fallback (d), 076r item 1; devin 076u)", () => {
+  type MapItem = { item: string; tool: string; case: string; comment: number; reasons: string[] };
+  const build = (f: ReturnType<typeof scoringFixture>, out: string, ...extra: string[]) => run(sheetMain, ["build", "--side", "dev", "--goldens", f.goldens,
+    "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`, "--judge", `th=${f.dir("th.detail.json")}`, "--judge", `cr=${f.dir("cr.detail.json")}`,
+    "--seed", "5", "--policy", f.policy(), "--out", out, ...extra]);
+  const read = (dir: string, file: string) => JSON.parse(readFileSync(path.join(dir, file), "utf8"));
+  const keyed = (items: MapItem[]) => items.map((i) => `${i.tool} ${i.case} #${i.comment} ${i.reasons.join(",")}`).sort();
+
+  it("puts every comment of every reviewed bug case on the sheet, reason fallback-d, and records the flag through to the summary", () => {
+    const f = scoringFixture();
+    const out = f.dir("fb");
+    const r = build(f, out, "--x1-fallback");
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("x1 fallback (d): every comment of every reviewed bug case");
+    const m = read(out, "mapping.json");
+    // th: c1 two comments, c2 one, c3 one; cr: c1 one, c3 one. The clean case c4 is never on the sheet.
+    expect(keyed(m.items)).toEqual([
+      "cr c1 #0 fallback-d", "cr c3 #0 judge-v1,location,fallback-d",
+      "th c1 #0 judge-v1,location,fallback-d", "th c1 #1 fallback-d", "th c2 #0 judge-v1,location,fallback-d", "th c3 #0 judge-v1,location,fallback-d"]);
+    expect(m.x1Fallback).toBe(true);
+    expect(read(out, "decisions.json")).toHaveLength(6);
+    const h = read(out, "hashes.json");
+    expect(h.x1Fallback).toBe(true);
+    // the recipe differs from the same build without the flag
+    const plain = f.dir("plain");
+    expect(build(f, plain).code).toBe(0);
+    expect(h.recipe).not.toBe(read(plain, "hashes.json").recipe);
+    // resolve carries it, and the scorer's summary shows it
+    const decided = f.dir("fb-decided.json");
+    json(decided, m.items.map((i: MapItem) => ({ item: i.item, decision: "not", guess: "unsure", reason: "r" })));
+    const hc = f.dir("fb-hc.json");
+    expect(run(sheetMain, ["resolve", "--side", "dev", "--mapping", path.join(out, "mapping.json"), "--decisions", decided, "--out", hc]).code).toBe(0);
+    expect(JSON.parse(readFileSync(hc, "utf8")).x1Fallback).toBe(true);
+    const sum = f.dir("fb-summary.json");
+    expect(run(scoreMain, ["--side", "dev", "--goldens", f.goldens, "--policy", f.policy(), "--tool", `th=${f.dir("th")}`, "--tool", `cr=${f.dir("cr")}`,
+      "--handcheck", hc, "--out", sum]).code).toBe(0);
+    expect(JSON.parse(readFileSync(sum, "utf8")).handcheckX1Fallback).toBe(true);
+  });
+
+  it("held-out: no x1 detail refuses without the flag and builds with it", () => {
+    const f = scoringFixture();
+    const hg = f.dir("ho-goldens.json");
+    json(hg, { ...JSON.parse(readFileSync(f.goldens, "utf8")), side: "heldout" });
+    const ho = (out: string, ...extra: string[]) => run(sheetMain, ["build", "--side", "heldout", "--heldout-ok", "--goldens", hg, "--tool", `th=${f.dir("th")}`,
+      "--judge", `th=${f.dir("th.detail.json")}`, "--seed", "1", "--out", out, "--policy", f.policy(), ...extra]);
+    const no = ho(f.dir("ho0"));
+    expect(no.code).toBe(2);
+    expect(no.out).toBe("refused: th has no --judge-x1 detail (held-out uses both judges)");
+    expect(existsSync(f.dir("ho0"))).toBe(false);
+    const yes = ho(f.dir("ho1"), "--x1-fallback");
+    expect(yes.code).toBe(0);
+    const m = read(f.dir("ho1"), "mapping.json");
+    expect(m.side).toBe("heldout");
+    expect(keyed(m.items)).toEqual(["th c1 #0 judge-v1,location,fallback-d", "th c1 #1 fallback-d", "th c2 #0 judge-v1,location,fallback-d", "th c3 #0 judge-v1,location,fallback-d"]);
+  });
+
+  it("without the flag the output is unchanged: no flag field anywhere, the judge/location items only", () => {
+    const f = scoringFixture();
+    const out = f.dir("plain");
+    expect(build(f, out).out).toBe(`hand-check sheet: 4 item(s) from 2 tool(s), seed 5 -> ${out} (keep mapping.json away from the checker)`);
+    const m = read(out, "mapping.json");
+    expect(Object.keys(m)).toEqual(["v", "side", "seed", "strip", "policy", "tools", "reviewed", "items"]);
+    expect(keyed(m.items)).toEqual(["cr c3 #0 judge-v1,location", "th c1 #0 judge-v1,location", "th c2 #0 judge-v1,location", "th c3 #0 judge-v1,location"]);
+    expect(Object.keys(read(out, "hashes.json"))).toEqual(["v", "sheet.md", "decisions.json", "mapping.json", "recipe"]);
+    const sheet = readFileSync(path.join(out, "sheet.md"), "utf8");
+    expect(read(out, "hashes.json").recipe).toBe(sha256(JSON.stringify({ seed: 5, strip: [], judgeCues: "hidden" })));
+    expect(sheet).not.toContain("fallback");
+  });
+
+  it("the strip refusal (B2 §5.4) still applies under the flag", () => {
+    const f = scoringFixture();
+    // a cr comment that the flag alone puts on the sheet (no judge match, outside the location range) names a tool
+    json(f.dir("cr/c1.json"), { pr_title: "P1", comments: [{ path: "x.ts", line: 30, body: "beta misses; ask @greptileai" }] });
+    json(f.dir("cr.detail.json"), { detail: [["P1", "c1", null], ["P3", "c3", "G1"], ["P4", "c4", null]].map(([title, id, mt]) =>
+      ({ prTitle: title, status: "SCORED", comments: (JSON.parse(readFileSync(f.dir(`cr/${id}.json`), "utf8")).comments as object[]).map((c) => ({ ...c, matched: mt })) })) });
+    expect(build(f, f.dir("ok")).code).toBe(0); // not on the sheet without the flag
+    const r = build(f, f.dir("fb"), "--x1-fallback");
+    expect(r.code).toBe(2);
+    expect(r.out).toBe("refused: 1 of 6 sheet bodies still name a tool after stripping (greptile 1); add a --strip pattern; nothing written");
+    expect(existsSync(f.dir("fb"))).toBe(false);
   });
 });
