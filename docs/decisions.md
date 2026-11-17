@@ -4590,3 +4590,49 @@ hand-checked; dev exposure 10 of 31 (grok).
 
 **Touches:** artu1 this file, `docs/budget.md` (H1 line $2.94; unallocated $6.04); H1's `CAP=` (`docs/runbooks/H1-window.md`
 reads it from 077); F1 row 2.
+
+## 078 — Predictions, claim wording and window dates for the held-out run (DRAFT, 2026-11-17)
+
+**Status: DRAFT by artu1 (F1 §5). Not in force until Sunny writes "go" below and the open fields are filled; committed and
+pushed before the first held-out action.** Basis: E1 (`run/out/bunny.e1.md`, grok's recount `run/out/grok.e1-check.md`;
+`docs/bench/ts-dev.md` when merged), decision 076t (dev reading RETHINK), plan-v2 §2's power statement. Dev numbers are
+"dev, selection set, one draw, one judge of record, not hand-checked; dev exposure 10 of 31". Held-out ranges below scale
+dev rates from 31 bugs to 20 and widen them by the Wilson interval; they are predictions, not targets.
+
+**Predictions (protocol §11; each field a number or "no quantitative prediction"; nothing filled in later):**
+1. TraceHound (A0) bugs caught of 20: **8 (range 5–11)** (dev 12/31, 39%; Wilson 24–56%).
+2. CodeRabbit of 20: **12 (range 9–15)** (dev 19/31); Greptile of 20: **12 (range 8–15)** (dev 18/31). Expected discordant
+   counts: TraceHound vs CodeRabbit **about 1 TraceHound-only vs 5 CodeRabbit-only**; TraceHound vs Greptile **about 1 vs
+   4–5** (dev paired v1: 1 vs 8 and 1 vs 7 of 31, scaled).
+3. Comments per PR: TraceHound **about 1.1**, CodeRabbit **about 3.1**, Greptile **about 2.9**; on the 9 clean cases in
+   total: TraceHound **about 1**, CodeRabbit **about 8**, Greptile **about 9**. Completion (reviews delivered of 29):
+   CodeRabbit **29**, Greptile **29** (P1: 40/40 each, 0 re-triggers), TraceHound **29** after its one rerun.
+4. TraceHound cost per PR **about $0.07 ledger (median about $0.05)**, total **about $2.0 ledger, about $2.4 at console
+   prices** (f = 1.17); failed chunks **about 1 of about 60**; empty cases (no comment) **about 14 of 29** (dev 19/40).
+5. Registered pairs: **"TraceHound vs CodeRabbit and TraceHound vs Greptile, each an exact two-sided sign test at 0.05,
+   uncorrected for two tests, exact p-values reported; CodeRabbit vs Greptile: counts only."** Prediction: **neither
+   rejects** (outcome C for both). Assumption: about 6 discordant cases split about 1 : 5; at those dev rates a
+   simulation gives a rejection (in the other tool's favour, outcome B) with probability **about 0.28 for CodeRabbit and
+   about 0.19 for Greptile** (20,000 draws of 20 cases, seed 78). No prediction and no test on CodeRabbit vs Greptile or
+   on a secondary row.
+6. Hand-check sheet: **about 61 items** (dev sheet 95 items over 31 bugs and three tools, scaled to 20 bugs: bunny, E1
+   step 4). Sunny's minutes per item: **[open: Sunny]**. If items × minutes is over 3 hours, Sunny says before the tag
+   whether he books a longer sitting.
+7. Test-sentence floor (076c item 6): **15** bug cases reviewed by both tools of a pair; copied, not a prediction.
+8. Pooled secondary analysis (076g item 5): secondary, A0 only, defined in protocol revision 10 §4 "Secondary pooled
+   analysis: A0 only" (still §4 in revision 13); no choice added here.
+
+**Claim wording:** `docs/runbooks/W1-writeup.md` §3 (3.1 always; 3.2 outcomes A, B, C and the floor; 3.3 volume and cost;
+3.4 and 3.4b never-written and vendor-fact rules; 3.5 README), copied verbatim at F1 from the merged W1 as of the tag;
+W1 only fills the placeholders.
+
+**Window (076e item 7, 076k item 5):** scheduled T0 **Wed 18 Nov 2026 10:00 IST = 04:30 UTC**; scheduled snapshot T0 + 72 h
+= **Sat 21 Nov 2026 10:00 IST = 04:30 UTC**; the window runs from the actual T0 (the first held-out PR's `created_at`) to
+T0 + 72 h, and H1 reports both clocks. A missed tag moves T0 and these dates by one day each, up to T0 Sun 22 Nov 10:00 IST.
+Hand-check sitting: **[open: Sunny's date and time]**. Sunny starts `caffeinate -is -t 280800` at about 09:00 IST on the day
+of the scheduled T0. Greptile credits: **[open: Sunny's reading]** (needs at least 35, F1 row 7; expiry 27 Nov). Money stop:
+**f = 1.17**, a job's console check trips above 1.08 × 1.17 ≈ 1.26; the `.env` hard stop is reset at F1 (076r item 2). H1
+cap $2.94 (077). Haiku held-out row as 076k item 1 and protocol revision 12 §5 (two draws after A0; $1.00 Anthropic).
+`ts-freeze.md` sha256: **[open: at F1]**.
+
+**Go:** [open: Sunny writes "go" for the window here, with the date].
