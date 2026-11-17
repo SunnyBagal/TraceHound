@@ -4618,9 +4618,9 @@ dev rates from 31 bugs to 20 and widen them by the Wilson interval; they are pre
 6. Hand-check sheet: **about 61 items** (dev sheet 95 items over 31 bugs and three tools, scaled to 20 bugs: bunny, E1
    step 4). Sunny's minutes per item: **4, an estimate, not a measurement** (Sunny, 17 Nov; the practice sheet's
    decisions were drafted by Claude and untimed, and are not data, 076v item 1). About 61 × 4 ≈ **244 minutes** against
-   Sunny's limit of **150 minutes** for Saturday's sitting. **The sitting is split (076w item 2):** about 150 minutes on
-   Sat 21 Nov afternoon IST, the rest (about 95 minutes at the estimate) on Sun 22 Nov; if Sunny is faster on Saturday he
-   continues and Sunday shrinks or goes away. The 4 minutes per item is an estimate. Nothing is unblinded until he
+   Sunny's limit of **150 minutes** for the first sitting. **The sitting is split (076w item 2; dates 076x item 3):**
+   about 150 minutes on **Sun 22 Nov afternoon IST**, the rest (about 95 minutes at the estimate) on **Mon 23 Nov**; if
+   Sunny is faster on Sunday he continues and Monday shrinks or goes away. The 4 minutes per item is an estimate. Nothing is unblinded until he
    finishes the last item. Under fallback (d) the sheet would be about 169 items. The sitting is Sunny's, by hand.
 7. Test-sentence floor (076c item 6): **15** bug cases reviewed by both tools of a pair; copied, not a prediction.
 8. Pooled secondary analysis (076g item 5): secondary, A0 only, defined in protocol revision 10 §4 "Secondary pooled
@@ -4630,10 +4630,11 @@ dev rates from 31 bugs to 20 and widen them by the Wilson interval; they are pre
 3.4 and 3.4b never-written and vendor-fact rules; 3.5 README), copied verbatim at F1 from the merged W1 as of the tag;
 W1 only fills the placeholders.
 
-**Window (076e item 7, 076k item 5):** scheduled T0 **Wed 18 Nov 2026 10:00 IST = 04:30 UTC**; scheduled snapshot T0 + 72 h
-= **Sat 21 Nov 2026 10:00 IST = 04:30 UTC**; the window runs from the actual T0 (the first held-out PR's `created_at`) to
+**Window (076e item 7, 076k item 5):** scheduled T0 **Thu 19 Nov 2026 10:00 IST = 04:30 UTC** (moved one day
+from Wed 18 Nov: tag missed 20:00 IST on 17 Nov, 076k item 5; 076w, 076x item 3); scheduled snapshot T0 + 72 h
+= **Sun 22 Nov 2026 10:00 IST = 04:30 UTC**; the window runs from the actual T0 (the first held-out PR's `created_at`) to
 T0 + 72 h, and H1 reports both clocks. A missed tag moves T0 and these dates by one day each, up to T0 Sun 22 Nov 10:00 IST.
-Hand-check sitting: **Sat 21 Nov 2026, afternoon IST, after the snapshot at 10:00, about 150 minutes; the rest on Sun 22 Nov** (Sunny, 17 Nov, 076w item 2; both days move with T0 if T0 slips). **H2's result: Sun 22 Nov evening**, after the last item. Sunny starts `caffeinate -is -t 280800` at about 09:00 IST on the day
+Hand-check sitting: **Sun 22 Nov 2026, afternoon IST, after the snapshot at 10:00, about 150 minutes; the rest on Mon 23 Nov** (Sunny, 076w item 2, dates 076x item 3; both days move with T0 if T0 slips). **No unblinding until Sunny finishes the last item.** **H2's result: Mon 23 Nov evening**, after the last item. Sunny starts `caffeinate -is -t 280800` at about 09:00 IST on the day
 of the scheduled T0. Greptile credits: **59** (Sunny's reading, 17 Nov; needs at least 35, F1 row 7; expiry 27 Nov). Money stop:
 **f = 1.17**, a job's console check trips above 1.08 × 1.17 ≈ 1.26; the `.env` hard stop is reset at F1 (076r item 2). H1
 cap $2.94 (077). Haiku held-out row as 076k item 1 and protocol revision 12 §5 (two draws after A0; $1.00 Anthropic).
@@ -4823,3 +4824,27 @@ then fall on Tue 24 Nov. The slot list (F1 row 14) is rebuilt at T0 2026-11-19T0
 
 **Touches:** artu1 this file (078 field 6 and the sitting line, 076w), `.agents/STATE.md`, `.agents/LOG.md`, the brain;
 codex the held-out clones (fetch only, under the brief); grok `run/out/grok.ho-identity.md`.
+
+## 076x — Fork-fetched objects kept as a deviation, after fsck; stage 2 and the tag; sittings Sun 22 / Mon 23 Nov (2026-11-18)
+
+**Status: ruled by Sunny (18 Nov 2026).** Recorded by artu1.
+
+1. **Deviation kept.** Under 076w item 1 codex's first fetch went to two forks by mistake (`git -c remote.origin.url=…`
+   adds a second URL; the fork's stayed first): **22,241 previously missing blobs in clones 1 and 2** came from forks
+   over plain git (no web, API, pull-request refs, comments or writes). The remaining 48,020 came from public upstream
+   (95/95 effective-URL proofs). Reports: `run/out/codex.ho-fetch-a-deviation.md`, `run/out/codex.ho-fetch-a.md`,
+   `run/out/grok.ho-identity.md` (GO: 29 cases, 58/58 commits and trees, 29/29 original heads, 0 mismatches; refs,
+   HEAD, index, config unchanged). **Sunny keeps the 22,241 objects, recorded as a deviation.** Reason: git objects are
+   addressed by content, and grok's identity check shows every commit, tree and original head matches the manifest;
+   rebuilding changes nothing. H1's report lists this deviation.
+2. **Condition first, $0:** codex runs `git fsck --full` on clones 1 and 2; grok checks the output. **Any corrupt or
+   mismatched object → rebuild those clones from upstream instead, and it comes to Sunny.** If fsck is clean, it is
+   recorded here, next to the deviation. Then stage 2 (dry runs, goldens, F1 §4, freeze GO) and the tag go ahead.
+   Briefs `run/briefs/codex.ho-fsck.md`, `run/briefs/grok.ho-fsck.md`.
+   **fsck result:** [open: filled when grok's check is in].
+3. **Dates:** T0 **Thu 19 Nov 10:00 IST**, window ends **Sun 22 Nov 10:00 IST**; sittings about 150 minutes **Sun 22
+   Nov afternoon** and the rest **Mon 23 Nov**; the no-unblinding rule holds until Sunny finishes the last item. 078's
+   window and sitting lines updated.
+
+**Touches:** artu1 this file (078, 076x), `.agents/STATE.md`, `.agents/LOG.md`, the brain; codex the held-out clones
+(read-only fsck); grok `run/out/grok.ho-fsck.md`.
