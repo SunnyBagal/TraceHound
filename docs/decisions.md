@@ -4851,3 +4851,27 @@ codex the held-out clones (fetch only, under the brief); grok `run/out/grok.ho-i
 
 **Touches:** artu1 this file (078, 076x), `.agents/STATE.md`, `.agents/LOG.md`, the brain; codex the held-out clones
 (read-only fsck); grok `run/out/grok.ho-fsck.md`.
+
+## 076y — Erratum before T0: the Haiku row's command must name its draw (2026-11-18)
+
+**Status: artu1, operator correction under 076g item 8, recorded before T0; Sunny may veto.** Found by codex in the F1
+§4.8 check on the tag (`run/out/codex.f1-heldout.md`).
+
+- **What is wrong:** `H1-window.md` (Haiku row, "Command", lines 460–461) and `docs/bench/ts-freeze.md` (Haiku row) give the
+  command as the runner line plus `--provider-config $HO/haiku.row.json` with `--out-dir $HO/th-haiku-1` or `-2`. The
+  frozen runner at the tag refuses that (exit 2): the registered held-out row needs `--draw 1|2`, and the out-dir must
+  contain exactly one path segment `draw-<d>` equal to `--draw` (`scripts/run-tracehound.ts:216-224`, merged with codex's
+  GO at `9819e2f`, decision 076k item 1). The documents were written from the row's description, not from the code.
+- **Correction (documents only; no code, prompt, setting or hash changes):** draw `<d>` (1, then 2) runs as
+  `<§4's runner line> --provider-config $HO/haiku.row.json --draw <d> --out-dir $HO/th-haiku-<d>/draw-<d>`
+  (dry run first, then `--execute`; never `--post`, never `--cache read`). Wherever H1 (record check, per draw) and H2
+  §1 (`official-haiku-<d>` from `$HO/th-haiku-<d>`) name `$HO/th-haiku-<d>` as the draw's record directory, they read
+  `$HO/th-haiku-<d>/draw-<d>`. Reruns use the same `--draw` and out-dir (the runner's one-rerun rule per draw applies).
+- **Why this is not a choice made with knowledge of outcomes:** it is decided before T0; the row's model, config
+  (`haiku.row.json` sha256 `239d5fa6…`), settings, order and caps are unchanged; `--draw` only labels the draw the
+  documents already name, and the code that enforces it is the code in the tag. The tag and `ts-freeze.md` stay as
+  they are, so their recorded hashes stay valid; this entry is the erratum H1 and H2 follow.
+- **Check:** codex dry-runs the corrected command for draw 1 and draw 2 against the tag worktree (no `--execute`, no
+  provider call) and records the exit codes in `run/out/codex.f1-heldout.md`.
+
+**Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`; codex the dry run (held-out side).
