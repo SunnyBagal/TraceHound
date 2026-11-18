@@ -4874,4 +4874,11 @@ codex the held-out clones (fetch only, under the brief); grok `run/out/grok.ho-i
 - **Check:** codex dry-runs the corrected command for draw 1 and draw 2 against the tag worktree (no `--execute`, no
   provider call) and records the exit codes in `run/out/codex.f1-heldout.md`.
 
+- **Addendum, Node runtime (same day, before T0):** `ts-freeze.md` records node **v26.13.1**, the binary first on artu1's
+  PATH (`~/.local/share/vite-plus/bin/node`); codex's shell resolves **v26.13.0** (`/opt/homebrew/bin/node`). Both are
+  installed. **H1 and H2 run with v26.13.1**: the operator puts `~/.local/share/vite-plus/bin` first on PATH in the job
+  shell and writes `node -v` into `$HO/job.md` before the first paid call; codex's F1 test rerun on the tag uses it too.
+  A run under another version is reported as a deviation, not stopped (a patch release; no reviewer code reads the
+  version). R1's records do not name a Node version.
+
 **Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`; codex the dry run (held-out side).
