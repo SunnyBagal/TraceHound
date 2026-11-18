@@ -1,5 +1,5 @@
 # .agents/STATE.md: read first; rewrite (never append) at the end of every session; ≤ 60 lines
-HEAD: `main` after F1: **tag `review-freeze-3` on `25151b1` pushed 18 Nov 16:17 IST** (parent `8aeb28b` = gated code; `docs/bench/ts-freeze.md` sha256 `da3d5e9d…`). **T0 Thu 19 Nov 10:00 IST (04:30Z)**, snapshot Sun 22 Nov 10:00; sittings Sun 22 (~150 min) + Mon 23 Nov; H2 result Mon 23 Nov evening.
+HEAD: `main` after F1: **tag `review-freeze-3` on `25151b1` pushed 18 Nov 16:17 IST** (parent `8aeb28b` = gated code; `docs/bench/ts-freeze.md` sha256 `da3d5e9d…`). **T0 Thu 19 Nov 10:00 IST (04:30Z)**, snapshot Sun 22 Nov 10:00; hand-check from ~11:30 IST Sun 22 Nov (Mon 23 only if needed; 076z); H2 result Sun 22 Nov evening if finished Sunday.
 ## Goal
 (076g) 1) a viability read from the dev table by 15–17 Nov; 2) a credible held-out result (A0, Nemotron pool-verify-v1, registered primary, vs CodeRabbit and Greptile on fresh held-out TS PRs); 3) low spend. Fable access ends 17 Nov.
 

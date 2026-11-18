@@ -4634,7 +4634,7 @@ W1 only fills the placeholders.
 from Wed 18 Nov: tag missed 20:00 IST on 17 Nov, 076k item 5; 076w, 076x item 3); scheduled snapshot T0 + 72 h
 = **Sun 22 Nov 2026 10:00 IST = 04:30 UTC**; the window runs from the actual T0 (the first held-out PR's `created_at`) to
 T0 + 72 h, and H1 reports both clocks. A missed tag moves T0 and these dates by one day each, up to T0 Sun 22 Nov 10:00 IST.
-Hand-check sitting: **Sun 22 Nov 2026, afternoon IST, after the snapshot at 10:00, about 150 minutes; the rest on Mon 23 Nov** (Sunny, 076w item 2, dates 076x item 3; both days move with T0 if T0 slips). **No unblinding until Sunny finishes the last item.** **H2's result: Mon 23 Nov evening**, after the last item. Sunny starts `caffeinate -is -t 280800` at about 09:00 IST on the day
+Hand-check sitting: **Sun 22 Nov 2026, from about 11:30 IST** (after the snapshot at 10:00, the hashing and H2's judging and sheet build), continuing that day; **Mon 23 Nov only for what is left** (Sunny, 076w item 2, dates 076x item 3, start time 076z; both days move with T0 if T0 slips). **No unblinding until Sunny finishes the last item.** **H2's result: Sun 22 Nov evening** if he finishes Sunday, otherwise Mon 23 Nov evening. Sunny starts `caffeinate -is -t 280800` at about 09:00 IST on the day
 of the scheduled T0. Greptile credits: **59** (Sunny's reading, 17 Nov; needs at least 35, F1 row 7; expiry 27 Nov). Money stop:
 **f = 1.17**, a job's console check trips above 1.08 × 1.17 ≈ 1.26; the `.env` hard stop is reset at F1 (076r item 2). H1
 cap $2.94 (077). Haiku held-out row as 076k item 1 and protocol revision 12 §5 (two draws after A0; $1.00 Anthropic).
@@ -4891,3 +4891,23 @@ codex the held-out clones (fetch only, under the brief); grok `run/out/grok.ho-i
   version). R1's records do not name a Node version.
 
 **Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`; codex the dry run (held-out side).
+
+## 076z — Faster finish without changing the registered design (2026-11-18)
+
+**Status: ruled by Sunny (18 Nov 2026, "go on" to artu1's two proposals).** Sunny asked to finish within 1–2 days.
+artu1 advised against shortening the 72-hour window or the 61-minute slot spacing (076e item 7, 076h item 3): the 29
+first triggers alone take about 29.5 hours, later re-triggers run to T0 + 64 h, tighter spacing risks CodeRabbit's
+hourly rate limits that P1 measured, and any change before T0 means a new plan, pins, `ts-freeze.md`, tag and full
+re-checks, likely moving T0 to Friday. Ruled instead:
+1. **Hand-check from about 11:30 IST on Sun 22 Nov**, right after the snapshot (10:00), §6's hashing and H2's judging
+   and sheet build (about 90 minutes, an estimate), continuing that day as 076w item 2 allows; Monday only for what is
+   left. H2's result Sunday evening if he finishes Sunday. Nothing is unblinded until his last item (unchanged).
+   078's sitting line updated. Codex plans H2's judging to start as soon as §6's hashing is done.
+2. **W1 skeleton during the window:** bunny drafts `docs/bench/ts-heldout.md` and the `results.md` section as a
+   branch with every number and outcome a placeholder, built only from `W1-writeup.md`, decision 078, the protocol and
+   dev files (`docs/bench/ts-dev.md`). No held-out file, no fork read (076c item 12), no outcome-dependent wording
+   chosen in advance beyond §3's templates; nothing merges before H2. Brief `run/briefs/bunny.w1-skeleton.md`.
+Reason: both save about a day (result Sunday instead of Monday; write-up Monday) and change no registered rule.
+
+**Touches:** artu1 this file (078 sitting line, 076z), `.agents/STATE.md`, `.agents/LOG.md`, the brain; bunny the W1
+branch; codex H2 timing.
