@@ -851,3 +851,9 @@ yet it still answers on 16 Nov; neither the price page nor `/models` gives a ret
 - What would have helped (opinion): the models list (`GET /v1/models`) is not reliable evidence that a model is served
   (our client notes a listed model that returns 404), so we now spend a completion per model. A free "served" flag per
   model in the list, or a deprecation date in the list response, would remove that need.
+
+## 2026-11-18: F1 model-availability check, T0 − 24 h repeat (artu1)
+- Called: Nebius Token Factory chat completions, three models, one request each: `nvidia/Nemotron-3.5-Super-VL`,
+  `nvidia/nemotron-3-super-120b-a12b`, `Qwen/Qwen3-30B-A3B-Instruct-2507`.
+- Counts: 3 requests, 3 successes, 0 failures. Latency 1271 / 1095 / 1001 ms. Ledger $0.0000195.
+- Nothing new missing; the 17 Nov entry's wish (a served flag or deprecation date in the models list) still stands.
