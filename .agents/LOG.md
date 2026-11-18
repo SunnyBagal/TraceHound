@@ -384,3 +384,4 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
 - 2026-11-18 (artu1): 18:38 IST check: caffeinate -is (pid 57880, no limit, started ~18:09 IST) holds the assertion; AC Power. H1 worker's power gate will pass.
 - 2026-11-18 (artu1): 6 EDIT brain notes pushed after grok GO d1599be (run/out/grok.brain-edits.md); 12 held-out-side notes stay HOLD until after H2.
 - 2026-11-18 (artu1): 076z (Sunny 'go on'): window and spacing unchanged (artu1 advised against shortening); hand-check from ~11:30 IST Sun 22 Nov, Monday only if needed, H2 result Sunday evening if finished; bunny drafts the W1 skeleton during the window (brief bunny.w1-skeleton, branch b23, placeholders only, firewall). 078 sitting line updated; codex told to start H2 judging right after §6 hashing.
+- 2026-11-18 (artu1): brain 076z note pushed (grok GO 7678127).
