@@ -4640,6 +4640,15 @@ of the scheduled T0. Greptile credits: **59** (Sunny's reading, 17 Nov; needs at
 cap $2.94 (077). Haiku held-out row as 076k item 1 and protocol revision 12 §5 (two draws after A0; $1.00 Anthropic).
 `ts-freeze.md` sha256: **`da3d5e9dadde691c0c0af09823ca07dc7ba773524533a8f65ef478821754df61`** (tag `review-freeze-3` on `25151b1`, pushed 18 Nov 16:17 IST; its parent `8aeb28b` is the gated code commit).
 
+**Hand-checker's inbox and dashboards (F1 §1 row 13, gap G2; recorded 18 Nov, before T0, after codex's §4.8 flag):**
+(1) *Sunny unsubscribed from the four forks (Unwatch → Ignore on each) and filters their GitHub mail out of his inbox*
+(Sunny: "Forks: all four set to Ignore on GitHub, and their mail filtered out of my inbox"). **Time: no later than
+17 Nov 2026 14:34 IST (09:04:55Z)**, when his message saying so reached artu1; he gave no exact time, so this is the
+upper bound (row 13 needs it before T0, which it is). (2) *He opens no CodeRabbit or Greptile dashboard and no fork PR
+page from T0 until his filled sheet is hashed* (`H2-scoring.md` §6.1); Sunny's own rule is stricter (076w item 2):
+nothing is unblinded and no results are shown to him, including the dashboard, the logs and GitHub mail, until he
+finishes the last item. Greptile's credit reading (59) was taken on 17 Nov, before T0.
+
 **Go:** Sunny, 17 Nov 2026: "'Go' on 078; make it final." 
 
 ## 076u — 078's inputs; "Full review finished." stays off the list; Planner A's edits by artu1; product rule registered; devin's pre-F1 review triaged (2026-11-17)
