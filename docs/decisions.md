@@ -4638,7 +4638,7 @@ Hand-check sitting: **Sun 22 Nov 2026, afternoon IST, after the snapshot at 10:0
 of the scheduled T0. Greptile credits: **59** (Sunny's reading, 17 Nov; needs at least 35, F1 row 7; expiry 27 Nov). Money stop:
 **f = 1.17**, a job's console check trips above 1.08 × 1.17 ≈ 1.26; the `.env` hard stop is reset at F1 (076r item 2). H1
 cap $2.94 (077). Haiku held-out row as 076k item 1 and protocol revision 12 §5 (two draws after A0; $1.00 Anthropic).
-`ts-freeze.md` sha256: **[open: at F1]**.
+`ts-freeze.md` sha256: **`da3d5e9dadde691c0c0af09823ca07dc7ba773524533a8f65ef478821754df61`** (tag `review-freeze-3` on `25151b1`, pushed 18 Nov 16:17 IST; its parent `8aeb28b` is the gated code commit).
 
 **Go:** Sunny, 17 Nov 2026: "'Go' on 078; make it final." 
 
