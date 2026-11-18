@@ -382,3 +382,4 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
 - 2026-11-18 (artu1): codex confirms worker PID 31475, detached (ppid 1, own session), exclusive lock; day-before checks pass: fork Actions disabled, gh auth is the SunnyBagal user, P1's CodeRabbit clause.
 - 2026-11-18 (artu1): Sunny's console reading $16.20 (reported 12:38Z) recorded as H1's baseline (budget.md; relayed in run/comms/artu1-to-codex.h1.md). At 12:38Z only a 300 s caffeinate (Claude Code's own) held an assertion and the Mac was on battery: told Sunny.
 - 2026-11-18 (artu1): 18:38 IST check: caffeinate -is (pid 57880, no limit, started ~18:09 IST) holds the assertion; AC Power. H1 worker's power gate will pass.
+- 2026-11-18 (artu1): 6 EDIT brain notes pushed after grok GO d1599be (run/out/grok.brain-edits.md); 12 held-out-side notes stay HOLD until after H2.
