@@ -402,3 +402,8 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   - Paste-ready gated Sunday list: /private/tmp/codex-h2-sunday-commands.md (manifest sha256 47ff9804…).
   - Fallbacks and owners are in the report; uncovered conditions stop for Sunny.
   - No held-out, window, network or ledger use.
+- 2026-11-20 (artu1): Sunny named the 14 Nov vendor table: f2146f3 on claude/upbeat-lamport-b280zm, §A of sidetrack/research/2026-11-14/vendor-verification-pass2.md; sha256 50c3affb… checked. **076ab:**
+  - 6a, 6b and 6c come off limit 6 (6b is also contradicted by the 0/58 `.coderabbit.yaml` count).
+  - The setup facts and limit 7 stay.
+  - The Cursor post is not D under W1.
+  - bunny cut on b24, ec35c2f. **codex GO on b24-w1-fill @ ec35c2f85d4a24ca0962ea0ec48cbdd13cec437c**, which supersedes aafb18f; merge at that sha after H2's commit.
