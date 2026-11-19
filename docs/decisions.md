@@ -4928,5 +4928,11 @@ fill helper b24 `33b7958`). No held-out file was read for any of this.
   (W1 §5); codex flags any that changes a claim, and that one comes back to artu1 or Sunny. The result's decision
   number is chosen at W1 (079 is the product rule).
 - b24-w1-fill merges only on codex's GO on its full sha, after H2's commit.
+- **Addendum (20 Nov, artu1), after codex's b24 review** (`run/out/codex.b24-review.md`, NO-GO on `33b7958`):
+  - codex accepted items 1–5, 7–9, 11–14 and 16–18. It changed item 10: writer directions may become page text only if
+    every substantive clause and its source are kept.
+  - Item 15(a)'s rule applies to every filled count on the page, not only the §3.2 templates. One example is §3b's
+    "the 1 case became exposed".
+  - Grammar only, as in item 15(a).
 
 **Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`; bunny b24 if codex asks for changes; codex the review.
