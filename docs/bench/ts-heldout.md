@@ -15,12 +15,16 @@ runbooks' field names. Every held-out value is a {{placeholder}} named after its
 Outcome-dependent text: every branch is present, each opened by {{if …}} and closed by {{end if}}. W1 keeps the one
 branch that holds, deletes the others and every marker, and deletes this comment. Dev numbers (section 9, limit 14's
 dev counts) are filled from docs/bench/ts-dev.md, which is committed.
+Derived names: {{G[a,b]}} = |onlyA − onlyB|; {{outcome[a,b]}} = floor / A / B / C by W1 §3.2 from reviewedByBoth,
+the policy's floor and alpha, p, onlyA and onlyB; {{flag:<name>}} = a yes/no that W1 states in the values file
+(pooledRan, datedDraft). `node scripts/bench/w1-fill.ts` (its header) fills every placeholder it can resolve, keeps or
+drops every {{if}} block, and lists what is left for the writer.
 -->
 # TraceHound, CodeRabbit and Greptile on fresh TypeScript pull requests (held-out, 2026-11; decision {{decision-number}})
 
 Protocol: `docs/eval/ts-protocol.md` revision 13 (it wins over the runbooks). Predictions and claim wording: decision
 078, registered before the first held-out pull request. Counts: `docs/bench/ts-heldout.summary.json` (headline, pairs,
-exposure, hand-check), `ts-heldout.secondary.json` (report-only rows){{if pooled ran}}, `ts-heldout.pooled.json`
+exposure, hand-check), `ts-heldout.secondary.json` (report-only rows){{if flag:pooledRan}}, `ts-heldout.pooled.json`
 (secondary pooled analysis){{end if}}. No case id, pull-request number, file path, label text or comment text from
 held-out appears on this page.
 
@@ -84,8 +88,8 @@ p = {{pairs[tracehound,coderabbit].p}}). That is no detectable difference at thi
 of about 6 or more one-sided misses can be told apart from chance, and a true difference of 30 points in catch rate
 would be found about four times in ten if the tools' catches are independent (more often if both catch the same easy
 bugs; that was not measured).
-{{if |onlyA − onlyB| ≥ 6}} The observed gap of {{G[tracehound,coderabbit]}} bugs is not distinguishable from chance here.{{end if}}
-{{if onlyA + onlyB == 0}} The two tools caught the same bugs.{{end if}}
+{{if G[tracehound,coderabbit] ≥ 6}} The observed gap of {{G[tracehound,coderabbit]}} bugs is not distinguishable from chance here.{{end if}}
+{{if pairs[tracehound,coderabbit].onlyA + pairs[tracehound,coderabbit].onlyB == 0}} The two tools caught the same bugs.{{end if}}
 {{end if}}
 
 **TraceHound against Greptile.**
@@ -115,8 +119,8 @@ p = {{pairs[tracehound,greptile].p}}). That is no detectable difference at this 
 about 6 or more one-sided misses can be told apart from chance, and a true difference of 30 points in catch rate would
 be found about four times in ten if the tools' catches are independent (more often if both catch the same easy bugs;
 that was not measured).
-{{if |onlyA − onlyB| ≥ 6}} The observed gap of {{G[tracehound,greptile]}} bugs is not distinguishable from chance here.{{end if}}
-{{if onlyA + onlyB == 0}} The two tools caught the same bugs.{{end if}}
+{{if G[tracehound,greptile] ≥ 6}} The observed gap of {{G[tracehound,greptile]}} bugs is not distinguishable from chance here.{{end if}}
+{{if pairs[tracehound,greptile].onlyA + pairs[tracehound,greptile].onlyB == 0}} The two tools caught the same bugs.{{end if}}
 {{end if}}
 
 TraceHound posted {{tools.tracehound.comments.perCompleted.mean}} comments per pull request, CodeRabbit
@@ -145,7 +149,7 @@ intervals, no continuity correction.*
   {{tools.tracehound.locationHits}}, CodeRabbit {{tools.coderabbit.locationHits}}, Greptile
   {{tools.greptile.locationHits}} of 20.
 - No review after the one re-trigger (`no-review`): CodeRabbit {{tools.coderabbit.noReview}}, Greptile
-  {{tools.greptile.noReview}}{{if any invalidBinding > 0}} (of which invalid binding: CodeRabbit
+  {{tools.greptile.noReview}}{{if tools.coderabbit.invalidBinding + tools.greptile.invalidBinding > 0}} (of which invalid binding: CodeRabbit
   {{tools.coderabbit.invalidBinding}}, Greptile {{tools.greptile.invalidBinding}}){{end if}}. TraceHound misses by rule
   (two failures, or unstarted at the window's end): {{tools.tracehound.misses}}.
 - Only inline review comments are scored; a tool's summary text is not (decision 076i item 1; limit 14).
@@ -158,8 +162,8 @@ corrected for there being two. CodeRabbit vs Greptile: counts only.
 
 | pair | bug cases reviewed by both (m) | paired n | caught only by the first | caught only by the second | exact two-sided p |
 |---|---|---|---|---|---|
-| TraceHound vs CodeRabbit | {{pairs[tracehound,coderabbit].reviewedByBoth}} | {{pairs[tracehound,coderabbit].n}} | {{pairs[tracehound,coderabbit].onlyA}} | {{pairs[tracehound,coderabbit].onlyB}} | {{if reviewedByBoth ≥ 15}}{{pairs[tracehound,coderabbit].p}}{{end if}}{{if reviewedByBoth < 15}}–{{end if}} |
-| TraceHound vs Greptile | {{pairs[tracehound,greptile].reviewedByBoth}} | {{pairs[tracehound,greptile].n}} | {{pairs[tracehound,greptile].onlyA}} | {{pairs[tracehound,greptile].onlyB}} | {{if reviewedByBoth ≥ 15}}{{pairs[tracehound,greptile].p}}{{end if}}{{if reviewedByBoth < 15}}–{{end if}} |
+| TraceHound vs CodeRabbit | {{pairs[tracehound,coderabbit].reviewedByBoth}} | {{pairs[tracehound,coderabbit].n}} | {{pairs[tracehound,coderabbit].onlyA}} | {{pairs[tracehound,coderabbit].onlyB}} | {{if pairs[tracehound,coderabbit].reviewedByBoth ≥ 15}}{{pairs[tracehound,coderabbit].p}}{{end if}}{{if pairs[tracehound,coderabbit].reviewedByBoth < 15}}–{{end if}} |
+| TraceHound vs Greptile | {{pairs[tracehound,greptile].reviewedByBoth}} | {{pairs[tracehound,greptile].n}} | {{pairs[tracehound,greptile].onlyA}} | {{pairs[tracehound,greptile].onlyB}} | {{if pairs[tracehound,greptile].reviewedByBoth ≥ 15}}{{pairs[tracehound,greptile].p}}{{end if}}{{if pairs[tracehound,greptile].reviewedByBoth < 15}}–{{end if}} |
 | CodeRabbit vs Greptile (counts only) | {{pairs[coderabbit,greptile].reviewedByBoth}} | {{pairs[coderabbit,greptile].n}} | {{pairs[coderabbit,greptile].onlyA}} | {{pairs[coderabbit,greptile].onlyB}} | – |
 
 <!-- One sentence per registered pair: the same §3.2 branch as in section 1, copied. No sentence for CodeRabbit vs Greptile. -->
@@ -276,8 +280,8 @@ draw 2 {{secondary:haikuVsA0.haiku2.both}} / {{secondary:haikuVsA0.haiku2.a0Only
 
 Disclosure (decision 076k item 1): Planner B drafted the thresholds before 076j's results existed; they were adopted
 after. Dev: v1 14 and 11 vs A0 12; second judge 15 and 12 vs 13; clean-case comments 1 and 0; draws differ by 3.
-{{if a dated pre-result draft exists}} The draft is {{planner-b-draft-commit-or-file-and-time}}.{{end if}}
-{{if no dated draft exists}} Stated by Planner B as drafted before 076j's results; no dated draft is on record.{{end if}}
+{{if flag:datedDraft}} The draft is {{planner-b-draft-commit-or-file-and-time}}.{{end if}}
+{{if flag:datedDraft == false}} Stated by Planner B as drafted before 076j's results; no dated draft is on record.{{end if}}
 Draw 2 met the dev condition with no margin.
 
 {{if secondary:haikuVsA0.meanMinusA0 < −2}}
@@ -298,7 +302,7 @@ Haiku coverage and failures, per draw: official records ok {{secondary:tools.hai
 {{secondary:tools.haiku2.judgeFailed}}; Anthropic cost {{secondary:tools.haiku1.costUSD.total}} +
 {{secondary:tools.haiku2.costUSD.total}} of the $1.00 cap.
 
-{{if pooled ran}}
+{{if flag:pooledRan}}
 ### Secondary
 
 <!-- Protocol revision 10's wording (§4 "Secondary pooled analysis: A0 only"), the dev table's label and grok's dev
