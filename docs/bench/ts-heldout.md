@@ -306,19 +306,21 @@ Haiku coverage and failures, per draw: official records ok {{secondary:tools.hai
 ### Secondary
 
 <!-- Protocol revision 10's wording (§4 "Secondary pooled analysis: A0 only"), the dev table's label and grok's dev
-     exposure count beside it. Never in the three result sentences. -->
+     exposure count beside it. Never in the three result sentences. Each cohort's missing-review exclusions are
+     published (protocol: "paired eligible n, missing-review exclusions and discordant counts"). -->
 Secondary, mixed dev selection set + held-out: A0 only, the 31 dev bugs and the 20 held-out bugs pooled (nominal N =
 51). Dev catches are judge v1's; held-out catches are the hand-checked ones. Dev numbers: dev, selection set, one draw,
 one judge of record, not hand-checked; dev exposure 10 of 31 (grok; audit sha256 `b94f54ee…`).
 
-| pair | dev: paired n / A0 only / other only | held-out: paired n / A0 only / other only | pooled: paired n / A0 only / other only | exact two-sided p |
+| pair | dev: paired n / A0 only / other only / missing-review exclusions | held-out: paired n / A0 only / other only / missing-review exclusions | pooled: paired n / A0 only / other only | exact two-sided p |
 |---|---|---|---|---|
-| A0 vs CodeRabbit | {{pooled:coderabbit.dev.n}} / {{pooled:coderabbit.dev.onlyA}} / {{pooled:coderabbit.dev.onlyB}} | {{pooled:coderabbit.heldout.n}} / {{pooled:coderabbit.heldout.onlyA}} / {{pooled:coderabbit.heldout.onlyB}} | {{pooled:coderabbit.pooled.n}} / {{pooled:coderabbit.pooled.onlyA}} / {{pooled:coderabbit.pooled.onlyB}} | {{pooled:coderabbit.p}} |
-| A0 vs Greptile | {{pooled:greptile.dev.n}} / {{pooled:greptile.dev.onlyA}} / {{pooled:greptile.dev.onlyB}} | {{pooled:greptile.heldout.n}} / {{pooled:greptile.heldout.onlyA}} / {{pooled:greptile.heldout.onlyB}} | {{pooled:greptile.pooled.n}} / {{pooled:greptile.pooled.onlyA}} / {{pooled:greptile.pooled.onlyB}} | {{pooled:greptile.p}} |
+| A0 vs CodeRabbit | {{pooled:coderabbit.dev.n}} / {{pooled:coderabbit.dev.onlyA}} / {{pooled:coderabbit.dev.onlyB}} / {{pooled:coderabbit.dev.excluded}} | {{pooled:coderabbit.heldout.n}} / {{pooled:coderabbit.heldout.onlyA}} / {{pooled:coderabbit.heldout.onlyB}} / {{pooled:coderabbit.heldout.excluded}} | {{pooled:coderabbit.pooled.n}} / {{pooled:coderabbit.pooled.onlyA}} / {{pooled:coderabbit.pooled.onlyB}} | {{pooled:coderabbit.p}} |
+| A0 vs Greptile | {{pooled:greptile.dev.n}} / {{pooled:greptile.dev.onlyA}} / {{pooled:greptile.dev.onlyB}} / {{pooled:greptile.dev.excluded}} | {{pooled:greptile.heldout.n}} / {{pooled:greptile.heldout.onlyA}} / {{pooled:greptile.heldout.onlyB}} / {{pooled:greptile.heldout.excluded}} | {{pooled:greptile.pooled.n}} / {{pooled:greptile.pooled.onlyA}} / {{pooled:greptile.pooled.onlyB}} | {{pooled:greptile.p}} |
 
 With the two pooled secondary tests, four tests at 0.05 with no correction; up to 0.20 that at least one rejects by
-chance. Even a small p here is not fresh held-out confirmation. {{if a pair fails the 15-of-20 floor}}That pair gets
-pooled counts only.{{end if}}
+chance. Even a small p here is not fresh held-out confirmation. {{if pairs[tracehound,coderabbit].reviewedByBoth < 15}}A0 vs CodeRabbit fails the held-out
+15-of-20 floor, so that pair gets pooled counts only.{{end if}}{{if pairs[tracehound,greptile].reviewedByBoth < 15}} A0 vs Greptile fails the held-out 15-of-20 floor, so that
+pair gets pooled counts only.{{end if}}
 {{end if}}
 
 ## 8. Predictions (decision 078, registered before the window)

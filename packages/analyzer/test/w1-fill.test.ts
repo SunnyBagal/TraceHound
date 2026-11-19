@@ -138,11 +138,11 @@ describe("w1-fill: the W1 skeleton files on this branch", () => {
   const HUMAN = /^(right \/ wrong|the §3\.2 sentence|choose one|planner-b-draft|vendor-fact-check|ho-score:|h1:|p1:|secondary:|pooled:)/;
 
   it("every placeholder resolves from the summary or --values, except the writer's choices and the named other sources", () => {
-    const res = new Resolver({ summary: summary([C_C, C_G]), values });
-    for (const f of FILES) {
+    for (const flag of [false, true]) for (const f of FILES) {
+      const res = new Resolver({ summary: summary([C_C, C_G]), values: { ...values, "flag:pooledRan": flag, "flag:datedDraft": flag } });
       const { report } = fill(readFileSync(path.join(ROOT, f), "utf8"), res, { tsSource: f.endsWith(".ts") });
       expect(report.left.filter((l) => !HUMAN.test(l.name)).map((l) => `${f}:${l.line} ${l.name}`)).toEqual([]);
-      expect(report.undecided.filter((u) => !/secondary:/.test(u.cond)).map((u) => `${f}:${u.line} ${u.cond}`)).toEqual([]);
+      expect(report.undecided.filter((u) => !/secondary:/.test(u.cond)).map((u) => `${f}:${u.line} ${u.cond} (flags ${flag})`)).toEqual([]);
     }
   });
 
