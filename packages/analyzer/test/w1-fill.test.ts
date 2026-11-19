@@ -145,7 +145,7 @@ describe("w1-fill: the W1 skeleton files on this branch", () => {
     R: "repo-a (10), repo-b (10), repo-c (9)", "decision-number": "999", "flag:pooledRan": false, "flag:datedDraft": false,
     "budget:h1ConsoleRatio": 1.17, "budget:h1Console": "2.40", "budget:h1Ledger": "2.04", "budget:h2Ledger": "0.10", "budget:h1ConsoleUtc": "t",
   };
-  const HUMAN = /^(right \/ wrong|the §3\.2 sentence|planner-b-draft|vendor-fact-check|ho-score:|h1:|p1:|secondary:|pooled:)/;
+  const HUMAN = /^(right \/ wrong|the §3\.2 sentence|planner-b-draft|ho-score:|h1:|p1:|secondary:|pooled:)/;
 
   it("every placeholder resolves from the summary or --values, except the writer's choices and the named other sources", () => {
     for (const flag of [false, true]) for (const f of FILES) {

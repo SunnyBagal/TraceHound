@@ -412,13 +412,8 @@ table is `docs/bench/ts-dev.md`.
    residual style cues cannot be excluded: the checker's guesses of the tool were right for {{handcheckGuess.right}} of
    {{handcheckGuess.guessed}} (section 6), against {{handcheckGuess.commonestToolItems}} of {{handcheckGuess.items}} for
    always naming the commonest tool.
-6. What the other tools could see: each fork's default branch was set to the last upstream commit before 2026-07-01;
-   neither vendor documents which ref its repository context is built from (`run/out/grok.tool-facts.md` rows 7, 11).
-   CodeRabbit reviewed payload's cases under payload's own configuration file, which is part of that code.
-   CodeRabbit was left at its defaults, under which web search is "Enabled unless explicitly disabled" and pull-request
-   context "Uses past PRs for context" (https://docs.coderabbit.ai/knowledge-base); what it looked up is not known.
-   <!-- §3.4b: each vendor fact in limits 6 and 7 stays only if the 14 Nov research's verified table labels it D:
-        {{vendor-fact-check: table path from artu1}} -->
+6. What the other tools could see: each fork's default branch was set to the last upstream commit before 2026-07-01.
+   <!-- §3.4b applied in decision 076ab; table: sidetrack/research/2026-11-14/vendor-verification-pass2.md §A at f2146f3. -->
    Other case branches on the same fork (premortem gap G16; decision 076d item 1 with its correction, and addendum e):
    - *Before anything was done:* the commit that later fixed the bug was an ancestor of another case's base on the
      same fork for 11 of the 20 held-out bugs (`run/out/grok.ancestry.md`, 2026-11-12). Of the 11, 6 could be reached
