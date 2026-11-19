@@ -186,11 +186,12 @@ on either group.
 
 | tool | exposed bug cases: caught | exposed bug cases: reviews completed | unexposed bug cases: caught | unexposed bug cases: reviews completed |
 |---|---|---|---|---|
-| TraceHound | {{tools.tracehound.exposure.exposed.caught}} of {{tools.tracehound.exposure.exposed.bugCases}} | {{tools.tracehound.exposure.exposed.completedBug}} | {{tools.tracehound.exposure.unexposed.caught}} of {{tools.tracehound.exposure.unexposed.bugCases}} | {{tools.tracehound.exposure.unexposed.completedBug}} |
-| CodeRabbit | {{tools.coderabbit.exposure.exposed.caught}} of {{tools.coderabbit.exposure.exposed.bugCases}} | {{tools.coderabbit.exposure.exposed.completedBug}} | {{tools.coderabbit.exposure.unexposed.caught}} of {{tools.coderabbit.exposure.unexposed.bugCases}} | {{tools.coderabbit.exposure.unexposed.completedBug}} |
-| Greptile | {{tools.greptile.exposure.exposed.caught}} of {{tools.greptile.exposure.exposed.bugCases}} | {{tools.greptile.exposure.exposed.completedBug}} | {{tools.greptile.exposure.unexposed.caught}} of {{tools.greptile.exposure.unexposed.bugCases}} | {{tools.greptile.exposure.unexposed.completedBug}} |
+| TraceHound | {{if exposure.exposedBugCases == 0}}0 of 0 (no exposed bug cases){{end if}}{{if exposure.exposedBugCases > 0}}{{tools.tracehound.exposure.exposed.caught}} of {{tools.tracehound.exposure.exposed.bugCases}}{{end if}} | {{if exposure.exposedBugCases == 0}}0 of 0 (no exposed bug cases){{end if}}{{if exposure.exposedBugCases > 0}}{{tools.tracehound.exposure.exposed.completedBug}}{{end if}} | {{tools.tracehound.exposure.unexposed.caught}} of {{tools.tracehound.exposure.unexposed.bugCases}} | {{tools.tracehound.exposure.unexposed.completedBug}} |
+| CodeRabbit | {{if exposure.exposedBugCases == 0}}0 of 0 (no exposed bug cases){{end if}}{{if exposure.exposedBugCases > 0}}{{tools.coderabbit.exposure.exposed.caught}} of {{tools.coderabbit.exposure.exposed.bugCases}}{{end if}} | {{if exposure.exposedBugCases == 0}}0 of 0 (no exposed bug cases){{end if}}{{if exposure.exposedBugCases > 0}}{{tools.coderabbit.exposure.exposed.completedBug}}{{end if}} | {{tools.coderabbit.exposure.unexposed.caught}} of {{tools.coderabbit.exposure.unexposed.bugCases}} | {{tools.coderabbit.exposure.unexposed.completedBug}} |
+| Greptile | {{if exposure.exposedBugCases == 0}}0 of 0 (no exposed bug cases){{end if}}{{if exposure.exposedBugCases > 0}}{{tools.greptile.exposure.exposed.caught}} of {{tools.greptile.exposure.exposed.bugCases}}{{end if}} | {{if exposure.exposedBugCases == 0}}0 of 0 (no exposed bug cases){{end if}}{{if exposure.exposedBugCases > 0}}{{tools.greptile.exposure.exposed.completedBug}}{{end if}} | {{tools.greptile.exposure.unexposed.caught}} of {{tools.greptile.exposure.unexposed.bugCases}} | {{tools.greptile.exposure.unexposed.completedBug}} |
 
-<!-- With exposure.exposedBugCases == 0 the two exposed cells of each row read "0 of 0 (no exposed bug cases)".
+<!-- With exposure.exposedBugCases == 0 the two exposed cells of each row read "0 of 0 (no exposed bug cases)" (W1 §2
+     item 3b, H2 §7); the cells decide it, and with E absent they stay as markers that --check reports.
      Counts only: no rate or percentage on either group, no comparison of the groups in words, never "the tools did
      not use the fix". -->
 
@@ -357,12 +358,8 @@ table is `docs/bench/ts-dev.md`.
 
 - Stop/go (decision 076g item 6), read once by decision 076t: **RETHINK** (CodeRabbit led A0 by 19 − 12 = 7 on v1;
   CodeRabbit completed 40 of 40). It did not gate the held-out run (decision 076k item 4).
-- {{choose one: W1 §2.9 verbatim | W1 §5.4 checklist wording}}
-  - §2.9: The configuration (pool-verify-v1) was fixed on 13 November 2026, before any result on the TypeScript dev
-    cases existed and before the held-out cases were opened; it had been chosen earlier on a different benchmark
-    (decision 059).
-  - §5.4: pool-verify-v1 was fixed before any catch count of it on the dev cases existed; contracts off was chosen by
-    a model-free dev audit.
+- pool-verify-v1 was fixed before any catch count of it on the dev cases existed; contracts off was chosen by a
+  model-free dev audit (decision 076u item 4, applied here by 076aa item 6).
 - The dev rows for A1 (pool-raw), A2 (review-diff-v1) and the Claude models are report-only. The only Claude dev
   numbers on this page are the registered Haiku row's, in its disclosure (section 7), labelled dev. There was no second
   dev run (cut by decision 076g).
@@ -402,8 +399,9 @@ table is `docs/bench/ts-dev.md`.
    in those pull requests. A comment on a real defect that no later fix repaired counts as unmatched, so the share of
    matching comments is a lower bound on precision.
 3. "Clean" means no qualifying later fix was found, not bug-free.
-4. The configuration was fixed before any result on the 40 TypeScript dev cases existed (decision 076g item 1); it had
-   been chosen on an earlier benchmark of other repositories. The 40 dev cases, from three of the same repositories as
+4. pool-verify-v1 was fixed before any catch count of it on the dev cases existed; contracts off was chosen by a
+   model-free dev audit (decision 076u item 4, applied here by 076aa item 6). The configuration had been chosen on an
+   earlier benchmark of other repositories. The 40 dev cases, from three of the same repositories as
    the held-out cases, were then used for a stop/go reading and for report-only rows, and those numbers were known
    before the window. The pooled analysis mixes those dev cases with the held-out ones and is secondary for that
    reason.
@@ -468,14 +466,17 @@ table is `docs/bench/ts-dev.md`.
     untracked files under its held-out directory (`docs/decisions.md` 076e addendum d; `run/out/bunny.076e-r1.md`). No
     file was opened, by either: 2 incidents, 8 file names shown in
     each, 0 files opened, both before the window. The rule made the same day: every agent but the held-out operator
-    runs git in that repository only with explicit paths outside the held-out directory.
+    runs git in that repository only with explicit paths outside the held-out directory. This page gives no file name,
+    and it claims nothing about what the names could reveal beyond the counts: names were shown, no file was opened.
 14. A tool's summary text was not scored (decision 076i item 1). Only a tool's top-level inline review comments count
     as its comments and can catch a bug. A summary, a walkthrough or a review body counts for one thing only: that the
     review was completed (decision 076c item 2). So a review that names its findings only in its summary scores no
     catch here, whatever that text says. Completed reviews with 0 inline comments, on the 29 held-out pull requests:
     CodeRabbit {{ho-score:coderabbit.completedZeroInline}} of {{tools.coderabbit.completedBug+completedClean}},
     Greptile {{ho-score:greptile.completedZeroInline}} of {{tools.greptile.completedBug+completedClean}}; on the 40
-    dev cases: CodeRabbit 9 of 40, Greptile 7 of 40 (`docs/bench/ts-dev.md`). In the smoke test all 4 reviews, 2 from
+    dev cases: CodeRabbit 9 of 40, Greptile 7 of 40 (`docs/bench/ts-dev.md`). Both counts come from the committed
+    counts: the held-out ones from H2's scoring counts (`docs/runbooks/H2-scoring.md` §7), the dev ones from
+    `docs/bench/ts-dev.md`. In the smoke test all 4 reviews, 2 from
     each tool, had 0 inline comments and ended with a summary comment (decision 076h). TraceHound's comments are its
     findings from the local export, so this limit is about the two other tools.
 

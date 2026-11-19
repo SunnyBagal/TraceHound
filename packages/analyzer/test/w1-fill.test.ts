@@ -70,14 +70,24 @@ describe("w1-fill: expressions, conditions and formats", () => {
   it("formats as ts-dev.md and the scorer print them", () => {
     expect(format("tools.x.caughtWilson[0]", 0.23733101420380254, false)).toBe("23.7");
     expect(format("tools.x.caughtWilson[1]", 0.5617589138033927, false)).toBe("56.2%");
-    expect(format("pairs[a,b].p", 0.21875, false)).toBe("0.219");
-    expect(format("pairs[a,b].p", 0.0000019073486328125, false)).toBe("0.00000191");
+    // every p as score-testset.ts prints it: Number(p.toPrecision(10))
+    expect(format("pairs[a,b].p", 0.21875, false)).toBe("0.21875");
+    expect(format("pairs[a,b].p", 0.0000019073486328125, false)).toBe(String(Number((0.0000019073486328125).toPrecision(10))));
+    expect(format("pairs[a,b].p", 0.14599609375, false)).toBe("0.1459960938");
     expect(format("pairs[a,b].p", null, false)).toBe("–");
     expect(format("tools.x.costUSD.perAttemptedMean", 0.070246785, false)).toBe("0.0702");
     expect(format("tools.x.comments.perCompleted.mean", 1.075, false)).toBe("1.07"); // toFixed, as score-testset.ts and ts-dev.md
     expect(format("tools.x.caught", 7, false)).toBe("7");
     expect(format("R", "medusa (9), payload (5)", false)).toBe("medusa (9), payload (5)");
     expect(format("flag:x", true, false)).toBeUndefined();
+  });
+  it("a small pooled p prints as the scorer prints it, never 0.00; counts-only pooled and secondary p keep the dash", () => {
+    expect(format("pooled:coderabbit.p", 0.00390625, false)).toBe("0.00390625");
+    expect(format("pooled:p", 0.00390625, false)).toBe("0.00390625");
+    expect(format("secondary:haikuVsA0.p", 0.0390625, false)).toBe("0.0390625");
+    expect(format("pooled:coderabbit.p", null, false)).toBe("–");
+    const res = new Resolver({ summary: summary([C_C, C_G]), pooled: { coderabbit: { p: 0.00390625 }, greptile: { p: null } } });
+    expect(fill("{{pooled:coderabbit.p}} / {{pooled:greptile.p}}", res).text).toBe("0.00390625 / –");
   });
 });
 
@@ -102,7 +112,7 @@ describe("w1-fill: blocks", () => {
     const { text: out, report } = fill(text, r());
     expect(out).toBe([
       "Head 7 of 20.",
-      "no difference, p = 0.219.",
+      "no difference, p = 0.21875.",
       "Gap 4.",
       "Inline: none; {{if flag:pooledRan}}pooled{{end if}}.",
       "<!-- legend {{if …}} {{placeholder}} -->",
@@ -135,7 +145,7 @@ describe("w1-fill: the W1 skeleton files on this branch", () => {
     R: "repo-a (10), repo-b (10), repo-c (9)", "decision-number": "999", "flag:pooledRan": false, "flag:datedDraft": false,
     "budget:h1ConsoleRatio": 1.17, "budget:h1Console": "2.40", "budget:h1Ledger": "2.04", "budget:h2Ledger": "0.10", "budget:h1ConsoleUtc": "t",
   };
-  const HUMAN = /^(right \/ wrong|the §3\.2 sentence|choose one|planner-b-draft|vendor-fact-check|ho-score:|h1:|p1:|secondary:|pooled:)/;
+  const HUMAN = /^(right \/ wrong|the §3\.2 sentence|planner-b-draft|vendor-fact-check|ho-score:|h1:|p1:|secondary:|pooled:)/;
 
   it("every placeholder resolves from the summary or --values, except the writer's choices and the named other sources", () => {
     for (const flag of [false, true]) for (const f of FILES) {
@@ -144,6 +154,37 @@ describe("w1-fill: the W1 skeleton files on this branch", () => {
       expect(report.left.filter((l) => !HUMAN.test(l.name)).map((l) => `${f}:${l.line} ${l.name}`)).toEqual([]);
       expect(report.undecided.filter((u) => !/secondary:/.test(u.cond)).map((u) => `${f}:${u.line} ${u.cond} (flags ${flag})`)).toEqual([]);
     }
+  });
+
+  it("E = 0: the exposed cells read \"0 of 0 (no exposed bug cases)\"; E > 0: counts; E absent: markers --check sees", () => {
+    const page = readFileSync(path.join(ROOT, "docs/bench/ts-heldout.md"), "utf8");
+    const table = page.slice(page.indexOf("| tool | exposed bug cases: caught"), page.indexOf("<!-- With exposure.exposedBugCases == 0"));
+    const rows = (t: string) => t.split("\n").filter((l) => /^\| (TraceHound|CodeRabbit|Greptile) \|/.test(l));
+    const zero = fill(table, new Resolver({ summary: summary([C_C, C_G]) })).text;
+    expect(rows(zero)).toEqual(["TraceHound", "CodeRabbit", "Greptile"].map((t, i) =>
+      `| ${t} | 0 of 0 (no exposed bug cases) | 0 of 0 (no exposed bug cases) | ${[7, 11, 10][i]} of 20 | 20 |`));
+    expect(leftovers(zero)).toBe(0);
+    const exp = (caught: number) => tool(caught, { exposure: { exposed: { bugCases: 2, completedBug: 2, caught: 1 }, unexposed: { bugCases: 18, completedBug: 18, caught: caught - 1 } } });
+    const two = fill(table, new Resolver({ summary: summary([C_C, C_G], {
+      exposure: { exposedBugCases: 2, unexposedBugCases: 18 }, tools: { tracehound: exp(7), coderabbit: exp(11), greptile: exp(10) } }) })).text;
+    expect(rows(two)[0]).toBe("| TraceHound | 1 of 2 | 2 | 6 of 18 | 18 |");
+    expect(two).not.toContain("no exposed bug cases");
+    const absent = summary([C_C, C_G]) as Record<string, unknown>;
+    delete absent.exposure;
+    const none = fill(table, new Resolver({ summary: absent }));
+    expect(none.report.undecided.length).toBe(4 * 3); // two conditions per exposed cell, two cells per row
+    expect(leftovers(none.text)).toBeGreaterThan(0);
+  });
+
+  it("076aa item 15(a): a count of 1 before \"bugs\" is written \"1 bug\"; no other word changes", () => {
+    const page = readFileSync(path.join(ROOT, "docs/bench/ts-heldout.md"), "utf8");
+    const one = r([pair("coderabbit", { onlyA: 1, onlyB: 5 }), pair("greptile", { onlyA: 5, onlyB: 1 })]);
+    const out = fill(page, one).text.replace(/<!--[\s\S]*?-->/g, "");
+    expect(out).not.toMatch(/\b1 bugs\b/);
+    expect(out).toContain("TraceHound caught 1 bug that CodeRabbit missed, and CodeRabbit caught\n5 that TraceHound missed");
+    expect(out).toContain("TraceHound caught 5 bugs that Greptile missed");
+    expect(fill("{{tools.tracehound.caught}} bugs; {{G[tracehound,greptile]}} bugsy", r([C_C, pair("greptile", { onlyA: 2, onlyB: 1 })])).text)
+      .toBe("7 bugs; 1 bugsy");
   });
 
   it("results.md §11 and the viewer table fill to the same cells", () => {

@@ -1,7 +1,7 @@
 // W1 fill helper (decision 076z item 2; docs/runbooks/W1-writeup.md). Fills the W1 skeleton's {{placeholders}} from
 // the committed result files and keeps or drops every {{if …}} … {{end if}} block, so W1 does not copy numbers by hand.
 // It writes no number of its own: every value is a field of a named file, or a formula stated below. What it cannot
-// resolve stays as it is and is listed for the writer (the prediction verdicts, the "choose one" wording, R, …).
+// resolve stays as it is and is listed for the writer (the prediction verdicts, R, …).
 //
 //   node scripts/bench/w1-fill.ts --summary docs/bench/ts-heldout.summary.json [--secondary f] [--pooled f]
 //     [--values f.json] [--alias tracehound=a0 …] [--write | --out-dir d] [--check] <file> …
@@ -22,9 +22,11 @@
 // Expressions: terms joined by "+", " − " (spaced) or "×"; "×" binds first. A bare term after a dotted one takes its
 // parent ("tools.x.completedBug+completedClean"). Conditions: <expr> (==|!=|<|>|≤|≥|<=|>=) <expr>, or a bare <expr>
 // that must be true. A condition that cannot be decided keeps its block and markers, and is listed.
-// Formats (as docs/bench/ts-dev.md and score-testset.ts print them): …Wilson[0] "23.7", …Wilson[1] "56.2%"; p to 3
-// significant figures, "–" when the scorer gave none (a pair under the floor); costUSD and "×" products to 4 decimals;
-// other non-integers to 2; integers and --values strings as they are.
+// Formats (as docs/bench/ts-dev.md and score-testset.ts print them): …Wilson[0] "23.7", …Wilson[1] "56.2%"; every p
+// field (pairs[a,b].p, pooled:….p, secondary:….p) to 10 significant figures as score-testset.ts prints it, "–" when
+// the source gave none (counts only: under the floor, or not tested); costUSD and "×" products to 4 decimals; other
+// non-integers to 2; integers and --values strings as they are.
+// Grammar (decision 076aa item 15(a)): a placeholder filled with 1 and followed by " bugs" is written "1 bug".
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -177,6 +179,9 @@ export function condition(r: Resolver, cond: string): boolean | undefined {
   }
 }
 
+/** a p value: the scorer prints Number(p.toPrecision(10)) (score-testset.ts, pairs line) */
+const P_FIELD = /^(pairs\[[^\]]+\]\.|(pooled|secondary):(.+\.)?)p$/;
+
 export function format(name: string, v: Val, product: boolean): string | undefined {
   if (v === undefined || typeof v === "boolean") return undefined;
   if (/Wilson\[[01]\]$/.test(name)) {
@@ -184,7 +189,7 @@ export function format(name: string, v: Val, product: boolean): string | undefin
     const s = (Number(v) * 100).toFixed(1);
     return name.endsWith("[1]") ? `${s}%` : s;
   }
-  if (/^pairs\[[^\]]+\]\.p$/.test(name)) return v === null ? "–" : String(Number(Number(v).toPrecision(3)));
+  if (P_FIELD.test(name)) return v === null ? "–" : String(Number(Number(v).toPrecision(10)));
   if (v === null) return undefined;
   if (typeof v === "string") return v;
   if (product || /costUSD/.test(name)) return v.toFixed(4);
@@ -264,7 +269,9 @@ export function fill(text: string, r: Resolver, opts: { tsSource?: boolean } = {
     if (s === undefined) report.left.push({ name: t.body, line: lineOf(t.start) });
     else {
       if (opts.tsSource && /["`\\]/.test(s)) throw new FillError(`${t.body}: value contains a quote or backslash; not written into TypeScript source`);
-      edits.push({ from: t.start, to: t.end, with: s });
+      // 076aa item 15(a): "1 bugs" → "1 bug"; nothing else in the template changes
+      const plural = s === "1" ? /^ bugs(?![\p{L}\p{N}])/u.exec(text.slice(t.end)) : null;
+      edits.push(plural ? { from: t.start, to: t.end + plural[0].length, with: "1 bug" } : { from: t.start, to: t.end, with: s });
       report.filled++;
     }
     i++;
