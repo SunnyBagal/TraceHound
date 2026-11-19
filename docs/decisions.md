@@ -4936,3 +4936,57 @@ fill helper b24 `33b7958`). No held-out file was read for any of this.
   - Grammar only, as in item 15(a).
 
 **Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`; bunny b24 if codex asks for changes; codex the review.
+
+## 076ab — W1 §3.4b applied: vendor facts in limits 6 and 7 against the 14 Nov verified table (2026-11-20)
+
+**Status: artu1, applying 076k item 9 at Sunny's request (20 Nov); Sunny may veto.**
+
+**The table (W1 §3.4b's "to be named by artu1"):** section A of `sidetrack/research/2026-11-14/vendor-verification-pass2.md`.
+- It sits at commit `f2146f3` on `claude/upbeat-lamport-b280zm`, committed verbatim by Fable's cloud session on 19 Nov.
+- The file's sha256 begins `50c3affb5d477bad`; artu1 recomputed it from the commit and it matches the README.
+- The checked report is `vendor-research-pass1.md` (sources 1–31); how to read the grades is in that folder's README.
+- The commit must stay reachable until W1 is published; do not delete the branch.
+
+**Rule (W1 §3.4b):** a vendor fact (what a tool does, reads, offers or costs) stays only if a D row of section A covers
+it. A fact that does not is cut, with nothing put in its place.
+
+Facts about this run's own setup and observations are not vendor facts and are not cut. These are:
+- the forks' default branches;
+- the order of pushes;
+- the deletion of dev branches;
+- the `refs/pull/*` counts we listed;
+- the plans our accounts used;
+- the scheduler's spacing.
+
+The page was checked at b24 `aafb18f`, `docs/bench/ts-heldout.md:415–456`.
+
+| # | fact on the page | row relied on | ruling |
+|---|---|---|---|
+| 6a | "neither vendor documents which ref its repository context is built from (`run/out/grok.tool-facts.md` rows 7, 11)" | none. The 11 Nov G1 reading is not the 14 Nov table, and no section A row covers it | **off** |
+| 6b | "CodeRabbit reviewed payload's cases under payload's own configuration file, which is part of that code." | none. The behaviour rests on docs.coderabbit.ai, and section A has every coderabbit.ai claim as I ("blocked, D → I"). The sentence is also contradicted by our own count: the held-out push trees carry 0 root `.coderabbit.yaml`/`.yml`, 29/29 cases, 58/58 trees (`run/out/codex.coderabbit-yaml.md`, decision 076r) | **off** |
+| 6c | CodeRabbit defaults: web search "Enabled unless explicitly disabled"; "Uses past PRs for context" (docs.coderabbit.ai/knowledge-base) | none. coderabbit.ai was blocked, so I | **off** |
+| 6d | `refs/pull/<n>/head` stays; closed PRs stay public; "a tool that indexed a fork then may keep what it read" | not a vendor fact. The first two are our own `ls-remote` counts (P1 §4 item 9). The third is a conditional, not a claim | stays |
+| 7 | "ran on free plans, … one pull request every 61 minutes, within their rate and credit limits" | not a vendor fact. It is our accounts' plans (`docs/live-setup.md:19`, `:24`, `:79`; $0 billed) and our scheduler. It states no limit's value | stays |
+
+Limit 6 then opens: "What the other tools could see: each fork's default branch was set to the last upstream commit
+before 2026-07-01." Its next sentence is "Other case branches on the same fork …". The only edit besides the cuts is the
+full stop that replaces the semicolon, so the sentence ends where the cut begins.
+
+None of the D facts (Anthropic's 4 reviewers / ~20 min / $15–25; Greptile on the Agent SDK, ~90% cache, Opus 4.5;
+CodeRabbit's shell scripts and "20+ linters and security scanners"; PR-Agent's defaults at `1b19ab2`; Martian 50 PRs /
+173 / 3 judges; ReviewBench 219 PRs / mean of 3 / one judge) is added: §3.4b cuts and does not replace.
+
+**Caveats recorded with the result (Sunny, 20 Nov):**
+1. Even the D rows were read through a tool that summarises pages, so their quotes are "as summarised", not raw text.
+   PR-Agent's code and the GitHub raw files were read directly.
+2. The 16 Nov audit's reading of Cursor's own Bugbot launch post is **not D under W1**. §3.4b names the 14 Nov table,
+   and that table grades every cursor.com claim I ("blocked, D → I"). Any later use needs a new verified row and a new
+   decision before it goes on the page, in the README or in a post. It changes nothing now: limits 6 and 7 carry no
+   Bugbot fact, and limit 8 only says there is no Bugbot row.
+
+**Also found:** the W1 runbook's own limit-6 template (`docs/runbooks/W1-writeup.md:177`) carries 6b. The runbook stays
+as registered; the page carries the cut, with this decision as its record.
+
+**Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`. bunny cuts 6a–6c on b24 and replaces the
+`{{vendor-fact-check}}` comment with this decision's number and the table's commit and path. codex re-reviews b24 on its
+new sha, and the merge is still after H2. The W1 values file needs nothing.
