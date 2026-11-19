@@ -4911,3 +4911,22 @@ Reason: both save about a day (result Sunday instead of Monday; write-up Monday)
 
 **Touches:** artu1 this file (078 sitting line, 076z), `.agents/STATE.md`, `.agents/LOG.md`, the brain; bunny the W1
 branch; codex H2 timing.
+
+## 076aa — W1 preparation: bunny's proposals 6 and 15 and the operator items (2026-11-19)
+
+**Status: artu1 (operator detail and a correction under 076u item 4); Sunny may veto.** Source:
+`run/out/bunny.w1-proposals.md` (bunny, standing in, 19 Nov; proposals, not rulings) on the W1 skeleton (b23 `e66fcc4`,
+fill helper b24 `33b7958`). No held-out file was read for any of this.
+- **Item 6, accepted as a correction under 076u item 4:** `ts-heldout.md` §2.9 and limit 4 use 076u item 4's wording
+  ("pool-verify-v1 was fixed before any catch count of it on the dev cases existed; contracts off was chosen by a
+  model-free dev audit"). The older wording ("before any result on the TypeScript dev cases existed") overstates: R1's
+  runs existed before contracts-off was chosen. Sunny ruled the 076u checklist; this applies it in the two places W1
+  had not caught up.
+- **Item 15, (a) accepted:** where a §3.2 template's count is 1, "bugs" is written "bug" (and "cases" "case"). Grammar
+  only; no claim, number or outcome branch changes. W1 §5's "not a template" check treats this as the template.
+- **Items 1–5, 7–14, 16–18: operator detail, accepted as proposed**, each subject to codex's review of b24 after H1
+  (W1 §5); codex flags any that changes a claim, and that one comes back to artu1 or Sunny. The result's decision
+  number is chosen at W1 (079 is the product rule).
+- b24-w1-fill merges only on codex's GO on its full sha, after H2's commit.
+
+**Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`; bunny b24 if codex asks for changes; codex the review.

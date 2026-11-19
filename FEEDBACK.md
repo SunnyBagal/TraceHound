@@ -857,3 +857,10 @@ yet it still answers on 16 Nov; neither the price page nor `/models` gives a ret
   `nvidia/nemotron-3-super-120b-a12b`, `Qwen/Qwen3-30B-A3B-Instruct-2507`.
 - Counts: 3 requests, 3 successes, 0 failures. Latency 1271 / 1095 / 1001 ms. Ledger $0.0000195.
 - Nothing new missing; the 17 Nov entry's wish (a served flag or deprecation date in the models list) still stands.
+
+## 2026-11-19: H1 primary model run (codex, appended by artu1)
+- Called: Nebius Token Factory chat completions, `https://api.tokenfactory.us-north1.nebius.com/v1/chat/completions`, model `nvidia/Nemotron-3.5-Super-VL`, from frozen `review-freeze-3`.
+- Counts: **114 ledgered completion calls, 114 success entries, 0 failure entries**; ledger cost **$1.7484582**. No provider/transport error string was recorded; exact errors: **none**. HTTP-level retry attempts are not separately retained in this ledger count.
+- Recorded reviewer-stage wall time (58 stages, includes local work and any internal attempts): median **69.8255 s**, mean **93.0148 s**, maximum **308.227 s**. These are stage wall times; per-request API latency was not retained by the wrapper.
+- First ledger timestamp **2026-11-19T08:40:36.874Z**; last **2026-11-19T10:29:24.380Z**. Console reading **$14.19**, taken after19Nov12:29:25Z and relayed12:50Z, is eligible (≥2h). Against the **$16.20** baseline, **$2.01 / $1.7484582 =1.149584 ≈1.15** (cent rounding≈1.14–1.16), below the1.26 trip; frozen factor/caps unchanged. Exact reading timestamp was not supplied.
+- No new endpoint/docs/console discrepancy observed in this session. Opinion: retaining per-request latency alongside usage would make direct latency distributions easier to audit; only stage wall times were retained here.
