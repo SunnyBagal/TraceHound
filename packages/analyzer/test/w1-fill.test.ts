@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { condition, evaluate, fill, format, leftovers, main, Resolver } from "../../../scripts/bench/w1-fill.ts";
+import { condition, evaluate, fill, format, leftovers, main, Resolver, singular } from "../../../scripts/bench/w1-fill.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "../../..");
 const dir = mkdtempSync(path.join(tmpdir(), "tracehound-w1fill-"));
@@ -185,6 +185,31 @@ describe("w1-fill: the W1 skeleton files on this branch", () => {
     expect(out).toContain("TraceHound caught 5 bugs that Greptile missed");
     expect(fill("{{tools.tracehound.caught}} bugs; {{G[tracehound,greptile]}} bugsy", r([C_C, pair("greptile", { onlyA: 2, onlyB: 1 })])).text)
       .toBe("7 bugs; 1 bugsy");
+  });
+
+  it("076aa addendum: every filled count of 1 on the page takes the singular, with its verb", () => {
+    expect(singular(" cases became exposed")).toEqual({ length: 6, with: " case" });
+    expect(singular(" of the 20 bug cases were\nexposed")).toEqual({ length: 25, with: " of the 20 bug cases was" });
+    expect(singular(" needed their second try")).toEqual({ length: 13, with: " needed its" });
+    expect(singular(" that TraceHound missed")).toBeNull();
+    const ones = (n: number) => tool(n, { comments: { total: 1, perAttempted: { mean: 1, median: 1 }, perCompleted: { mean: 1, median: 1 }, clean: 1 },
+      exposure: { exposed: { bugCases: 1, completedBug: 1, caught: 1 }, unexposed: { bugCases: 19, completedBug: 19, caught: n - 1 } } });
+    const res = new Resolver({
+      summary: summary([pair("coderabbit", { reviewedByBoth: 1, onlyA: 1, onlyB: 1, p: null }), pair("greptile", { onlyA: 1, onlyB: 5 })], {
+        exposure: { exposedBugCases: 1, unexposedBugCases: 19 }, tools: { tracehound: ones(7), coderabbit: ones(11), greptile: ones(10) },
+        handcheckGuess: { items: 1, guessed: 1, unsure: 1, right: 1, tools: 3, commonestToolItems: 1 } }),
+      values: { "ho-score:sheetItems": 1, "ho-score:sittingMinutes": 1, "h1:firstTriggers": 1, "h1:firstTriggersSecondTry": 1 },
+    });
+    const out = fill(readFileSync(path.join(ROOT, "docs/bench/ts-heldout.md"), "utf8"), res).text.replace(/<!--[\s\S]*?-->/g, "");
+    expect(out).toContain("the 1 case became exposed");
+    expect(out).toContain("1 of the 20 bug cases was\nexposed");
+    expect(out).toContain("Only 1 of the 20 bugs was reviewed by both TraceHound and CodeRabbit");
+    expect(out).toContain("1 needed its second try");
+    expect(out).toContain("(1 item)");
+    expect(out).toContain("1 comment per pull request");
+    expect(out).toContain("1 of the 1 item he guessed");
+    expect(out).not.toMatch(/\b1 (bugs|bug cases|cases|comments|items|misses|minutes|pull requests|first triggers)\b/);
+    expect(out).not.toMatch(/\b1 of the \d+\s+(bugs|bug cases|cases)\s+were\b/);
   });
 
   it("results.md §11 and the viewer table fill to the same cells", () => {

@@ -26,7 +26,9 @@
 // field (pairs[a,b].p, pooled:….p, secondary:….p) to 10 significant figures as score-testset.ts prints it, "–" when
 // the source gave none (counts only: under the floor, or not tested); costUSD and "×" products to 4 decimals; other
 // non-integers to 2; integers and --values strings as they are.
-// Grammar (decision 076aa item 15(a)): a placeholder filled with 1 and followed by " bugs" is written "1 bug".
+// Grammar (decision 076aa item 15(a) and its addendum: every filled count on the page): a placeholder filled with 1
+// takes the singular of the plural noun after it ("1 bug", "the 1 case became exposed", "1 item"), "1 of the 20 bugs
+// was …" for "were", and "1 needed its …" for "their". Nothing else in the wording changes.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -196,6 +198,25 @@ export function format(name: string, v: Val, product: boolean): string | undefin
   return Number.isInteger(v) ? String(v) : v.toFixed(2);
 }
 
+const SINGULAR: Record<string, string> = {
+  "bug cases": "bug case", "pull requests": "pull request", "first triggers": "first trigger", bugs: "bug", cases: "case",
+  comments: "comment", items: "item", misses: "miss", minutes: "minute",
+};
+const NOUN = new RegExp(`^(\\s+)(${Object.keys(SINGULAR).map((k) => k.replace(" ", "\\s+")).join("|")})(?![\\p{L}\\p{N}])`, "u");
+const OF_THE = /^(\s+of\s+the\s+\d+\s+(?:bug\s+cases|bugs|cases)\s+)were(?![\p{L}\p{N}])/u;
+const THEIR = /^(\s+needed\s+)their(?![\p{L}\p{N}])/u;
+
+/** 076aa item 15(a) and addendum: the text after a count of 1, rewritten; null when nothing changes */
+export function singular(after: string): { length: number; with: string } | null {
+  let m = NOUN.exec(after);
+  if (m) return { length: m[0].length, with: m[1]! + SINGULAR[m[2]!.replace(/\s+/g, " ")]! };
+  m = OF_THE.exec(after);
+  if (m) return { length: m[0].length, with: `${m[1]}was` };
+  m = THEIR.exec(after);
+  if (m) return { length: m[0].length, with: `${m[1]}its` };
+  return null;
+}
+
 export interface Report { filled: number; left: { name: string; line: number }[]; kept: number; dropped: number; undecided: { cond: string; line: number }[] }
 
 interface Tok { start: number; end: number; body: string }
@@ -269,9 +290,8 @@ export function fill(text: string, r: Resolver, opts: { tsSource?: boolean } = {
     if (s === undefined) report.left.push({ name: t.body, line: lineOf(t.start) });
     else {
       if (opts.tsSource && /["`\\]/.test(s)) throw new FillError(`${t.body}: value contains a quote or backslash; not written into TypeScript source`);
-      // 076aa item 15(a): "1 bugs" → "1 bug"; nothing else in the template changes
-      const plural = s === "1" ? /^ bugs(?![\p{L}\p{N}])/u.exec(text.slice(t.end)) : null;
-      edits.push(plural ? { from: t.start, to: t.end + plural[0].length, with: "1 bug" } : { from: t.start, to: t.end, with: s });
+      const one = s === "1" ? singular(text.slice(t.end)) : null;
+      edits.push(one ? { from: t.start, to: t.end + one.length, with: s + one.with } : { from: t.start, to: t.end, with: s });
       report.filled++;
     }
     i++;
