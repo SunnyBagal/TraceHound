@@ -138,7 +138,7 @@ calls (GitHub for the project's repos and forks, Nebius and Anthropic through th
 - **Cleanup.** No `git clean -fdx`, `reset --hard` or `checkout -- .` in a checkout you did not create for this
   brief.
 - **History.** No force-push, history rewrite, or branch or tag deletion except your own temporary ones. No push to
-  `main`: artu1 merges.
+  `main` except a commit your brief names (e.g. the H2 score commit in `codex.h2.md`); otherwise artu1 merges.
 - **Worktrees.** Remove only worktrees you created.
 - **Docker.** No `docker system prune`, `docker rm`, `docker rmi` or `volume rm`.
 - **Moving or overwriting.** Nothing moved, renamed or overwritten that you did not create, except files your brief
