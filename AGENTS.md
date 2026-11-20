@@ -107,6 +107,61 @@ Briefs use the template in `docs/plan/team-process.md` §2: `run/briefs/<lane>.<
   committed → lift): artu1 and bunny make no `gh` or browser read of pulls, issues or notifications on the four forks
   (SunnyBagal/medusa, twenty, payload, bullmq) (076c item 12).
 
+## Machine safety (Sunny, 2026-11-20; non-negotiable)
+
+Agents run with full permissions on Sunny's own laptop. These rules hold whatever the permission mode allows. When a
+rule and a brief disagree, the rule wins: stop and write to artu1.
+
+**1. Paths.**
+- **Allowed** (read and write as your lane and brief allow):
+  - `~/Projects/TraceHound` and its git worktrees `~/Projects/TraceHound-*`, `~/Projects/th-*` and
+    `~/Projects/tracehound-ui`. `TraceHound-eval` is excluded (Blindness).
+  - `~/Projects/tracehound-testset`, `~/Projects/tracehound-runs` and `~/Projects/tracehound-brain`.
+  - `~/Projects/tracehound-ho-window`: codex and grok only.
+  - Your own scratch directories under `/private/tmp/` (named `<agent>-…`).
+- **Anything else needs a brief that names it.** That includes every other folder in `~/Projects` (other projects of
+  Sunny's), the folders in Blindness, and `tracehound-seeds`.
+- **Never, under any brief:** `~/Documents`, `~/Desktop`, `~/Downloads`, `~/Pictures`, `~/Movies`, `~/Music`,
+  `~/Library` (apart from caches tools write themselves), iCloud, Mail, browser profiles, the keychain, `~/.ssh`,
+  `~/.aws`, `~/.gnupg`, `~/.config`, `~/.zshrc` and other shell profiles, `/etc`, `/System`, `/Applications`,
+  `/usr/local` and `/opt/homebrew` (no writes).
+- **Tools.** Using installed tools is fine: node from `~/.local/share/vite-plus`, pnpm, git, gh, docker. Their
+  config and credential files are not opened.
+
+**2. Secrets.** Never open, print, copy, log or commit a key, token or `.env` value. A tool may load `.env`
+itself. Check a key only for presence. Never send any file to a service other than the ones the project already
+calls (GitHub for the project's repos and forks, Nebius and Anthropic through the project's client).
+
+**3. Nothing destructive.**
+- **Deleting.** No `rm -rf` or delete outside your own `/private/tmp/<agent>-…` scratch, and never on `~`,
+  `~/Projects` or a repository root.
+- **Cleanup.** No `git clean -fdx`, `reset --hard` or `checkout -- .` in a checkout you did not create for this
+  brief.
+- **History.** No force-push, history rewrite, or branch or tag deletion except your own temporary ones. No push to
+  `main`: artu1 merges.
+- **Worktrees.** Remove only worktrees you created.
+- **Docker.** No `docker system prune`, `docker rm`, `docker rmi` or `volume rm`.
+- **Moving or overwriting.** Nothing moved, renamed or overwritten that you did not create, except files your brief
+  names.
+
+**4. The machine.**
+- **Administration.** No `sudo`. No `defaults write`, `pmset`, `launchctl`, `networksetup`, `crontab`, login items
+  or system settings.
+- **Software.** No global installs or uninstalls (`brew`, `npm -g`, `pip` outside a project venv). No
+  `pnpm install` in main's checkout until H2's commit.
+- **Processes.** No `kill` of a process you did not start. That rule names the window scheduler (pid 47297), its
+  `caffeinate` (57880), Herdr and other agents' terminals.
+- **Disk.** Check `df -h ~` before any write over 1 GB. Stop at under 10 GiB free, and never delete to make room.
+
+**5. GitHub.**
+- No change to repository settings, visibility, webhooks, apps, secrets or members.
+- No repository deletion.
+- No comment, PR, review or issue except what the scheduler or your brief defines.
+- No new accounts and no spend beyond what artu1 approved.
+
+**6. When in doubt, stop.** Don't do it. Write `run/comms/<agent>-to-artu1.<topic>.md` with what you wanted to do and
+why, then wait. Sunny is away until 21 Nov. The window, the snapshot and H2 run as planned, under these rules.
+
 ## Models and keys
 
 - The product's model calls go to Nemotron on Nebius Token Factory (hackathon rule). Do not add calls to any other model provider in product code.
