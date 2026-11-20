@@ -129,7 +129,8 @@ rule and a brief disagree, the rule wins: stop and write to artu1.
   config and credential files are not opened.
 
 **2. Secrets.** Never open, print, copy, log or commit a key, token or `.env` value. A tool may load `.env`
-itself. Check a key only for presence. Never send any file to a service other than the ones the project already
+itself (`node --env-file`, the project's client, and the registered tag-worktree verifier of `docs/eval/tag-worktree.md`, which
+hashes and compares the file and prints only non-secret numbers); an agent never cats, greps or diffs it. Check a key only for presence. Never send any file to a service other than the ones the project already
 calls (GitHub for the project's repos and forks, Nebius and Anthropic through the project's client).
 
 **3. Nothing destructive.**
@@ -145,8 +146,8 @@ calls (GitHub for the project's repos and forks, Nebius and Anthropic through th
   names.
 
 **4. The machine.**
-- **Administration.** No `sudo`. No `defaults write`, `pmset`, `launchctl`, `networksetup`, `crontab`, login items
-  or system settings.
+- **Administration.** No `sudo`. No `defaults write`, `pmset` (except the read-only `pmset -g …` queries the H1
+  runbook registers), `launchctl`, `networksetup`, `crontab`, login items or system settings.
 - **Software.** No global installs or uninstalls (`brew`, `npm -g`, `pip` outside a project venv). No
   `pnpm install` in main's checkout until H2's commit.
 - **Processes.** No `kill` of a process you did not start. That rule names the window scheduler (pid 47297), its
