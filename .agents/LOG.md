@@ -408,3 +408,13 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
   - The Cursor post is not D under W1.
   - bunny cut on b24, ec35c2f. **codex GO on b24-w1-fill @ ec35c2f85d4a24ca0962ea0ec48cbdd13cec437c**, which supersedes aafb18f; merge at that sha after H2's commit.
 - 2026-11-20 (artu1): codex H1 check 05:28:18Z: 25 slots done, missed 0, late 0, boots 1, not stopped; latest trigger lag 218 s, none over 15 min. Codex's direct CLI checks were 10 h 28 min apart (19 Nov 19:00:03Z → 20 Nov 05:28:18Z). A daemon restart interrupted its 00:28 turn, and permission prompts held the escalated command. Its read-only watch visits were under 8 h apart. Codex discloses the gap separately for H1 §7; no check is backdated. The scheduler is unaffected. No spend; snapshot 22 Nov 04:30:06Z unchanged.
+- 2026-11-20 (artu1): Sunny gave every agent full permissions (away until 21 Nov). Standing rules:
+  - The "Machine safety" section in AGENTS.md (62935ff, 633e95a, d57085c) and run/briefs/ALL.machine-safety.md.
+  - Agents stay in the project paths, never touch secrets, take no destructive or system action, and when in doubt stop and write to artu1.
+  - Acks: bunny none, grok none.
+  - codex raised 4 holds, all ruled in run/comms/artu1-to-codex.machine-safety.md:
+    1. Read-only `pmset -g` queries are allowed. Its own watch was paused 110 s; the gap is logged, not backfilled.
+    2. The registered tag-worktree `.env` verifier is allowed.
+    3. A df guard is now in the Sunday list (manifest sha256 92fdbff6…, replaces 47ff9804…).
+    4. A main commit is allowed only when a brief names it.
+  - Scheduler and caffeinate untouched; 25 slots, missed 0.
