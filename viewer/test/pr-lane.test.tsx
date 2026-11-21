@@ -212,6 +212,31 @@ it("ui-01: opening the inspector folds the PR list to an icon rail that expands 
   expect(screen.getByTestId("pr-lane")).toBeTruthy();
 });
 
+it("ui-01b (codex-ui P2 b): expanding the PR list beside the open inspector narrows it; folding the list restores the stored width", async () => {
+  vi.stubGlobal("fetch", github());
+  window.localStorage.removeItem("tracehound:pr-panel");
+  window.localStorage.removeItem("tracehound:inspector-width");
+  window.history.replaceState(null, "", "/graph?repo=tracehound-demo&pr=2");
+  render(<Viewer snapshot={snapshot} repoId="tracehound-demo" />);
+  await within(await screen.findByTestId("pr-lane")).findAllByTestId("pr-chip");
+  fireEvent.click(await screen.findByTestId("findings-badge", {}, { timeout: 3000 }));
+  const sep = await screen.findByRole("separator", { name: "Resize inspector" });
+  // jsdom is 1024px wide: End takes the edge to 1024 - 380 = 644px
+  fireEvent.keyDown(sep, { key: "End" });
+  await waitFor(() => expect(sep.getAttribute("aria-valuenow")).toBe("644"));
+  fireEvent.click(within(await screen.findByTestId("pr-rail")).getByTestId("pr-rail-expand"));
+  await screen.findByTestId("pr-lane");
+  // the list takes 248px more: 1024 - 380 - 248 = 396, floored at 400
+  await waitFor(() => expect(sep.getAttribute("aria-valuemax")).toBe("400"));
+  expect(sep.getAttribute("aria-valuenow")).toBe("400");
+  expect(screen.getByTestId("inspector").style.getPropertyValue("--inspector-w")).toBe("400px");
+  expect(window.localStorage.getItem("tracehound:inspector-width")).toBe("644");
+  // hiding the list: the inspector is 644px again
+  fireEvent.click(screen.getByTestId("pr-toggle"));
+  await waitFor(() => expect(sep.getAttribute("aria-valuenow")).toBe("644"));
+  window.localStorage.removeItem("tracehound:pr-panel");
+});
+
 it("ui-01: the inspector's left edge is a keyboard separator; the width is kept, and nothing breaks when storage throws", async () => {
   vi.stubGlobal("fetch", github());
   window.localStorage.removeItem("tracehound:inspector-width");
