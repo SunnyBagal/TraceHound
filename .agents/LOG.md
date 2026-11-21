@@ -418,3 +418,4 @@ Dates are local (IST, as in `git log`). Newest last. Current state lives in `.ag
     3. A df guard is now in the Sunday list (manifest sha256 92fdbff6…, replaces 47ff9804…).
     4. A main commit is allowed only when a brief names it.
   - Scheduler and caffeinate untouched; 25 slots, missed 0.
+- 2026-11-21 (artu1): **H1 scheduler ended normally** at 09:22:06Z (slot 52, the last position's re-trigger check; the queue was empty). Codex confirmed: scheduler_done=true, ended=true, stopped=false; exit 0; boots 1. 53 slots assessed: 29 first triggers plus 24 conditional checks that needed nothing. All 29 first triggers and 58 tool checks terminal; due-and-unrun 0, missed 0, late 0. H1 §5 failure 15 does not apply, and nothing was restarted. Snapshot unchanged: 22 Nov 04:30:06Z (T0 + 72 h). Source: run/comms/codex-to-artu1.h1-scheduler-gone.md.
