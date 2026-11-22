@@ -4990,3 +4990,43 @@ as registered; the page carries the cut, with this decision as its record.
 **Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`. bunny cuts 6a–6c on b24 and replaces the
 `{{vendor-fact-check}}` comment with this decision's number and the table's commit and path. codex re-reviews b24 on its
 new sha, and the merge is still after H2. The W1 values file needs nothing.
+
+## 081 — Held-out result: 079 band D; prediction scoring rule; Haiku default not switched (2026-11-22)
+
+**Status: computed by artu1 from the committed counts (`dc9aab3`, `docs/bench/ts-heldout.summary.json`) after the
+firewall lift. grok checks it as codex's stand-in, since codex is down (079: "codex checks"). Sunny reads it with the W1 page
+(W1 §5 item 3).** This is the W1 page's `{{decision-number}}`.
+
+1. **Registered tests (protocol rev 13 §4, W1 §3.2).** Both pairs had 20 bug cases reviewed by both, so the floor of 15 is met.
+   - TraceHound vs CodeRabbit: 2 vs 8 discordant, exact p 0.109375. **Outcome C**: no detectable difference at this
+     size.
+   - TraceHound vs Greptile: 0 vs 8, exact p 0.0078125. **Outcome B**: Greptile caught more of the labelled bugs.
+   - Each test is at 0.05, uncorrected, one of two. artu1 recomputed both p-values and the three Wilson intervals from the
+     counts, and they match.
+2. **079 band.** `D_H` is A0 minus the competitor on each pair's eligible cases: CodeRabbit 4 − 10 = −6, Greptile 4 − 12 =
+   −8. The worse pair counts, so `D_H` = −8, which is **band D: stop reviewer work; publish the result and the method.**
+   Modifiers in order:
+   1. Dev demotion: nothing below D.
+   2. The floor: A0 has 4 > 3, so it does not apply.
+   3. Comments: A0 has 0.76 per PR, not above twice either tool's, so it does not apply.
+   4. Coverage: 20 ≥ 15 on both pairs, so it does not apply.
+   This agrees with 080, which had already stopped reviewer work. Under 080, the band decides only the product note's
+   §2 and §5 (no paid tier, kill dates as written).
+3. **Haiku product default (076k item 2).** The held-out condition is met: the mean of Haiku's two draws under v1 is 6.5,
+   and A0's v1 count is 6, so Haiku is +0.5 and not more than 2 behind. **The default is not switched**, because 080
+   (17 Nov, after 076k) rules "no model switches". The page reports the line as 076k item 2 requires. That item is a
+   product rule, not a test claim. Sunny can rule otherwise.
+4. **Prediction scoring (W1 §2 item 8).** 078 gave ranges for some predictions and "about X" for others, with no
+   stated tolerance. **This rule was chosen after the result and is labelled so on the page:**
+   - A range is right if the result is inside it.
+   - "About X" is right within ±25% of X, or within ±1 when X ≤ 4.
+   - A row with several numbers is right only if every number is.
+   - "Too vague to score" is kept for a prediction that states no number.
+   - *Rejected:* calling every "about" row too vague. That would score 8 of the 14 rows as nothing, and it would hide
+     the misses on rows 2c, 3a and 3b.
+   - The row-by-row verdicts are on the page (§8). grok checks them.
+5. **What follows (080):** the W1 page is published once codex or grok gives GO and Sunny says yes. After that the repo
+   is in maintenance.
+
+**Touches:** artu1 this file, `docs/bench/ts-heldout.md` (decision number, §8 verdicts), `.agents/STATE.md`,
+`.agents/LOG.md`, the brain; grok's check.
