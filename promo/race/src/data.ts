@@ -19,4 +19,5 @@ export const REPOS = ["medusa", "payload", "twenty", "bullmq"] as const;
 export const TITLE = `${PRS} fresh TypeScript PRs. ${BUGS} real bugs. ${RACERS.length} AI reviewers.`;
 export const NOBODY = "Nobody finished.";
 export const SCORE_HEADING = `Bugs caught, of ${BUGS}`;
-export const FOOTER = `Pre-registered · hand-graded blind · PRs from ${REPOS.join(", ")}`;
+/** Footer, two lines. "One run": §1 ("One run, 20 bugs, …"). */
+export const FOOTER = ["Pre-registered · hand-graded blind · one run", `PRs from ${REPOS.join(", ")}`] as const;

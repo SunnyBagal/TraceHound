@@ -18,7 +18,7 @@ run(remotion, ["still", "src/index.ts", "Race", "renders/tracehound-race-first.p
 run(remotion, ["still", "src/index.ts", "Race", "renders/tracehound-race-scoreboard.png", "--frame=240"]);
 // Phone-size copy for the legibility check (not published).
 run("ffmpeg", ["-y", "-loglevel", "error", "-i", "renders/tracehound-race.mp4", "-vf", "scale=640:-2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-movflags", "+faststart", "out/race-640.mp4"]);
-for (const s of ["0.5", "1.5", "3.5", "6.0", "6.5", "7.5", "8.0", "8.95"]) {
+for (const s of ["0.5", "1.5", "3.5", "6.0", "6.5", "7.0", "7.5", "8.0", "8.4", "8.95"]) {
   for (const [src, tag] of [["renders/tracehound-race.mp4", "1920"], ["out/race-640.mp4", "640"]]) {
     run("ffmpeg", ["-y", "-loglevel", "error", "-ss", s, "-i", src, "-frames:v", "1", `out/frames/t${s}s-${tag}.png`]);
   }

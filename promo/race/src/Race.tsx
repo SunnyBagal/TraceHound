@@ -3,9 +3,9 @@ import type { CSSProperties } from "react";
 import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { BUGS, FOOTER, NOBODY, RACERS, SCORE_HEADING, TITLE } from "./data";
 import { LOGOS } from "./logos.generated";
-import { LOOP_OUT, RACE_END, RESET, SCORE_IN, SCORE_SOLID, TICK, TITLE_END, tickStart } from "./timing";
+import { LOOP_OUT, NOBODY_SOLID, RACE_END, RESET, SCORE_IN, SCORE_SOLID, TICK, TITLE_END, tickStart } from "./timing";
 
-const { fontFamily } = loadFont("normal", { weights: ["400", "600", "700"], subsets: ["latin"] });
+const { fontFamily } = loadFont("normal", { weights: ["400", "500", "600", "700"], subsets: ["latin"] });
 
 const C = {
   bg: "#121214",
@@ -83,7 +83,7 @@ const Track = ({ f }: { f: number }) => {
   const titleOpacity = interpolate(f, [TITLE_END - 6, TITLE_END + 6], [1, 0], clamp);
   const progressOpacity = interpolate(f, [TITLE_END, TITLE_END + 6], [0, 1], clamp);
   const progress = interpolate(f, [TITLE_END, RACE_END], [0, 1], clamp);
-  const nobody = interpolate(f, [RACE_END, RACE_END + 14], [0, 1], clamp);
+  const nobody = interpolate(f, [RACE_END, NOBODY_SOLID], [0, 1], clamp);
   const top = LANE_Y[0] - 110;
   const bottom = LANE_Y[2] + 90;
   return (
@@ -163,7 +163,7 @@ const Scoreboard = ({ f }: { f: number }) => {
       <div style={{ ...centerText, top: 150, fontSize: 68, fontWeight: 700, color: C.text }}>{SCORE_HEADING}</div>
       {RACERS.map((r, i) => {
         const y = 330 + i * 185;
-        const fill = interpolate(f, [SCORE_IN + 4 + i * 3, SCORE_SOLID + 12 + i * 3], [0, r.caught / BUGS], { ...clamp, easing: ease });
+        const fill = interpolate(f, [SCORE_IN + 2 + i * 2, SCORE_SOLID + 4 + i * 2], [0, r.caught / BUGS], { ...clamp, easing: ease });
         return (
           <div key={r.id}>
             <div style={{ position: "absolute", left: BAR_L, top: y, fontSize: 52, fontWeight: 600, color: C.text }}>{r.name}</div>
@@ -171,13 +171,17 @@ const Scoreboard = ({ f }: { f: number }) => {
               {r.caught}
             </div>
             {/* Thin bar: the faint track is all 20 bugs. */}
-            <div style={{ position: "absolute", left: BAR_L, width: BAR_W, top: y + 96, height: 8, borderRadius: 4, background: C.faint }}>
-              <div style={{ width: `${fill * 100}%`, height: "100%", borderRadius: 4, background: GRADIENT, boxShadow: `0 0 12px rgba(45,212,191,0.5)` }} />
+            <div style={{ position: "absolute", left: BAR_L, width: BAR_W, top: y + 94, height: 12, borderRadius: 6, background: "rgba(255,255,255,0.20)" }}>
+              <div style={{ width: `${fill * 100}%`, height: "100%", borderRadius: 6, background: GRADIENT, boxShadow: `0 0 12px rgba(45,212,191,0.5)` }} />
             </div>
           </div>
         );
       })}
-      <div style={{ ...centerText, top: 920, fontSize: 40, fontWeight: 400, color: C.dim }}>{FOOTER}</div>
+      <div style={{ ...centerText, top: 862, fontSize: 48, lineHeight: 1.35, fontWeight: 500, color: "#d4d4d8" }}>
+        {FOOTER.map((line) => (
+          <div key={line}>{line}</div>
+        ))}
+      </div>
     </AbsoluteFill>
   );
 };
