@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Promo animation for the held-out benchmark result post. Separate from the app and the bench code.",
   "scripts": {
-    "studio": "node scripts/logos.mjs && remotion studio src/index.ts",
+    "studio": "remotion studio src/index.ts",
     "render": "node scripts/render.mjs",
     "typecheck": "tsc --noEmit"
   },

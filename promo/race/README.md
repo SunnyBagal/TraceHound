@@ -1,16 +1,17 @@
-# Promo race animation (held-out result post)
+# Promo chart animation (held-out result post)
 
-A 9-second looping video for the X post about the held-out benchmark result (decision 081). It is separate from the app
+A 9-second looping line-chart video for the X post about the held-out benchmark result (decision 081). It is separate from the app
 and the bench code: its own pnpm root, not in the TraceHound workspace, not in CI.
 
 - **Numbers:** `src/data.ts` only, each from `docs/bench/ts-heldout.md` (bugs caught of 20: Greptile 12, CodeRabbit 10,
-  TraceHound 4; 29 PRs; 20 bugs; medusa, payload, twenty, bullmq). No per-PR data is used: each racer moves in even
-  one-bug ticks across the race and all finish their ticks at the same moment, so the video implies no order of pull
-  requests (Sunny's choice, 22 Nov).
-- **Output:** `renders/tracehound-race.mp4` (1920×1080, 30 fps, H.264, yuv420p, faststart, 270 frames) and two stills,
-  `renders/tracehound-race-first.png` (frame 0) and `renders/tracehound-race-scoreboard.png` (frame 240).
-- **Logos:** put official logos at `assets/{greptile,coderabbit,tracehound}.png` and re-render; a missing file falls back
-  to the text label. Nothing here draws or recreates a company logo.
+  TraceHound 4; 29 PRs; the registered tests' p = 0.0078125 and 0.109375, shown rounded; medusa, payload, twenty,
+  bullmq). No per-PR data is used (Sunny's ruling): each line runs straight from 0 to the total, and the footer says the
+  lines show totals only, not PR order.
+- **Highlights:** Greptile "Most caught" (green), TraceHound "Fewest caught · mine" (red). Not "winner": Greptile vs
+  CodeRabbit (12 vs 10) was not tested.
+- **Output:** `renders/tracehound-result.mp4` (1920×1080, 30 fps, H.264, yuv420p, faststart, 270 frames) and two stills,
+  `renders/tracehound-result-first.png` (frame 0) and `renders/tracehound-result-final.png` (frame 225).
+- **Logos:** `assets/*.svg`, copied unmodified from the viewer's vendored icons (`assets/CREDITS.md`).
 
 ```sh
 cd promo/race
