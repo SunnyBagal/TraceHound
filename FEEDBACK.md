@@ -864,3 +864,9 @@ yet it still answers on 16 Nov; neither the price page nor `/models` gives a ret
 - Recorded reviewer-stage wall time (58 stages, includes local work and any internal attempts): median **69.8255 s**, mean **93.0148 s**, maximum **308.227 s**. These are stage wall times; per-request API latency was not retained by the wrapper.
 - First ledger timestamp **2026-11-19T08:40:36.874Z**; last **2026-11-19T10:29:24.380Z**. Console reading **$14.19**, taken after19Nov12:29:25Z and relayed12:50Z, is eligible (≥2h). Against the **$16.20** baseline, **$2.01 / $1.7484582 =1.149584 ≈1.15** (cent rounding≈1.14–1.16), below the1.26 trip; frozen factor/caps unchanged. Exact reading timestamp was not supplied.
 - No new endpoint/docs/console discrepancy observed in this session. Opinion: retaining per-request latency alongside usage would make direct latency distributions easier to audit; only stage wall times were retained here.
+
+## 2026-11-22: H2 step 0 and judging (grok)
+
+- Called: Nebius Token Factory chat completions through the project client on the frozen tag. Step 0: one request each to `nvidia/nemotron-3-super-120b-a12b` and `Qwen/Qwen3-30B-A3B-Instruct-2507`. Judging: `bench-judge` on the same two models.
+- Counts: step 0, 2 requests, 2 successes, 0 failures, ledger $0.0000221, latency 1199 ms and 1411 ms, both uncached HTTP 200. Judging, 163 requests (83 v1, 80 x1), 163 successes, 0 failures, ledger $0.076046. Exact error strings: none. Judge-call latency was not retained on the ledger.
+- No new docs or console discrepancy in this session. Opinion: none beyond the 19 Nov note that per-request latency is not on the ledger.
