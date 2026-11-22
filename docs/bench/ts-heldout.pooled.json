@@ -1,0 +1,87 @@
+{
+ "v": 1,
+ "label": "secondary",
+ "population": "31 dev bugs + 20 held-out bugs, nominal 51, A0 only",
+ "headline": false,
+ "devExposureBeside": {
+  "exposed": 10,
+  "of": 31
+ },
+ "catches": {
+  "a0": {
+   "devJudged": 12,
+   "heldoutHandcheck": 4,
+   "pooled": 16,
+   "of": 51
+  },
+  "coderabbit": {
+   "devJudged": 19,
+   "heldoutHandcheck": 10,
+   "pooled": 29,
+   "of": 51
+  },
+  "greptile": {
+   "devJudged": 18,
+   "heldoutHandcheck": 12,
+   "pooled": 30,
+   "of": 51
+  }
+ },
+ "pairs": [
+  {
+   "a": "a0",
+   "b": "coderabbit",
+   "dev": {
+    "pairedN": 31,
+    "reviewedByBoth": 31,
+    "missingReviewExcluded": 0,
+    "onlyA": 1,
+    "onlyB": 8
+   },
+   "heldout": {
+    "pairedN": 20,
+    "reviewedByBoth": 20,
+    "missingReviewExcluded": 0,
+    "onlyA": 2,
+    "onlyB": 8
+   },
+   "pooled": {
+    "pairedN": 51,
+    "onlyA": 3,
+    "onlyB": 16,
+    "p": 0.004425048828125
+   }
+  },
+  {
+   "a": "a0",
+   "b": "greptile",
+   "dev": {
+    "pairedN": 31,
+    "reviewedByBoth": 31,
+    "missingReviewExcluded": 0,
+    "onlyA": 1,
+    "onlyB": 7
+   },
+   "heldout": {
+    "pairedN": 20,
+    "reviewedByBoth": 20,
+    "missingReviewExcluded": 0,
+    "onlyA": 0,
+    "onlyB": 8
+   },
+   "pooled": {
+    "pairedN": 51,
+    "onlyA": 1,
+    "onlyB": 15,
+    "p": 0.000518798828125
+   }
+  }
+ ],
+ "test": "exact two-sided sign test on the summed discordant bugs, uncorrected, secondary",
+ "heldoutCatchesAre": "hand-check",
+ "sources": [
+  "docs/bench/ts-dev.md",
+  "l1.summary.json",
+  "summary.final.json"
+ ]
+}
