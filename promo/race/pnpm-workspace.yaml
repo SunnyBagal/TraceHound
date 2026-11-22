@@ -1,4 +1,0 @@
-# Own pnpm root, so this folder is never part of the TraceHound workspace (app, bench and CI ignore it).
-packages: []
-allowBuilds:
-  esbuild: true

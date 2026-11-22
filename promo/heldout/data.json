@@ -1,0 +1,19 @@
+{
+  "title": "AI Code Review Benchmark",
+  "badge": "Bugs caught, of 20",
+  "subtitle": "On a pre-registered blind test of fresh pull requests, TraceHound caught the fewest bugs of 3 AI code reviewers",
+  "caption": "29 fresh TypeScript pull requests (20 real bugs), hand-checked blind, one run",
+  "axis": { "min": 0, "max": 20, "start": 0, "ticks": [0, 5, 10, 15, 20], "segment": 1, "decimals": 0, "unit": "" },
+  "highlight": "TraceHound",
+  "winner": { "name": "Greptile", "label": "Most bugs caught" },
+  "referenceLine": { "value": 4, "label": "TraceHound" },
+  "footer": [
+    "Results run by Sunny Bagal · held-out, pre-registered · checked by hand, tool hidden · PRs from medusa, payload, twenty, bullmq ·",
+    "TraceHound vs Greptile p = 0.008 · vs CodeRabbit p = 0.11 (not significant) · CodeRabbit and Greptile on free plans"
+  ],
+  "tools": [
+    { "name": "Greptile", "subtext": "PR review", "score": 12, "logo": "assets/logos/greptile.svg" },
+    { "name": "CodeRabbit", "subtext": "PR review", "score": 10, "logo": "assets/logos/coderabbit.svg" },
+    { "name": "TraceHound", "subtext": "Nemotron 3.5 Super", "subtextLogo": "assets/logos/nvidia.svg", "score": 4, "logo": "assets/logos/tracehound.svg" }
+  ]
+}

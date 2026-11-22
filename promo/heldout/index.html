@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Plex Serif"; src: url("assets/fonts/ibm-plex-serif-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-latin-500-normal.woff2") format("woff2"); font-weight: 500; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/inter-latin-600-normal.woff2") format("woff2"); font-weight: 600; }
+      @font-face { font-family: "Plex Mono"; src: url("assets/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Plex Mono"; src: url("assets/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); font-weight: 500; }
+      @font-face { font-family: "Plex Mono"; src: url("assets/fonts/ibm-plex-mono-latin-600-normal.woff2") format("woff2"); font-weight: 600; }
+
+      /* Colors sampled from reference/via-1.jpg and via-2.jpg */
+      :root {
+        --outer: #1b2022;
+        --panel: #fafafa;
+        --panel-edge: #dddfe0;
+        --card-border: #e4e4e4;
+        --badge-bg: #f1f2f0;
+        --ink: #000000;
+        --subtitle: #1d1d1d;
+        --caption: #555555;
+        --axis: #6e6e6e;
+        --grid: #ededed;
+        --baseline: #dcdcdc;
+        --bar: #e0e1df;
+        --bar-cap: #b9b9b9;
+        --hi: #f05252;
+        --hi-cap: #b91c1c;
+        --hi-ink: #dc2626;
+        --dash: #e5484d;
+        --win: #117f3a;
+        --win-band: rgba(22, 163, 74, 0.075);
+        --sub: #6b6b6b;
+        --mono: #545454;
+        --footer: #666666;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--outer); }
+      #root { width: 100%; height: 100%; position: relative; font-family: "Inter", sans-serif; }
+      #stage { position: absolute; inset: 0; }
+      #panel {
+        position: absolute; left: 114px; top: 30px; width: 1692px; height: 1020px;
+        background: var(--panel); border: 3px solid var(--panel-edge); border-radius: 26px;
+      }
+      #card {
+        position: absolute; left: 33px; top: 33px; width: 1620px; height: 948px;
+        border: 1.5px solid var(--card-border); border-radius: 2px;
+      }
+      #head { position: absolute; left: 40px; top: 40px; display: flex; align-items: center; gap: 18px; }
+      #title { font-family: "Plex Serif", serif; font-weight: 400; font-size: 46px; line-height: 1.2; color: var(--ink); letter-spacing: -0.01em; }
+      #badge {
+        font-size: 20px; line-height: 40px; height: 40px; padding: 0 15px; color: #060608;
+        background: var(--badge-bg); border-radius: 3px;
+      }
+      #brand { position: absolute; right: 40px; top: 46px; width: 50px; height: 50px; display: block; }
+      #subtitle { position: absolute; left: 40px; top: 112px; font-size: 24px; line-height: 28px; color: var(--subtitle); }
+      #caption { position: absolute; left: 118px; width: 1425px; top: 168px; text-align: center; font-size: 26px; line-height: 30px; color: var(--caption); }
+      #plot { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+      .grid { position: absolute; left: 118px; width: 1425px; height: 1px; background: var(--grid); }
+      .grid.zero { background: var(--baseline); }
+      .tick {
+        position: absolute; left: 0; width: 103px; text-align: right; font-family: "Plex Mono", monospace;
+        font-size: 19px; line-height: 16px; color: var(--axis);
+      }
+      .col { position: absolute; top: 0; left: 0; width: 237.5px; height: 100%; }
+      .stack { position: absolute; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; }
+      .val { font-weight: 600; font-size: 36px; line-height: 40px; margin-bottom: 7px; color: var(--ink); font-variant-numeric: tabular-nums; }
+      .bar { position: relative; width: 160px; display: block; }
+      .bar::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--cap); }
+      .meta { position: absolute; left: 0; right: 0; text-align: center; }
+      .name { display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 500; font-size: 26px; line-height: 32px; color: var(--ink); }
+      .ico { width: 28px; height: 28px; object-fit: contain; display: block; filter: grayscale(1) brightness(0.7) contrast(12); }
+      .ico-hi { width: 28px; height: 28px; display: block; background: var(--hi-ink); -webkit-mask: var(--src) center / contain no-repeat; mask: var(--src) center / contain no-repeat; }
+      .subtext { margin-top: 3px; display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 19px; line-height: 24px; color: var(--sub); }
+      .sublogo { height: 18px; width: auto; display: block; }
+      .hi .val, .hi .name { color: var(--hi-ink); }
+      .win .val { color: var(--win); }
+      .band { position: absolute; left: 8%; right: 8%; border-radius: 6px; background: var(--win-band); }
+      .winlabel { position: absolute; left: 0; right: 0; text-align: center; font-weight: 600; font-size: 24px; line-height: 28px; color: var(--win); }
+      #refline { position: absolute; left: 0; width: 100%; height: 0; }
+      #refline .dash {
+        position: absolute; left: 118px; width: 1425px; top: -1px; height: 2px;
+        background: repeating-linear-gradient(to right, var(--dash) 0 5px, transparent 5px 9px);
+      }
+      /* Sits just under the line, clear of the tick label above it. */
+      #refline .rl { position: absolute; left: 0; width: 103px; top: 5px; text-align: right; font-size: 17px; line-height: 20px; color: var(--hi-ink); }
+      #footer {
+        position: absolute; left: 0; width: 100%; top: 870px; text-align: center; font-family: "Plex Mono", monospace;
+        font-size: 19px; line-height: 28px; color: var(--footer);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="7" data-width="1920" data-height="1080">
+      <div id="stage" class="clip" data-start="0" data-duration="7" data-track-index="0">
+        <div id="panel">
+          <div id="card">
+            <div id="head"><h1 id="title"></h1><span id="badge"></span></div>
+            <img id="brand" alt="" />
+            <p id="subtitle"></p>
+            <p id="caption"></p>
+            <div id="plot"></div>
+            <div id="footer"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // Layout constants (card-relative px), scaled 1.13x from the reference.
+      const PLOT_LEFT = 118, PLOT_WIDTH = 1425, PLOT_TOP = 268, BASELINE = 765, BAR_W = 230, GAP = 3;
+      // Motion: competitors grow 0.5–3.1s, the highlight 0.7–4.5s with a gentler ease-out, so it overtakes late.
+      const GROW = { start: 0.5, dur: 2.6, ease: "power2.out" };
+      const GROW_HI = { start: 0.7, dur: 3.8, ease: "power1.out" };
+      const SWAP_DUR = 0.36, HOLD = 4.5;
+
+      (async () => {
+        const data = await (await fetch("data.json")).json();
+        const $ = (id) => document.getElementById(id);
+        const { axis, tools } = data;
+        const pxPerUnit = (BASELINE - PLOT_TOP) / (axis.max - axis.min);
+        const yOf = (v) => BASELINE - (v - axis.min) * pxPerUnit;
+        const segPx = axis.segment * pxPerUnit;
+        const fmt = (v) => v.toFixed(axis.decimals) + axis.unit;
+        const slotX = (i) => PLOT_LEFT + i * (PLOT_WIDTH / tools.length);
+
+        $("title").textContent = data.title;
+        $("badge").textContent = data.badge;
+        $("subtitle").textContent = data.subtitle;
+        $("caption").textContent = data.caption;
+        $("brand").src = tools.find((t) => t.name === data.highlight).logo;
+        $("footer").innerHTML = data.footer.map((l) => `<div>${l}</div>`).join("");
+
+        const plot = $("plot");
+        for (const v of axis.ticks) {
+          const g = document.createElement("div");
+          g.className = "grid" + (v === axis.min ? " zero" : "");
+          g.style.top = yOf(v) + "px";
+          const t = document.createElement("div");
+          t.className = "tick";
+          t.style.top = yOf(v) - 8 + "px";
+          t.textContent = v + axis.unit;
+          plot.append(g, t);
+        }
+
+        // Each bar's value over time: everyone starts at axis.start (default one segment), then eases to its score.
+        const startVal = axis.start ?? axis.min + axis.segment;
+        const colW = PLOT_WIDTH / tools.length;
+        const bars = tools.map((tool, idx) => {
+          const hi = tool.name === data.highlight;
+          const g = hi ? GROW_HI : GROW;
+          const easeFn = gsap.parseEase(g.ease);
+          const valueAt = (t) => startVal + (tool.score - startVal) * easeFn(Math.min(1, Math.max(0, (t - g.start) / g.dur)));
+          return { tool, idx, hi, g, valueAt };
+        });
+        // Order at time t: tallest first; ties go to whoever starts growing first, then the higher final score.
+        const orderAt = (t) =>
+          [...bars].sort((a, b) => b.valueAt(t) - a.valueAt(t) || a.g.start - b.g.start || b.tool.score - a.tool.score).map((b) => b.idx);
+
+        const order0 = orderAt(GROW.start + 0.01);
+        for (const b of bars) {
+          const col = document.createElement("div");
+          const win = data.winner && b.tool.name === data.winner.name;
+          col.className = "col" + (b.hi ? " hi" : "") + (win ? " win" : "");
+          col.style.width = colW + "px";
+          col.id = "col-" + b.idx;
+          const icon = b.tool.logo
+            ? b.hi
+              ? `<span class="ico-hi" style="--src:url('${b.tool.logo}')"></span>`
+              : `<img class="ico" src="${b.tool.logo}" alt="" />`
+            : "";
+          col.innerHTML = `
+            ${win ? `<div class="band" style="top:${PLOT_TOP - 52}px;height:${BASELINE - PLOT_TOP + 52 + 72}px"></div><div class="winlabel" style="top:${PLOT_TOP - 44}px">${data.winner.label}</div>` : ""}
+            <div class="stack" style="bottom:${948 - BASELINE}px">
+              <div class="val" id="val-${b.idx}">${fmt(startVal)}</div>
+              <div class="bar" id="bar-${b.idx}"></div>
+            </div>
+            <div class="meta" style="top:${BASELINE + 13}px">
+              <div class="name">${icon}<span>${b.tool.name}</span></div>
+              <div class="subtext">${b.tool.subtextLogo ? `<img class="sublogo" src="${b.tool.subtextLogo}" alt="" />` : ""}<span>${b.tool.subtext}</span></div>
+            </div>`;
+          plot.append(col);
+          const bar = col.querySelector(".bar");
+          const seg = b.hi ? "var(--hi)" : "var(--bar)";
+          bar.style.setProperty("--cap", b.hi ? "var(--hi-cap)" : "var(--bar-cap)");
+          bar.style.height = startVal * pxPerUnit + "px";
+          bar.style.width = BAR_W + "px";
+          bar.style.background = `repeating-linear-gradient(to top, ${seg} 0 ${segPx - GAP}px, transparent ${segPx - GAP}px ${segPx}px)`;
+          b.col = col;
+        }
+
+        const ref = document.createElement("div");
+        ref.id = "refline";
+        ref.style.top = yOf(data.referenceLine.value) + "px";
+        ref.innerHTML = `<div class="dash"></div><div class="rl">${data.referenceLine.label}</div>`;
+        plot.append(ref);
+
+        await Promise.all(
+          ['400 46px "Plex Serif"', '400 24px "Inter"', '500 26px "Inter"', '600 36px "Inter"', '400 14px "Plex Mono"', '500 16px "Plex Mono"', '600 16px "Plex Mono"'].map((f) => document.fonts.load(f))
+        );
+
+        const tl = gsap.timeline({ paused: true });
+
+        // 0.0–0.5: card, header and axes in.
+        // 0.0–0.5: the card, title, axes and names are already on screen (frame 0 is the social thumbnail).
+
+        // 0.5–4.5: bars stack up; value labels count in sync.
+        for (const b of bars) {
+          const bar = $("bar-" + b.idx), val = $("val-" + b.idx);
+          tl.fromTo(bar, { height: startVal * pxPerUnit }, { height: b.tool.score * pxPerUnit, duration: b.g.dur, ease: b.g.ease }, b.g.start);
+          const counter = { v: startVal };
+          tl.fromTo(counter, { v: startVal }, { v: b.tool.score, duration: b.g.dur, ease: b.g.ease, onUpdate: () => (val.textContent = fmt(counter.v)) }, b.g.start);
+        }
+
+        // Slot positions: start in the opening order, then slide (FLIP-style) whenever the ranking changes.
+        const slotOf = {};
+        order0.forEach((idx, slot) => {
+          slotOf[idx] = slot;
+          gsap.set("#col-" + idx, { x: slotX(slot) });
+        });
+        const busyUntil = {};
+        let prev = order0;
+        for (let f = Math.round(GROW.start * 120); f <= HOLD * 120; f++) {
+          const t = f / 120;
+          const cur = orderAt(t);
+          if (cur.join() === prev.join()) continue;
+          cur.forEach((idx, slot) => {
+            if (slotOf[idx] === slot) return;
+            const at = Math.max(t, busyUntil[idx] || 0);
+            tl.fromTo("#col-" + idx, { x: slotX(slotOf[idx]) }, { x: slotX(slot), duration: SWAP_DUR, ease: "power2.inOut", immediateRender: false }, at);
+            busyUntil[idx] = at + SWAP_DUR;
+            slotOf[idx] = slot;
+          });
+          prev = cur;
+        }
+
+        // 4.5–7.0: hold. Reference line and footer fade in.
+        tl.fromTo("#refline", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power1.out" }, HOLD);
+        tl.fromTo("#footer", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power1.out" }, HOLD + 0.15);
+        if (document.querySelector(".band")) tl.fromTo([".band", ".winlabel"], { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power1.out" }, HOLD);
+
+        tl.seek(0);
+        window.__timelines["main"] = tl;
+        if (window.__hfForceTimelineRebind) window.__hfForceTimelineRebind();
+      })();
+    </script>
+  </body>
+</html>
