@@ -5015,7 +5015,9 @@ firewall lift. grok checks it as codex's stand-in, since codex is down (079: "co
 3. **Haiku product default (076k item 2).** The held-out condition is met: the mean of Haiku's two draws under v1 is 6.5,
    and A0's v1 count is 6, so Haiku is +0.5 and not more than 2 behind. **The default is not switched**, because 080
    (17 Nov, after 076k) rules "no model switches". The page reports the line as 076k item 2 requires. That item is a
-   product rule, not a test claim. Sunny can rule otherwise.
+   product rule, not a test claim. Sunny can rule otherwise. **Page wording:** the kept 076k block's last sentence ("After this
+   default switch, the 29 held-out cases are spent for Haiku") is replaced by "The condition is met, but the default was
+   not switched" with the reason, because no switch happened (grok's finding on b25). This is the only template sentence the page changes.
 4. **Prediction scoring (W1 §2 item 8).** 078 gave ranges for some predictions and "about X" for others, with no
    stated tolerance. **This rule was chosen after the result and is labelled so on the page:**
    - A range is right if the result is inside it.
@@ -5023,8 +5025,10 @@ firewall lift. grok checks it as codex's stand-in, since codex is down (079: "co
    - A row with several numbers is right only if every number is.
    - "Too vague to score" is kept for a prediction that states no number.
    - *Rejected:* calling every "about" row too vague. That would score 8 of the 14 rows as nothing, and it would hide
-     the misses on rows 2c, 3a and 3b.
+     the misses on rows 2c, 3b and 4c.
    - The row-by-row verdicts are on the page (§8). grok checks them.
+   - **Result under the rule:** 8 right (2a, 2b, 3a, 3c, 4a, 4b, 4d, 6), 6 wrong (1, 2c, 2d, 3b, 4c, 5). Row 3a is right
+     because the ±1 band applies to TraceHound's "about 1.1" (grok's check of the first draft, which had called it a miss).
 5. **What follows (080):** the W1 page is published once codex or grok gives GO and Sunny says yes. After that the repo
    is in maintenance.
 
