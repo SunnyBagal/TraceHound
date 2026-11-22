@@ -102,6 +102,12 @@ export default function BenchmarkPage() {
       <BenchTable t={COST} id="table-cost" />
     </section>
 
+    {/* W1 SKELETON (b23-w1-skeleton): results.md section 11; W1 fills the placeholders and may move this section */}
+    <section className="bench-part" data-band="light" aria-labelledby="part-heldout">
+      <h2 id="part-heldout" className="bench-h2">Fresh TypeScript pull requests</h2>
+      <BenchTable t={table("Fresh TypeScript PRs (held-out, 2026-11)")} id="table-heldout" />
+    </section>
+
     <div className="bench-limits-row">
     <aside className="bench-limits" data-glow="amber" aria-labelledby="limits">
       <h2 id="limits" className="bench-h2">Limits</h2>
