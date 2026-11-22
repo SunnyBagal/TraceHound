@@ -1,4 +1,5 @@
-// scripts/bench/w1-fill.ts on invented summaries: no held-out file, no network.
+// scripts/bench/w1-fill.ts on invented summaries, no network. The last block reads the committed held-out score files
+// (docs/bench/ts-heldout.{secondary,pooled}.json; the firewall lifted at dc9aab3) to pin the page's names to their shape.
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -238,5 +239,32 @@ describe("w1-fill: the W1 skeleton files on this branch", () => {
     writeFileSync(f, "{{choose one: a | b}}\n");
     expect(main(["--summary", s, "--write", "--check", f], () => {})).toBe(1);
     expect(main(["--summary", path.join(dir, "missing.json"), f], () => {})).toBe(2);
+  });
+});
+
+describe("w1-fill: the page's secondary: and pooled: names match the committed score files", () => {
+  const read = (f: string) => JSON.parse(readFileSync(path.join(ROOT, "docs/bench", f), "utf8")) as Record<string, any>;
+  const secondary = read("ts-heldout.secondary.json"), pooled = read("ts-heldout.pooled.json");
+
+  it("every secondary: and pooled: name and condition resolves; none is left or undecided", () => {
+    const res = new Resolver({ summary: summary([C_C, C_G]), secondary, pooled, values: { "flag:pooledRan": true } });
+    const { report } = fill(readFileSync(path.join(ROOT, "docs/bench/ts-heldout.md"), "utf8"), res);
+    expect(report.left.filter((l) => /^(secondary|pooled):/.test(l.name)).map((l) => `${l.line} ${l.name}`)).toEqual([]);
+    expect(report.undecided.filter((u) => /(secondary|pooled):/.test(u.cond)).map((u) => `${u.line} ${u.cond}`)).toEqual([]);
+  });
+
+  it("the shapes the names rely on: pooled pairs[0] is A0 vs CodeRabbit, pairs[1] A0 vs Greptile; in haikuVsA0, a is A0", () => {
+    expect(pooled.pairs.map((p: { a: string; b: string }) => `${p.a},${p.b}`)).toEqual(["a0,coderabbit", "a0,greptile"]);
+    const h = secondary.haikuVsA0;
+    for (const d of ["haiku1", "haiku2"]) {
+      expect(h.v1[d].ka).toBe(h.a0v1);
+      expect(h.v1[d].kb).toBe(secondary.tools[d].caught);
+      expect(h.v1[d].both + h.v1[d].aOnly).toBe(h.v1[d].ka);
+      expect(h.v1[d].both + h.v1[d].bOnly).toBe(h.v1[d].kb);
+    }
+    expect(h.meanV1).toBe((h.v1.haiku1.kb + h.v1.haiku2.kb) / 2);
+    const res = new Resolver({ summary: summary([C_C, C_G]), secondary, pooled });
+    expect(evaluate(res, "secondary:haikuVsA0.meanV1 − a0v1")?.value).toBe(h.meanV1 - h.a0v1);
+    expect(format("pooled:pairs[0].pooled.p", pooled.pairs[0].pooled.p, false)).toBe(String(Number(pooled.pairs[0].pooled.p.toPrecision(10))));
   });
 });

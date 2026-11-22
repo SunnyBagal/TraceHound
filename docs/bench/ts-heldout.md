@@ -271,12 +271,12 @@ money. Every number in this paragraph is judge v1.
 
 | | A0 (v1) | Haiku draw 1 (v1) | Haiku draw 2 (v1) | mean of the two draws (v1) | mean − A0 |
 |---|---|---|---|---|---|
-| caught of 20 | {{secondary:haikuVsA0.a0CaughtV1}} | {{secondary:haikuVsA0.haiku1CaughtV1}} | {{secondary:haikuVsA0.haiku2CaughtV1}} | {{secondary:haikuVsA0.meanCaughtV1}} | {{secondary:haikuVsA0.meanMinusA0}} |
+| caught of 20 | {{secondary:haikuVsA0.a0v1}} | {{secondary:haikuVsA0.v1.haiku1.kb}} | {{secondary:haikuVsA0.v1.haiku2.kb}} | {{secondary:haikuVsA0.meanV1}} | {{secondary:haikuVsA0.meanV1 − a0v1}} |
 
-Per-case matrix against A0 (v1; both / A0 only / Haiku only / neither): draw 1 {{secondary:haikuVsA0.haiku1.both}} /
-{{secondary:haikuVsA0.haiku1.a0Only}} / {{secondary:haikuVsA0.haiku1.haikuOnly}} / {{secondary:haikuVsA0.haiku1.neither}};
-draw 2 {{secondary:haikuVsA0.haiku2.both}} / {{secondary:haikuVsA0.haiku2.a0Only}} /
-{{secondary:haikuVsA0.haiku2.haikuOnly}} / {{secondary:haikuVsA0.haiku2.neither}}. The same table by x1 is in
+Per-case matrix against A0 (v1; both / A0 only / Haiku only / neither): draw 1 {{secondary:haikuVsA0.v1.haiku1.both}} /
+{{secondary:haikuVsA0.v1.haiku1.aOnly}} / {{secondary:haikuVsA0.v1.haiku1.bOnly}} / {{secondary:haikuVsA0.v1.haiku1.neither}};
+draw 2 {{secondary:haikuVsA0.v1.haiku2.both}} / {{secondary:haikuVsA0.v1.haiku2.aOnly}} /
+{{secondary:haikuVsA0.v1.haiku2.bOnly}} / {{secondary:haikuVsA0.v1.haiku2.neither}}. The same table by x1 is in
 `ts-heldout.secondary.json` and changes nothing.
 
 Disclosure (decision 076k item 1): Planner B drafted the thresholds before 076j's results existed; they were adopted
@@ -285,12 +285,12 @@ after. Dev: v1 14 and 11 vs A0 12; second judge 15 and 12 vs 13; clean-case comm
 {{if flag:datedDraft == false}} Stated by Planner B as drafted before 076j's results; no dated draft is on record.{{end if}}
 Draw 2 met the dev condition with no margin.
 
-{{if secondary:haikuVsA0.meanMinusA0 < −2}}
+{{if secondary:haikuVsA0.meanV1 − a0v1 < −2}}
 Product default (decision 076k item 2; not a test claim): the mean of Haiku's two draws under v1 is more than 2 behind
 A0's v1 count. This decides only the product's default model; A0 is the headline. It is a pre-set product threshold; at
 20 bugs it does not show that Haiku is as good as A0.
 {{end if}}
-{{if secondary:haikuVsA0.meanMinusA0 ≥ −2}}
+{{if secondary:haikuVsA0.meanV1 − a0v1 ≥ −2}}
 Product default (decision 076k item 2; not a test claim): the mean of Haiku's two draws under v1 is not more than 2
 behind A0's v1 count. This decides only the product's default model; A0 is the headline. It is a pre-set product
 threshold; at 20 bugs it does not show that Haiku is as good as A0. After this default switch, the 29 held-out cases
@@ -315,8 +315,8 @@ one judge of record, not hand-checked; dev exposure 10 of 31 (grok; audit sha256
 
 | pair | dev: paired n / A0 only / other only / missing-review exclusions | held-out: paired n / A0 only / other only / missing-review exclusions | pooled: paired n / A0 only / other only | exact two-sided p |
 |---|---|---|---|---|
-| A0 vs CodeRabbit | {{pooled:coderabbit.dev.n}} / {{pooled:coderabbit.dev.onlyA}} / {{pooled:coderabbit.dev.onlyB}} / {{pooled:coderabbit.dev.excluded}} | {{pooled:coderabbit.heldout.n}} / {{pooled:coderabbit.heldout.onlyA}} / {{pooled:coderabbit.heldout.onlyB}} / {{pooled:coderabbit.heldout.excluded}} | {{pooled:coderabbit.pooled.n}} / {{pooled:coderabbit.pooled.onlyA}} / {{pooled:coderabbit.pooled.onlyB}} | {{pooled:coderabbit.p}} |
-| A0 vs Greptile | {{pooled:greptile.dev.n}} / {{pooled:greptile.dev.onlyA}} / {{pooled:greptile.dev.onlyB}} / {{pooled:greptile.dev.excluded}} | {{pooled:greptile.heldout.n}} / {{pooled:greptile.heldout.onlyA}} / {{pooled:greptile.heldout.onlyB}} / {{pooled:greptile.heldout.excluded}} | {{pooled:greptile.pooled.n}} / {{pooled:greptile.pooled.onlyA}} / {{pooled:greptile.pooled.onlyB}} | {{pooled:greptile.p}} |
+| A0 vs CodeRabbit | {{pooled:pairs[0].dev.pairedN}} / {{pooled:pairs[0].dev.onlyA}} / {{pooled:pairs[0].dev.onlyB}} / {{pooled:pairs[0].dev.missingReviewExcluded}} | {{pooled:pairs[0].heldout.pairedN}} / {{pooled:pairs[0].heldout.onlyA}} / {{pooled:pairs[0].heldout.onlyB}} / {{pooled:pairs[0].heldout.missingReviewExcluded}} | {{pooled:pairs[0].pooled.pairedN}} / {{pooled:pairs[0].pooled.onlyA}} / {{pooled:pairs[0].pooled.onlyB}} | {{pooled:pairs[0].pooled.p}} |
+| A0 vs Greptile | {{pooled:pairs[1].dev.pairedN}} / {{pooled:pairs[1].dev.onlyA}} / {{pooled:pairs[1].dev.onlyB}} / {{pooled:pairs[1].dev.missingReviewExcluded}} | {{pooled:pairs[1].heldout.pairedN}} / {{pooled:pairs[1].heldout.onlyA}} / {{pooled:pairs[1].heldout.onlyB}} / {{pooled:pairs[1].heldout.missingReviewExcluded}} | {{pooled:pairs[1].pooled.pairedN}} / {{pooled:pairs[1].pooled.onlyA}} / {{pooled:pairs[1].pooled.onlyB}} | {{pooled:pairs[1].pooled.p}} |
 
 With the two pooled secondary tests, four tests at 0.05 with no correction; up to 0.20 that at least one rejects by
 chance. Even a small p here is not fresh held-out confirmation. {{if pairs[tracehound,coderabbit].reviewedByBoth < 15}}A0 vs CodeRabbit fails the held-out
