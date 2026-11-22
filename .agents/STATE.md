@@ -25,12 +25,12 @@ LIFTED 2026-11-22T08:40Z (H2 §6 step 8, after `dc9aab3`). Still in force: never
 - Ledger $49.92287 after H2 (H1 A0 $1.7484582; H2 judging $0.076046); hard stop $61.08980 in `.env`. Haiku draws $0.37 on Anthropic ($0.1864 each; $0.3727592 total, budget.md). Last console reading $16.20 (17 Nov). No paid work is planned.
 
 ## Agents (recheck with `hc ls`)
-artu1 `t9` · bunny `t15` · codex `t14` (**status error since 22 Nov ~04:15Z; Sunny to restart; its window-watch sends automated alerts, ignore**) · grok `t1g` (stand-in for codex on review) · devin out of quota. Commands `docs/herdr.md`.
+artu1 `t9` · bunny `t15` · codex `t14` (**status error since 22 Nov ~04:15Z; Sunny to restart; its window-watch sends automated alerts, ignore**) · grok `t1g` (stand-in for codex on review; **hit its weekly usage limit 22 Nov ~18:08 IST**, buying more is Sunny's call) · devin out of quota. Commands `docs/herdr.md`.
 
 ## OPEN
 1. Done 22 Nov: PR #77 (ui-01b viewer inspector bounds) merged `bdc7ed4` at `2519b54` (bunny brought it up to main; grok GO). Brain batch pushed (vault `63c13a5`: 39 inbox notes, NOW, timeline phase 6, results, digest 079–081; grok GO after two edits).
 2. codex (t14): Sunny restarts it; on recovery it writes `run/comms/codex-to-artu1.recovered.md`.
-3. Docker prune: proposal to Sunny (system change; not run by an agent without his yes).
+3. Promo race video: PR #79 (`promo/race-animation` @ `8cd38b3`), open, not merged until Sunny says so; MP4 `promo/race/renders/tracehound-race.mp4`. Docker pruned (cache; cap_test_dem, fl, cs50) on Sunny's rulings.
 4. Failure-2 note: 28 CodeRabbit pre-trigger comments were probably skip notices edited after the trigger; their first versions are not in the records, so the page says "0 confirmed other".
 5. P1's §4 report `run/out/artu1.dev-coderabbit.md` exists (17 Nov); nothing further needed now that F1 passed.
 
