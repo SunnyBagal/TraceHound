@@ -273,6 +273,18 @@ tasks with the graph as without it, and never called a graph tool. See
 
 ## PR reviewer benchmark
 
+**Fresh TypeScript pull requests (held-out, 2026-11).** On 29 fresh pull requests from medusa (8), payload (10), twenty (10), and bullmq (1), 20 of which introduced a
+bug that a later merged fix repaired, TraceHound as frozen at `review-freeze-3` (pool-verify-v1 on Nemotron 3.5 Super)
+commented on 4 of the 20 bugs (95% interval
+8.1–41.6%), CodeRabbit on 10
+(29.9–70.1%) and Greptile on 12
+(38.7–78.1%).
+Against CodeRabbit: no detectable difference at this sample size;
+against Greptile: Greptile caught more of the labelled bugs than TraceHound on this set (p = 0.0078125).
+TraceHound ran on an open model (Nemotron 3.5 on Nebius) at $0.0603 per pull
+request (ledger; $0.0693 at console prices).
+Details, pairs and limits: [docs/bench/ts-heldout.md](docs/bench/ts-heldout.md).
+
 This section is the first look, v1 (pool-verify-v1 on Nemotron 3 Super, `review-freeze-1`,
 decisions 062 and 066). The product config's numbers are under [Results](#results).
 

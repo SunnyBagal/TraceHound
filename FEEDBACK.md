@@ -823,3 +823,50 @@ was re-run.
   receive 429 with the same message)"); our reply's text was "worker overloaded", not the documented "System is
   overloaded". The docs give no retry advice for 529 (the 429 example says "Retry the request after 30 sec").
 - **What would have helped (opinion):** a `Retry-After` header or a stated backoff for 529.
+
+## 2026-11-15 (bunny, decision 076n)
+Token Factory chat completions, `nvidia/nemotron-3-super-120b-a12b` (bench-judge-v1, reasoning on): 47 requests, 47
+succeeded, 0 failed; about 1 s per call (two sequential processes of 49 s and 58 s). Ledger $0.02581 at
+`config/prices.json`'s $0.30 / $0.90, which decision 076k item 10 suspects runs about 15% low; the console check is pending.
+
+## 2026-11-15 (bunny, decision 076o)
+Token Factory chat completions, `nvidia/nemotron-3-super-120b-a12b` (bench-judge-v1, reasoning on): 82 requests, 82
+succeeded, 0 failed. Five sequential processes, 16:08:50Z to 16:12:21Z: three full folders took 83 s, 50 s and 56 s (24 to
+30 calls each, about 2 s per call); two needed 1 fresh call each (the rest came from the response cache). Ledger $0.04832 at
+`config/prices.json`'s $0.30 / $0.90, which decision 076k item 10 suspects runs about 15% low; the console check is pending.
+No errors; nothing wrong or missing in the docs or console seen this session.
+
+## 2026-11-16 (bunny, judge-availability probe)
+Token Factory chat completions, one minimal request each to `Qwen/Qwen3-235B-A22B-Instruct-2507`,
+`Qwen/Qwen3-30B-A3B-Instruct-2507` and `nvidia/nemotron-3-super-120b-a12b`: 3 requests, 3 HTTP 200 with usage reported,
+0 failures; latency 1,028 / 762 / 405 ms. `GET /models` listed all three. Missing: the price page marks
+Qwen3-235B-A22B-Instruct-2507 "Deprecated", and the November 2026 deprecation notice lists it for removal on 9 Nov 2026,
+yet it still answers on 16 Nov; neither the price page nor `/models` gives a retirement date. A date (or a
+`deprecated`/`sunset` field in `/models`) would have let us plan the judge switch.
+
+## 2026-11-17: F1 model-availability check (artu1)
+- Called: Nebius Token Factory chat completions (us-central1 base URL from `.env`), three models, one request each:
+  `nvidia/Nemotron-3.5-Super-VL`, `nvidia/nemotron-3-super-120b-a12b`, `Qwen/Qwen3-30B-A3B-Instruct-2507`.
+- Counts: 3 requests, 3 successes, 0 failures. Latency 1186 / 961 / 786 ms. Ledger $0.0000195.
+- What would have helped (opinion): the models list (`GET /v1/models`) is not reliable evidence that a model is served
+  (our client notes a listed model that returns 404), so we now spend a completion per model. A free "served" flag per
+  model in the list, or a deprecation date in the list response, would remove that need.
+
+## 2026-11-18: F1 model-availability check, T0 − 24 h repeat (artu1)
+- Called: Nebius Token Factory chat completions, three models, one request each: `nvidia/Nemotron-3.5-Super-VL`,
+  `nvidia/nemotron-3-super-120b-a12b`, `Qwen/Qwen3-30B-A3B-Instruct-2507`.
+- Counts: 3 requests, 3 successes, 0 failures. Latency 1271 / 1095 / 1001 ms. Ledger $0.0000195.
+- Nothing new missing; the 17 Nov entry's wish (a served flag or deprecation date in the models list) still stands.
+
+## 2026-11-19: H1 primary model run (codex, appended by artu1)
+- Called: Nebius Token Factory chat completions, `https://api.tokenfactory.us-north1.nebius.com/v1/chat/completions`, model `nvidia/Nemotron-3.5-Super-VL`, from frozen `review-freeze-3`.
+- Counts: **114 ledgered completion calls, 114 success entries, 0 failure entries**; ledger cost **$1.7484582**. No provider/transport error string was recorded; exact errors: **none**. HTTP-level retry attempts are not separately retained in this ledger count.
+- Recorded reviewer-stage wall time (58 stages, includes local work and any internal attempts): median **69.8255 s**, mean **93.0148 s**, maximum **308.227 s**. These are stage wall times; per-request API latency was not retained by the wrapper.
+- First ledger timestamp **2026-11-19T08:40:36.874Z**; last **2026-11-19T10:29:24.380Z**. Console reading **$14.19**, taken after19Nov12:29:25Z and relayed12:50Z, is eligible (≥2h). Against the **$16.20** baseline, **$2.01 / $1.7484582 =1.149584 ≈1.15** (cent rounding≈1.14–1.16), below the1.26 trip; frozen factor/caps unchanged. Exact reading timestamp was not supplied.
+- No new endpoint/docs/console discrepancy observed in this session. Opinion: retaining per-request latency alongside usage would make direct latency distributions easier to audit; only stage wall times were retained here.
+
+## 2026-11-22: H2 step 0 and judging (grok)
+
+- Called: Nebius Token Factory chat completions through the project client on the frozen tag. Step 0: one request each to `nvidia/nemotron-3-super-120b-a12b` and `Qwen/Qwen3-30B-A3B-Instruct-2507`. Judging: `bench-judge` on the same two models.
+- Counts: step 0, 2 requests, 2 successes, 0 failures, ledger $0.0000221, latency 1199 ms and 1411 ms, both uncached HTTP 200. Judging, 163 requests (83 v1, 80 x1), 163 successes, 0 failures, ledger $0.076046. Exact error strings: none. Judge-call latency was not retained on the ledger.
+- No new docs or console discrepancy in this session. Opinion: none beyond the 19 Nov note that per-request latency is not on the ledger.

@@ -31,7 +31,7 @@ reading is open except where the firewall says otherwise.
 ### Pane names (Sunny, 2026-11-14)
 Display names only. Every file, brief, claim, report path, ruling and brain note keeps using the internal id.
 Set as Herdr labels (`hc label <t> name=<pane name> id=<internal id>`, 2026-11-14); a label is not an address, so
-`hc send` keeps using the t-address from `hc ls` (t9, t15, t14, t1g on 14 Nov). Jake is labelled when devin's pane opens.
+`hc send` keeps using the t-address from `hc ls` (t9, t15, t14, t1g on 14 Nov; t1w for devin on 16 Nov).
 
 | pane name | internal id |
 |---|---|
@@ -39,7 +39,7 @@ Set as Herdr labels (`hc label <t> name=<pane name> id=<internal id>`, 2026-11-1
 | Terry | bunny |
 | Amy | codex |
 | Rosa | grok |
-| Jake | devin (joins when its quota resets; no lane yet) |
+| Jake | devin (t1w since 16 Nov; methodology lane) |
 | Boyle | Planner A |
 | Kevin | Planner B |
 
@@ -51,6 +51,15 @@ config, never the default, mocked tests only, for report-only Claude rows on dev
 and, since 2026-11-14 (decision 076k item 1), for the registered secondary held-out Haiku 5.5 row (two draws, after A0, on
 A0's cases); never in `packages/action/`, `.github/actions/` or the held-out primary (A0); until Sunny withdraws it. It overrides "Models and
 keys" and the "Build and safety" review rule for that provider only.
+(2) 2026-11-17, decision 076r item 4 (Sunny): artu1 makes five one-line changes on `pa-076g`, the empty-ledger guard after
+`ledger()` in `docs/specs/R1.md`, `docs/specs/S1.md`, `docs/specs/E1.md`, `docs/runbooks/H1-window.md` and
+`docs/runbooks/H2-scoring.md` (Planner A's files), so that an empty reading stops the paid command; until `pa-076g` merges.
+(3) 2026-11-17, decision 076s item 1 (Sunny): artu1 adds one paragraph to `docs/runbooks/H1-window.md` §5 failure 2
+(Planner A's file): a pre-trigger object is classified from its first version and creation time, not its current text.
+(4) 2026-11-17, decision 076u item 2 (Sunny): artu1 makes Planner A's 076r–076u edits itself (`run/comms/artu1-to-planner-a.076r-076s.md`
+items 1–5, and 076u item 4) in `docs/runbooks/F1-freeze.md`, `docs/specs/E1.md`, `docs/specs/S1.md`,
+`docs/runbooks/H1-window.md`, `docs/runbooks/H2-scoring.md` and `docs/runbooks/W1-writeup.md`; codex checks them,
+then grok does one pass on the range; artu1 merges on both GOs. For that branch only.
 
 ## Process (decision 076c item 14; `docs/plan/team-process.md` §1)
 
@@ -86,7 +95,8 @@ Briefs use the template in `docs/plan/team-process.md` §2: `run/briefs/<lane>.<
 - Never open `~/Projects/tracehound-bench`, `~/Projects/tracehound-ops`, `~/Projects/TraceHound-eval`, `~/Projects/tracehound-heldout` or `~/Projects/Recall`.
 - Never copy text from the benchmark dataset into code, tests or docs. Counts only.
 - **Track B held-out (tracehound-testset):** artu1 and bunny (the tuning side) never open, list, grep or diff
-  `tracehound-testset/heldout/`, `labels/heldout/` or any held-out case note; never run git on `heldout/repos/` (including
+  `tracehound-testset/heldout/`, `labels/heldout/`, the held-out window directory `~/Projects/tracehound-ho-window`
+  (F1 §4.1, added 2026-11-17) or any held-out case note; never run git on `heldout/repos/` (including
   as an alternate object store); never pass `--heldout-ok` or a held-out side flag; never `hc read` the pane of an agent
   doing held-out work. Numbers-only files in `run/out/` are their only held-out input. codex, grok (and devin) may read
   held-out; their held-out reports are counts only.
@@ -97,9 +107,66 @@ Briefs use the template in `docs/plan/team-process.md` §2: `run/briefs/<lane>.<
   committed → lift): artu1 and bunny make no `gh` or browser read of pulls, issues or notifications on the four forks
   (SunnyBagal/medusa, twenty, payload, bullmq) (076c item 12).
 
+## Machine safety (Sunny, 2026-11-20; non-negotiable)
+
+Agents run with full permissions on Sunny's own laptop. These rules hold whatever the permission mode allows. When a
+rule and a brief disagree, the rule wins: stop and write to artu1.
+
+**1. Paths.**
+- **Allowed** (read and write as your lane and brief allow):
+  - `~/Projects/TraceHound` and its git worktrees `~/Projects/TraceHound-*`, `~/Projects/th-*` and
+    `~/Projects/tracehound-ui`. `TraceHound-eval` is excluded (Blindness).
+  - `~/Projects/tracehound-testset`, `~/Projects/tracehound-runs` and `~/Projects/tracehound-brain`.
+  - `~/Projects/tracehound-ho-window`: codex and grok only.
+  - Your own scratch directories under `/private/tmp/` (named `<agent>-…`).
+- **Anything else needs a brief that names it.** That includes every other folder in `~/Projects` (other projects of
+  Sunny's), the folders in Blindness, and `tracehound-seeds`.
+- **Never, under any brief:** `~/Documents`, `~/Desktop`, `~/Downloads`, `~/Pictures`, `~/Movies`, `~/Music`,
+  `~/Library` (apart from caches tools write themselves), iCloud, Mail, browser profiles, the keychain, `~/.ssh`,
+  `~/.aws`, `~/.gnupg`, `~/.config`, `~/.zshrc` and other shell profiles, `/etc`, `/System`, `/Applications`,
+  `/usr/local` and `/opt/homebrew` (no writes).
+- **Tools.** Using installed tools is fine: node from `~/.local/share/vite-plus`, pnpm, git, gh, docker. Their
+  config and credential files are not opened.
+
+**2. Secrets.** Never open, print, copy, log or commit a key, token or `.env` value. A tool may load `.env`
+itself (`node --env-file`, the project's client, and the registered tag-worktree verifier of `docs/eval/tag-worktree.md`, which
+hashes and compares the file and prints only non-secret numbers); an agent never cats, greps or diffs it. Check a key only for presence. Never send any file to a service other than the ones the project already
+calls (GitHub for the project's repos and forks, Nebius and Anthropic through the project's client).
+
+**3. Nothing destructive.**
+- **Deleting.** No `rm -rf` or delete outside your own `/private/tmp/<agent>-…` scratch, and never on `~`,
+  `~/Projects` or a repository root.
+- **Cleanup.** No `git clean -fdx`, `reset --hard` or `checkout -- .` in a checkout you did not create for this
+  brief.
+- **History.** No force-push, history rewrite, or branch or tag deletion except your own temporary ones. No push to
+  `main` except a commit your brief names (e.g. the H2 score commit in `codex.h2.md`); otherwise artu1 merges.
+- **Worktrees.** Remove only worktrees you created.
+- **Docker.** No `docker system prune`, `docker rm`, `docker rmi` or `volume rm`.
+- **Moving or overwriting.** Nothing moved, renamed or overwritten that you did not create, except files your brief
+  names.
+
+**4. The machine.**
+- **Administration.** No `sudo`. No `defaults write`, `pmset` (except the read-only `pmset -g …` queries the H1
+  runbook registers), `launchctl`, `networksetup`, `crontab`, login items or system settings.
+- **Software.** No global installs or uninstalls (`brew`, `npm -g`, `pip` outside a project venv). No
+  `pnpm install` in main's checkout until H2's commit.
+- **Processes.** No `kill` of a process you did not start. That rule names the window scheduler (pid 47297), its
+  `caffeinate` (57880), Herdr and other agents' terminals.
+- **Disk.** Check `df -h ~` before any write over 1 GB. Stop at under 10 GiB free, and never delete to make room.
+
+**5. GitHub.**
+- No change to repository settings, visibility, webhooks, apps, secrets or members.
+- No repository deletion.
+- No comment, PR, review or issue except what the scheduler or your brief defines.
+- No new accounts and no spend beyond what artu1 approved.
+
+**6. When in doubt, stop.** Don't do it. Write `run/comms/<agent>-to-artu1.<topic>.md` with what you wanted to do and
+why, then wait. Sunny is away until 21 Nov. The window, the snapshot and H2 run as planned, under these rules.
+
 ## Models and keys
 
 - The product's model calls go to Nemotron on Nebius Token Factory (hackathon rule). Do not add calls to any other model provider in product code.
+- **After held-out scoring (decision 076p item 1):** the reviewer's provider and model become a setting; Claude and OpenAI models are allowed beside Nemotron. Until held-out scoring is done the rule above holds, apart from exception (1).
 - Never print, log or commit `NEBIUS_API_KEY` or any other secret. Tests never hit the network.
 
 ## Gates
@@ -139,6 +206,6 @@ Treat every rule below as P1 when it is broken.
 
 ### Build and safety
 - A new dependency in any package.json.
-- Product code that calls a model provider other than Nebius Token Factory.
+- Product code that calls a model provider other than Nebius Token Factory (until held-out scoring is done; after it, a provider other than Nebius, Anthropic or OpenAI, or one that is not selected by setting: decision 076p item 1).
 - A secret (`NEBIUS_API_KEY`, `GITHUB_TOKEN` or any token) that can reach a log, an error message, a file or a commit.
 - A test that can reach the network.

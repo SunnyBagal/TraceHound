@@ -1,0 +1,255 @@
+{
+ "v": 1,
+ "side": "heldout",
+ "policy": {
+  "v": 1,
+  "approved": {
+   "by": "Sunny",
+   "on": "2026-11-12",
+   "ref": "TraceHound docs/decisions.md 076a (protocol section 13 items 3-5: official_attempt, failed_case, unstarted_case, no_review_in_pairs, sheet_judge_cues, as in policy.076a.json, 2026-11-11) and 076c (2026-11-12) item 4: the registered pairs are TraceHound vs CodeRabbit and TraceHound vs Greptile, each an exact two-sided sign test at 0.05 (076a section 13 item 1), uncorrected, exact p reported; CodeRabbit vs Greptile counts only; item 6: a pair with fewer than 15 bug cases reviewed by both tools is reported as counts with no test. The pair names are the --tool names of the held-out scoring command (docs/runbooks/H2-scoring.md)."
+  },
+  "official_attempt": "last",
+  "failed_case": "miss",
+  "unstarted_case": "miss",
+  "no_review_in_pairs": "exclude",
+  "sheet_judge_cues": "hidden",
+  "registered_tests": {
+   "pairs": [
+    [
+     "tracehound",
+     "coderabbit"
+    ],
+    [
+     "tracehound",
+     "greptile"
+    ]
+   ],
+   "alpha": 0.05,
+   "min_reviewed_by_both": 15
+  }
+ },
+ "policySha256": "b5b33512cf802a7598278c692bcaa16afe33202971b536755b56210d8cb28679",
+ "tools": {
+  "tracehound": {
+   "attempted": 29,
+   "bugCases": 20,
+   "cleanCases": 9,
+   "caught": 4,
+   "caughtWilson": [
+    0.08065766257979809,
+    0.4160174322518936
+   ],
+   "completedBug": 20,
+   "completedClean": 9,
+   "noReview": 0,
+   "misses": 0,
+   "invalidBinding": 0,
+   "judgeFailed": 0,
+   "caughtOfCompleted": "4/20",
+   "caughtOfCompletedWilson": [
+    0.08065766257979809,
+    0.4160174322518936
+   ],
+   "caughtX1": 9,
+   "judgeFailedX1": 0,
+   "handchecked": true,
+   "comments": {
+    "total": 22,
+    "perAttempted": {
+     "mean": 0.7586206896551724,
+     "median": 0
+    },
+    "perCompleted": {
+     "mean": 0.7586206896551724,
+     "median": 0
+    },
+    "clean": 2
+   },
+   "locationHits": 7,
+   "costUSD": {
+    "total": 1.7484582,
+    "perAttemptedMean": 0.06029166206896552,
+    "median": 0.048677700000000004,
+    "max": 0.1308627
+   },
+   "exposure": {
+    "exposed": {
+     "bugCases": 0,
+     "completedBug": 0,
+     "caught": 0
+    },
+    "unexposed": {
+     "bugCases": 20,
+     "completedBug": 20,
+     "caught": 4
+    }
+   }
+  },
+  "coderabbit": {
+   "attempted": 29,
+   "bugCases": 20,
+   "cleanCases": 9,
+   "caught": 10,
+   "caughtWilson": [
+    0.2992980081982123,
+    0.7007019918017877
+   ],
+   "completedBug": 20,
+   "completedClean": 9,
+   "noReview": 0,
+   "misses": 0,
+   "invalidBinding": 0,
+   "judgeFailed": 0,
+   "caughtOfCompleted": "10/20",
+   "caughtOfCompletedWilson": [
+    0.2992980081982123,
+    0.7007019918017877
+   ],
+   "caughtX1": 15,
+   "judgeFailedX1": 0,
+   "handchecked": true,
+   "comments": {
+    "total": 82,
+    "perAttempted": {
+     "mean": 2.8275862068965516,
+     "median": 2
+    },
+    "perCompleted": {
+     "mean": 2.8275862068965516,
+     "median": 2
+    },
+    "clean": 15
+   },
+   "locationHits": 13,
+   "costUSD": null,
+   "exposure": {
+    "exposed": {
+     "bugCases": 0,
+     "completedBug": 0,
+     "caught": 0
+    },
+    "unexposed": {
+     "bugCases": 20,
+     "completedBug": 20,
+     "caught": 10
+    }
+   }
+  },
+  "greptile": {
+   "attempted": 29,
+   "bugCases": 20,
+   "cleanCases": 9,
+   "caught": 12,
+   "caughtWilson": [
+    0.38658150076225317,
+    0.7811934676271829
+   ],
+   "completedBug": 20,
+   "completedClean": 9,
+   "noReview": 0,
+   "misses": 0,
+   "invalidBinding": 0,
+   "judgeFailed": 0,
+   "caughtOfCompleted": "12/20",
+   "caughtOfCompletedWilson": [
+    0.38658150076225317,
+    0.7811934676271829
+   ],
+   "caughtX1": 17,
+   "judgeFailedX1": 0,
+   "handchecked": true,
+   "comments": {
+    "total": 79,
+    "perAttempted": {
+     "mean": 2.7241379310344827,
+     "median": 3
+    },
+    "perCompleted": {
+     "mean": 2.7241379310344827,
+     "median": 3
+    },
+    "clean": 13
+   },
+   "locationHits": 13,
+   "costUSD": null,
+   "exposure": {
+    "exposed": {
+     "bugCases": 0,
+     "completedBug": 0,
+     "caught": 0
+    },
+    "unexposed": {
+     "bugCases": 20,
+     "completedBug": 20,
+     "caught": 12
+    }
+   }
+  }
+ },
+ "pairs": [
+  {
+   "a": "tracehound",
+   "b": "coderabbit",
+   "registered": true,
+   "n": 20,
+   "reviewedByBoth": 20,
+   "onlyA": 2,
+   "onlyB": 8,
+   "both": 2,
+   "neither": 8,
+   "p": 0.109375
+  },
+  {
+   "a": "tracehound",
+   "b": "greptile",
+   "registered": true,
+   "n": 20,
+   "reviewedByBoth": 20,
+   "onlyA": 0,
+   "onlyB": 8,
+   "both": 4,
+   "neither": 8,
+   "p": 0.0078125
+  },
+  {
+   "a": "coderabbit",
+   "b": "greptile",
+   "registered": false,
+   "n": 20,
+   "reviewedByBoth": 20,
+   "onlyA": 1,
+   "onlyB": 3,
+   "both": 9,
+   "neither": 7,
+   "p": null
+  }
+ ],
+ "registeredTests": {
+  "pairs": [
+   [
+    "tracehound",
+    "coderabbit"
+   ],
+   [
+    "tracehound",
+    "greptile"
+   ]
+  ],
+  "alpha": 0.05,
+  "min_reviewed_by_both": 15,
+  "test": "exact two-sided sign test on the discordant bug cases, uncorrected"
+ },
+ "exposure": {
+  "sha256": "11fa31f81611c4f6e8fecf107041d1cb08b69f402f053f326469f888d93c1706",
+  "exposedBugCases": 0,
+  "unexposedBugCases": 20
+ },
+ "handcheckGuess": {
+  "items": 61,
+  "guessed": 61,
+  "unsure": 0,
+  "right": 25,
+  "tools": 3,
+  "commonestToolItems": 25
+ }
+}

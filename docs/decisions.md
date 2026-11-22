@@ -4363,3 +4363,674 @@ It amends 076k items 8–9 for this track only.
 
 **Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`, the brain inbox; the side-track branch (new paths only).
 Nothing in the held-out run, its freeze, the protocol or `docs/budget.md` changes.
+
+## 076n — Side-track scoring spend; tonight's side-track result (2026-11-15)
+
+**Status: ruled by Sunny (15 Nov 2026).**
+- **Spend:** about **$0.05** of Nebius money, **hard cap $0.10**, for bunny (Terry) to score the side track's 2026-11-15
+  review folders (`sidetrack/runs/2026-11-15/` on `claude/upbeat-lamport-b280zm`) with the real bench-judge-v1, one judge
+  process after the other (parallel judging hits a limit). Dev cases only. Caps per 076c item 1: a job-start ledger value
+  in the job file, `TRACEHOUND_BUDGET_RUN_USD=0.10`, total = that value + $0.10. From unallocated; it is not L1's.
+- **Tonight's side-track result (076m), recorded as reported:** the skill reviewer against the pipeline shows **no
+  detectable change** (a difference under 4 catches of 31); the lookup speed fix landed; the contract check produced
+  **0 facts** (its typed stage finished on 3 of 40 cases), so contracts-as-facts is **untested**. These are proxy-scored
+  numbers until bunny's real-judge scores exist.
+- **Checks:** bunny reports judged catches of 31 and comments on the 9 clean cases per folder beside the proxy numbers,
+  flagging every case where the real judge and the proxy disagree; codex ($0, read-only, dev only) reports for the 40
+  dev cases whether the case-head tree equals the "original commit" the side track reviewed (tree hashes), with the count
+  and any that differ.
+
+**Touches:** artu1 this file, `docs/budget.md` (approval row), `.agents/LOG.md`, the brain inbox; bunny and codex reports
+in `tracehound-testset/run/out/`. The held-out run is untouched.
+- **Real-judge scores (bunny, 2026-11-15, `run/out/bunny.076n.md`; added to 076n):** bench-judge-v1, sequential, 47 calls,
+  0 `JUDGE_FAILED`, $0.02581 of $0.10. Haiku skill **12/31** catches (A0 v1 12/31; paired 4 vs 4, p 1.0), 2 comments on
+  the 9 clean cases; Sonnet skill **17/31** (paired vs A0 7 vs 2, exact sign test p 0.18, dev, report-only), 2 comments on
+  clean cases. So "no detectable change (under 4 of 31)" holds for Haiku but not for Sonnet, which is +5 over A0 and not
+  significant. The per-case proxy comparison is not done: the proxy's per-case scores are not on the branch.
+
+## 076o — Scoring the side track's unjudged folders; A/B 1 (short packet) logged (2026-11-15)
+
+**Status: ruled by Sunny (15 Nov 2026).**
+- **Spend:** up to **$0.25** of Nebius money (hard cap; stop at the cap) for bunny (Terry) to score, with the real
+  bench-judge-v1 and one judge process after the other, every folder under `sidetrack/runs/2026-11-15/` on
+  `claude/upbeat-lamport-b280zm` (at `ccf6c01` or later) that has no real-judge score yet: per Fable, 7 folders, including
+  `sonnet-short-packet-draw1/`, `-draw2/` and the two `sonnet-skill-typed-facts-*` folders. Dev cases only; caps per 076c
+  item 1 (job-start ledger value in the job file, run cap $0.25, total = that value + $0.25). From unallocated.
+- **Per folder:** catches of 31, comments on the 9 clean cases, paired counts vs A0 (A0-only vs folder-only).
+- **A/B 1 decision line** (plan `sidetrack/ab1-plan.md`, committed before arm B ran): arm A's two draws (`sonnet-skill/`,
+  `sonnet-skill-draw2/`) vs arm B's two (`sonnet-short-packet-draw1/`, `-draw2/`): union catches, paired counts, and whether
+  B meets "no loss of 4+ catches". case-040 is flagged: its draw-2 review failed at the account's usage limit and was run
+  once after the reset. Sonnet only; the plan's Haiku half was not run (15 Nov ruling).
+- **Arm B model-free results:** logged as Fable reported them, pending judged catches. The numbers are in Fable's session
+  report, which is not on the branch; artu1 has not received them, so they are recorded when Sunny passes them on.
+- **Proxy vs real:** `sidetrack/runs/2026-11-15/proxy-judge-caught.json` is now on the branch, so bunny diffs the proxy's
+  per-case catches against the real judge's for $0.
+
+**Touches:** artu1 this file, `docs/budget.md`, `.agents/LOG.md`, the brain inbox; bunny's report in `run/out/`.
+- **Results (bunny, 2026-11-15, `run/out/bunny.076o.md`; added to 076o):** 5 unjudged folders at `ccf6c01`, not 7
+  (`haiku-skill/` and `sonnet-skill/` were scored under 076n, trees unchanged). bench-judge-v1, 82 calls, 0 failed,
+  0 `JUDGE_FAILED`, **$0.04832** of $0.25. Catches of 31: `sonnet-skill-draw2` 17, short packet draw 1 17, draw 2 17,
+  typed facts draw 1 17, draw 2 17 (A0 12); against A0 each is 2–3 A0-only vs 7–8 folder-only, exact sign test p 0.18–0.23
+  (dev, report-only). **A/B 1:** arm A mean 17.0, arm B mean 17.0; union 19 each; A-only 1, B-only 1 (p 1.0); **B meets
+  "no loss of 4+ catches"**; mean clean-case comments B 2 vs A 3. Still open under the plan's rule: the cost condition
+  (Fable's model-free numbers, not received) and "on both models" (the Haiku half was not run). case-040: the short packet's
+  draw-2 rerun review did not catch it (every other Sonnet draw did); it does not change the line. case-025: the typed fact
+  gave 0 catches in both draws (parents 0 too). Proxy vs real: Haiku skill 25/31 agree, Sonnet skill 28/31.
+
+## 076p — Provider as a setting after held-out; A/B 1 adopted on the side track; typed facts killed (2026-11-16)
+
+**Status: ruled by Sunny (16 Nov 2026).** Nothing in the held-out plan changes: A0 (pool-verify-v1 on Nemotron) stays the
+registered primary.
+1. **Model rule:** after the held-out result, the reviewer's provider and model become a setting (Claude and OpenAI models
+   allowed). `AGENTS.md` "Models and keys" and its review rule say so, effective after held-out scoring.
+2. **A/B 1:** the short affected-set packet replaces the full one on the side track, on the Sonnet evidence alone. Cost
+   condition met: median list price per case $0.118 and $0.117 (short) against $0.119 and $0.127 (full). The Haiku half
+   was not run.
+3. **Typed facts are killed** (0 catches in both draws). The dev review folders under `sidetrack/runs/` stay until E1 is
+   done, then move to the private test-set repo and are removed from the branch in a normal commit; no history rewrite.
+
+**Touches:** artu1 this file, `AGENTS.md` ("Models and keys", "Build and safety" review rule), `.agents/STATE.md`,
+`.agents/LOG.md`; the side-track branch `claude/upbeat-lamport-b280zm` (short packet as its default, typed-facts path
+removed, `sidetrack/runs/` removed after E1); `tracehound-testset` (receives the dev review folders after E1). Not
+touched: the protocol, the freeze, H1/H2, `docs/budget.md`'s held-out lines.
+
+## 076q — Console reading and listed rates; the 1.08 trip; A/B 2 approved; A/B 3 deferred; dev exposure count (2026-11-16)
+
+**Status: ruled by Sunny (16 Nov 2026).** The held-out plan does not change; A0 on Nemotron stays the registered primary.
+1. **Console reading and listed rates:** Sunny's message carried placeholders, not values ("$[READING] at [TIME IST]";
+   "[MODEL: input $/MTok, output $/MTok]"), so **the reading, its time and the listed rates are not given** and are
+   recorded when Sunny sends them. The ruling as given: the reading is taken more than 2 hours after the last paid call;
+   bunny (Terry) fixes `config/prices.json` from the listed rates (codex/Amy GOs), and a correction row re-prices R1, 076j,
+   076n and 076o without rewriting history.
+2. **The 1.08 stop:** if that reading shows no drop beyond the $0.11 already seen, the trip was billing lag and E1
+   proceeds under its existing cap after P1 closes. If it has dropped further, nothing paid runs and artu1 brings Sunny the
+   numbers. **Until the reading arrives, the stop holds:** no paid Nebius call, E1 included.
+3. **A/B 2 approved** (`sidetrack/ab2-plan.md`, committed at `f827b23` before any run): Sonnet only, side track only,
+   reviews on Sunny's subscription, run by bunny after E1 is done. Judging with bench-judge-v1, one process at a time,
+   **cap $0.15 from unallocated**.
+4. **A/B 3 deferred** (`sidetrack/ab3-plan.md`) until A/B 2 is scored; no run and no judging. Reasons: pooled Sonnet +
+   Opus is estimated above Sunny's $0.25 per PR ceiling (Opus cost unmeasured), and its clean-case rule makes a keep
+   nearly impossible.
+5. **Dev exposure count (Fable; counts only):** 0 of 31 dev fix commits are dated before 1 July 2026; 24 of 31
+   bug-introducing commits are. Limits: the model cutoff is published to the month only, and earlier bug reports or
+   discussion were not checked.
+
+**Touches:** artu1 this file, `docs/budget.md` (A/B 2 cap; the reading and the correction row when the values arrive),
+`.agents/STATE.md`, `.agents/LOG.md`; bunny `config/prices.json` (codex GO) once the rates are given; the side-track
+branch (A/B 2 runs after E1; A/B 3 parked). Not touched: the protocol, the freeze, H1/H2.
+- **Item 1–2 applied (artu1, 16 Nov 2026; Sunny's reading):** console **$16.35** (time not given; more than 2 h after the
+  last paid call), **unchanged** from the previous reading, so no drop beyond the $0.11 already seen: under item 2 the trip
+  was billing lag, and **E1 proceeds under its existing cap after P1 closes**. Listed rates (console catalog, Base flavor,
+  per 1M tokens, input / cached input / output): Nemotron 3.5 Super VL $0.30 / $0.06 / $0.90; Nemotron-3-Super-120b
+  $0.30 / $0.06 / $0.90; Nemotron-3-Ultra-550b $1.00 / $0.12 / $3.00; Nemotron-3-Nano-30B-A3B $0.06 / $0.012 / $0.24;
+  Qwen3-235B-A22B-Instruct $0.20 / $0.05 / $0.60, marked Deprecated. The Super rates equal `config/prices.json`'s
+  $0.30 / $0.90, so the ~15–17% gap (076k item 10) is not a wrong base price; bunny is checking the exact model ids
+  charged and whether cached input is priced or recorded (`run/out/bunny.076q-prices.md`). 076k item 10's deadline
+  (Sun 15 Nov 23:00 IST) has passed without a cause, so it goes to Sunny before F1, as that item says.
+- **bench-judge-x1's model is past its listed removal date (artu1, 16 Nov 2026):** Nebius's November 2026 deprecation
+  notice lists `Qwen/Qwen3-235B-A22B-Instruct-2507` for removal from Token Factory Serverless on **November 9, 2026**
+  (recommended replacement `Qwen/Qwen3-30B-A3B-Instruct-2507`); "Token Factory does not automatically reroute requests".
+  On 16 Nov it is still listed by us-central1's `GET /v1/models` (a $0 call) and served 076j's judging on 14 Nov, so it can
+  go at any time, before the held-out scoring. A ruling for Sunny.
+- **Prices check (bunny, 16 Nov 2026, `run/out/bunny.076q-prices.md`, $0):** since 14 Nov the one Nebius ledger charged three
+  ids: `nvidia/Nemotron-3.5-Super-VL` (192 calls, $2.80987), `nvidia/nemotron-3-super-120b-a12b` (192, $0.10538),
+  `Qwen/Qwen3-235B-A22B-Instruct-2507` (61, $0.00768). The listed rates equal `config/prices.json` for all three, so
+  re-pricing changes $0.00000 and **no correction row is needed**. No cached-input pricing on the Nebius path (the ledger
+  reads prompt and completion tokens only; cached input can only lower real cost, so it cannot explain the gap);
+  reasoning tokens are inside completion tokens; no default price used. Latent: the Ultra entry is still a placeholder
+  ($5/$15 against the listed $1/$3): bunny fixes it on a branch, codex GO. **The gap stays unexplained:** 0.94 as written,
+  1.17 with the $0.57054 outage charges apart. The outage requests do not cover it: 15 of the 17 failed on DNS and 1 never
+  connected, so at most the one read time-out (≈ $0.034) could have been billed. The per-model console usage for 14 Nov
+  around 08:00–08:10Z would settle whether anything was billed then.
+- **076l hand check done (artu1, 2026-11-16 ~17:50Z, before the collection closes):** read-only gh over all 40 PRs on the
+  forks (P1's 38 plus S1's 2), with `b13-review-skipped`'s pattern at `1d07c82` applied to each comment's current body.
+  37 PRs carry a CodeRabbit comment posted before the trigger; all **37 were edited into a real summary; 0 are still a
+  "Review skipped" notice**, so none is listed as not-completion.
+
+## 076r — x1 switched to Qwen3-30B; money stop factor 1.17; bullmq auto-review off; guard fix; pa-076g GO; dev exposure split; branch deletion (2026-11-17)
+
+**Status: ruled by Sunny (17 Nov 2026).** Aim: the tag today, T0 Wed 18 Nov 10:00 IST. A0 on Nemotron stays the
+registered primary.
+1. **Second judge (x1): option (b).** x1 becomes `Qwen/Qwen3-30B-A3B-Instruct-2507` (Nebius's named replacement for the
+   deprecated `Qwen/Qwen3-235B-A22B-Instruct-2507`), same frozen prompt, reasoning off. E1 re-judges **every** dev row with
+   it. Protocol revision 13 says so before any held-out data is touched. If Qwen3-30B becomes unavailable mid-run, fall
+   back to option (d): every comment on a reviewed bug case goes on Sunny's sheet. No third model. Reason: the only
+   option with one second judge on dev and held-out and a dev baseline, chosen by a rule (Nebius's named replacement),
+   not by results.
+2. **Money stop: option (b).** The measured console ÷ ledger factor **f = 1.17** is frozen at F1; a job's console check
+   trips above **1.08 × 1.17 ≈ 1.26**; at F1 the `.env` hard stop is reset to ledger_now + (console − $1.00) ÷ 1.17. The
+   hard stop stays on. The cause of the 1.17 is still sought at $0, and a reading that moves away from it is reported.
+   Reason: a working tripwire matched to how Nebius actually bills; no planned job is cut.
+3. **CodeRabbit on the bullmq fork: option (a).** Sunny turns auto-review off for bullmq, checks the other forks, and
+   sends a screenshot. No re-probe (the Greptile credit is kept). Reason: bullmq then behaves like the dev forks P1 measured.
+4. **Ledger-helper guard:** artu1 makes the five one-line changes on `pa-076g` itself, as a dated exception in
+   `AGENTS.md`. Codex's check runs each of the five guards with an empty helper and confirms that **the paid command does
+   not run**, not only that STOP prints.
+5. **GO to merge `pa-076g`** (the RETHINK gate and the guard fix together) once codex passes item 4 and grok has done its
+   one pass on the whole range. If either says NO-GO, stop and tell Sunny.
+6. **Dev exposure: 10 of 31 is the label** (grok, `run/out/grok.dev-exposure.md`). Before E1 runs, the dev table reports
+   each tool on all 31 bug cases **and** on the 21 unexposed ones separately; protocol revision 13 says so, before any
+   judging.
+7. **Branch deletion: GO**, after artu1 confirms that every dev branch tip in the manifest exists in a local clone or a
+   git bundle, so the branches can be restored.
+8. Every ruling and GO is recorded in the brain with the date and reason; grok's exposure note is committed; STATE is
+   brought up to date. Then E1 starts.
+
+**Touches:** artu1 this file, `AGENTS.md` (exception 2), `docs/budget.md` (f = 1.17, hard stop at F1), STATE, LOG, the
+brain; codex protocol revision 13 (x1 model, fallback (d), stop factor, dev exposure split); `pa-076g` (five guard
+lines, artu1 under exception 2); Planner A's E1 `$X1`, F1 row 10/§3 model ids, H2 §2 (follow revision 13);
+`config/prices.json` (a Qwen3-30B entry from Nebius's listed rate); the four forks (dev branches deleted).
+- **Item 3 amended (Sunny, 17 Nov 2026):** bullmq's automatic review was already off, or Sunny cannot confirm it was on,
+  so the first probe's pre-trigger "in progress" post (source mode Auto) is unexplained. [Corrected the same day (076s): that post was first "Review skipped"; the "in progress" text was a post-trigger edit, read off the edited comment.] **The re-probe runs before the
+  tag** (1 Greptile credit, 1 CodeRabbit hour): codex repeats the 076k item 6 procedure on the bullmq fork, waits at
+  least 2 minutes between opening and triggering, and records any bot object posted before the trigger (with its first
+  wording). Held-out trees and the forks carry no root `.coderabbit.yaml` (codex 29/29; artu1).
+- **The first probe explained (artu1, 17 Nov 2026; read-only timeline and edit history of the bullmq probe PR):** PR opened
+  20:50:54Z (base `master`, no label, no reviewer, description without any mention). CodeRabbit's comment at 20:51:03Z has
+  four edits; its **first version is "Review skipped: Auto reviews are disabled on this repository"**, the same notice
+  the dev forks got on opening (37/37), and "Source mode: Auto" is a line in that notice's run-configuration block (it
+  appears in the dev forks' saved notice too). The "Currently processing" text is the edit at 20:51:39Z, after the
+  20:51:13Z trigger; the review followed at 20:52:24Z. So CodeRabbit did **not** auto-review on bullmq: the probe behaved
+  as on the dev forks, which is the re-probe's pass condition. codex's re-probe is on hold (no PR opened, no credit spent)
+  until Sunny decides whether it still runs.
+
+## 076s — Re-probe cancelled; CodeRabbit cleared; auto-reviewed flag from first version and creation time (2026-11-17)
+
+**Status: ruled by Sunny (17 Nov 2026).** The re-probe is cancelled: CodeRabbit is cleared for the tag on the first
+probe's timeline (its pre-trigger comment was first "Review skipped", as on the dev forks; "Currently processing" was a
+post-trigger edit). No Greptile credit spent; codex deletes its prepared, never-opened probe branch.
+1. **The auto-reviewed flag (076i item 3) is decided from a comment's first version and its creation time against the
+   trigger time, never from its current text.** H1 §5 failure 2 did not say how a pre-trigger object is classified; artu1
+   added the rule (first version from GitHub's edit history; `created_at` against GitHub's time of the tool's trigger
+   comment, since the local resume record ran about 6 s behind GitHub in P1) under `AGENTS.md` exception (3).
+2. **The record is corrected** wherever "in progress before the trigger" was written as a finding: LOG (two lines of
+   16 Nov), 076r item 3's amendment, codex's probe journal and report, and the brain. The reading came from an edited
+   comment. Reason for the ruling: the probe's pass condition was already met; the error was in how the comment was read.
+- The held-out-side YAML check is done (codex, `run/out/codex.coderabbit-yaml.md`, 16–17 Nov): 29/29 cases, 58/58 push
+  trees, 0 root `.coderabbit.yaml`/`.yml`. It no longer gates the tag.
+
+**Touches:** artu1 this file, `AGENTS.md` (exception 3), `docs/runbooks/H1-window.md` §5 failure 2 (one paragraph),
+`.agents/LOG.md`, the brain; codex's probe journal and report; the bullmq fork (prepared branch deleted).
+
+## 076t — E1 stop/go reading: RETHINK (dev, report to Sunny; does not gate the tag) (2026-11-17)
+
+**artu1's one reading of E1 §2 (076g item 6, 076i item 2), from grok's independent recount (`run/out/grok.e1-check.md`,
+every row MATCH with bunny's `run/out/bunny.e1.md`).** Dev, selection set, one draw, scorer of record bench-judge-v1, not
+hand-checked; dev exposure 10 of 31 (grok).
+- A0 caught **12** of 31 bug cases; CodeRabbit **19**; d = **7**. CodeRabbit completed 40 of 40.
+- GO needs A0 ≥ CodeRabbit − 3 (12 ≥ 16: **no**) and A0 comments per case ≤ 2 × CodeRabbit's (1.075 ≤ 6.150: yes).
+- **RETHINK holds: CodeRabbit leads by 6 or more (7 ≥ 6).** Coverage does not change a RETHINK (076i item 2).
+- **Reading: RETHINK.** Under 076k item 4 it does **not** gate the tag or the held-out run; it is told to Sunny the same
+  day with the table, and pauses company work (pricing, demo) until the held-out result.
+- Beside the rule, not inputs to it: under x1 (Qwen3-30B) d = 22 − 14 = 8; on the 21 unexposed cases d = 15 − 10 = 5
+  under v1 and 16 − 12 = 4 under x1. Greptile caught 18 (x1 18). Paired on the 31 under v1: A0-only 1 vs CodeRabbit-only 8;
+  A0-only 1 vs Greptile-only 7. A1 13, A2 13 (report-only). A0's comments per case 1.075 against CodeRabbit's 3.075 and
+  Greptile's 2.850; comments on the 9 clean cases A0 1, CodeRabbit 8, Greptile 9.
+
+**Touches:** artu1 this file, LOG, STATE, the brain; Sunny is told today. Nothing in the held-out plan changes.
+
+## 077 — H1 cap reset from R1's measured costs (2026-11-17)
+
+**Status: computed and recorded by artu1 under 076a item 3 and 076g item 1 (077 is only the cap reset); one grok pass.**
+- **Frozen, as before (076g item 1):** the arm is A0, pool-verify-v1 on Nemotron 3.5 Super, attempts 2, comment cap 15.
+  No arm is chosen on dev; R2 was cut.
+- **H1 cap: $2.94** (ledger dollars). Method: the caps check's, made empirical (`run/out/bunny.caps-077-recipe.py`, run by
+  artu1 with `python3 -I`; self-test passes): R1's 40 per-case costs (every attempt summed per case, from
+  `~/Projects/tracehound-runs/dev/r1/th`: median $0.0511, mean $0.0702); for N = 29 under 076a's rolling rule,
+  cap_95 = q95(sum of 28 draws) + the $0.40 case cap, 20,000 draws, seed 77: lognormal $2.915, bootstrap $2.945, the larger
+  rounded up → **$2.94**. H1's judging is H2's line, not H1's.
+- The per-case costs include R1's $0.54 of outage upper-bound charges on six cases, so the cap leans high. The cap is in
+  ledger dollars, which run about 17% under the console; a constant factor cancels in the completion probability
+  (devin's review, finding 4), and the money stop uses f = 1.17 (076r item 2). At the cap, about $3.44 at console prices.
+- **Funding (076a item 3):** H1's line was $3.15 until this decision; the cap is $2.94, so **$0.21 returns to unallocated**.
+  Unallocated: $6.05 (076g) − $0.07434 side-track and probe spend (076n $0.02581, 076o $0.04832, the judge probe $0.00012,
+  the region check $0.00009) − $0.15 committed to A/B 2 (076q) + $0.21 = **$6.04**. Unstarted held-out cases still run from
+  the reserve (076a item 4). The Haiku held-out row is Anthropic money, its own $1.00 line (076k item 1).
+- **Stop/go:** the dev reading is **RETHINK** (076t); under 076k item 4 it does not gate the tag.
+
+**Touches:** artu1 this file, `docs/budget.md` (H1 line $2.94; unallocated $6.04); H1's `CAP=` (`docs/runbooks/H1-window.md`
+reads it from 077); F1 row 2.
+
+## 078 — Predictions, claim wording and window dates for the held-out run (2026-11-17)
+
+**Status: FINAL. Sunny's "go", 17 Nov 2026 (076v item 1); written by artu1 (F1 §5); committed and pushed before the first
+held-out action.** Basis: E1 (`run/out/bunny.e1.md`, grok's recount `run/out/grok.e1-check.md`;
+`docs/bench/ts-dev.md` when merged), decision 076t (dev reading RETHINK), plan-v2 §2's power statement. Dev numbers are
+"dev, selection set, one draw, one judge of record, not hand-checked; dev exposure 10 of 31". Held-out ranges below scale
+dev rates from 31 bugs to 20 and widen them by the Wilson interval; they are predictions, not targets.
+
+**Predictions (protocol §11; each field a number or "no quantitative prediction"; nothing filled in later):**
+1. TraceHound (A0) bugs caught of 20: **8 (range 5–11)** (dev 12/31, 39%; Wilson 24–56%).
+2. CodeRabbit of 20: **12 (range 9–15)** (dev 19/31); Greptile of 20: **12 (range 8–15)** (dev 18/31). Expected discordant
+   counts: TraceHound vs CodeRabbit **about 1 TraceHound-only vs 5 CodeRabbit-only**; TraceHound vs Greptile **about 1 vs
+   4–5** (dev paired v1: 1 vs 8 and 1 vs 7 of 31, scaled).
+3. Comments per PR: TraceHound **about 1.1**, CodeRabbit **about 3.1**, Greptile **about 2.9**; on the 9 clean cases in
+   total: TraceHound **about 1**, CodeRabbit **about 8**, Greptile **about 9**. Completion (reviews delivered of 29):
+   CodeRabbit **29**, Greptile **29** (P1: 40/40 each, 0 re-triggers), TraceHound **29** after its one rerun.
+4. TraceHound cost per PR **about $0.07 ledger (median about $0.05)**, total **about $2.0 ledger, about $2.4 at console
+   prices** (f = 1.17); failed chunks **about 1 of about 60**; empty cases (no comment) **about 14 of 29** (dev 19/40).
+5. Registered pairs: **"TraceHound vs CodeRabbit and TraceHound vs Greptile, each an exact two-sided sign test at 0.05,
+   uncorrected for two tests, exact p-values reported; CodeRabbit vs Greptile: counts only."** Prediction: **neither
+   rejects** (outcome C for both). Assumption: about 6 discordant cases split about 1 : 5; at those dev rates a
+   simulation gives a rejection (in the other tool's favour, outcome B) with probability **about 0.28 for CodeRabbit and
+   about 0.19 for Greptile** (20,000 draws of 20 cases, seed 78). No prediction and no test on CodeRabbit vs Greptile or
+   on a secondary row.
+6. Hand-check sheet: **about 61 items** (dev sheet 95 items over 31 bugs and three tools, scaled to 20 bugs: bunny, E1
+   step 4). Sunny's minutes per item: **4, an estimate, not a measurement** (Sunny, 17 Nov; the practice sheet's
+   decisions were drafted by Claude and untimed, and are not data, 076v item 1). About 61 × 4 ≈ **244 minutes** against
+   Sunny's limit of **150 minutes** for the first sitting. **The sitting is split (076w item 2; dates 076x item 3):**
+   about 150 minutes on **Sun 22 Nov afternoon IST**, the rest (about 95 minutes at the estimate) on **Mon 23 Nov**; if
+   Sunny is faster on Sunday he continues and Monday shrinks or goes away. The 4 minutes per item is an estimate. Nothing is unblinded until he
+   finishes the last item. Under fallback (d) the sheet would be about 169 items. The sitting is Sunny's, by hand.
+7. Test-sentence floor (076c item 6): **15** bug cases reviewed by both tools of a pair; copied, not a prediction.
+8. Pooled secondary analysis (076g item 5): secondary, A0 only, defined in protocol revision 10 §4 "Secondary pooled
+   analysis: A0 only" (still §4 in revision 13); no choice added here.
+
+**Claim wording:** `docs/runbooks/W1-writeup.md` §3 (3.1 always; 3.2 outcomes A, B, C and the floor; 3.3 volume and cost;
+3.4 and 3.4b never-written and vendor-fact rules; 3.5 README), copied verbatim at F1 from the merged W1 as of the tag;
+W1 only fills the placeholders.
+
+**Window (076e item 7, 076k item 5):** scheduled T0 **Thu 19 Nov 2026 10:00 IST = 04:30 UTC** (moved one day
+from Wed 18 Nov: tag missed 20:00 IST on 17 Nov, 076k item 5; 076w, 076x item 3); scheduled snapshot T0 + 72 h
+= **Sun 22 Nov 2026 10:00 IST = 04:30 UTC**; the window runs from the actual T0 (the first held-out PR's `created_at`) to
+T0 + 72 h, and H1 reports both clocks. A missed tag moves T0 and these dates by one day each, up to T0 Sun 22 Nov 10:00 IST.
+Hand-check sitting: **Sun 22 Nov 2026, from about 11:30 IST** (after the snapshot at 10:00, the hashing and H2's judging and sheet build), continuing that day; **Mon 23 Nov only for what is left** (Sunny, 076w item 2, dates 076x item 3, start time 076z; both days move with T0 if T0 slips). **No unblinding until Sunny finishes the last item.** **H2's result: Sun 22 Nov evening** if he finishes Sunday, otherwise Mon 23 Nov evening. Sunny starts `caffeinate -is -t 280800` at about 09:00 IST on the day
+of the scheduled T0. Greptile credits: **59** (Sunny's reading, 17 Nov; needs at least 35, F1 row 7; expiry 27 Nov). Money stop:
+**f = 1.17**, a job's console check trips above 1.08 × 1.17 ≈ 1.26; the `.env` hard stop is reset at F1 (076r item 2). H1
+cap $2.94 (077). Haiku held-out row as 076k item 1 and protocol revision 12 §5 (two draws after A0; $1.00 Anthropic).
+`ts-freeze.md` sha256: **`da3d5e9dadde691c0c0af09823ca07dc7ba773524533a8f65ef478821754df61`** (tag `review-freeze-3` on `25151b1`, pushed 18 Nov 16:17 IST; its parent `8aeb28b` is the gated code commit).
+
+**Hand-checker's inbox and dashboards (F1 §1 row 13, gap G2; recorded 18 Nov, before T0, after codex's §4.8 flag):**
+(1) *Sunny unsubscribed from the four forks (Unwatch → Ignore on each) and filters their GitHub mail out of his inbox*
+(Sunny: "Forks: all four set to Ignore on GitHub, and their mail filtered out of my inbox"). **Time: no later than
+17 Nov 2026 14:34 IST (09:04:55Z)**, when his message saying so reached artu1; he gave no exact time, so this is the
+upper bound (row 13 needs it before T0, which it is). (2) *He opens no CodeRabbit or Greptile dashboard and no fork PR
+page from T0 until his filled sheet is hashed* (`H2-scoring.md` §6.1); Sunny's own rule is stricter (076w item 2):
+nothing is unblinded and no results are shown to him, including the dashboard, the logs and GitHub mail, until he
+finishes the last item. Greptile's credit reading (59) was taken on 17 Nov, before T0.
+
+**Go:** Sunny, 17 Nov 2026: "'Go' on 078; make it final." 
+
+## 076u — 078's inputs; "Full review finished." stays off the list; Planner A's edits by artu1; product rule registered; devin's pre-F1 review triaged (2026-11-17)
+
+**Status: ruled by Sunny (17 Nov 2026), applied by artu1.**
+
+**Inputs for 078 and the tag (Sunny, 17 Nov):**
+- Minutes per hand-check item: not known yet. bunny built a 10-item practice sheet from dev cases only
+  (`tracehound-testset` `run/out/practice-sheet.md`, seed 20261117, `--strip`, tool-name grep 0; blank
+  `run/out/practice-decisions.json`; key outside the repo). Sunny times himself; his number fills 078 field 6, and 078's
+  "go" follows once it is in.
+- Hand-check sitting: Sat 21 Nov 2026, afternoon IST, after the window closes at 10:00; it moves with T0.
+- Greptile credits remaining: **59** (read 17 Nov; F1 row 7 needs 35).
+- Nebius console: **$16.20** (read 17 Nov, about 14:00 IST = 08:30Z; last paid call 16 Nov 23:41:37Z, so ≥ 2 h).
+- Forks: all four set to Ignore on GitHub and their mail filtered (F1 row 13).
+- **E1's console check (artu1, under 076r item 2):** since the $16.35 reading the ledger holds $0.11511 (E1's judging
+  $0.11490, plus the judge probe $0.00012 and the region check $0.00009); drop $0.15 → **1.30**, above the 1.26 trip
+  (cent rounding: 1.22–1.39, so the range straddles the line). Under 076q item 2's precedent a trip stops new Nebius
+  spend until Sunny rules: A/B 2 and the F1 model check below wait for that ruling. At F1, with no spend before it, the
+  hard stop would reset to 48.09831 + (16.20 − 1.00) ÷ 1.17 = **61.08976** (now 63.15547).
+
+1. **"Full review finished." is not added to CodeRabbit's not-completion list.** Sunny: add it only if the dev records
+   show the text posted while the review comments were not yet complete. They show the opposite
+   (`run/out/artu1.full-review-finished.md`): in 40 of 40 dev cases the reply's last edit, when its text became
+   "Full review finished.", came after every CodeRabbit review object and inline comment (0 after it; 6–12 s after the
+   last one on the 36 cases that had any). The reply is created seconds after the trigger with other text: the one timed
+   reading taken mid-review shows "Full review triggered.". Reason: no record shows the text before completion; the list
+   stays as merged (`tools.json`, 076l's pattern).
+2. **Planner A's 076r–076t edits: artu1 makes them**, as AGENTS.md exception (4), on branch `b21-076u-pa-edits`
+   (@ `3b123ac`): x1 = Qwen3-30B in F1, E1 and H2 with H2 §8's fallback (d); f = 1.17 (trip 1.26, hard-stop reset) in
+   F1 row 10 and §3 and in H1; E1's exposure split; `--strip` on S1 step 14 and E1 step 4; item 4's lines below. codex
+   checks them, then grok does one pass on the range; artu1 merges on both GOs. Reason: Planner A runs outside Herdr and
+   the tag is today.
+3. **The product decision rule is registered as decision 079** (below), with the sha256 of the brain note. Reason:
+   bands fixed before any held-out number; it does not count once the hand-check has unblinded anything.
+4. **devin's pre-F1 review (`run/out/devin.pre-f1-methodology.md`), triaged.** Its three blockers (findings 1, 2, 4) are
+   settled by 076r. The rest:
+   a. *The kit prints "x1 caught 0" with no failure count.* `score-testset.ts` is not frozen yet (frozen at the tag by
+      sha256, F1 §3), and **the fix is already on `main`**: `e67d237` (branch `b16-x1-unavailable`, codex's GO, merged)
+      prints x1's judge-failed count beside caught and "unavailable" when no x1 entry is `SCORED`. Lane: devin confirms
+      at $0 that it meets finding 1(i); nothing new to build.
+   b. *F1's model check:* the models-list read is replaced by one minimal completion request per model (F1 row 15,
+      H1 §1 at T0 − 24 h, H2 §2 step 0). Approved by Sunny for the two judges (v1, x1); artu1 also includes the frozen
+      reviewer id in F1 row 15 and H1 (same purpose, < $0.001 in all, on the ledger; artu1 approves the spend). Lane:
+      codex at F1, after the E1 console ruling above.
+   c. *v1's removal date:* STATE records that **H2 must finish before 9 Dec 2026**; F1 and H2 say so. Lane: artu1.
+   d. *W1 checklist:* the Haiku disclosure wording, the Haiku product-rule wording, the README naming A0, "$D" as the
+      ledger figure, the four uncorrected tests, "fixed before any dev result", plus the side-track line and the x1
+      fallback sentence, go into W1 §5 item 4. None blocks the tag. Lane: artu1 (b21), codex ticks it at W1.
+   e. *Side-track Sonnet dev numbers cannot reach the held-out counts:* enforced by **decision 076m** ("new paths only;
+      unmerged until held-out scoring is done"): `claude/upbeat-lamport-b280zm` is not an ancestor of `main` and `main`
+      holds 0 side-track paths (checked 17 Nov), so the tag tree that H1 and H2 run from has none of it; H2 scores only
+      the rows it assembles in §1 from `$HO`, and only the pairs in `policy.076c.json` `registered_tests` get a p. W1 §5
+      item 4 adds the wording rule. Lane: devin re-checks this statement at $0.
+5. **bunny's multi-line check (P1 U4, `run/out/bunny.p1-multiline.md`): no case changes.** Under the interval rule one
+   comment per tool changes from miss to hit, on a case each tool already hits; CodeRabbit stays 18/31 and Greptile
+   17/31 on location. Noted; nothing to do.
+
+**PRs #77 and #78:** assessed for Sunny (not merged; his call): see LOG, 17 Nov.
+
+**Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`, `docs/budget.md`, the brain; branch `b21-076u-pa-edits`
+(AGENTS.md, F1, E1, S1, H1, H2, W1; codex GO, grok GO); devin `run/out/devin.076u-check.md`.
+
+## 079 — Product decision rule, registered before T0 (2026-11-17)
+
+**Status: registered by Sunny's ruling (076u item 3), before T0 and before any held-out number.** Source: tracehound-brain
+`inbox/2026-11-17-product-decision.md`, **sha256 `de5adafbe2d447dfd87d30f7daeec6533cf4e4d4c515bd06457f3e48a522b942`**
+(an unreviewed read-only report; its thresholds are judgements, tagged INFERRED there). This entry registers its §1
+decision rule only; pricing, the model test, kill dates and the four-week plan stay proposals. **The rule does not count
+if anything has been unblinded by the hand-check before this entry is on `main`.** It is a product rule, not a test: the
+registered tests stay protocol revision 13 §4 and 078.
+
+**Measure:** distinct labelled bugs caught of 20, human-confirmed (protocol §4). `D_H` = A0's catches minus the
+competitor's on each registered pair's eligible cases (TraceHound vs CodeRabbit, TraceHound vs Greptile); the worse pair
+counts. `D_31` and `D_21` are the same on all 31 dev bugs and on the 21 unexposed ones.
+
+| Band | `D_H` | Outcome |
+|---|---|---|
+| A | +4 or more | Paid product, as a pilot until the note's §5 user test passes |
+| B | −3 to +3 | Narrow to the cross-file TypeScript monorepo claim if its seeded test (the note's task 8) passes; otherwise C |
+| C | −4 or −5 | Open source only: no pricing, no hosted service, no spend |
+| D | −6 or worse | Stop reviewer work; publish the result and the method |
+
+**Modifiers, in order:**
+1. Dev demotion: one band down if `D_31` ≤ −6 **and** `D_21` ≤ −4. Dev never promotes.
+2. Floor: A0 catches 3 or fewer of 20 → band C at best.
+3. Comments: A0's mean comments per PR above twice the competitor's → one band down.
+4. Coverage: under 15 of 20 reviewed by both tools, that pair gives counts only (G10); if both pairs fail, band C holds
+   until a fresh set exists.
+
+**Known limit (from the note):** at n = 20 the power is near 0.4 for a 30-point gap, and bands B and C differ by less
+than the set resolves. **Dev at registration (076t, for the record):** v1 on all 31, A0 12, CodeRabbit 19, Greptile 18,
+so `D_31` = −7 (the CodeRabbit pair); `D_21` is in `docs/bench/ts-dev.md`. Modifier 1 is read only after H2. Who computes the band: artu1 from H2's counts-only summary, after the
+firewall lifts; codex checks.
+
+## 076v — 078 made final; minutes per item an estimate; console trip option (b); A/B 2 cancelled; PRs #77/#78 timing (2026-11-17)
+
+**Status: ruled by Sunny (17 Nov 2026), applied by artu1.**
+
+1. **Practice sheet.** `run/out/practice-decisions.*` was filled by Claude, not by Sunny, and not timed: renamed
+   `practice-decisions.CLAUDE-DRAFTED-NOT-DATA.json` with `practice-decisions.NOT-DATA.md` beside it (testset `ea4b8cb`);
+   never data, never a human label. **078 uses 4 minutes per item, labelled an estimate.** Saturday's sheet must fit in
+   **150 minutes**; at about 61 items that is about 244 minutes, so it does not fit, and artu1 brings Sunny the cut before
+   the tag (options below). **078 is final** on Sunny's "go". Saturday's hand-check is Sunny's, by hand.
+   *Options for the fit (artu1; dev numbers from E1's stripped sheet, 95 items, 57 tool–case groups, scaled by 20/31):*
+   - (a) **Two sittings, no rule change:** 150 minutes on Saturday, the rest (about 95 minutes) on Sunday, nothing else
+     seen in between (H2 §8 already allows it; the report says "two sittings"). This doesn't cut the sheet. It is
+     artu1's recommendation.
+   - (b) **Stop at the first confirmed comment per tool and bug case** (the measure counts distinct bugs, so later
+     comments of that tool on that case cannot change it): expected 157–185 minutes on the dev proxy, still over 150.
+     It needs a kit change to a file hashed at the tag and a protocol revision tonight, and grouping shows Sunny which
+     comments share a tool.
+   - (c) **Hand-check only where the two judges disagree, plus location-only items:** about 25 items, about 100 minutes.
+     It fits, but the headline changes from "confirmed by hand" to "two judges agreed, or confirmed by hand", and it
+     needs a protocol revision (codex) and new W1 §3.1 wording before the tag.
+   Under fallback (d), about 169 items (about 11 hours) cannot fit any single sitting; Sunny rules then.
+2. **Console trip: option (b).** Only the tag's one-request model checks are allowed (F1 row 15; at T0 − 24 h and H2 step 0
+   as written). **Planned real spend at 1.39** (the top of the rounding range): H1 cap $2.94 + H2 $0.40 = $3.34 ledger →
+   **$4.64**; with the whole $3.00 reserve used too, $6.34 → **$8.81**; model checks < $0.003. Against $16.20 − $1.00 =
+   $15.20, it fits, with $6.39 left even with the reserve spent. (The F1 hard stop at f = 1.17 allows about $12.99
+   of ledger, about $18.06 real at 1.39. The job caps, not the hard stop, are what keep spend inside the balance.)
+   Sunny's console reading tonight is recorded as a data point, not a gate. **A/B 2 is cancelled:** W1 does not depend
+   on it (no reference in `W1-writeup.md` or `H2-scoring.md`; W1 §5 item 4 keeps side-track numbers off the page); its
+   $0.15 returns to unallocated.
+3. **PRs:** #78 (flaky 061a test) merges before the tag if codex gives GO in time, otherwise after H2. #77 (viewer
+   inspector width) waits until after H2.
+
+**Touches:** artu1 this file, `docs/budget.md`, `.agents/STATE.md`, `.agents/LOG.md`, the brain; testset `run/out/practice-*`.
+
+## 080 — Scope after the held-out result: reviewer work stops; maintenance after W1 (2026-11-17)
+
+**Status: ruled by Sunny (17 Nov 2026).** After H2 and the W1 write-up, **TraceHound reviewer work stops**: no new arms, no
+tuning, no model switches. The dev table's gap of 7 is RETHINK under the registered rule (076t), and **company work is
+paused from today**. After W1 the repo goes into **maintenance: fixes only**, plus the pricing (§2) and kill-date (§5)
+items of the product note that decision 079 registers by hash, applied as written. Reason: Sunny's ruling. The dev
+reading is RETHINK, and the held-out run answers the registered question once.
+
+**What this changes (artu1's reading; Sunny corrects it if it is wrong):**
+- 076p's plan to make the provider and model a setting after held-out scoring is withdrawn ("no model switches").
+- The model test in the product note's §3 (arms M2–M4) and the side track (076m) get no further work; the side-track
+  branch stays unmerged as it is.
+- 079's band is still computed and reported after H2, as registered. Under 080 it decides only what the note's §2 and §5
+  say (paid tiers only in band A; the kill dates).
+- The held-out run, H2, the hand-check and W1 go ahead unchanged.
+
+**Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`, the brain.
+
+## 076w — Held-out clones: wider fetch from upstream (option A); hand-check in two sittings (2026-11-17)
+
+**Status: ruled by Sunny (17 Nov 2026).** Recorded by artu1.
+
+1. **Held-out clones, option (A).** Codex's first fetch from a clone's existing remote failed ("bad revision / remote
+   did not send all necessary objects"; 225 objects still missing in the first clone, the other three not attempted,
+   refs, HEAD and config unchanged; `run/out/codex.ho-materialize.md`). Codex fetches the missing objects from a
+   **wider source: the public upstream repos, or another plain git host — nowhere that shows review comments or
+   results** (so not the forks, and nothing over a web page or an API that shows pull requests). **Before any held-out
+   action, every fetched commit and tree must match its manifest sha. Any mismatch stops the run and comes to Sunny.**
+   Codex runs the fetch and writes an identity report; **grok checks that report before codex continues** (dry runs,
+   goldens, the rest of F1 §4). Reason: the clones must be complete for the runner to execute, git objects are
+   content-addressed, and the manifest check proves the cases are unchanged. Briefs `run/briefs/codex.ho-fetch-a.md`,
+   `run/briefs/grok.ho-identity.md`.
+2. **Hand-check in two sittings.** About **150 minutes on Sat 21 Nov afternoon IST**, the rest on **Sun 22 Nov**.
+   **Nothing is unblinded and no results are shown to Sunny until he finishes the last item on Sunday**, including the
+   dashboard, the logs and GitHub mail. If he is faster on Saturday he continues, and the Sunday sitting shrinks or goes
+   away. 078 records that the sitting is split and that 4 minutes per item is an estimate. **H2 and the result move to
+   Sunday evening.** Reason: the sheet (about 61 items × 4 minutes ≈ 244 minutes) does not fit 150 minutes; splitting
+   it keeps every item and changes no rule (H2 §8's "two sittings" row; 076v item 1 option (a)).
+   **artu1's reading (Sunny corrects it if it is wrong):** H2's judging and the sheet build (H2 §2–§4) still run
+   before Saturday's sitting, because the sheet is built from them, and nothing from them is shown to Sunny; H2's
+   scoring with his labels, the report and the result follow his last item, Sunday evening. Where the runbooks say
+   "one sitting" (H2 §5's heading, handover.md's sitting row, H1's "Dates"), this decision governs; H2's "two
+   sittings" row applies (partial file hashed and kept at the end of Saturday; the report says "two sittings").
+   Sunny's blindness rule now covers Saturday evening to Sunday: no dashboard, logs, or GitHub mail about the forks.
+
+**Dates after the missed tag (no ruling; 076k item 5, F1 §1 row 5 and line 47):** the tag was not pushed by 20:00 IST on
+Tue 17 Nov (the held-out clone fetch was still running at 02:15 IST on 18 Nov), so the tag and T0 move by one day:
+**scheduled T0 Thu 19 Nov 2026 10:00 IST = 04:30 UTC**, snapshot **Sun 22 Nov 10:00 IST**, hand-check **about 150
+minutes Sun 22 Nov afternoon IST, the rest Mon 23 Nov**, H2's result **Mon 23 Nov evening**. Sunny starts `caffeinate`
+at about 09:00 IST on Thu 19 Nov. Greptile's expiry (27 Nov) is still after the last sitting. This is the last free
+move: a further miss puts T0 at Fri 20 Nov, still within 076k item 5's limit (Sun 22 Nov) but the second sitting would
+then fall on Tue 24 Nov. The slot list (F1 row 14) is rebuilt at T0 2026-11-19T04:30:00Z.
+
+**Touches:** artu1 this file (078 field 6 and the sitting line, 076w), `.agents/STATE.md`, `.agents/LOG.md`, the brain;
+codex the held-out clones (fetch only, under the brief); grok `run/out/grok.ho-identity.md`.
+
+## 076x — Fork-fetched objects kept as a deviation, after fsck; stage 2 and the tag; sittings Sun 22 / Mon 23 Nov (2026-11-18)
+
+**Status: ruled by Sunny (18 Nov 2026).** Recorded by artu1.
+
+1. **Deviation kept.** Under 076w item 1 codex's first fetch went to two forks by mistake (`git -c remote.origin.url=…`
+   adds a second URL; the fork's stayed first): **22,241 previously missing blobs in clones 1 and 2** came from forks
+   over plain git (no web, API, pull-request refs, comments or writes). The remaining 48,020 came from public upstream
+   (95/95 effective-URL proofs). Reports: `run/out/codex.ho-fetch-a-deviation.md`, `run/out/codex.ho-fetch-a.md`,
+   `run/out/grok.ho-identity.md` (GO: 29 cases, 58/58 commits and trees, 29/29 original heads, 0 mismatches; refs,
+   HEAD, index, config unchanged). **Sunny keeps the 22,241 objects, recorded as a deviation.** Reason: git objects are
+   addressed by content, and grok's identity check shows every commit, tree and original head matches the manifest;
+   rebuilding changes nothing. H1's report lists this deviation.
+2. **Condition first, $0:** codex runs `git fsck --full` on clones 1 and 2; grok checks the output. **Any corrupt or
+   mismatched object → rebuild those clones from upstream instead, and it comes to Sunny.** If fsck is clean, it is
+   recorded here, next to the deviation. Then stage 2 (dry runs, goldens, F1 §4, freeze GO) and the tag go ahead.
+   Briefs `run/briefs/codex.ho-fsck.md`, `run/briefs/grok.ho-fsck.md`.
+   **fsck result (18 Nov): clean.** `git fsck --full` on clones 1 and 2: exit 0 each, stdout and stderr empty, 0 error,
+   missing, corrupt, hash-mismatch, dangling, unreachable or warning lines; refs, HEAD, index and config unchanged,
+   FETCH_HEAD absent (`run/out/codex.ho-fsck.md`). grok's independent rerun: the same, **GO** (`run/out/grok.ho-fsck.md`).
+   The 22,241 objects stay; the deviation stands as recorded. Stage 2 goes ahead.
+3. **Dates:** T0 **Thu 19 Nov 10:00 IST**, window ends **Sun 22 Nov 10:00 IST**; sittings about 150 minutes **Sun 22
+   Nov afternoon** and the rest **Mon 23 Nov**; the no-unblinding rule holds until Sunny finishes the last item. 078's
+   window and sitting lines updated.
+
+**Touches:** artu1 this file (078, 076x), `.agents/STATE.md`, `.agents/LOG.md`, the brain; codex the held-out clones
+(read-only fsck); grok `run/out/grok.ho-fsck.md`.
+
+## 076y — Erratum before T0: the Haiku row's command must name its draw (2026-11-18)
+
+**Status: artu1, operator correction under 076g item 8, recorded before T0; Sunny may veto.** Found by codex in the F1
+§4.8 check on the tag (`run/out/codex.f1-heldout.md`).
+
+- **What is wrong:** `H1-window.md` (Haiku row, "Command", lines 460–461) and `docs/bench/ts-freeze.md` (Haiku row) give the
+  command as the runner line plus `--provider-config $HO/haiku.row.json` with `--out-dir $HO/th-haiku-1` or `-2`. The
+  frozen runner at the tag refuses that (exit 2): the registered held-out row needs `--draw 1|2`, and the out-dir must
+  contain exactly one path segment `draw-<d>` equal to `--draw` (`scripts/run-tracehound.ts:216-224`, merged with codex's
+  GO at `9819e2f`, decision 076k item 1). The documents were written from the row's description, not from the code.
+- **Correction (documents only; no code, prompt, setting or hash changes):** draw `<d>` (1, then 2) runs as
+  `<§4's runner line> --provider-config $HO/haiku.row.json --draw <d> --out-dir $HO/th-haiku-<d>/draw-<d>`
+  (dry run first, then `--execute`; never `--post`, never `--cache read`). Wherever H1 (record check, per draw) and H2
+  §1 (`official-haiku-<d>` from `$HO/th-haiku-<d>`) name `$HO/th-haiku-<d>` as the draw's record directory, they read
+  `$HO/th-haiku-<d>/draw-<d>`. Reruns use the same `--draw` and out-dir (the runner's one-rerun rule per draw applies).
+- **Why this is not a choice made with knowledge of outcomes:** it is decided before T0; the row's model, config
+  (`haiku.row.json` sha256 `239d5fa6…`), settings, order and caps are unchanged; `--draw` only labels the draw the
+  documents already name, and the code that enforces it is the code in the tag. The tag and `ts-freeze.md` stay as
+  they are, so their recorded hashes stay valid; this entry is the erratum H1 and H2 follow.
+- **Check:** codex dry-runs the corrected command for draw 1 and draw 2 against the tag worktree (no `--execute`, no
+  provider call) and records the exit codes in `run/out/codex.f1-heldout.md`.
+
+- **Addendum, Node runtime (same day, before T0):** `ts-freeze.md` records node **v26.13.1**, the binary first on artu1's
+  PATH (`~/.local/share/vite-plus/bin/node`); codex's shell resolves **v26.13.0** (`/opt/homebrew/bin/node`). Both are
+  installed. **H1 and H2 run with v26.13.1**: the operator puts `~/.local/share/vite-plus/bin` first on PATH in the job
+  shell and writes `node -v` into `$HO/job.md` before the first paid call; codex's F1 test rerun on the tag uses it too.
+  A run under another version is reported as a deviation, not stopped (a patch release; no reviewer code reads the
+  version). R1's records do not name a Node version.
+
+**Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`; codex the dry run (held-out side).
+
+## 076z — Faster finish without changing the registered design (2026-11-18)
+
+**Status: ruled by Sunny (18 Nov 2026, "go on" to artu1's two proposals).** Sunny asked to finish within 1–2 days.
+artu1 advised against shortening the 72-hour window or the 61-minute slot spacing (076e item 7, 076h item 3): the 29
+first triggers alone take about 29.5 hours, later re-triggers run to T0 + 64 h, tighter spacing risks CodeRabbit's
+hourly rate limits that P1 measured, and any change before T0 means a new plan, pins, `ts-freeze.md`, tag and full
+re-checks, likely moving T0 to Friday. Ruled instead:
+1. **Hand-check from about 11:30 IST on Sun 22 Nov**, right after the snapshot (10:00), §6's hashing and H2's judging
+   and sheet build (about 90 minutes, an estimate), continuing that day as 076w item 2 allows; Monday only for what is
+   left. H2's result Sunday evening if he finishes Sunday. Nothing is unblinded until his last item (unchanged).
+   078's sitting line updated. Codex plans H2's judging to start as soon as §6's hashing is done.
+2. **W1 skeleton during the window:** bunny drafts `docs/bench/ts-heldout.md` and the `results.md` section as a
+   branch with every number and outcome a placeholder, built only from `W1-writeup.md`, decision 078, the protocol and
+   dev files (`docs/bench/ts-dev.md`). No held-out file, no fork read (076c item 12), no outcome-dependent wording
+   chosen in advance beyond §3's templates; nothing merges before H2. Brief `run/briefs/bunny.w1-skeleton.md`.
+Reason: both save about a day (result Sunday instead of Monday; write-up Monday) and change no registered rule.
+
+**Touches:** artu1 this file (078 sitting line, 076z), `.agents/STATE.md`, `.agents/LOG.md`, the brain; bunny the W1
+branch; codex H2 timing.
+
+## 076aa — W1 preparation: bunny's proposals 6 and 15 and the operator items (2026-11-19)
+
+**Status: artu1 (operator detail and a correction under 076u item 4); Sunny may veto.** Source:
+`run/out/bunny.w1-proposals.md` (bunny, standing in, 19 Nov; proposals, not rulings) on the W1 skeleton (b23 `e66fcc4`,
+fill helper b24 `33b7958`). No held-out file was read for any of this.
+- **Item 6, accepted as a correction under 076u item 4:** `ts-heldout.md` §2.9 and limit 4 use 076u item 4's wording
+  ("pool-verify-v1 was fixed before any catch count of it on the dev cases existed; contracts off was chosen by a
+  model-free dev audit"). The older wording ("before any result on the TypeScript dev cases existed") overstates: R1's
+  runs existed before contracts-off was chosen. Sunny ruled the 076u checklist; this applies it in the two places W1
+  had not caught up.
+- **Item 15, (a) accepted:** where a §3.2 template's count is 1, "bugs" is written "bug" (and "cases" "case"). Grammar
+  only; no claim, number or outcome branch changes. W1 §5's "not a template" check treats this as the template.
+- **Items 1–5, 7–14, 16–18: operator detail, accepted as proposed**, each subject to codex's review of b24 after H1
+  (W1 §5); codex flags any that changes a claim, and that one comes back to artu1 or Sunny. The result's decision
+  number is chosen at W1 (079 is the product rule).
+- b24-w1-fill merges only on codex's GO on its full sha, after H2's commit.
+- **Addendum (20 Nov, artu1), after codex's b24 review** (`run/out/codex.b24-review.md`, NO-GO on `33b7958`):
+  - codex accepted items 1–5, 7–9, 11–14 and 16–18. It changed item 10: writer directions may become page text only if
+    every substantive clause and its source are kept.
+  - Item 15(a)'s rule applies to every filled count on the page, not only the §3.2 templates. One example is §3b's
+    "the 1 case became exposed".
+  - Grammar only, as in item 15(a).
+
+**Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`; bunny b24 if codex asks for changes; codex the review.
+
+## 076ab — W1 §3.4b applied: vendor facts in limits 6 and 7 against the 14 Nov verified table (2026-11-20)
+
+**Status: artu1, applying 076k item 9 at Sunny's request (20 Nov); Sunny may veto.**
+
+**The table (W1 §3.4b's "to be named by artu1"):** section A of `sidetrack/research/2026-11-14/vendor-verification-pass2.md`.
+- It sits at commit `f2146f3` on `claude/upbeat-lamport-b280zm`, committed verbatim by Fable's cloud session on 19 Nov.
+- The file's sha256 begins `50c3affb5d477bad`; artu1 recomputed it from the commit and it matches the README.
+- The checked report is `vendor-research-pass1.md` (sources 1–31); how to read the grades is in that folder's README.
+- The commit must stay reachable until W1 is published; do not delete the branch.
+
+**Rule (W1 §3.4b):** a vendor fact (what a tool does, reads, offers or costs) stays only if a D row of section A covers
+it. A fact that does not is cut, with nothing put in its place.
+
+Facts about this run's own setup and observations are not vendor facts and are not cut. These are:
+- the forks' default branches;
+- the order of pushes;
+- the deletion of dev branches;
+- the `refs/pull/*` counts we listed;
+- the plans our accounts used;
+- the scheduler's spacing.
+
+The page was checked at b24 `aafb18f`, `docs/bench/ts-heldout.md:415–456`.
+
+| # | fact on the page | row relied on | ruling |
+|---|---|---|---|
+| 6a | "neither vendor documents which ref its repository context is built from (`run/out/grok.tool-facts.md` rows 7, 11)" | none. The 11 Nov G1 reading is not the 14 Nov table, and no section A row covers it | **off** |
+| 6b | "CodeRabbit reviewed payload's cases under payload's own configuration file, which is part of that code." | none. The behaviour rests on docs.coderabbit.ai, and section A has every coderabbit.ai claim as I ("blocked, D → I"). The sentence is also contradicted by our own count: the held-out push trees carry 0 root `.coderabbit.yaml`/`.yml`, 29/29 cases, 58/58 trees (`run/out/codex.coderabbit-yaml.md`; decisions 076r, 076s) | **off** |
+| 6c | CodeRabbit defaults: web search "Enabled unless explicitly disabled"; "Uses past PRs for context" (docs.coderabbit.ai/knowledge-base) | none. coderabbit.ai was blocked, so I | **off** |
+| 6d | `refs/pull/<n>/head` stays; closed PRs stay public; "a tool that indexed a fork then may keep what it read" | not a vendor fact. The first two are our own `ls-remote` counts (P1 §4 item 9). The third is a conditional, not a claim | stays |
+| 7 | "ran on free plans, … one pull request every 61 minutes, within their rate and credit limits" | not a vendor fact. It is our accounts' plans (`docs/live-setup.md:19`, `:24`, `:79`; $0 billed) and our scheduler. It states no limit's value | stays |
+
+Limit 6 then opens: "What the other tools could see: each fork's default branch was set to the last upstream commit
+before 2026-07-01." Its next sentence is "Other case branches on the same fork …". The only edit besides the cuts is the
+full stop that replaces the semicolon, so the sentence ends where the cut begins.
+
+None of the D facts (Anthropic's 4 reviewers / ~20 min / $15–25; Greptile on the Agent SDK, ~90% cache, Opus 4.5;
+CodeRabbit's shell scripts and "20+ linters and security scanners"; PR-Agent's defaults at `1b19ab2`; Martian 50 PRs /
+173 / 3 judges; ReviewBench 219 PRs / mean of 3 / one judge) is added: §3.4b cuts and does not replace.
+
+**Caveats recorded with the result (Sunny, 20 Nov):**
+1. Even the D rows were read through a tool that summarises pages, so their quotes are "as summarised", not raw text.
+   PR-Agent's code and the GitHub raw files were read directly.
+2. The 16 Nov audit's reading of Cursor's own Bugbot launch post is **not D under W1**. §3.4b names the 14 Nov table,
+   and that table grades every cursor.com claim I ("blocked, D → I"). Any later use needs a new verified row and a new
+   decision before it goes on the page, in the README or in a post. It changes nothing now: limits 6 and 7 carry no
+   Bugbot fact, and limit 8 only says there is no Bugbot row.
+
+**Also found:** the W1 runbook's own limit-6 template (`docs/runbooks/W1-writeup.md:177`) carries 6b. The runbook stays
+as registered; the page carries the cut, with this decision as its record.
+
+**Touches:** artu1 this file, `.agents/STATE.md`, `.agents/LOG.md`. bunny cuts 6a–6c on b24 and replaces the
+`{{vendor-fact-check}}` comment with this decision's number and the table's commit and path. codex re-reviews b24 on its
+new sha, and the merge is still after H2. The W1 values file needs nothing.
+
+## 081 — Held-out result: 079 band D; prediction scoring rule; Haiku default not switched (2026-11-22)
+
+**Status: computed by artu1 from the committed counts (`dc9aab3`, `docs/bench/ts-heldout.summary.json`) after the
+firewall lift. grok checks it as codex's stand-in, since codex is down (079: "codex checks"). Sunny reads it with the W1 page
+(W1 §5 item 3).** This is the W1 page's `{{decision-number}}`.
+
+1. **Registered tests (protocol rev 13 §4, W1 §3.2).** Both pairs had 20 bug cases reviewed by both, so the floor of 15 is met.
+   - TraceHound vs CodeRabbit: 2 vs 8 discordant, exact p 0.109375. **Outcome C**: no detectable difference at this
+     size.
+   - TraceHound vs Greptile: 0 vs 8, exact p 0.0078125. **Outcome B**: Greptile caught more of the labelled bugs.
+   - Each test is at 0.05, uncorrected, one of two. artu1 recomputed both p-values and the three Wilson intervals from the
+     counts, and they match.
+2. **079 band.** `D_H` is A0 minus the competitor on each pair's eligible cases: CodeRabbit 4 − 10 = −6, Greptile 4 − 12 =
+   −8. The worse pair counts, so `D_H` = −8, which is **band D: stop reviewer work; publish the result and the method.**
+   Modifiers in order:
+   1. Dev demotion: nothing below D.
+   2. The floor: A0 has 4 > 3, so it does not apply.
+   3. Comments: A0 has 0.76 per PR, not above twice either tool's, so it does not apply.
+   4. Coverage: 20 ≥ 15 on both pairs, so it does not apply.
+   This agrees with 080, which had already stopped reviewer work. Under 080, the band decides only the product note's
+   §2 and §5 (no paid tier, kill dates as written).
+3. **Haiku product default (076k item 2).** The held-out condition is met: the mean of Haiku's two draws under v1 is 6.5,
+   and A0's v1 count is 6, so Haiku is +0.5 and not more than 2 behind. **The default is not switched**, because 080
+   (17 Nov, after 076k) rules "no model switches". The page reports the line as 076k item 2 requires. That item is a
+   product rule, not a test claim. Sunny can rule otherwise. **Page wording:** the kept 076k block's last sentence ("After this
+   default switch, the 29 held-out cases are spent for Haiku") is replaced by "The condition is met, but the default was
+   not switched" with the reason, because no switch happened (grok's finding on b25). This is the only template sentence the page changes.
+4. **Prediction scoring (W1 §2 item 8).** 078 gave ranges for some predictions and "about X" for others, with no
+   stated tolerance. **This rule was chosen after the result and is labelled so on the page:**
+   - A range is right if the result is inside it.
+   - "About X" is right within ±25% of X, or within ±1 when X ≤ 4.
+   - A row with several numbers is right only if every number is.
+   - "Too vague to score" is kept for a prediction that states no number.
+   - *Rejected:* calling every "about" row too vague. That would score 8 of the 14 rows as nothing, and it would hide
+     the misses on rows 2c, 3b and 4c.
+   - The row-by-row verdicts are on the page (§8). grok checks them.
+   - **Result under the rule:** 8 right (2a, 2b, 3a, 3c, 4a, 4b, 4d, 6), 6 wrong (1, 2c, 2d, 3b, 4c, 5). Row 3a is right
+     because the ±1 band applies to TraceHound's "about 1.1" (grok's check of the first draft, which had called it a miss).
+5. **What follows (080):** the W1 page is published once codex or grok gives GO and Sunny says yes. After that the repo
+   is in maintenance.
+
+**Touches:** artu1 this file, `docs/bench/ts-heldout.md` (decision number, §8 verdicts), `.agents/STATE.md`,
+`.agents/LOG.md`, the brain; grok's check.

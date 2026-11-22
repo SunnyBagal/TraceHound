@@ -1,0 +1,289 @@
+// scripts/bench/w1-fill.ts on invented summaries, no network. The skeleton tests read the four W1 files as they were
+// before W1 filled them (main aa4fc0e, copied byte for byte to test/fixtures/w1-skeleton/). One block reads the committed
+// held-out score files (docs/bench/ts-heldout.{secondary,pooled}.json; the firewall lifted at dc9aab3) to pin the page's
+// names to their shape; the last checks that the live, filled files have no placeholder left.
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
+import { condition, evaluate, fill, format, leftovers, main, Resolver, singular } from "../../../scripts/bench/w1-fill.ts";
+
+const ROOT = path.resolve(import.meta.dirname, "../../..");
+/** the unfilled skeleton of a W1 file (repo path → its fixture copy from main aa4fc0e) */
+const skel = (f: string) => path.join(import.meta.dirname, "fixtures/w1-skeleton", path.basename(f));
+const W1_FILES = ["docs/bench/ts-heldout.md", "docs/bench/results.md", "viewer/lib/benchmark.ts", "README.md"];
+const dir = mkdtempSync(path.join(tmpdir(), "tracehound-w1fill-"));
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+const tool = (caught: number, extra: Record<string, unknown> = {}) => ({
+  attempted: 29, bugCases: 20, cleanCases: 9, caught, caughtWilson: [0.2373, 0.5617], completedBug: 20, completedClean: 9,
+  noReview: 0, misses: 0, invalidBinding: 0, judgeFailed: 0, caughtX1: 9, judgeFailedX1: 0, handchecked: true,
+  comments: { total: 31, perAttempted: { mean: 1.075, median: 1 }, perCompleted: { mean: 1.075, median: 1 }, clean: 2 },
+  locationHits: 7, costUSD: { total: 2.0371, perAttemptedMean: 0.070246785, median: 0.0511, max: 0.4373 },
+  exposure: { exposed: { bugCases: 0, completedBug: 0, caught: 0 }, unexposed: { bugCases: 20, completedBug: 20, caught } }, ...extra,
+});
+const pair = (b: string, x: Record<string, unknown>) => ({ a: "tracehound", b, registered: true, n: 20, reviewedByBoth: 20, onlyA: 1, onlyB: 5, both: 6, neither: 8, p: 0.21875, ...x });
+const summary = (pairs: Record<string, unknown>[], extra: Record<string, unknown> = {}) => ({
+  v: 1, side: "invented", tools: { tracehound: tool(7), coderabbit: tool(11, { invalidBinding: 1, noReview: 2 }), greptile: tool(10) },
+  pairs: [...pairs, { a: "coderabbit", b: "greptile", registered: false, n: 20, reviewedByBoth: 20, onlyA: 2, onlyB: 1, p: null }],
+  registeredTests: { pairs: [["tracehound", "coderabbit"], ["tracehound", "greptile"]], alpha: 0.05, min_reviewed_by_both: 15 },
+  exposure: { exposedBugCases: 0, unexposedBugCases: 20 },
+  handcheckGuess: { items: 61, guessed: 40, unsure: 21, right: 15, tools: 3, commonestToolItems: 25 }, ...extra,
+});
+const C_C = pair("coderabbit", {}), C_G = pair("greptile", { onlyA: 2, onlyB: 2, p: 1 });
+const r = (pairs = [C_C, C_G], extra: Record<string, unknown> = {}, values: Record<string, unknown> = {}) =>
+  new Resolver({ summary: summary(pairs, extra), values });
+
+describe("w1-fill: outcome[a,b] (W1 §3.2)", () => {
+  it("C when p ≥ alpha, whatever the gap", () => {
+    expect(r().outcome("tracehound", "coderabbit")).toBe("C");
+    expect(r([pair("coderabbit", { onlyA: 0, onlyB: 9, p: 0.0039 }), C_G]).outcome("tracehound", "greptile")).toBe("C");
+  });
+  it("A when p < alpha and TraceHound is ahead, B when behind", () => {
+    expect(r([pair("coderabbit", { onlyA: 8, onlyB: 1, p: 0.039 }), C_G]).outcome("tracehound", "coderabbit")).toBe("A");
+    expect(r([pair("coderabbit", { onlyA: 0, onlyB: 6, p: 0.031 }), C_G]).outcome("tracehound", "coderabbit")).toBe("B");
+  });
+  it("the floor is checked before p: under 15 reviewed by both is floor even with p < alpha", () => {
+    expect(r([pair("coderabbit", { reviewedByBoth: 14, onlyA: 0, onlyB: 9, p: 0.0039 }), C_G]).outcome("tracehound", "coderabbit")).toBe("floor");
+  });
+  it("refuses an unregistered pair, a missing p at or above the floor, and a pair not in the summary", () => {
+    expect(() => r().outcome("coderabbit", "greptile")).toThrow(/not a registered pair/);
+    expect(() => r([pair("coderabbit", { p: null }), C_G]).outcome("tracehound", "coderabbit")).toThrow(/no p/);
+    expect(() => r().outcome("greptile", "tracehound")).toThrow(/no such pair/);
+  });
+});
+
+describe("w1-fill: expressions, conditions and formats", () => {
+  it("sums inherit the parent path, products and G", () => {
+    expect(evaluate(r(), "tools.coderabbit.completedBug+completedClean")!.value).toBe(29);
+    expect(evaluate(r(), "tools.coderabbit.invalidBinding + tools.greptile.invalidBinding")!.value).toBe(1);
+    expect(evaluate(r(), "G[tracehound,coderabbit]")!.value).toBe(4);
+    const v = evaluate(r(undefined, {}, { "budget:h1ConsoleRatio": 1.2 }), "tools.tracehound.costUSD.perAttemptedMean×budget:h1ConsoleRatio")!;
+    expect(format("x×y", v.value, v.product)).toBe("0.0843");
+  });
+  it("conditions: comparisons, unicode signs, absent fallback flag = false, flags from --values, undecidable", () => {
+    expect(condition(r(), "G[tracehound,coderabbit] ≥ 6")).toBe(false);
+    expect(condition(r(), "pairs[tracehound,greptile].onlyA + pairs[tracehound,greptile].onlyB == 0")).toBe(false);
+    expect(condition(r(), "tools.tracehound.completedBug+completedClean < 29")).toBe(false);
+    expect(condition(r(), "handcheckX1Fallback != true")).toBe(true);
+    expect(condition(r(undefined, { handcheckX1Fallback: true }), "handcheckX1Fallback == true")).toBe(true);
+    expect(condition(r(undefined, {}, { "secondary-x": 1 }), "secondary:haikuVsA0.meanMinusA0 ≥ −2")).toBeUndefined();
+    expect(condition(r(undefined, {}, { "flag:pooledRan": false }), "flag:pooledRan")).toBe(false);
+    expect(condition(r(undefined, {}, { "flag:datedDraft": false }), "flag:datedDraft == false")).toBe(true);
+    expect(condition(r(), "flag:pooledRan")).toBeUndefined();
+    expect(condition(r(), "outcome[tracehound,coderabbit] == C")).toBe(true);
+  });
+  it("formats as ts-dev.md and the scorer print them", () => {
+    expect(format("tools.x.caughtWilson[0]", 0.23733101420380254, false)).toBe("23.7");
+    expect(format("tools.x.caughtWilson[1]", 0.5617589138033927, false)).toBe("56.2%");
+    // every p as score-testset.ts prints it: Number(p.toPrecision(10))
+    expect(format("pairs[a,b].p", 0.21875, false)).toBe("0.21875");
+    expect(format("pairs[a,b].p", 0.0000019073486328125, false)).toBe(String(Number((0.0000019073486328125).toPrecision(10))));
+    expect(format("pairs[a,b].p", 0.14599609375, false)).toBe("0.1459960938");
+    expect(format("pairs[a,b].p", null, false)).toBe("–");
+    expect(format("tools.x.costUSD.perAttemptedMean", 0.070246785, false)).toBe("0.0702");
+    expect(format("tools.x.comments.perCompleted.mean", 1.075, false)).toBe("1.07"); // toFixed, as score-testset.ts and ts-dev.md
+    expect(format("tools.x.caught", 7, false)).toBe("7");
+    expect(format("R", "medusa (9), payload (5)", false)).toBe("medusa (9), payload (5)");
+    expect(format("flag:x", true, false)).toBeUndefined();
+  });
+  it("a small pooled p prints as the scorer prints it, never 0.00; counts-only pooled and secondary p keep the dash", () => {
+    expect(format("pooled:coderabbit.p", 0.00390625, false)).toBe("0.00390625");
+    expect(format("pooled:p", 0.00390625, false)).toBe("0.00390625");
+    expect(format("secondary:haikuVsA0.p", 0.0390625, false)).toBe("0.0390625");
+    expect(format("pooled:coderabbit.p", null, false)).toBe("–");
+    const res = new Resolver({ summary: summary([C_C, C_G]), pooled: { coderabbit: { p: 0.00390625 }, greptile: { p: null } } });
+    expect(fill("{{pooled:coderabbit.p}} / {{pooled:greptile.p}}", res).text).toBe("0.00390625 / –");
+  });
+});
+
+describe("w1-fill: blocks", () => {
+  const text = [
+    "Head {{tools.tracehound.caught}} of 20.",
+    "{{if outcome[tracehound,coderabbit] == A}}",
+    "ahead {{pairs[tracehound,coderabbit].onlyA}}",
+    "{{end if}}",
+    "{{if outcome[tracehound,coderabbit] == C}}",
+    "no difference, p = {{pairs[tracehound,coderabbit].p}}.",
+    "{{if G[tracehound,coderabbit] ≥ 6}} Gap {{G[tracehound,coderabbit]}}.{{end if}}",
+    "{{if G[tracehound,coderabbit] ≥ 4}} Gap {{G[tracehound,coderabbit]}}.{{end if}}",
+    "{{end if}}",
+    "Inline: {{if outcome[tracehound,greptile] == C}}none{{end if}}{{if outcome[tracehound,greptile] == A}}more{{end if}}; {{if flag:pooledRan}}pooled{{end if}}.",
+    "<!-- legend {{if …}} {{placeholder}} -->",
+    "Verdict {{right / wrong / too vague to score}}.",
+    "",
+  ].join("\n");
+
+  it("keeps the branch that holds, drops the others with their lines, nested and inline, and leaves the rest", () => {
+    const { text: out, report } = fill(text, r());
+    expect(out).toBe([
+      "Head 7 of 20.",
+      "no difference, p = 0.21875.",
+      "Gap 4.",
+      "Inline: none; {{if flag:pooledRan}}pooled{{end if}}.",
+      "<!-- legend {{if …}} {{placeholder}} -->",
+      "Verdict {{right / wrong / too vague to score}}.",
+      "",
+    ].join("\n"));
+    expect(report.kept).toBe(3);
+    expect(report.dropped).toBe(3);
+    expect(report.undecided.map((u) => u.cond)).toEqual(["flag:pooledRan"]);
+    expect(report.left.map((l) => l.name)).toEqual(["right / wrong / too vague to score"]);
+    expect(leftovers(out)).toBe(3);
+  });
+  it("leaves GitHub Actions expressions (a space after the braces) alone, and a $ before a placeholder stays", () => {
+    const { text: out, report } = fill("pr: ${{ github.event.pull_request.number }} cost ${{tools.tracehound.costUSD.perAttemptedMean}}", r());
+    expect(out).toBe("pr: ${{ github.event.pull_request.number }} cost $0.0702");
+    expect(report.left).toEqual([]);
+    expect(leftovers(out)).toBe(0);
+  });
+  it("refuses unbalanced markers and a quote going into TypeScript source", () => {
+    expect(() => fill("{{if flag:x}} a", r())).toThrow(/without \{\{end if\}\}/);
+    expect(() => fill("a {{end if}}", r())).toThrow(/without \{\{if\}\}/);
+    expect(() => fill('"{{R}}"', r(undefined, {}, { R: 'say "x"' }), { tsSource: true })).toThrow(/quote/);
+  });
+});
+
+describe("w1-fill: the W1 skeleton files (fixtures from main aa4fc0e)", () => {
+  const FILES = W1_FILES;
+  // every name that is neither in the summary nor a stated writer's choice, given as an invented value
+  const values: Record<string, unknown> = {
+    R: "repo-a (10), repo-b (10), repo-c (9)", "decision-number": "999", "flag:pooledRan": false, "flag:datedDraft": false,
+    "budget:h1ConsoleRatio": 1.17, "budget:h1Console": "2.40", "budget:h1Ledger": "2.04", "budget:h2Ledger": "0.10", "budget:h1ConsoleUtc": "t",
+  };
+  const HUMAN = /^(right \/ wrong|the §3\.2 sentence|planner-b-draft|ho-score:|h1:|p1:|secondary:|pooled:)/;
+
+  it("every placeholder resolves from the summary or --values, except the writer's choices and the named other sources", () => {
+    for (const flag of [false, true]) for (const f of FILES) {
+      const res = new Resolver({ summary: summary([C_C, C_G]), values: { ...values, "flag:pooledRan": flag, "flag:datedDraft": flag } });
+      const { report } = fill(readFileSync(skel(f), "utf8"), res, { tsSource: f.endsWith(".ts") });
+      expect(report.left.filter((l) => !HUMAN.test(l.name)).map((l) => `${f}:${l.line} ${l.name}`)).toEqual([]);
+      expect(report.undecided.filter((u) => !/secondary:/.test(u.cond)).map((u) => `${f}:${u.line} ${u.cond} (flags ${flag})`)).toEqual([]);
+    }
+  });
+
+  it("E = 0: the exposed cells read \"0 of 0 (no exposed bug cases)\"; E > 0: counts; E absent: markers --check sees", () => {
+    const page = readFileSync(skel("docs/bench/ts-heldout.md"), "utf8");
+    const table = page.slice(page.indexOf("| tool | exposed bug cases: caught"), page.indexOf("<!-- With exposure.exposedBugCases == 0"));
+    const rows = (t: string) => t.split("\n").filter((l) => /^\| (TraceHound|CodeRabbit|Greptile) \|/.test(l));
+    const zero = fill(table, new Resolver({ summary: summary([C_C, C_G]) })).text;
+    expect(rows(zero)).toEqual(["TraceHound", "CodeRabbit", "Greptile"].map((t, i) =>
+      `| ${t} | 0 of 0 (no exposed bug cases) | 0 of 0 (no exposed bug cases) | ${[7, 11, 10][i]} of 20 | 20 |`));
+    expect(leftovers(zero)).toBe(0);
+    const exp = (caught: number) => tool(caught, { exposure: { exposed: { bugCases: 2, completedBug: 2, caught: 1 }, unexposed: { bugCases: 18, completedBug: 18, caught: caught - 1 } } });
+    const two = fill(table, new Resolver({ summary: summary([C_C, C_G], {
+      exposure: { exposedBugCases: 2, unexposedBugCases: 18 }, tools: { tracehound: exp(7), coderabbit: exp(11), greptile: exp(10) } }) })).text;
+    expect(rows(two)[0]).toBe("| TraceHound | 1 of 2 | 2 | 6 of 18 | 18 |");
+    expect(two).not.toContain("no exposed bug cases");
+    const absent = summary([C_C, C_G]) as Record<string, unknown>;
+    delete absent.exposure;
+    const none = fill(table, new Resolver({ summary: absent }));
+    expect(none.report.undecided.length).toBe(4 * 3); // two conditions per exposed cell, two cells per row
+    expect(leftovers(none.text)).toBeGreaterThan(0);
+  });
+
+  it("076aa item 15(a): a count of 1 before \"bugs\" is written \"1 bug\"; no other word changes", () => {
+    const page = readFileSync(skel("docs/bench/ts-heldout.md"), "utf8");
+    const one = r([pair("coderabbit", { onlyA: 1, onlyB: 5 }), pair("greptile", { onlyA: 5, onlyB: 1 })]);
+    const out = fill(page, one).text.replace(/<!--[\s\S]*?-->/g, "");
+    expect(out).not.toMatch(/\b1 bugs\b/);
+    expect(out).toContain("TraceHound caught 1 bug that CodeRabbit missed, and CodeRabbit caught\n5 that TraceHound missed");
+    expect(out).toContain("TraceHound caught 5 bugs that Greptile missed");
+    expect(fill("{{tools.tracehound.caught}} bugs; {{G[tracehound,greptile]}} bugsy", r([C_C, pair("greptile", { onlyA: 2, onlyB: 1 })])).text)
+      .toBe("7 bugs; 1 bugsy");
+  });
+
+  it("076aa addendum: every filled count of 1 on the page takes the singular, with its verb", () => {
+    expect(singular(" cases became exposed")).toEqual({ length: 6, with: " case" });
+    expect(singular(" of the 20 bug cases were\nexposed")).toEqual({ length: 25, with: " of the 20 bug cases was" });
+    expect(singular(" needed their second try")).toEqual({ length: 13, with: " needed its" });
+    expect(singular(" that TraceHound missed")).toBeNull();
+    const ones = (n: number) => tool(n, { comments: { total: 1, perAttempted: { mean: 1, median: 1 }, perCompleted: { mean: 1, median: 1 }, clean: 1 },
+      exposure: { exposed: { bugCases: 1, completedBug: 1, caught: 1 }, unexposed: { bugCases: 19, completedBug: 19, caught: n - 1 } } });
+    const res = new Resolver({
+      summary: summary([pair("coderabbit", { reviewedByBoth: 1, onlyA: 1, onlyB: 1, p: null }), pair("greptile", { onlyA: 1, onlyB: 5 })], {
+        exposure: { exposedBugCases: 1, unexposedBugCases: 19 }, tools: { tracehound: ones(7), coderabbit: ones(11), greptile: ones(10) },
+        handcheckGuess: { items: 1, guessed: 1, unsure: 1, right: 1, tools: 3, commonestToolItems: 1 } }),
+      values: { "ho-score:sheetItems": 1, "ho-score:sittingMinutes": 1, "h1:firstTriggers": 1, "h1:firstTriggersSecondTry": 1 },
+    });
+    const out = fill(readFileSync(skel("docs/bench/ts-heldout.md"), "utf8"), res).text.replace(/<!--[\s\S]*?-->/g, "");
+    expect(out).toContain("the 1 case became exposed");
+    expect(out).toContain("1 of the 20 bug cases was\nexposed");
+    expect(out).toContain("Only 1 of the 20 bugs was reviewed by both TraceHound and CodeRabbit");
+    expect(out).toContain("1 needed its second try");
+    expect(out).toContain("(1 item)");
+    expect(out).toContain("1 comment per pull request");
+    expect(out).toContain("1 of the 1 item he guessed");
+    expect(out).not.toMatch(/\b1 (bugs|bug cases|cases|comments|items|misses|minutes|pull requests|first triggers)\b/);
+    expect(out).not.toMatch(/\b1 of the \d+\s+(bugs|bug cases|cases)\s+were\b/);
+  });
+
+  it("results.md §11 and the viewer table fill to the same cells", () => {
+    const res = new Resolver({ summary: summary([C_C, C_G]), values });
+    const md = fill(readFileSync(skel("docs/bench/results.md"), "utf8"), res).text;
+    const ts = fill(readFileSync(skel("viewer/lib/benchmark.ts"), "utf8"), res, { tsSource: true }).text;
+    const section = md.slice(md.indexOf("## 11. Fresh TypeScript PRs"));
+    const mdRows = section.split("\n").filter((l) => l.startsWith("| ") && !/^\|[-| ]+\|$/.test(l)).slice(1)
+      .map((l) => l.slice(2, -2).split(" | ").map((c) => c.replace(/\*/g, "")));
+    expect(mdRows.length).toBe(3);
+    for (const row of mdRows) for (const cell of row) expect(ts).toContain(JSON.stringify(cell));
+  });
+
+  it("CLI: dry run writes nothing, --out-dir writes, --check fails while writer's choices remain", () => {
+    const s = path.join(dir, "summary.json"), v = path.join(dir, "values.json");
+    writeFileSync(s, JSON.stringify(summary([C_C, C_G])));
+    writeFileSync(v, JSON.stringify(values));
+    const f = path.join(dir, "page.md");
+    writeFileSync(f, "K {{tools.greptile.caught}}; {{if flag:pooledRan}}x{{end if}}\n");
+    const lines: string[] = [];
+    expect(main(["--summary", s, "--values", v, f], (l) => lines.push(l))).toBe(0);
+    expect(lines.at(-1)).toBe("dry run: nothing written");
+    expect(readFileSync(f, "utf8")).toContain("{{");
+    expect(main(["--summary", s, "--values", v, "--write", "--check", f], () => {})).toBe(0);
+    expect(readFileSync(f, "utf8")).toBe("K 10; \n");
+    writeFileSync(f, "{{choose one: a | b}}\n");
+    expect(main(["--summary", s, "--write", "--check", f], () => {})).toBe(1);
+    expect(main(["--summary", path.join(dir, "missing.json"), f], () => {})).toBe(2);
+  });
+});
+
+describe("w1-fill: the page's secondary: and pooled: names match the committed score files", () => {
+  const read = (f: string) => JSON.parse(readFileSync(path.join(ROOT, "docs/bench", f), "utf8")) as Record<string, any>;
+  const secondary = read("ts-heldout.secondary.json"), pooled = read("ts-heldout.pooled.json");
+
+  it("every secondary: and pooled: name and condition resolves; none is left or undecided", () => {
+    const res = new Resolver({ summary: summary([C_C, C_G]), secondary, pooled, values: { "flag:pooledRan": true } });
+    const { report } = fill(readFileSync(skel("docs/bench/ts-heldout.md"), "utf8"), res);
+    expect(report.left.filter((l) => /^(secondary|pooled):/.test(l.name)).map((l) => `${l.line} ${l.name}`)).toEqual([]);
+    expect(report.undecided.filter((u) => /(secondary|pooled):/.test(u.cond)).map((u) => `${u.line} ${u.cond}`)).toEqual([]);
+  });
+
+  it("the shapes the names rely on: pooled pairs[0] is A0 vs CodeRabbit, pairs[1] A0 vs Greptile; in haikuVsA0, a is A0", () => {
+    expect(pooled.pairs.map((p: { a: string; b: string }) => `${p.a},${p.b}`)).toEqual(["a0,coderabbit", "a0,greptile"]);
+    const h = secondary.haikuVsA0;
+    for (const d of ["haiku1", "haiku2"]) {
+      expect(h.v1[d].ka).toBe(h.a0v1);
+      expect(h.v1[d].kb).toBe(secondary.tools[d].caught);
+      expect(h.v1[d].both + h.v1[d].aOnly).toBe(h.v1[d].ka);
+      expect(h.v1[d].both + h.v1[d].bOnly).toBe(h.v1[d].kb);
+    }
+    expect(h.meanV1).toBe((h.v1.haiku1.kb + h.v1.haiku2.kb) / 2);
+    const res = new Resolver({ summary: summary([C_C, C_G]), secondary, pooled });
+    expect(evaluate(res, "secondary:haikuVsA0.meanV1 − a0v1")?.value).toBe(h.meanV1 - h.a0v1);
+    expect(format("pooled:pairs[0].pooled.p", pooled.pairs[0].pooled.p, false)).toBe(String(Number(pooled.pairs[0].pooled.p.toPrecision(10))));
+  });
+});
+
+describe("w1-fill: the live W1 files after W1 filled them", () => {
+  it("no {{…}} placeholder or {{if}} marker is left outside GitHub Actions ${{ }} expressions, and --check passes", () => {
+    for (const f of W1_FILES) {
+      const text = readFileSync(path.join(ROOT, f), "utf8").replace(/\$\{\{[^{}]*\}\}/g, "");
+      expect(text.match(/\{\{|\}\}/g) ?? [], f).toEqual([]);
+      expect(leftovers(text), f).toBe(0);
+    }
+    const lines: string[] = [];
+    const code = main(["--summary", path.join(ROOT, "docs/bench/ts-heldout.summary.json"), "--check", ...W1_FILES.map((f) => path.join(ROOT, f))], (l) => lines.push(l));
+    expect(lines.filter((l) => l.startsWith("check:"))).toEqual([]);
+    expect(code).toBe(0);
+  });
+});

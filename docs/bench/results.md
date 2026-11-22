@@ -287,3 +287,19 @@ Prices are the third-party rates in `config/prices.json`; costs are pre-VAT.
   a $15 cap.
 - **Whole project:** $57.05 + VAT of Nebius spend over the 30 days to 24 Oct (Nebius console,
   owner's record).
+
+## 11. Fresh TypeScript PRs (held-out, 2026-11)
+
+
+A separate result from the benchmark above, with its own wording; it is never combined with it into one number or one
+ranking. TraceHound as frozen at `review-freeze-3` (pool-verify-v1 on Nemotron 3.5 Super, arm A0), CodeRabbit and
+Greptile on 29 fresh pull requests from medusa (8), payload (10), twenty (10), and bullmq (1), 20 with a labelled bug that a later merged fix repaired. One run.
+Bugs caught are hand-checked, blind to the tool, with Wilson 95% intervals. The result, the two registered pairs, the
+exposure split, the secondary rows and all 14 limits: [`docs/bench/ts-heldout.md`](ts-heldout.md) (decision
+081).
+
+| tool | reviews completed of 29 | of those, 0 inline comments | bugs caught of 20, hand-checked | comments per completed PR: mean / median | comments on the 9 clean PRs | cost per PR |
+|---|---|---|---|---|---|---|
+| TraceHound (A0, review-freeze-3) | 29 | 16 | 4 [8.1–41.6%] | 0.76 / 0 | 2 | $0.0603 ledger |
+| CodeRabbit | 29 | 3 | 10 [29.9–70.1%] | 2.83 / 2 | 15 | free tier |
+| Greptile | 29 | 3 | 12 [38.7–78.1%] | 2.72 / 3 | 13 | free tier |
