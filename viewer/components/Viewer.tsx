@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeModel, ChangeSetEntry } from "@/lib/changes";
 import { useHighlight, type Highlight } from "@/lib/highlight";
 import { impactParam, type ImpactReport } from "@/lib/impact";
-import { useInspectorWidth } from "@/lib/inspector-width";
+import { LANE_RESERVE, useInspectorWidth } from "@/lib/inspector-width";
 import { current, usePanelNavigation } from "@/lib/navigation";
 import { prLaneRepo, type RepoInfo } from "@/lib/repos";
 import { prOverlay } from "@/lib/pulls";
@@ -52,7 +52,9 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
   const [impactName] = useState(() => (typeof window === "undefined" ? null : impactParam(window.location.search)));
   const [focus, setFocus] = useState<{ ids: string[]; nonce: number }>({ ids: [], nonce: 0 });
   // the floating inspector: its width (draggable, lib/inspector-width.ts) and the canvas it covers
-  const inspector = useInspectorWidth();
+  // the PR list expanded beside the open inspector takes LANE_RESERVE px more (ui-01b)
+  const [laneExpanded, setLaneExpanded] = useState(false);
+  const inspector = useInspectorWidth(laneExpanded ? LANE_RESERVE : 0);
   const overlay = inspector.occlusion;
   const phone = useIsPhone();
   const { close } = nav;
@@ -112,7 +114,7 @@ export function Viewer({ snapshot, repos = [], repoId, changeSets = [], impact, 
               <>
                 {impact && <ImpactPanel name={impactName ?? "impact"} impact={impact} snapshot={snapshot} onSelect={nav.open} />}
                 {changes && <ChangeWarningsPanel model={changes} activeId={activeWarning} onToggle={toggleWarning} onOpen={(id) => nav.open({ type: "node", id })} />}
-                {laneRepo && lane.list && <PrLane repo={laneRepo} list={lane.list} selected={lane.selected} onSelect={lane.select} overlay={lane.overlay} model={pr ?? null} collapsed={Boolean(selection) && !phone} />}
+                {laneRepo && lane.list && <PrLane repo={laneRepo} list={lane.list} selected={lane.selected} onSelect={lane.select} overlay={lane.overlay} model={pr ?? null} collapsed={Boolean(selection) && !phone} onExpandedChange={setLaneExpanded} />}
                 {/* Railway's boxed canvas: a rounded, bordered panel inset in the chrome, so the
                     chrome's colour shows around it; nodes, edges and the canvas buttons are
                     clipped by its corners. At 640px+ the rail's own width is the left gutter. */}

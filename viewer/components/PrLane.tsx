@@ -96,12 +96,17 @@ function usePanelOpen() {
 /** Left of the canvas: the repo's pull requests, newest first. The selected one opens its summary in place and outlines its cards. */
 /**
  * `collapsed` (the inspector is open, ui-01): the panel shrinks to an icon rail so the canvas keeps
- * its room; clicking the rail expands it again until the inspector next opens.
+ * its room; clicking the rail expands it again until the inspector next opens. `onExpandedChange`
+ * reports when the full list shows beside the open inspector (ui-01b: Viewer narrows the inspector
+ * meanwhile, so the canvas keeps its room).
  */
-export function PrLane({ repo, list, selected, onSelect, overlay, model, collapsed = false }: { repo: string; list: Load<LaneList>; selected: number | null; onSelect: (n: number | null) => void; overlay: Load<PullOverlayData> | null; model: PrOverlay | null; collapsed?: boolean }) {
+export function PrLane({ repo, list, selected, onSelect, overlay, model, collapsed = false, onExpandedChange }: { repo: string; list: Load<LaneList>; selected: number | null; onSelect: (n: number | null) => void; overlay: Load<PullOverlayData> | null; model: PrOverlay | null; collapsed?: boolean; onExpandedChange?: (expanded: boolean) => void }) {
   const [open, toggle] = usePanelOpen();
   const [peek, setPeek] = useState(false);
   useEffect(() => { if (collapsed) setPeek(false); }, [collapsed]);
+  const expanded = open && collapsed && peek;
+  useEffect(() => { onExpandedChange?.(expanded); }, [expanded, onExpandedChange]);
+  useEffect(() => () => onExpandedChange?.(false), [onExpandedChange]);
   const count = list.status === "ready" ? list.data.pulls.length : null;
   const findings = list.status === "ready" && selected !== null ? list.data.pulls.find((p) => p.number === selected)?.findingCount ?? null : null;
   if (open && collapsed && !peek) {
