@@ -71,7 +71,7 @@ corrected for there being two. CodeRabbit vs Greptile: counts only.
 | CodeRabbit vs Greptile (counts only) | 20 | 20 | 1 | 3 | – |
 
 - TraceHound vs CodeRabbit: TraceHound caught 2 bugs that CodeRabbit missed, and CodeRabbit caught 8 that TraceHound missed (20; exact sign test, p = 0.109375). That is no detectable difference at this sample size: with 20 bugs, only a gap of about 6 or more one-sided misses can be told apart from chance, and a true difference of 30 points in catch rate would be found about four times in ten if the tools' catches are independent (more often if both catch the same easy bugs; that was not measured). The observed gap of 6 bugs is not distinguishable from chance here.
-- TraceHound vs Greptile: Greptile caught 8 bugs that TraceHound missed, and TraceHound caught 0 that Greptile missed (20; exact sign test, p = 0.0078125). On this set Greptile caught more of the labelled bugs than TraceHound.
+- TraceHound vs Greptile: Greptile caught 8 bugs that TraceHound missed, and TraceHound caught 0 that Greptile missed (20; exact sign test, p = 0.0078125). On this set Greptile caught more of the labelled bugs than TraceHound. One run, 20 bugs, medusa (8), payload (10), twenty (10), and bullmq (1) only; one of two registered tests, each at 0.05 with no correction for making two.
 
 ## 3b. Exposed and unexposed catches, reported separately (decision 076d item 1d)
 
@@ -193,7 +193,7 @@ chance. Even a small p here is not fresh held-out confirmation.
 
 ## 8. Predictions (decision 078, registered before the window)
 
-*Scoring rule, chosen after the result (decision 081 item 4), because 078 gave "about X" without a tolerance: a range is right if the result is inside it; "about X" is right within ±25% of X, or within ±1 when X ≤ 4; a row with several numbers is right only if every number is. 8 right, 6 wrong.*
+*Scoring rule, chosen after the result (decision 081 item 4), because 078 gave "about X" without a tolerance: a range is right if the result is inside it; "about X" is right within ±25% of X, or within ±1 when X ≤ 4; a row with several numbers is right only if every number is; a prediction that states no number is too vague to score. 8 right, 6 wrong.*
 
 | # | prediction (decision 078) | result | scored |
 |---|---|---|---|
