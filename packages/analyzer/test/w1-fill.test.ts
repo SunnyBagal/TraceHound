@@ -1,5 +1,7 @@
-// scripts/bench/w1-fill.ts on invented summaries, no network. The last block reads the committed held-out score files
-// (docs/bench/ts-heldout.{secondary,pooled}.json; the firewall lifted at dc9aab3) to pin the page's names to their shape.
+// scripts/bench/w1-fill.ts on invented summaries, no network. The skeleton tests read the four W1 files as they were
+// before W1 filled them (main aa4fc0e, copied byte for byte to test/fixtures/w1-skeleton/). One block reads the committed
+// held-out score files (docs/bench/ts-heldout.{secondary,pooled}.json; the firewall lifted at dc9aab3) to pin the page's
+// names to their shape; the last checks that the live, filled files have no placeholder left.
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7,6 +9,9 @@ import { afterAll, describe, expect, it } from "vitest";
 import { condition, evaluate, fill, format, leftovers, main, Resolver, singular } from "../../../scripts/bench/w1-fill.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "../../..");
+/** the unfilled skeleton of a W1 file (repo path → its fixture copy from main aa4fc0e) */
+const skel = (f: string) => path.join(import.meta.dirname, "fixtures/w1-skeleton", path.basename(f));
+const W1_FILES = ["docs/bench/ts-heldout.md", "docs/bench/results.md", "viewer/lib/benchmark.ts", "README.md"];
 const dir = mkdtempSync(path.join(tmpdir(), "tracehound-w1fill-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -139,8 +144,8 @@ describe("w1-fill: blocks", () => {
   });
 });
 
-describe("w1-fill: the W1 skeleton files on this branch", () => {
-  const FILES = ["docs/bench/ts-heldout.md", "docs/bench/results.md", "viewer/lib/benchmark.ts", "README.md"];
+describe("w1-fill: the W1 skeleton files (fixtures from main aa4fc0e)", () => {
+  const FILES = W1_FILES;
   // every name that is neither in the summary nor a stated writer's choice, given as an invented value
   const values: Record<string, unknown> = {
     R: "repo-a (10), repo-b (10), repo-c (9)", "decision-number": "999", "flag:pooledRan": false, "flag:datedDraft": false,
@@ -151,14 +156,14 @@ describe("w1-fill: the W1 skeleton files on this branch", () => {
   it("every placeholder resolves from the summary or --values, except the writer's choices and the named other sources", () => {
     for (const flag of [false, true]) for (const f of FILES) {
       const res = new Resolver({ summary: summary([C_C, C_G]), values: { ...values, "flag:pooledRan": flag, "flag:datedDraft": flag } });
-      const { report } = fill(readFileSync(path.join(ROOT, f), "utf8"), res, { tsSource: f.endsWith(".ts") });
+      const { report } = fill(readFileSync(skel(f), "utf8"), res, { tsSource: f.endsWith(".ts") });
       expect(report.left.filter((l) => !HUMAN.test(l.name)).map((l) => `${f}:${l.line} ${l.name}`)).toEqual([]);
       expect(report.undecided.filter((u) => !/secondary:/.test(u.cond)).map((u) => `${f}:${u.line} ${u.cond} (flags ${flag})`)).toEqual([]);
     }
   });
 
   it("E = 0: the exposed cells read \"0 of 0 (no exposed bug cases)\"; E > 0: counts; E absent: markers --check sees", () => {
-    const page = readFileSync(path.join(ROOT, "docs/bench/ts-heldout.md"), "utf8");
+    const page = readFileSync(skel("docs/bench/ts-heldout.md"), "utf8");
     const table = page.slice(page.indexOf("| tool | exposed bug cases: caught"), page.indexOf("<!-- With exposure.exposedBugCases == 0"));
     const rows = (t: string) => t.split("\n").filter((l) => /^\| (TraceHound|CodeRabbit|Greptile) \|/.test(l));
     const zero = fill(table, new Resolver({ summary: summary([C_C, C_G]) })).text;
@@ -178,7 +183,7 @@ describe("w1-fill: the W1 skeleton files on this branch", () => {
   });
 
   it("076aa item 15(a): a count of 1 before \"bugs\" is written \"1 bug\"; no other word changes", () => {
-    const page = readFileSync(path.join(ROOT, "docs/bench/ts-heldout.md"), "utf8");
+    const page = readFileSync(skel("docs/bench/ts-heldout.md"), "utf8");
     const one = r([pair("coderabbit", { onlyA: 1, onlyB: 5 }), pair("greptile", { onlyA: 5, onlyB: 1 })]);
     const out = fill(page, one).text.replace(/<!--[\s\S]*?-->/g, "");
     expect(out).not.toMatch(/\b1 bugs\b/);
@@ -201,7 +206,7 @@ describe("w1-fill: the W1 skeleton files on this branch", () => {
         handcheckGuess: { items: 1, guessed: 1, unsure: 1, right: 1, tools: 3, commonestToolItems: 1 } }),
       values: { "ho-score:sheetItems": 1, "ho-score:sittingMinutes": 1, "h1:firstTriggers": 1, "h1:firstTriggersSecondTry": 1 },
     });
-    const out = fill(readFileSync(path.join(ROOT, "docs/bench/ts-heldout.md"), "utf8"), res).text.replace(/<!--[\s\S]*?-->/g, "");
+    const out = fill(readFileSync(skel("docs/bench/ts-heldout.md"), "utf8"), res).text.replace(/<!--[\s\S]*?-->/g, "");
     expect(out).toContain("the 1 case became exposed");
     expect(out).toContain("1 of the 20 bug cases was\nexposed");
     expect(out).toContain("Only 1 of the 20 bugs was reviewed by both TraceHound and CodeRabbit");
@@ -215,8 +220,8 @@ describe("w1-fill: the W1 skeleton files on this branch", () => {
 
   it("results.md §11 and the viewer table fill to the same cells", () => {
     const res = new Resolver({ summary: summary([C_C, C_G]), values });
-    const md = fill(readFileSync(path.join(ROOT, "docs/bench/results.md"), "utf8"), res).text;
-    const ts = fill(readFileSync(path.join(ROOT, "viewer/lib/benchmark.ts"), "utf8"), res, { tsSource: true }).text;
+    const md = fill(readFileSync(skel("docs/bench/results.md"), "utf8"), res).text;
+    const ts = fill(readFileSync(skel("viewer/lib/benchmark.ts"), "utf8"), res, { tsSource: true }).text;
     const section = md.slice(md.indexOf("## 11. Fresh TypeScript PRs"));
     const mdRows = section.split("\n").filter((l) => l.startsWith("| ") && !/^\|[-| ]+\|$/.test(l)).slice(1)
       .map((l) => l.slice(2, -2).split(" | ").map((c) => c.replace(/\*/g, "")));
@@ -248,7 +253,7 @@ describe("w1-fill: the page's secondary: and pooled: names match the committed s
 
   it("every secondary: and pooled: name and condition resolves; none is left or undecided", () => {
     const res = new Resolver({ summary: summary([C_C, C_G]), secondary, pooled, values: { "flag:pooledRan": true } });
-    const { report } = fill(readFileSync(path.join(ROOT, "docs/bench/ts-heldout.md"), "utf8"), res);
+    const { report } = fill(readFileSync(skel("docs/bench/ts-heldout.md"), "utf8"), res);
     expect(report.left.filter((l) => /^(secondary|pooled):/.test(l.name)).map((l) => `${l.line} ${l.name}`)).toEqual([]);
     expect(report.undecided.filter((u) => /(secondary|pooled):/.test(u.cond)).map((u) => `${u.line} ${u.cond}`)).toEqual([]);
   });
@@ -266,5 +271,19 @@ describe("w1-fill: the page's secondary: and pooled: names match the committed s
     const res = new Resolver({ summary: summary([C_C, C_G]), secondary, pooled });
     expect(evaluate(res, "secondary:haikuVsA0.meanV1 − a0v1")?.value).toBe(h.meanV1 - h.a0v1);
     expect(format("pooled:pairs[0].pooled.p", pooled.pairs[0].pooled.p, false)).toBe(String(Number(pooled.pairs[0].pooled.p.toPrecision(10))));
+  });
+});
+
+describe("w1-fill: the live W1 files after W1 filled them", () => {
+  it("no {{…}} placeholder or {{if}} marker is left outside GitHub Actions ${{ }} expressions, and --check passes", () => {
+    for (const f of W1_FILES) {
+      const text = readFileSync(path.join(ROOT, f), "utf8").replace(/\$\{\{[^{}]*\}\}/g, "");
+      expect(text.match(/\{\{|\}\}/g) ?? [], f).toEqual([]);
+      expect(leftovers(text), f).toBe(0);
+    }
+    const lines: string[] = [];
+    const code = main(["--summary", path.join(ROOT, "docs/bench/ts-heldout.summary.json"), "--check", ...W1_FILES.map((f) => path.join(ROOT, f))], (l) => lines.push(l));
+    expect(lines.filter((l) => l.startsWith("check:"))).toEqual([]);
+    expect(code).toBe(0);
   });
 });
