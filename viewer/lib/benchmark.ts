@@ -124,15 +124,14 @@ export const BENCHMARK_TABLES = [
       ["3.5 Super (runs 7r, 8 and the 23 PRs of run 9)", "103", "50,151", "52,510", "63,497", "$0.0642", "$0.0756", "$0.3397"],
     ],
   },
-  /* W1 SKELETON (b23-w1-skeleton): the same placeholders as results.md section 11, cell for cell; W1 fills both. */
   {
     title: "Fresh TypeScript PRs (held-out, 2026-11)",
-    note: "A separate result, never combined with the tables above. 29 fresh pull requests from {{R}}, 20 with a labelled bug; one run. Bugs caught are hand-checked, blind to the tool, with Wilson 95% intervals. Pairs, exposure, secondary rows and limits: docs/bench/ts-heldout.md.",
+    note: "A separate result, never combined with the tables above. 29 fresh pull requests from medusa (8), payload (10), twenty (10), and bullmq (1), 20 with a labelled bug; one run. Bugs caught are hand-checked, blind to the tool, with Wilson 95% intervals. Pairs, exposure, secondary rows and limits: docs/bench/ts-heldout.md.",
     headers: ["tool", "reviews completed of 29", "of those, 0 inline comments", "bugs caught of 20, hand-checked", "comments per completed PR: mean / median", "comments on the 9 clean PRs", "cost per PR"],
     rows: [
-      ["TraceHound (A0, review-freeze-3)", "{{tools.tracehound.completedBug+completedClean}}", "{{ho-score:tracehound.completedZeroInline}}", "{{tools.tracehound.caught}} [{{tools.tracehound.caughtWilson[0]}}–{{tools.tracehound.caughtWilson[1]}}]", "{{tools.tracehound.comments.perCompleted.mean}} / {{tools.tracehound.comments.perCompleted.median}}", "{{tools.tracehound.comments.clean}}", "${{tools.tracehound.costUSD.perAttemptedMean}} ledger"],
-      ["CodeRabbit", "{{tools.coderabbit.completedBug+completedClean}}", "{{ho-score:coderabbit.completedZeroInline}}", "{{tools.coderabbit.caught}} [{{tools.coderabbit.caughtWilson[0]}}–{{tools.coderabbit.caughtWilson[1]}}]", "{{tools.coderabbit.comments.perCompleted.mean}} / {{tools.coderabbit.comments.perCompleted.median}}", "{{tools.coderabbit.comments.clean}}", "free tier"],
-      ["Greptile", "{{tools.greptile.completedBug+completedClean}}", "{{ho-score:greptile.completedZeroInline}}", "{{tools.greptile.caught}} [{{tools.greptile.caughtWilson[0]}}–{{tools.greptile.caughtWilson[1]}}]", "{{tools.greptile.comments.perCompleted.mean}} / {{tools.greptile.comments.perCompleted.median}}", "{{tools.greptile.comments.clean}}", "free tier"],
+      ["TraceHound (A0, review-freeze-3)", "29", "16", "4 [8.1–41.6%]", "0.76 / 0", "2", "$0.0603 ledger"],
+      ["CodeRabbit", "29", "3", "10 [29.9–70.1%]", "2.83 / 2", "15", "free tier"],
+      ["Greptile", "29", "3", "12 [38.7–78.1%]", "2.72 / 3", "13", "free tier"],
     ],
   },
 ] as const;

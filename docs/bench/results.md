@@ -290,19 +290,16 @@ Prices are the third-party rates in `config/prices.json`; costs are pre-VAT.
 
 ## 11. Fresh TypeScript PRs (held-out, 2026-11)
 
-<!-- W1 SKELETON (b23-w1-skeleton): every {{placeholder}} is a field of docs/bench/ts-heldout.summary.json
-     ({{tools.<tool>.<field>}}) or of run/out/codex.ho-score.md ({{ho-score:…}}); W1 fills them and deletes this
-     comment. viewer/lib/benchmark.ts carries the same table, cell for cell (decision 063). -->
 
 A separate result from the benchmark above, with its own wording; it is never combined with it into one number or one
 ranking. TraceHound as frozen at `review-freeze-3` (pool-verify-v1 on Nemotron 3.5 Super, arm A0), CodeRabbit and
-Greptile on 29 fresh pull requests from {{R}}, 20 with a labelled bug that a later merged fix repaired. One run.
+Greptile on 29 fresh pull requests from medusa (8), payload (10), twenty (10), and bullmq (1), 20 with a labelled bug that a later merged fix repaired. One run.
 Bugs caught are hand-checked, blind to the tool, with Wilson 95% intervals. The result, the two registered pairs, the
 exposure split, the secondary rows and all 14 limits: [`docs/bench/ts-heldout.md`](ts-heldout.md) (decision
-{{decision-number}}).
+081).
 
 | tool | reviews completed of 29 | of those, 0 inline comments | bugs caught of 20, hand-checked | comments per completed PR: mean / median | comments on the 9 clean PRs | cost per PR |
 |---|---|---|---|---|---|---|
-| TraceHound (A0, review-freeze-3) | {{tools.tracehound.completedBug+completedClean}} | {{ho-score:tracehound.completedZeroInline}} | {{tools.tracehound.caught}} [{{tools.tracehound.caughtWilson[0]}}–{{tools.tracehound.caughtWilson[1]}}] | {{tools.tracehound.comments.perCompleted.mean}} / {{tools.tracehound.comments.perCompleted.median}} | {{tools.tracehound.comments.clean}} | ${{tools.tracehound.costUSD.perAttemptedMean}} ledger |
-| CodeRabbit | {{tools.coderabbit.completedBug+completedClean}} | {{ho-score:coderabbit.completedZeroInline}} | {{tools.coderabbit.caught}} [{{tools.coderabbit.caughtWilson[0]}}–{{tools.coderabbit.caughtWilson[1]}}] | {{tools.coderabbit.comments.perCompleted.mean}} / {{tools.coderabbit.comments.perCompleted.median}} | {{tools.coderabbit.comments.clean}} | free tier |
-| Greptile | {{tools.greptile.completedBug+completedClean}} | {{ho-score:greptile.completedZeroInline}} | {{tools.greptile.caught}} [{{tools.greptile.caughtWilson[0]}}–{{tools.greptile.caughtWilson[1]}}] | {{tools.greptile.comments.perCompleted.mean}} / {{tools.greptile.comments.perCompleted.median}} | {{tools.greptile.comments.clean}} | free tier |
+| TraceHound (A0, review-freeze-3) | 29 | 16 | 4 [8.1–41.6%] | 0.76 / 0 | 2 | $0.0603 ledger |
+| CodeRabbit | 29 | 3 | 10 [29.9–70.1%] | 2.83 / 2 | 15 | free tier |
+| Greptile | 29 | 3 | 12 [38.7–78.1%] | 2.72 / 3 | 13 | free tier |
